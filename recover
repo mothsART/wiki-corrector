@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+
+import os
+
+import requests
+from scrapy.selector import Selector
+
+URL_ROOT = 'https://doc.ubuntu-fr.org/'
+
+def get_index():
+    r = requests.get('%saccueil?do=index' % URL_ROOT)
+    return r.text
+
+def save_cache_index(index_raw):
+    os.makedirs('cache', exist_ok=True)
+    with open('cache/index.html', 'w') as f:
+        f.write(index_raw)
+
+def download_page(a_dic):
+    page = requests.get(URL_ROOT + a_dic['href'])
+    with open('cache' + a_dic['href'] + '.html', 'w') as f:
+        f.write(page.text)
+
+def recursive_link(a_dic):
+    print(a_dic)
+    sub_sec = requests.post(
+        'https://doc.ubuntu-fr.org/lib/exe/ajax.php',
+        {
+            'idx': a_dic['title'],
+            'call': 'index'
+        }
+    )
+    a_list = Selector(text=sub_sec.text).css('a').getall()
+    for a in a_list:
+        a_el = Selector(text=a).css('a')
+        href = a_el.attrib['href']
+        if '/' not in href:
+            continue
+        sub_a_dic = {
+            'title': a_el.attrib['title'],
+            'href': href,
+            'is_dir': True if a_el.attrib['class'] == 'idx_dir' else False
+        }
+        if sub_a_dic['is_dir']:
+            os.makedirs(
+                'cache/' + sub_a_dic['title'].replace(':', '/'),
+                exist_ok=True
+            )
+            recursive_link(sub_a_dic)
+            continue
+        download_page(sub_a_dic)
+
+def walk_links():
+    with open('cache/index.html', 'r') as f:
+        index_raw = f.read()
+    a_list = Selector(text=index_raw).css('#index__tree a').getall()
+
+    a_el_list = []
+
+    for a in a_list:
+        a_el = Selector(text=a).css('a')
+        href = a_el.attrib['href']
+        if '/' not in href:
+            continue
+        a_el_list.append({
+            'title': a_el.attrib['title'],
+            'href': href,
+            'is_dir': True if a_el.attrib['class'] == 'idx_dir' else False
+        })
+
+    for a in a_el_list:
+        if a['is_dir']:
+            os.makedirs('cache/' + a['title'], exist_ok=True)
+            recursive_link(a)
+            continue
+        download_page(a)
+
+if __name__ == '__main__':
+    #index_raw = get_index()
+    #save_cache_index(index_raw)
+    walk_links()
