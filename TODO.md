@@ -1,0 +1,2 @@
+- gérer la suppression de pages
+- gérer l'ajout de pages

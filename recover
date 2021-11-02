@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 
 import os
+from os.path import isfile, join
+from datetime import datetime
 
+import toml
 import requests
 from scrapy.selector import Selector
+
+from wiki_c.cli_message import success_message
 
 URL_ROOT = 'https://doc.ubuntu-fr.org/'
 
@@ -74,7 +79,38 @@ def walk_links():
             continue
         download_page(a)
 
+def get_index():
+    with open(join('cache', 'index.toml'), 'r') as f:
+        index = toml.loads(f.read())
+    return index
+
+def update_index():
+    index['last_date'] = datetime.now()
+    with open(join('cache', 'index.toml'), 'w') as f:
+        toml.dump(index, f)
+
+def create_index():
+    toml_str = """
+    first_date = {0},
+    last_date = {0}
+    """.format(datetime.now())
+    print(toml_str)
+    parsed_toml = toml.loads(toml_str)
+    with open(join('cache', 'index.toml'), 'w') as f:
+        toml.dump(parsed_toml, f)
+
+def get_diff():
+    nb_per_page = 40
+    '?do=recent&show_changes=pages&first%5B' + nb_per_page + '%5D='
+
 if __name__ == '__main__':
+    if isfile(join('cache', 'index.toml')):
+        index = get_index()
+        update_index(index)
+        success_message('Recover up to date !')
+        exit(0)
     index_raw = get_index()
     save_cache_index(index_raw)
     walk_links()
+    create_index()
+    success_message('Recover up to date !')
