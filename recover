@@ -21,9 +21,9 @@ def save_cache_index(index_raw):
     with open('cache/index.html', 'w') as f:
         f.write(index_raw)
 
-def download_page(a_dic):
-    page = requests.get(URL_ROOT + a_dic['href'])
-    with open('cache' + a_dic['href'] + '.html', 'w') as f:
+def download_page(href):
+    page = requests.get(URL_ROOT + href)
+    with open('cache' + href + '.html', 'w') as f:
         f.write(page.text)
 
 def recursive_link(a_dic):
@@ -52,7 +52,7 @@ def recursive_link(a_dic):
             )
             recursive_link(sub_a_dic)
             continue
-        download_page(sub_a_dic)
+        download_page(sub_a_dic['href'])
 
 def walk_links():
     with open('cache/index.html', 'r') as f:
@@ -77,14 +77,14 @@ def walk_links():
             os.makedirs('cache/' + a['title'], exist_ok=True)
             recursive_link(a)
             continue
-        download_page(a)
+        download_page(a['href'])
 
 def get_index():
     with open(join('cache', 'index.toml'), 'r') as f:
         index = toml.loads(f.read())
     return index
 
-def update_index():
+def update_index(index):
     index['last_date'] = datetime.now()
     with open(join('cache', 'index.toml'), 'w') as f:
         toml.dump(index, f)
@@ -94,18 +94,44 @@ def create_index():
     first_date = {0},
     last_date = {0}
     """.format(datetime.now())
-    print(toml_str)
     parsed_toml = toml.loads(toml_str)
     with open(join('cache', 'index.toml'), 'w') as f:
         toml.dump(parsed_toml, f)
 
-def get_diff():
+def get_diff(last_date, index=0):
     nb_per_page = 40
-    '?do=recent&show_changes=pages&first%5B' + nb_per_page + '%5D='
+    url = '{0}?do=recent&show_changes=pages&first%5B{1}%5D='.format(
+        URL_ROOT, index * nb_per_page
+    )
+    page = requests.get(url)
+    a_list = Selector(text=page.text).css('.fix-media-list-overlap .li').getall()
+
+    for count, a in enumerate(a_list):
+        txt_date = Selector(text=a).css('.date::text').get().strip()[3:]
+        day = int(txt_date[0:2])
+        month = int(txt_date[3:5])
+        year = int(txt_date[6:10])
+        hour = int(txt_date[12:14])
+        minute = int(txt_date[15:17])
+        page_date = datetime(year, month, day, hour, minute)
+
+        if last_date > page_date:
+            return
+        
+        href= None
+        wikilink1 = Selector(text=a).css('.wikilink1')
+        wikilink2 = Selector(text=a).css('.wikilink2')
+        if 'href' in wikilink1.attrib:
+            href = wikilink1.attrib['href']
+        if 'href' in wikilink2.attrib:
+            href = wikilink2.attrib['href']
+        download_page(href)
+    get_diff(last_date, index + 1)
 
 if __name__ == '__main__':
     if isfile(join('cache', 'index.toml')):
         index = get_index()
+        get_diff(index['last_date'])
         update_index(index)
         success_message('Recover up to date !')
         exit(0)
