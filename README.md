@@ -26,6 +26,18 @@ En revanche, si vous relancer après une première étape avec succès, il ne va
     ./recover
 ```
 
+Si l'on veut forcer la récupération de zéro, il est possible de faire :
+
+```sh
+    ./recover -f
+```
+
+ou
+
+```sh
+    ./recover --full
+```
+
 ### Application des passes de QA
 
 ```sh

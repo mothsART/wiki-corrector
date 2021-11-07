@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import sys
 from os.path import isfile, join
 from datetime import datetime
 
@@ -12,7 +13,7 @@ from wiki_c.cli_message import success_message
 
 URL_ROOT = 'https://doc.ubuntu-fr.org/'
 
-def get_index():
+def get_html_index():
     r = requests.get('%saccueil?do=index' % URL_ROOT)
     return r.text
 
@@ -22,9 +23,10 @@ def save_cache_index(index_raw):
         f.write(index_raw)
 
 def download_page(href):
-    page = requests.get(URL_ROOT + href)
-    with open('cache' + href + '.html', 'w') as f:
-        f.write(page.text)
+    page = requests.get(URL_ROOT + href + '?do=edit')
+    docuwiki = Selector(text=page.text).css('#wiki__text::text').get()
+    with open('cache' + href + '.docuwiki', 'w') as f:
+        f.write(docuwiki)
 
 def recursive_link(a_dic):
     sub_sec = requests.post(
@@ -117,7 +119,7 @@ def get_diff(last_date, index=0):
 
         if last_date > page_date:
             return
-        
+
         href= None
         wikilink1 = Selector(text=a).css('.wikilink1')
         wikilink2 = Selector(text=a).css('.wikilink2')
@@ -129,13 +131,16 @@ def get_diff(last_date, index=0):
     get_diff(last_date, index + 1)
 
 if __name__ == '__main__':
-    if isfile(join('cache', 'index.toml')):
+    full = False
+    if '-f' in sys.argv or '--full' in sys.argv:
+        full = True
+    if not full and isfile(join('cache', 'index.toml')):
         index = get_index()
         get_diff(index['last_date'])
         update_index(index)
         success_message('Recover up to date !')
         exit(0)
-    index_raw = get_index()
+    index_raw = get_html_index()
     save_cache_index(index_raw)
     walk_links()
     create_index()

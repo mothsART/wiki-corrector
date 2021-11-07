@@ -1,14 +1,48 @@
 #!/usr/bin/env python3
+
+import os
+from os.path import join
+
+import fnmatch
+
+from scrapy.selector import Selector
 from pygrammalecte import grammalecte_text
 
-texte_bidon = """\
-Coucou, je veut du fromage.
-Je sais coder en VHDL.
-Le VHDL est est compliquer.
-"""
-
+def get_errors(content):
+    errors = ""
+    content_list = content.splitlines()
+    last_line = 0
+    for message in grammalecte_text(content):
+        cr = ''
+        if last_line != 0 and last_line != message.line:
+            cr = '\n'
+        last_line = message.line
+        error = "{0}{1} {2} => {3}\n".format(
+            cr,
+            message.line,
+            message.message,
+            content_list[message.line - 1]
+        )
+        errors += error
+    return errors
 
 if __name__ == '__main__':
-    for message in grammalecte_text(texte_bidon):
-        #print(dir(message))
-        print(message.message)
+    dir_cache = 'cache'
+    len_dir_cache = len(dir_cache)
+
+    os.makedirs('result', exist_ok=True)
+
+    for root, _dir, files in os.walk(dir_cache):
+        for _file in fnmatch.filter(files, '*'):
+            if not _file.endswith('.dokuwiki'):
+                continue
+
+            with open(join(root, _file), 'r') as f:
+                content = f.read()
+
+            errors = get_errors(content)
+            path = 'result' + root[len_dir_cache:] + '/' + _file.replace('.dokuwiki', '.txt')
+            print(path, root)
+            os.makedirs('result/' + root[len_dir_cache:], exist_ok=True)
+            with open(path, 'w') as f:
+                f.write(errors)
