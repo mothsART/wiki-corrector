@@ -18,17 +18,21 @@ def get_html_index():
     return r.text
 
 def save_cache_index(index_raw):
-    os.makedirs('cache', exist_ok=True)
     with open('cache/index.html', 'w') as f:
         f.write(index_raw)
 
-def download_page(href):
+def download_page(href, force_update=False):
+    path = 'cache' + href + '.dokuwiki'
+    if not force_update and isfile(path):
+        print(path, '[exist]')
+        return
+    print(path, '[created]')
     page = requests.get(URL_ROOT + href + '?do=edit')
-    docuwiki = Selector(text=page.text).css('#wiki__text::text').get()
-    with open('cache' + href + '.docuwiki', 'w') as f:
-        f.write(docuwiki)
+    dokuwiki = Selector(text=page.text).css('#wiki__text::text').get()
+    with open(path, 'w') as f:
+        f.write(dokuwiki)
 
-def recursive_link(a_dic):
+def recursive_link(a_dic, force_update=False):
     sub_sec = requests.post(
         'https://doc.ubuntu-fr.org/lib/exe/ajax.php',
         {
@@ -56,7 +60,7 @@ def recursive_link(a_dic):
             continue
         download_page(sub_a_dic['href'])
 
-def walk_links():
+def walk_links(force_update=False):
     with open('cache/index.html', 'r') as f:
         index_raw = f.read()
     a_list = Selector(text=index_raw).css('#index__tree a').getall()
@@ -77,28 +81,52 @@ def walk_links():
     for a in a_el_list:
         if a['is_dir']:
             os.makedirs('cache/' + a['title'], exist_ok=True)
-            recursive_link(a)
+            recursive_link(a, force_update)
             continue
-        download_page(a['href'])
+        download_page(a['href'], force_update)
 
-def get_index():
-    with open(join('cache', 'index.toml'), 'r') as f:
-        index = toml.loads(f.read())
-    return index
 
-def update_index(index):
-    index['last_date'] = datetime.now()
-    with open(join('cache', 'index.toml'), 'w') as f:
-        toml.dump(index, f)
+class State:
+    def __init__(self):
+        self.path = join('cache', 'index.toml')
+        os.makedirs('cache', exist_ok=True)
 
-def create_index():
-    toml_str = """
-    first_date = {0},
-    last_date = {0}
-    """.format(datetime.now())
-    parsed_toml = toml.loads(toml_str)
-    with open(join('cache', 'index.toml'), 'w') as f:
-        toml.dump(parsed_toml, f)
+    def get_index(self):
+        if not isfile(self.path):
+            return None
+        with open(self.path, 'r') as f:
+            index = toml.loads(f.read())
+        return index
+
+    def update_index(self, index):
+        index['last_date'] = datetime.now()
+        index['finished'] = 'true'
+        with open(self.path, 'w') as f:
+            toml.dump(index, f)
+
+    def create_index(self, force_update=False):
+        index = self.get_index()
+        if not force_update and index:
+            return index
+
+        toml_str = """
+        first_date = {0},
+        last_date = {0}
+        finished = false
+        """.format(datetime.now())
+        index = toml.loads(toml_str)
+        with open(self.path, 'w') as f:
+            toml.dump(index, f)
+        return index
+
+    def is_finished(self):
+        index = self.get_index()
+        if not index:
+            return False
+        if index['finished'] == 'true':
+            return True
+        return False
+
 
 def get_diff(last_date, index=0):
     nb_per_page = 40
@@ -127,21 +155,27 @@ def get_diff(last_date, index=0):
             href = wikilink1.attrib['href']
         if 'href' in wikilink2.attrib:
             href = wikilink2.attrib['href']
-        download_page(href)
+        download_page(href, True)
     get_diff(last_date, index + 1)
 
 if __name__ == '__main__':
     full = False
+    state = State()
+
     if '-f' in sys.argv or '--full' in sys.argv:
         full = True
-    if not full and isfile(join('cache', 'index.toml')):
-        index = get_index()
+
+    if not full and state.is_finished():
+        index = state.get_index()
         get_diff(index['last_date'])
-        update_index(index)
+        state.update_index(index)
         success_message('Recover up to date !')
         exit(0)
+
+    index = state.create_index(full)
     index_raw = get_html_index()
     save_cache_index(index_raw)
-    walk_links()
-    create_index()
+    walk_links(full)
+    get_diff(index['last_date'])
+    state.update_index(index)
     success_message('Recover up to date !')
