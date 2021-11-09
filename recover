@@ -2,27 +2,28 @@
 
 import os
 import sys
-from os.path import isfile, join
+from os.path import isfile
 from datetime import datetime
 
-import toml
 import requests
 from scrapy.selector import Selector
 
 from wiki_c.cli_message import success_message
+from wiki_c.state import State
 
 URL_ROOT = 'https://doc.ubuntu-fr.org/'
+DIR_DESTINATION = 'cache'
 
 def get_html_index():
     r = requests.get('%saccueil?do=index' % URL_ROOT)
     return r.text
 
 def save_cache_index(index_raw):
-    with open('cache/index.html', 'w') as f:
+    with open('%s/index.html' % DIR_DESTINATION, 'w') as f:
         f.write(index_raw)
 
 def download_page(href, force_update=False):
-    path = 'cache' + href + '.dokuwiki'
+    path = DIR_DESTINATION + href + '.dokuwiki'
     if not force_update and isfile(path):
         print(path, '[exist]')
         return
@@ -30,7 +31,13 @@ def download_page(href, force_update=False):
     page = requests.get(URL_ROOT + href + '?do=edit')
     dokuwiki = Selector(text=page.text).css('#wiki__text::text').get()
     with open(path, 'w') as f:
-        f.write(dokuwiki)
+        try:
+            f.write(dokuwiki)
+        except TypeError as e:
+            print("TypeError: {0}".format(e))
+            print("Url : {0}".format(page))
+            print("content : {0}".format(page.text))
+            exit(1)
 
 def recursive_link(a_dic, force_update=False):
     sub_sec = requests.post(
@@ -53,7 +60,7 @@ def recursive_link(a_dic, force_update=False):
         }
         if sub_a_dic['is_dir']:
             os.makedirs(
-                'cache/' + sub_a_dic['title'].replace(':', '/'),
+                DIR_DESTINATION + '/' + sub_a_dic['title'].replace(':', '/'),
                 exist_ok=True
             )
             recursive_link(sub_a_dic)
@@ -61,7 +68,7 @@ def recursive_link(a_dic, force_update=False):
         download_page(sub_a_dic['href'])
 
 def walk_links(force_update=False):
-    with open('cache/index.html', 'r') as f:
+    with open('%s/index.html' % DIR_DESTINATION, 'r') as f:
         index_raw = f.read()
     a_list = Selector(text=index_raw).css('#index__tree a').getall()
 
@@ -80,52 +87,10 @@ def walk_links(force_update=False):
 
     for a in a_el_list:
         if a['is_dir']:
-            os.makedirs('cache/' + a['title'], exist_ok=True)
+            os.makedirs('%s/' % DIR_DESTINATION + a['title'], exist_ok=True)
             recursive_link(a, force_update)
             continue
         download_page(a['href'], force_update)
-
-
-class State:
-    def __init__(self):
-        self.path = join('cache', 'index.toml')
-        os.makedirs('cache', exist_ok=True)
-
-    def get_index(self):
-        if not isfile(self.path):
-            return None
-        with open(self.path, 'r') as f:
-            index = toml.loads(f.read())
-        return index
-
-    def update_index(self, index):
-        index['last_date'] = datetime.now()
-        index['finished'] = 'true'
-        with open(self.path, 'w') as f:
-            toml.dump(index, f)
-
-    def create_index(self, force_update=False):
-        index = self.get_index()
-        if not force_update and index:
-            return index
-
-        toml_str = """
-        first_date = {0},
-        last_date = {0}
-        finished = false
-        """.format(datetime.now())
-        index = toml.loads(toml_str)
-        with open(self.path, 'w') as f:
-            toml.dump(index, f)
-        return index
-
-    def is_finished(self):
-        index = self.get_index()
-        if not index:
-            return False
-        if index['finished'] == 'true':
-            return True
-        return False
 
 
 def get_diff(last_date, index=0):
@@ -160,7 +125,7 @@ def get_diff(last_date, index=0):
 
 if __name__ == '__main__':
     full = False
-    state = State()
+    state = State(DIR_DESTINATION)
 
     if '-f' in sys.argv or '--full' in sys.argv:
         full = True
