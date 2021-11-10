@@ -1,0 +1,179 @@
+
+{{tag>tutoriel sauvegarde serveur synchronisation système sécurité}}
+
+----
+
+====== Serveur de synchronisation avec rsync======
+
+===== Introduction =====
+Sur [[:rsync]] voir la page principale à ce sujet : [[:rsync]].
+
+
+**Pourquoi synchroniser ?**
+
+D'un point de vue de l'entreprise, un serveur de synchronisation est utile pour centraliser les sauvegardes sur une même machine équipée accessoirement d'un enregistreur de bande.
+
+Pour le particulier, il est intéressant (si vous avez plusieurs machines), d'avoir une sauvegarde simple et rapide de son répertoire home.
+
+**rsync** est prévu à cet effet. Il peut même faire plus. Il peut être utilisé [[:tutoriel:sauvegarder_home_avec_rsync|pour la sauvegarde de "/home"]], et dispose d'une interface graphique, [[:tutoriel:sauvegarder_home_avec_grsync|Grsync]]. Mais nous allons envisager dans ce tutoriel comment faire une synchronisation entre deux serveurs ; un serveur de production et un serveur de centralisation des backups.
+
+<note important>Attention : si vous utilisez rsync avec les options **%%--%%del** ou **%%--%%delete**, et si vous effacez vos données par erreur, rsync transmettra cet effacement sur le serveur de sauvegarde ; vous allez donc perdre vos données. L'emploi de rsync avec ces options d'effacement %%--%%del ou %%--%%delete n'est pas adapté à ce genre d'utilisation. Ou alors, s'il s'agit de données sensibles, et si vous voulez disposer sur la destination d'un contenu identique à celui de la source (ce que permet l'utilisation d'une option d'effacement comme **%%--%%delete**), prévoyez de faire une double sauvegarde sur deux répertoires de destination différents. L'une avec utilisation de %%--%%delete ; l'autre sans cette option d'effacement. En cas d'effacement malencontreux de données sur la source, et donc sur le premier répertoire de sauvegarde, vous retrouverez ces données sur le second répertoire de sauvegarde. La prudence recommande de placer ces deux répertoires de sauvegardes sur deux disques durs distincts.</note> 
+
+
+Pour une synchronisation de plusieurs dossiers, vous pouvez aller voir aussi du coté de [[:unison|unison]].
+
+===== Les particularités de rsync =====
+
+**rsync** est un outil simple disponible sans installation particulière sous Ubuntu et existant pour divers systèmes d'exploitation. La grande particularité de rsync est d'optimiser la bande passante disponible en compressant les données à synchroniser et en ne transférant que les octets modifiés.
+
+==== Étude de cas ====
+
+Pour vous donner une idée de l'amélioration que rsync peut apporter, voici quelques tests que nous avons effectués en entreprise sur un serveur de production.
+
+  * Masse de données : environ 30 Go
+  * Taux de modification des données : 1% par heure (environ 250 fichiers)
+  * Liaison dédiée 100Mbits entre les deux serveurs.
+  * Temps de synchronisation avec parcours de fichiers : 4h30 (du coup, on ne faisait que 3 synchros par jour).
+  * Temps de synchronisation avec rsync : 22min (quand on le fait 3x par jour, maintenant, on fait 1 synchro par heure avec un temps de synchro de 10min).
+
+C'était pour la petite histoire, passons maintenant à la configuration du serveur rsync.
+
+
+
+
+===== Configuration du serveur de synchronisation =====
+
+Pour autoriser **rsync** à se lancer, il faut éditer le fichier ''/etc/default/rsync'' via la commande :
+<code>
+sudo vi /etc/default/rsync
+</code>
+
+et modifier la ligne RSYNC à true
+<code>
+RSYNC_ENABLE=true
+</code>
+
+
+Pour configurer **rsync**, on crée le fichier de configuration de rsync en éditant le fichier ''/etc/rsyncd.conf'' via la commande :
+
+<code>
+sudo vi /etc/rsyncd.conf
+</code>
+
+En entête de ce fichier, il faut copier les lignes suivantes :
+<code>
+uid = rsync
+gid = rsync
+</code>
+Le démon rsyncd sera lancé en tant qu'utilisateur rsync, et pourra donc écrire dans les répertoires qui lui seront attribués.
+
+Dans ce fichier, on introduit les informations concernant les modules. Un module est une sorte de //partage// rsync. Dans notre cas, on va créer un module nommé ''share_rsync''.
+
+<code>
+[share_rsync]
+   path = /srv/intern
+   comment = Synchro fichiers internes
+   read only = false
+</code>
+
+Vous pouvez bien entendu créer plusieurs modules de synchronisation. Il existe également d'autres mots clés à utiliser dans le fichier ''/etc/rsyncd.conf'' qui permettent l'authentification et d'autres choses. Vous trouverez de plus amples détails en tapant :
+
+<code>
+man rsyncd.conf
+</code>
+
+Ajouter un utilisateur et un groupe **rsync
+**
+
+<code>
+sudo useradd rsync
+sudo passwd rsync
+sudo groupadd rsync
+sudo gpasswd -a rsync rsync
+</code>
+
+Attribuer le répertoire de sauvegarde à **rsync**
+
+<code>
+sudo chown -R rsync:rsync /srv/intern
+</code>
+
+Attribuer les droits adéquats au répertoire de sauvegarde
+
+<code>
+sudo chmod -R 775 /srv/intern
+</code>
+
+Pour terminer, lancer rsync sans redémarrage avec la commande :
+<code>
+sudo /etc/init.d/rsync start
+</code>
+
+Sur Ubuntu 16.04, on peut lancer le deamon rsync à tous les démarrages du PC en utilisant la commande suivante :
+<code>
+sudo systemctl enable rsync.service
+</code>
+
+
+Le serveur est maintenant prêt pour recevoir les requêtes de synchronisation.
+
+===== Configuration du client =====
+
+Les synchronisations du (ou des) client(s) peuvent se faire par le biais de la commande ''rsync''. La syntaxe de cette dernière est relativement simple. Voici la commande que j'utilise :
+
+<code>
+rsync -az --stats --delete --force --ignore-errors --exclude-from=/etc/rsync.exclude /srv/intern 192.168.252.201::share_rsync/
+</code>
+
+Avec cette commande, j'indique que je souhaite supprimer les fichiers (option ''--delete'') qui ne sont plus sur la source (la source dans ce cas-ci est ''/srv/intern''), que je souhaite obtenir des statistiques quant à la vitesse de transfert (option ''--stats'') et que je souhaite exclure les fichiers listés dans **/etc/rsync.exclude** (''--exclude-from'').
+
+Dans le fichier **rsync.exclude**, mettre un chemin par ligne (vers un répertoire ou un fichier).
+Attention, ne pas oublier les **/** en fin de ligne pour les répertoires ainsi que "- " (moins espace) avant chaque ligne.
+
+Les options clés se trouvant juste après la commande sont explicitées ci-dessous :
+  * **''a''** : indique que ''rsync'' doit travailler en mode //archive//, c'est-à-dire qu'une copie fidèle de l'arborescence (et donc des sous répertoires)  est réalisée (les permissions,  les propriétaires et les dates de modification des fichiers sont conservés).
+  * **''z''** : indique à ''rsync'' qu'il doit utiliser la compression pour le transfert des données.
+
+
+La destination de synchronisation (notre serveur) s'indique comme suit :
+
+<code>
+adresse_ip::module/
+</code>
+
+Notez que si vous ne placez pas le ''/'' après le module, vous allez obtenir un sous-répertoire ''intern'' (dans ce cas-ci) dans le répertoire défini dans le module. Ce qui peut être intéressant dans certains cas mais ce n'est pas le but ici.
+
+Donc, en exécutant cette commande, le répertoire ''/srv/intern'' est synchronisé avec le module ''share_rsync'' sur le serveur ''192.168.252.201''.
+
+Sur une station de travail, on peut utiliser cette commande à chaque fois où l'on veut faire un petit backup (c'est ce que je fais à la maison) mais en entreprise, on souhaite que ces synchronisations (ou backup, comme vous voulez) soient faites à des intervalles fixes.
+
+Pour ce faire, nous allons configurer [[:Cron]] pour lancer les synchronisations automatiquement. Ceci est fait en ajoutant une ligne au fichier ''/etc/crontab''. Par exemple, pour une synchronisation par heure de 7h à 22h :
+
+<code>
+05 7-22 * * *   root   rsync -raz --stats --delete /srv/intern 192.168.252.201::share_rsync/
+</code>
+
+N'oubliez pas de forcer le rechargement du ''crontab'' via la commande :
+
+<code>
+sudo /etc/init.d/cron reload
+</code>
+
+Pour plus d'informations concernant les configurations de cron, veuillez vous reporter à [[:cron|cette page]].
+
+
+Si l'adresse des fichiers à copier contient des espaces, il faut les remplacer par ? ou \ , par exemple, dans le cas de Windows avec cwrsync : 
+
+<code>
+C:\Mes documents\
+</code>
+devient : 
+<code>
+/cygdrive/c/Mes?documents/
+</code>
+
+
+
+----
+
+// Contributeur : [[utilisateurs:ostaquet]] //

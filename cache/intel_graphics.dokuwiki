@@ -1,0 +1,210 @@
+
+{{tag>Bionic matériel carte_graphique intel}}
+
+----
+{{ :materiel:intel:intel-logo.png?120|logo}}
+====== Cartes graphiques Intel ======
+[[wpfr>Intel]] est un fabricant de microprocesseurs qui propose aussi des chipsets graphiques nommés [[wpfr>intel GMA]] et [[wpfr>Intel HD Graphics]]. Cette page traite de l'utilisation de ce système d'affichage sous Ubuntu.\\
+ À partir de 2006, Intel a diffusé ses pilotes graphique officiels sous licence libre (mélange de [[wpfr>Licence publique générale GNU|GPL]] et de [[wpfr>licence X11|X11]]). Aujourd'hui la tendance se poursuit, puisque les spécifications des cartes sont diffusées pendant leur développement. Ces pilotes sont donc largement intégrés à [[wpfr>X.org]] et notamment rendus compatibles au mieux avec le reste des éléments utilisés par Ubuntu, et les problèmes se font de plus en plus rares. Seule exception à la règle, le GMA500 intégré au [[:poulsbo]] (voir la page //dédiée//).\\
+Les pilotes fonctionnent donc automatiquement sous Ubuntu. Mais il peut arriver que vous n'ayez pas les rendements graphiques souhaités (cas d'une carte très récente et pas encore prise en charge par les pilotes intégrés à X.org par exemple). Pour résoudre cela, très souvent il suffit de passer à une version plus récente d'Ubuntu, d'installer un nouveau [[:noyau]] ou bien d'utiliser une application fournie par Intel qui va vous [[#installer la dernière version souhaitée du pilote]].
+<note>Le pilote pour carte **GMA500** est un cas particulier traité dans la page [[:poulsbo]] (du nom du "chipset" où il est intégré).
+Son pilote vidéo fonctionne complètement en 2D et 3D (avec quelques fois de petits //efforts de configuration manuelle//).</note>
+
+
+===== Identifier sa carte graphique =====
+Pour identifier votre carte graphique, entrez ces [[:commande_Shell|commandes]] dans un [[:terminal]] :
+<code bash>lspci -nnk | egrep -iA3 "VGA"</code>
+<code bash>sudo lshw -c video</code>
+
+=====Types de cartes=====
+====Cartes ixxx, GMA et HD Graphics====
+Les cartes produites directement par Intel, de type i, GMA et HD Graphics fonctionnent (en 2D et en 3D) avec les pilotes suivants : 
+  * i810 à i945
+  * vesa
+  * intel
+Xorg fournit les pilotes [[apt>xserver-xorg-video-intel]] qui sont compatibles avec les puces graphiques des familles i8xx à i9xx. La version qui correspond à votre carte graphique est installée par défaut automatiquement.
+
+====Sandy bridge====
+Les cartes Sandy Bridge ( HD2000 et HD3000) sont supportées depuis le noyau 2.6.37.
+
+====Puce GMA 3600 D2xxx/N2xxx====
+Le GMA3600 est en fait un PowerVR sgx545 de l'entreprise **Imagination Technologies** qui est connu pour n'avoir jamais libéré le moindre pilote, donc pas d'accélération graphique possible par défaut. Il faut donc se contenter du pilote libre d'Intel.
+
+
+===== Problèmes connus =====
+
+====GM 965 : Lenteur lors du démarrage d'Ubuntu 18.04====
+
+Si vous avez des lignes **[drm:drm ... timed out** dans le dmesg, ce qui rend le démarrage d'Ubuntu 18.04 très lent (plus de 3 minutes où l'ordinateur ne fait rien lors du démarrage, cf extrait du dmesg sur [[https://lafibre.info/tutoriels-linux/drm-boot-ubuntu/|la fibre]].
+
+La solution est d'ajouter un paramètre de démarrage au noyau :
+
+  - [[:tutoriel:comment_modifier_un_fichier|Éditer le fichier]] de paramètre de [[:tutoriel:grub2_parametrage_manuel|grub]],
+  - Modifier la ligne **GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"** par **GRUB_CMDLINE_LINUX_DEFAULT="quiet splash video=SVIDEO-1:d"**
+  - Une fois modifié pensez à [[:tutoriel:grub2_parametrage_manuel#parametrage_manuel|mettre à jour grub]].
+
+Ubuntu 18.04 sera aussi rapide à démarrer qu'Ubuntu 16.04. (ce problème ne se produit que sur les noyaux Linux 4.8 et supérieurs)
+
+====GMA 4500====
+Si vous avez une carte GMA 4500 et qu'au moment de l'installation vous avez un écran noir, vous devez installer Ubuntu avec l'alternate CD et au démarrage choisir l'option par le biais de la touche F6: nomodeset. Elle permet d'éviter l'écran noir à votre premier démarrage.
+L'installation se fait en mode texte, et au premier démarrage, la définition est fixée à 1024x768 au lieu des 1366x768 natifs de la dalle LCD. Qui plus est, les touches de réglage de luminosité ne fonctionnent pas (ou à l'envers !), et l'écran redevient noir au sortir de l'hibernation.
+Une fois l'installation faite, suivez ces instructions pour régler la résolution et le problème de luminosité.
+
+Avec les [[:sudo|les droits d'administration]] :
+  - [[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/default/grub** et remplacez la ligne :<file>GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
+GRUB_CMDLINE_LINUX="nomodeset"</file> par<file>GRUB_CMDLINE_LINUX_DEFAULT="quiet splash acpi_osi=Linux acpi_backlight=legacy"
+#GRUB_CMDLINE_LINUX="nomodeset"</file>
+    * Le //acpi_osi=Linux// permet de gérer le problème de définition ;
+    *  le //acpi_backlight=legacy// permet de restaurer le réglage de luminosité par les touches Fn + => et Fn + <= (Il semble possible d'utiliser //acpi_backlight=vendor// au lieu de //acpi_backlight=legacy//) ;
+    * La ligne avec le //nomodeset// n'est plus utile et gêne le fonctionnement du //acpi_osi=Linux//.
+  - [[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/rc.local** et remplacez la ligne :<file>
+# By default this script does nothing.
+exit 0</file> par :<file>
+# By default this script does nothing.
+setpci -s 00:02.0 F4.B=00
+exit 0</file>Ainsi, au démarrage, la luminosité est placée au maximum (B=00); on peut la fixer sur une valeur intermédiaire, le noir étant indiqué par B=FF.
+  - [[:tutoriel:comment_modifier_un_fichier|Créez le fichier]] **/etc/pm/sleep.d/screen.backlight** en recopiant les lignes suivantes dans le fichier :<file>
+#!/bin/sh
+case "$1" in
+    thaw|resume)
+        /usr/bin/setpci -s 00:02.0 F4.B=00>/dev/null
+        ;;
+    *)
+        ;;
+esac
+exit $?</file>
+  - Enfin rendez le [[:tutoriel/script_shell|script]] exécutable avec cette [[:commande_shell|commande]] :<code>sudo chmod +x /etc/pm/sleep.d/screen.backlight:</code>
+Grâce à ce script placé dans ceux qui sont lancés au réveil, l'écran est restauré à sa luminosité maximale au sortir de l'hibernation.
+
+====Problèmes de saccades====
+
+Problème de saccade/déchirure [[wp>Screen_tearing|"Tearing"]]avec Intel HD graphics lors des lectures VLC ou navigation sous Firefox.
+
+Suite à une mise à niveau sous la version 18.04, mes lectures VLC sont déchirées, présence de "Tearing".
+
+Il faut [[:tutoriel:comment_modifier_un_fichier|créer le fichier]] suivant **/usr/share/X11/xorg.conf.d/20-intel_flicker_fix.conf** avec les [[sudo|droits d'administration]] et y coller ces lignes :
+<file>
+Section "Device"
+  Identifier  "Intel Graphics"
+  Driver      "intel"
+  Option      "TripleBuffer" "true"
+  Option      "TearFree"     "true"
+EndSection
+</file>
+
+Sauvegarder et redémarrer.
+
+Si cela ne fonctionne pas ne pas oublier de supprimer le fichier de configuration avec les [[sudo|droits d'administration]].
+
+====Résolution limitée à 1024 X 768====
+Parfois seules les résolutions standards VGA SVGA XGA sont reconnues lors de l’installation. La résolution maximum est alors 1024 X 768. La solution est d’utiliser le serveur graphique Xorg avec un fichier Xorg.conf adapté. 
+
+Par défaut, Xorg est utilisé sous **Ubuntu 20.04** mais le serveur X Wayland est aussi possible. La commande
+    XDG_SESSION_TYPE
+permet de connaître le serveur X utilisé. Si c'est le cas, il faut Configurer l’emploi du serveur X Xorg par défaut en modifiant le fichier :
+/etc/gdm3/custom.conf
+
+Décommenter (= enlever les 2 ##) la ligne WaylandEnable=false
+    
+Sous **Lubuntu 20.04** seul Xorg est utilisé. Le fichier xorg.conf est lu par le serveur X lors de son allumage. 
+
+Il faut donc :
+
+
+
+<note>
+1 Créer un fichier xorg.conf
+
+2 Relever les paramètres nécessaires à la carte graphique pour la résolution désirée
+
+3 Entrer ces paramètres dans le fichier xorg.conf
+</note>
+**__Créer le fichier xorg.conf__**
+
+Un fichier xorg.conf erroné, peut empêcher le serveur graphique de démarrer. Il est donc indispensable d’installer midnight commander (mc) qui est un gestionnaire de fichier en ligne de commande. Avec  midnight commander vous pourrez facilement supprimer un fichier Xorg.conf erroné. 
+
+- //Passer en mode console
+//
+
+
+Créer 2 modes consoles
+
+CTRL + ALT + F3 
+remplir login puis mot de passe
+
+CTRL + ALT + F4
+remplir login puis mot de passe
+
+- //Arrêter le serveur X//
+
+<code>sudo service gdm3 stop  (Ubuntu 20.04)
+
+sudo service sddm stop   (Lubuntu 20.04)</code>
+
+- //Repasser sur la console 3//
+
+CTRL + ALT + F3  remplir login puis mot de passe.
+
+
+- //Créer un fichier xorg.conf.new qui sera dans le dossier /root//
+<code> sudo Xorg -configure </code>
+
+- Redémarrer
+<code> sudo reboot </code>
+
+** __Rechercher les paramètres à appliquer à la carte graphique pour la résolution désirée__ **
+
+L’utilitaire GTF permet de calculer les paramètres nécessaires à la carte graphique pour la résolution spatiale et la fréquence de balayage désirée. La résolution doit être compatible avec l’écran et la carte graphique. Pour les écrans plats, la fréquence de balayage est quasiment toujours 60 Hz. En ligne de commande, GTF doit être suivi de la matrice et la fréquence de balayage, par exemple pour une résolution 19250x1200 à 60 Hz
+<code>  gtf 1920 1200 60
+
+  # 1920x1200 @ 60.00 Hz (GTF) hsync: 74.52 kHz; pclk: 193.16 MHz
+  Modeline "1920x1200_60.00"  193.16  1920 2048 2256 2592  1200 1201 1204 1242  -HSync +Vsync </code> 
+
+La ligne  Modeline à +Vsync indique tous les paramètres nécessaires à la carte graphique.
+
+** __Ajouter les paramètres obtenus au fichier Xorg.conf__ ** 
+
+Il faut ouvrir le fichier Xorg.conf.new située dans /root puis l’enregistrer dans le dossier / home / « user » en le **renommant Xorg.conf**
+
+La ligne Modeline...+Vsync doit être ajouté au fichier dans la section « Monitor » juste au-dessus de la ligne EndSection
+
+Section "Monitor"
+	Identifier   "Monitor0"
+	VendorName   "Monitor Vendor"
+	ModelName    "Monitor Model"
+  Modeline "1920x1200_60.00"  193.16  1920 2048 2256 2592  1200 1201 1204 1242  -HSync +Vsync
+  EndSection
+
+Il faut encore copier le fichier sous root dans le dossier / etc / X11
+
+Il ne reste plus qu’à redémarrer et la nouvelle résolution spatiale (1920x1200 dans mon cas) est maintenant accessible.
+
+
+
+** __Remarque : Manipulation des fichiers en dehors de son répertoire personnel__ ** 
+
+Le plus simple est d’appeler dans un terminal le gestionnaire de fichier :
+  sudo nautilus (Ubuntu 20.04)
+  
+  sudo pcmanfm-qt (Lubutnu 20.04) 
+
+
+=====Aller plus loin=====
+====Autres commandes utiles====
+  *  Pour vérifier si votre pilote Intel est activé. Exemple pour i915:<code bash>lsmod | egrep  'i915'</code> Ce que doit vous répondre le [[:terminal]]:<code>
+i915                  686995  3 
+drm_kms_helper         53178  1 i915
+drm                   302332  4 i915,drm_kms_helper
+i2c_algo_bit           13564  1 i915
+video                  19574  1 i915l</code>Rem: Pour un autre pilote, mettre le nom du pilote donné par lsmod.
+  *  Pour vérifier si Xv fonctionne :<code>xvinfo | grep -A11 Intel</code>
+  *  Pour vérifier si le DRI2 fonctionne :<code>grep rendering /var/log/Xorg.0.log</code>Vous devez avoir la réponse: <code>[    21.396] (II) intel(0): direct rendering: DRI2 Enabled</code>
+  *  Pour vérifier si le pilote Intel est compatible :<code>grep -A29 Chipsets /var/log/Xorg.0.log</code>Dans la réponse du [[:terminal]] vous devez y trouver le nom de votre carte.
+ 
+===== Voir aussi =====
+  * **(en)** Liste détaillée des cartes supportées par le pilote Intel selon la [[http://intellinuxgraphics.org/documentation.html|documentation intellinuxgraphics.org]] //(utilisant le nom commercial des cartes)//
+  * **(en)** [[http://www.x.org/wiki/IntelGraphicsDriver/|Xorg et les pilotes graphiques Intel]]
+
+----
+
+//Contributeurs: [[:utilisateurs:Biginoz]], [[:utilisateurs:Fabien26]], [[:utilisateurs:wido]], [[:utilisateurs:Sleeper]], [[:utilisateurs:francoise_peace]], [[:utilisateurs:l_africain|L'Africain]].//

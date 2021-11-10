@@ -1,0 +1,154 @@
+
+{{tag>xenial cloud sauvegarde}}
+
+====== Installation d'un serveur ownCloud ======
+
+
+Cette page traite de l'installation d'un serveur ownCloud. Pour consulter des informations sur l'utilisation comme utilisateur, veuillez consulter les pages [[:ownCloud]] et son fork [[:nextcloud#clients|Nextcloud]].
+<note tip>La migration d'un serveur owncloud à nextcloud est décrite [[:nextcloud-serveur#migration_d_un_serveur_owncloud_en_serveur_nextcloud|sur la page nextcloud-serveur]] </note>
+
+===== Dépôts officiels d'ownCloud =====
+L'installation est très simple, des paquets pour ownCloud sont disponibles pour les [[:versions]] supportées d'Ubuntu sur [[https://download.owncloud.org/download/repositories/stable/owncloud/|download.owncloud.org]].
+
+Par exemple pour une installation sur Ubuntu 16.10 :
+
+Installez la clef du dépôt
+<code>
+wget -nv https://download.owncloud.org/download/repositories/stable/Ubuntu_16.10/Release.key -O Release.key
+sudo apt-key add - < Release.key
+</code>
+Ajoutez le dépôt et installez le serveur ownCloud
+<code>
+sudo sh -c "echo 'deb http://download.owncloud.org/download/repositories/stable/Ubuntu_16.10/ /' > /etc/apt/sources.list.d/owncloud.list"
+sudo apt-get update
+sudo apt-get install owncloud-files
+</code>
+Votre serveur est maintenant accessible à l'adresse http://localhost/owncloud/ (si vous accédez à la page depuis le serveur, sinon remplacer localhost par l'IP du serveur). Vous devez créer un compte à la première connexion. Si le serveur se plaint de dépendances non satisfaites, redémarrer le serveur web : "sudo service apache2 reload".
+
+Pour activer les connexions sécurisées à votre serveur Apache (https) :
+<code>
+sudo a2enmod ssl
+sudo a2ensite default-ssl
+sudo service apache2 reload
+</code>
+Connectez-vous maintenant via l'adresse https://localhost/owncloud/. Dans le menu Administration, c'est-à-dire sur la page https://localhost/owncloud/index.php/settings/admin, cochez la case "Forcer HTTPS".
+
+Vous pourriez avoir besoin de [[:tutoriel/comment_creer_un_certificat_ssl|créer un certificat tls/ssl]] si ce n'est déjà fait.
+
+<note>Sur **Ubuntu 16.04 LTS** :
+Si vous ne parvenez pas à atteindre votre interface par http://localhost/owncloud , créez un lien symbolique pour remonter du dossier /usr/www/html où vous êtes enfermé(e).
+<code>
+sudo ln -s /var/www/owncloud /var/www/html/owncloud
+</code>
+</note>
+<note>Avec Owncloud 10.* :
+Cette version ne peut plus être installée de cette façon car il n'y a plus de méta-paquet installant toutes les dépendances automatiquement. Maintenant il faut connaître et trouver toutes les dépendances manuellement...
+</note>
+===== Installation manuelle =====
+==== Préambule ====
+Pour des raisons de sécurité et **surtout** si le service est accessible depuis Internet, il est recommandé de suivre les différentes releases (versions) proposées par le projet ownCloud. Effectivement, les releases sont souvent le fruit de corrections de failles de sécurité. Fin juin 2012, le projet OwnCloud publiait la release 4.0.3. En comparaison, le dépôt Universe ne propose que la release 3.0.0. Une bonne façon de suivre cette évolution consiste à s'abonner au flux RSS du projet ([[http://owncloud.org/blogfeed/]])
+
+==== Pré-requis ====
+Il vous faudra avoir installé au préalable :
+  * [[:apache2|apache]]
+  * [[:php]]
+  * [[:git]]
+  * Si besoin, installer [[:mysql]], sinon la base de données utilisée sera sqlite.
+
+==== Installation ====
+Depuis un [[:terminal]], saisissez les [[:commande_shell|commandes]] suivantes :
+<code>
+cd /var/www/
+sudo git clone git://github.com/owncloud/core.git owncloud
+cd owncloud
+sudo git submodule update --init
+sudo mkdir data
+sudo groupadd www-data
+sudo chgrp www-data data
+sudo chmod 770 data
+sudo chgrp www-data config
+sudo chmod g+w config
+</code>
+Puis, dans votre [[:navigateur]], saisissez l'adresse [[http://localhost/owncloud]] (ou l'adresse I.P. du serveur).
+
+Introduisez un login et mot de passe dans les boîtes correspondantes et vérifiez dans la boîte "Avancé" que le dossier des données est correct (logiquement oui).
+
+=====Sécurisation=====
+[[:adduser|Créer un utilisateur]] dédié à cet usage, tout en l'ajoutant au groupe **www-data** serait un plus.\\
+
+On peut s'inspirer de cette méthode : 
+[[:tutoriel/reverse_ssh#creation_d_un_utilisateur_dedie_sur_le_poste_serveur|#creation_d_un_utilisateur_dedie_sur_le_poste_serveur]]
+
+==== Sécurisation par HTTPS ====
+Une petite modification du fichier .htaccess (/var/www/owncloud/.htaccess) permet de rediriger les accès non sécurisés (HTTP) vers leur équivalent sécurisé (HTTPS). Ceci va **garantir que les communications** entre le client et le serveur au travers de l'Internet **sont chiffrées**. Ainsi, on **évite** les interceptions et **le vol des paramètres d'identification**.
+<code apache>
+<IfModule mod_rewrite.c>
+RewriteEngine on
+RewriteCond %{HTTPS} !=on
+RewriteRule .* https://%{SERVER_NAME}%{REQUEST_URI} [R,L]
+RewriteRule .* - [env=HTTP_AUTHORIZATION:%{HTTP:Authorization},last]
+</IfModule>
+</code>
+
+Il existe une seconde méthode qui consiste à modifier le fichier de configuration de l'installation de ownCloud ( par défaut /var/www/owncloud/config/config.php).
+Dans le tableau $CONFIG, ajouter la ligne  :
+<code apache>
+'forcessl' => true,
+</code>
+
+Il est intéressant d'aller voir dans le même répertoire le fichier config.sample.php qui décrit les options possibles.
+
+==== Sécurisation des données ====
+__Attention, par défaut, Apache2 ne prend pas les "overrides"__, ce qui se traduit par une inefficacité du .htaccess du dossier data et donc la possibilité d'accéder aux fichiers des utilisateurs librement, depuis le web. Pour corriger cette faille :
+
+Sauvegardez le fichier de configuration
+<code>sudo cp -p /etc/apache2/apache2.conf /etc/apache2/apache2.conf.orig</code>
+
+Puis ouvrez apache2.conf
+<code>sudo nano /etc/apache2/apache2.conf</code>
+
+Dans la section ''<Directory /var/www/>'', Cherchez "**Allow Override None**" et changez-le en **All**.
+En clair, vous voulez voir ceci
+
+<code><Directory /var/www/>
+        Options Indexes FollowSymLinks
+        AllowOverride All
+        Require all granted
+</Directory>
+</code>
+
+===== Problème(s) connu(s) =====
+==== Permission de téléverser ====
+
+Si vous avez le message d'erreur suivant : 
+<code>
+Vous n'avez pas la permission de téléverser ou de créer des fichiers ici
+</code>
+
+Ouvrir un terminal au nom de l'utilisateur d'owncloud, allez à la racine du serveur ownCloud, puis utilisez les commandes suivante :
+<code>
+~owncloud/
+sudo chmod u+x occ
+occ files:scan --all
+</code>
+
+==== ...same user... ====
+
+Si vous avez ce message d'erreur :
+<code>Console has to be executed with the same user as the web server is operated
+Current user: root
+Web server user: "user"
+</code>
+
+C'est que vous ne vous êtes pas logué sur le bon utilisateur, ouvrez un terminal au nom du "user" puis recommencez la manipulation.
+
+===== Voir aussi =====
+
+   * [[http://owncloud.org/|Site officiel]]
+   * [[http://demo.owncloud.org/|Démonstration]] sur le site officiel
+   * [[http://geekdefrance.fr/2012/01/17/tuto-remplacer-dropbox-par-une-alternative-libre-owncloud/|Tutoriel: remplacer dropbox par une alternative libre owncloud]] sur Geekdefrance.fr
+   * [[https://www.cozy.io/|Cozy Cloud]] une alternative, elle aussi libre, à ownCloud.
+   * [[http://www.it-connect.fr/tutoriels/stockage/cloud/owncloud/|Plusieurs tutoriels sur la mise en place d'ownCloud]] sur IT-Connect
+
+----
+//Contributeurs : [[:utilisateurs:davy014]], [[:utilisateurs:bcag2]]//

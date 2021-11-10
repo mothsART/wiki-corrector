@@ -1,0 +1,222 @@
+
+{{tag> tutoriel serveur }}
+-------
+====== Configurer un domaine sur un serveur avec apache2 et bind9 ======
+
+Ce tutoriel a pour but de vous expliquer pas à pas comment gérer un nom de domaine avec votre propre machine. Pour y parvenir nous allons devoir effectuer deux étapes principales:
+
+   - [[#Configuration de bind9|Configurer]] le [[wpfr>Domain_Name_System|serveur de nom]] (DNS) pour que le domaine pointe sur l'ip d'une machine cliente
+   - [[#Configuration d'apache2|Configurer]] apache pour répondre aux requêtes de ce domaine.
+
+===== Prérequis & Préambule =====
+
+  *  Disposer d'un serveur avec les [[:sudo|droits administrateur]].
+  *  Le serveur doit disposer d'un serveur web [[:apache2|apache2]] et d'un serveur de nom [[:bind9|bind9]].
+  *  Si vous utilisez un [[:pare-feu|pare-feu]] tel que [[:iptables|iptables]], veillez à ce que les ports suivants soient ouverts:
+    *  **53** ([[wpfr>User_Datagram_Protocol|UDP]] et [[wpfr>Transmission_Control_Protocol|TCP]] (([[http://www.frameip.com/dns/#3.1_-_Le_transport|Source]])) ) pour le DNS 
+    *  **80** (TCP) pour le HTTP (port par défaut)
+    *  **443** (TCP) pour le HTTPS (port par défaut)
+
+  *  Avoir le contrôle du nom de domaine concerné (pouvoir faire la demande de modification de ses DNS). 
+  *  Dans ce tutoriel le nom du serveur utilisé sera **myserver.adomain.tdl**, il correspond à l'adresse du serveur (par exemple //ksxxxxxx.kimsufi.com//).
+  *  Dans ce tutoriel l'ip du serveur correspondant à **myserver.adomain.tdl** est **12.345.678.9**.
+  *  Dans ce tutoriel l'email de contact est //myemail@mailprovider.tdl// (ex: //toto@gmail.com//).
+  *  Dans ce tutoriel les serveurs DNS secondaires utilisés seront:
+    *  **dns1.domain.tdl**
+    *  **dns2.domain.tdl**\\ Dans la pratique, il est possible qu'un seul serveur secondaire soit indiqué, comme par exemple //sdns2.ovh.net// ou encore //ns.kimsufi.com// (cf. [[http://guides.ovh.com/InstallDNSSecondaire|ici]]).
+
+
+<note important>  
+Si le serveur est une machine hébergée à votre domicile afin de faire de [[wpfr>Auto-h%C3%A9bergement_%28Internet%29|l'auto-hébergement]], l'ip utilisée dans les configurations devra être l'[[:tutoriel:connaitre_son_adresse_ip#adresse_publique|IP publique]] donnée par votre [[wpfr>Fournisseur_d'accès_à_internet|FAI]].\\
+Si l'ip fournit par le FAI n'est pas fixe, il faudra [[http://www.commentcamarche.net/faq/1887-securite-ip-statique-fixe-ou-dynamique|en posséder une]]
+
+Si toutefois vous souhaitez conserver une IP dynamique, reportez-vous [[http://www.imnotgeek.com/15-05-2012/un-ndd-com-fr-etc-sur-un-serveur-ip-dynamique-grce-cloudflare-14638/|ici]].
+</note>
+
+
+===== Configuration de bind9 =====
+
+==== Préambule ====
+
+En premier lieu il va falloir configurer bind9 pour communiquer avec les serveurs de noms secondaires. Car pour qu'un domaine soit configuré correctement, des serveurs de noms secondaires doivent connaître la configuration de votre domaine. C'est une histoire de sécurité afin qu'il y ait au moins toujours une machine référente lors de la [[wpfr>Domain_Name_System#R.C3.A9solution_du_nom_par_un_h.C3.B4te|résolution d'un nom de domaine]].
+
+==== Déclarations ====
+
+Dans le fichier **/etc/bind/named.conf** il doit y avoir une inclusion de **/etc/bind/named.conf.options**. C'est dans ce fichier que vous allez placer la liste des serveurs autorisés (en réalité vous pouvez la mettre où bon vous semble, mais autant être un peu organisé ;-) ). \\
+Cette liste de serveurs autorisés va dépendre de quels serveurs/services vous utilisez pour vos serveurs DNS secondaires. En général le prestataire chez qui vous louez votre serveur ou votre nom de domaine propose un service de DNS secondaire (ex: [[http://guides.ovh.com/InstallDNSSecondaire|ovh]] ou [[http://wiki.gandi.net/fr/domains/faq/technical-parameters#gandi-fournit-il-un-serveur-dns-secondaire|gandi]]). 
+<note>Pour la suite, le service utilisé sera celui de http://www.cloudns.net/.</note>
+
+Pour définir la liste d'ip autorisées à communiquer avec votre serveur, [[:tutoriel:comment_modifier_un_fichier|éditez avec les droits d'administration]] le fichier **/etc/bind/named.conf.options** pour le modifier comme suit:
+
+<file>
+options {
+    directory "/var/cache/bind";
+    auth-nxdomain no;
+    listen-on-v6 { any; };
+    allow-query { trusted; cloudns; };
+    allow-recursion {trusted; cloudns; };
+};
+
+acl trusted {
+  127.0.0.1;
+};
+
+acl cloudns {
+    85.159.233.17;
+    108.59.1.205; 
+    91.230.195.150;
+    85.25.34.84;   
+    87.117.196.78; 
+    62.75.145.77;  
+    69.197.4.65;   
+    188.241.115.14;
+    91.218.115.228;
+    184.75.249.242;
+    216.24.196.51; 
+};
+</file>
+
+Il s'agit ensuite d'[[:tutoriel:comment_modifier_un_fichier|éditer avec les droits d'administration]] le fichier de configuration **/etc/bind/named.conf.local** (ou ailleurs ...) pour:
+  * déclarer une zone correspondant au domaine **mydomain.tdl** pour lequel les serveurs de cloudns sont autorisés à communiquer avec le serveur et qui doivent être notifiés des changements.
+  * indiquer que le reste de la [[#Configuration_de_la_zone|configuration de zone]] se trouve dans le fichier **/etc/bind/db.mydomain.tdl**
+<file>
+zone "mydomain.tdl" { 
+  type master;    
+  file "/etc/bind/db.mydomain.tdl";  
+  allow-transfer { localhost; cloudns; };
+  allow-query { any; };
+  notify yes;
+};
+</file>
+
+
+==== Configuration de la zone ====
+
+Vous trouverez ci-dessous un fichier de configuration de zone tout prêt. 
+<file /etc/bind/db.mydomain.tdl>
+$TTL    86400
+mydomain.tdl.   IN      SOA     myserver.adomain.tdl. myemail.mailprovider.tdl. (
+                        2012092401 ; Numero
+                        28800      ; refresh
+                        14400      ; Retry
+                        604800     ; Expire
+                        86400 )    ; Minimum
+
+; Default IP adress of the domain
+        IN          A       12.345.678.9
+
+; Name servers for the domain
+        IN          NS      myserver.adomain.tdl.
+        IN          NS      dns1.domain.tdl.
+        IN          NS      dns2.domain.tdl.
+
+; Mail server
+        IN          MX      1   mx.myserver.adomain.tdl.
+
+; Nodes in domain
+mx                  IN      A    12.345.678.9
+ftp                 IN      A    12.345.678.9
+@                   IN      A    12.345.678.9
+www                 IN      A    12.345.678.9
+
+; Aliases
+blog                IN      CNAME   www
+</file>
+Une description de toutes les composantes de ce fichier ne sera pas développée ici, seules celles intéressantes pour configurer le domaine de manière fonctionnelle le seront ci-dessous. Vous pourrez trouver plus d'informations [[http://fr.wikipedia.org/wiki/Domain_Name_System#Principaux_enregistrements_DNS|ici]] par exemple.
+  *  Le numéro identifiant la version de votre zone est très important. Ici il s'agit de **2012021601**. Il permet aux serveurs de noms de savoir si il y a une nouvelle version de ce fichier. **À chaque modification de votre zone vous devrez mettre à jour ce numéro** (notez qu'il est au format yyyymmddnn)!
+
+  *  La partie //Name servers for the domain// liste les serveurs de noms qui s'occupe de cette zone. En l’occurrence ici, le serveur actuel //myserver.adomain.tdl//, ainsi que deux autres: //dns1.domain.tdl// et //dns2.domain.tdl//.\\ Dans votre cas vous n'aurez peut-être pas deux serveurs mais un seul, voire plus. En réalité cela dépend uniquement de combien de serveurs DNS secondaires vous disposez. Par exemple, l' [[#Déclarations|étape précédente]] qui fait appel aux serveurs de cloudns montre que beaucoup y sont à disposition.
+
+    * La partie //Mail server// déclare la liste des serveurs mx ([[wpfr>Domain_Name_System#MX_record|mail exchange]]). Ce tutoriel ne s'attardera pas sur cette partie.
+
+    * La partie //Nodes in domain//  fait correspondre une ip à chaque sous-domaines.
+
+    * La partie //Aliases// déclare les alias. Ici le sous-réseau **blog** est un alias de **www**, donc aura la même ip.
+==== Backup des zones ====
+
+À ce stade la zone est déclarée. Pour vérifier que celle-ci est configurée correctement, saisissez dans un [[:terminal]] la [[:commande_shell|commande]] suivante:
+
+<code>named-checkconf -z</code>
+
+Vous devez avoir dans la liste une ligne correspondant à cette zone:
+
+<code>zone mydomain.tdl/IN: loaded serial 2012092401</code>
+
+Si il y a une erreur dans votre zone, vous verrez plutôt quelque chose comme ça:
+
+<code>zone mydomain.tdl/IN: not loaded due to errors.</code>
+
+Si tout va bien, rechargez la configuration du serveur de nom:
+
+<code>sudo service bind9 reload</code>
+
+qui devrait répondre
+
+<code>  Reloading domain name service...: bind9.</code>
+
+Vous devez maintenant aller configurer vos serveurs DNS secondaires. Cette démarche dépendant du service de serveur de nom secondaire que vous utilisez, elle ne peut pas être expliquée dans ce tutoriel. Mais typiquement vous aurez à informer ces serveurs DNS secondaires de l'ip de votre serveur DNS principal. 
+
+Une fois la procédure effectuée du coté de vos serveurs de nom secondaire, le tour devrait être joué. Mais il faut tout de même vérifier tout ça ...
+
+Sur votre serveur, entrez cette commande afin de récupérer les informations de zone auprès de la machine DNS principale (c'est-à-dire la votre)
+
+<code>dig soa mydomain.tdl</code>
+
+Vous devriez normalement voir votre configuration de zone. Repérez surtout le numéro dans **;; ANSWER SECTION:** il doit correspondre à votre numéro (le plus récent bien entendu).
+
+Mais vous pouvez également vous assurer que les serveurs de noms secondaires connaissent bien votre zone et/ou sont bien à jour (en repérant le numéro). Pour cela entrez cette commande (**ou l'ip correspond à l'ip d'un/du serveur DNS secondaire**)
+
+<code>dig @87.117.xxx.xx soa mydomain.tdl</code>
+
+Si le serveur de nom secondaire est à jour: **tout est ok** :-) !
+
+==== Propagation DNS ====
+
+Il faut maintenant propager votre nouvelle configuration de DNS pour ce domaine afin que les autres serveurs DNS du monde sachent à quelle machine (votre serveur et les serveur DNS secondaires) demander des informations sur votre zone.\\
+Pour cela, le prestataire chez qui vous avez acheté votre domaine doit vous proposer une interface permettant de changer les serveurs DNS de votre domaine. Vous devrez y indiquer le serveur DNS primaire et le(s) serveur(s) DNS secondaire(s), à savoir ici **myserver.adomain.tdl** ainsi que **dns1.domain.tdl** et **dns2.domain.tdl**. 
+
+Pensez à vérifier en premier lieu que votre configuration va être accepté. Pour cela utilisez par exemple le [[http://www.afnic.fr/fr/produits-et-services/services/zonecheck/formulaire-complet/|formulaire de l'afnic]].
+
+Une fois cette procédure lancée le délai pour que vous puissiez constater que le domaine pointe bien sur votre machine est relatif. En principe le prestataire chez qui vous avez acheté le domaine vous informera de l'avancée de la procédure et à minima si elle a fonctionné.
+
+De chez vous, vous pouvez vérifier si le domaine pointe correctement vers votre machine en effectuant un simple ''ping'' par exemple.
+
+<code>ping mydomain.tdl</code>
+
+Si l'IP indiqué par le ''ping'' correspond a celle de votre serveur, c'est que la propagation a été faite. Ou du moins que les serveurs DNS de votre Fournisseur d'Accès Internet en ont connaissance.
+
+===== Configuration d'apache2 =====
+
+==== Préambule ====
+
+Il s'agira ici de configurer le serveur apache afin de répondre aux demandes HTTP correspondant à votre domaine. Ce serveur web apache pourrait très bien se trouver sur une machine différente que celle ou se trouve le serveur de nom. Souvenez-vous de l'ip que vous avez fait correspondre à vos sous-domaine dans la zone [[#Configuration de la zone|tout à l'heure]]. Le serveur DNS ne fait qu'informer le client à quelle ip correspond le domaine ou le sous-domaine. Dans ce tutoriel le serveur web se trouvera sur la même machine que le serveur de nom.
+
+ ==== Création de l’hôte virtuel ====
+
+[[:tutoriel:comment_modifier_un_fichier|Editez avec les droits d'administration]] le fichier de configuration de l'[[:apache2#creation_d_hotes_virtuels|hôte virtuel]] ''/etc/apache2/sites-available/mydomain.tdl.conf'' sous cette forme :
+
+<file - mydomain.tdl.conf>
+<VirtualHost *:80>
+	ServerName mydomain.tdl
+	ServerAlias www.mydomain.tdl
+	DocumentRoot "/var/www/mydomain"
+	<Directory "/var/www/mydomain">
+		Options +FollowSymLinks
+		AllowOverride all
+		Require all granted
+	</Directory>
+	ErrorLog /var/log/apache2/error.mydomain.tdl.log
+	CustomLog /var/log/apache2/access.mydomain.tdl.log combined
+</VirtualHost>
+</file>
+
+Vous placerez alors les fichiers de votre site dans le répertoire ''/var/www/mydomain''. Évidemment, vous pouvez configurer ce répertoire là ou vous le souhaitez.\\
+Pour plus une documentation plus approfondie sur la création d'un hôte virtuel vous pouvez consulter [[:apache2#creation_d_hotes_virtuels|cette page]], et pour des exemples pratiques consulter [[:tutoriel:lamp_repertoires_de_travail|ce tutoriel]].
+<note important>Faites attention aux [[:droits]] : Apache doit pouvoir accéder aux fichier de votre site web. Pensez donc à modifier les [[:permissions]] des fichiers en conséquence en suivant [[:apache2#permissions|cette documentation]], par exemple :
+<code>sudo chown $USER:www-data /var/www/public
+chmod 750 /var/www/mydomain</code></note>
+
+<note tip>Si vous avez des difficultés avec Apache (comme des "accès denied") pensez a regarder du coté des log d'Apache (''/var/log/apache2/error.mydomain.tdl.log'' pour cet hôte)</note>
+
+----
+//Contributeurs: [[:utilisateurs:buxbux|bux]] //

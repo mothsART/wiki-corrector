@@ -1,0 +1,239 @@
+
+{{tag> matériel réseau}}
+----
+====== ISCSI ======
+
+<note important>Cette configuration a été effectuée sous un serveur local disposant d'[[:Precise|ubuntu 12.04.1 LTS]], il se peut qu'elle diffère pour des versions antérieures</note>
+
+Un SAN, qu'est ce que c'est ? :-P
+
+Un SAN, tout comme un NAS usant des protocoles NFS ou SAMBA, vous permet de partager de l'espace disque via une image disque simulant un disque dur ou d'un disque complet, via le protocole ISCSI.\\
+La nette différence résulte dans le fait que c'est le système client qui prend en charge le formatage et le système de fichiers de ce dernier, sans compter que les performances seront généralement meilleures que sous les deux autres protocoles, notamment sur de multiples petits fichiers. ;-)
+
+Selon [[http://blog.gaetan-grigis.eu/systeme/administration/mise-en-place-discsi-pour-le-partage-de-donnees/|cet article]], l'accès en écriture serait amélioré de 20% par rapport en NFS, et de 400% (théorique, dépend de votre configuration réseau) en lecture. ^_^
+
+Autres points importants, cette technique vous permet de soulager votre serveur en terme de ressources demandées (au détriment du poste client toutefois), mais surtout de mapper en dur cet espace disque comme s'il faisait partie intégrante de la machine client.\\
+Ainsi certains logiciels comme le client [[:Steam]] sous Windows, développé pour empêcher l'utilisateur de faire fonctionner ce client logiciel de jeux, sous un disque réseau (m(), n'y verra plus que du feu. LOL\\
+Cette technique est aussi valable pour d'autres logiciels n'autorisant leur utilisation que sur des disques locaux.  ;-)
+
+
+===== Configuration du serveur et de ses disques =====
+
+La configuration est également assez simple une fois le concept saisi, deux choix s'offrent à vous, dédier un disque complet à l'utilisation de ISCSI pour un partage réseau en dur, ou bien dédier un espace choisi via la création d'un fichier image d'un disque dur.
+
+==== Installation du service ====
+
+L'installation est très simple, et se résume par l'[[:tutoriel:comment_installer_un_paquet|installation des paquets]] **[[apt>iscsitarget,iscsitarget-source,iscsitarget-dkms|iscsitarget iscsitarget-source iscsitarget-dkms]]**.\\
+Ce qui peut se résumer avec l'outil [[:apt-get]] dans un [[:terminal]] par la [[:commande_shell|commande]] :
+<code>sudo apt-get install iscsitarget iscsitarget-source iscsitarget-dkms</code>
+
+
+==== Cas d'un disque émulé ====
+
+Voici la commande nécessaire à la création d'un disque virtuel de 40Go, vous devrez modifier fs.iscsi.disk par le chemin et le nom du fichier que vous aurez choisi, et la valeur 40000 correspondra à la taille du disque choisie.
+
+<code>dd if=/dev/zero of=fs.iscsi.disk bs=1M count=40000</code>
+
+[[:tutoriel:comment_modifier_un_fichier|Éditer avec les droits d'administration]] le fichier de configuration **/etc/iet/ietd.conf** pour y ajouter:
+<file>
+Target nom-libre:fs.iscsi.disk
+Lun 0 Path=/chemin/du/disque/virtuel/fs.iscsi.disk,Type=fileio
+</file>
+
+==== Cas pour un disque dur ou une partition en dur ====
+[[:tutoriel:comment_modifier_un_fichier|Éditer avec les droits d'administration]] le fichier de configuration **/etc/iet/ietd.conf** pour y ajouter:
+<file>
+Target nom-libre:sdb2
+Lun 0 Path=/dev/sdb2,Type=fileio
+</file>
+En adaptant la partition ///dev/sdb2// à votre cas.
+
+==== Configuration finale ====
+Enfin, [[:tutoriel:comment_modifier_un_fichier|éditer avec les droits d'administration]] le fichier de configuration **/etc/default/iscsitarget** et remplacez la valeur "false" par "true" :
+
+<file> ISCSITARGET_ENABLE=false </file>
+
+deviendra ainsi
+
+<file>ISCSITARGET_ENABLE=true </file>
+
+Il ne reste plus qu'à redémarrer le [[:services|service]] pour prendre en compte les modifications :
+<code>sudo service iscsitarget restart</code>
+Devra vous indiquer :
+
+<code>
+ * Removing iSCSI enterprise target devices:              [ OK ]
+ * Starting iSCSI enterprise target service                   [ OK ]
+                                                                                   [ OK ]
+</code>
+
+Enfin, vous pouvez vérifier que votre disque a bien été pris en compte via cette commande :
+
+<code>cat /proc/net/iet/volume</code>
+
+<note important>Si votre serveur est protégé par un [[:pare-feu]], ouvrez le port 3260 vers votre réseau local\\
+Par exemple : <code>sudo ufw allow to any port 3260 from 192.168.1.0/24</code></note>
+
+===== Configuration du poste client GNU/Linux =====
+==== Installation manuelle ====
+Sur le poste client, [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>open-iscsi]]**, puis lancez une détection (192.168.0.1 étant à remplacer par l'[[:tutoriel:connaitre_son_adresse_ip|ip du serveur]]):
+<code>sudo iscsiadm --mode discovery --type sendtargets --portal 192.168.0.1</code>
+
+Par exemple, sur un disque virtuel étant dédié à [[:Steam]], cela peut donner le résultat :
+<code>192.168.0.1:3260,1 steam:fs.iscsi.steam</code>
+
+Ensuite pour lier le disque virtuel au couple machine/client (en adaptant selon vos valeurs) :
+<code>sudo iscsiadm --mode node --targetname steam:fs.iscsi.steam \ --portal 192.168.0.1 --login</code>
+
+Si l'opération s'est bien déroulée, toujours avec l'exemple du disque virtuel dédié à Steam,  s'affiche alors quelque chose comme : 
+<code>Logging in to [iface: default, target: steam:fs.iscsi.steam, portal: 192.168.0.1,3260] (multiple)</code>
+
+Remarquez le jeu de mot... (Steam/Valve/Portal ! m( )
+
+Voilà, votre disque virtuel distant SCSI est disponible en tant que périphérique (dans /dev) sur votre machine cliente Linux !
+
+==== Montage automatique au démarrage ====
+Si vous voulez que les disques distants soient automatiquement montés au démarrage de votre système, il faut [[:tutoriel:comment_modifier_un_fichier|éditer avec les droits d'administration]] le fichier **/etc/iscsi/iscsid.conf** et dé-commenter ((enlever le dièse "#"))
+<file>node.startup = automatic</file>
+
+==== Script automatique pour PC diskless (PXE boot en Live) ====
+Lors d'un démarrage en mode [[:netboot_live|Netboot Live]], votre PC client est totalement dénudé.\\
+Ce script va vous permettre de réaliser l'installation de 'open-iscsi', d'interroger le serveur et de pouvoir choisir le disque à connecter.
+Il permet aussi de déconnecter un disque.
+=== Version terminal ===
+<code>#! /bin/sh
+# gestion automatique iSCSI
+
+if [ x$1 = x ];
+then
+  echo "You have to give the server (IP or URL) or -u to disconnect disks"
+  exit
+fi
+
+installed=`dpkg -l "open-iscsi*" | grep ii | cut -d ' ' -f 1`
+if [ "x$installed" = "x" ];
+then
+   apt-get install -y open-iscsi open-iscsi-utils
+fi
+
+if [ "$1" != "-u" ];
+then
+  info=`iscsiadm --mode discovery --type sendtargets --portal $1`
+  pos=2
+  while [ 1 ];
+  do
+    volume=`echo $info | cut -d ' ' -f $pos`
+    if [ "$volume" = "" ]; then break;fi
+    echo "`expr $pos / 2` - $volume"
+    pos=`expr $pos + 2`
+  done
+  echo -n "\nChoose the disk number : "; read n
+  bon=`echo "123456789" | grep $n`
+  if [ "$bon" = "" ]; then echo "Error, you do type a number"; exit;fi
+  n=`expr $n + $n`
+  if [ $n -ge $pos ]; then echo "Error, bad disks number"; exit;fi
+  disk=`echo $info | cut -d ' ' -f $n`
+  session=`iscsiadm -m session | grep $disk`
+  if [ "$session" != "" ]; then echo "Error, iSCSI disk already connected"; exit;fi
+
+  iscsiadm --mode node --targetname $disk \ --portal $1 --login
+  iscsiadm -m session
+else
+  sion=`iscsiadm -m session`
+  if [ "$sion" = "" ]; then exit;fi
+  sion=`iscsiadm -m session | cut -d ' ' -f 4`
+  pos=1
+  for i in $sion;
+  do 
+     echo "$pos - $i"
+     pos=`expr $pos + 1`
+  done
+  echo -n "\nChoose the disk number : "; read n
+  bon=`echo "123456789" | grep $n`
+  if [ "$bon" = "" ]; then echo "Error, you do type a number"; exit;fi
+  if [ $n -ge $pos ]; then echo "Error, bad disks number"; exit;fi
+
+  name=`echo $sion | cut -d ' ' -f $n`
+  iscsiadm -m node -u -T $name
+fi
+</code>
+
+
+
+Copier tout ce code dans un fichier, la syntaxe de lancement est très simple : 
+  * <code>sudo sh <SCRIPT> <IP_DU_SERVEUR></code> pour connecter un disque
+  * <code>sudo sh <SCRIPT> -u </code>pour déconnecter un disque
+
+=== version avec interface graphique ===
+
+<code>#! /bin/sh
+# gestion automatique iSCSI
+
+installed=`dpkg -l "open-iscsi*" | grep ii | cut -d ' ' -f 1`
+
+if [ "x$installed" = "x" ];
+then
+  zenity --question --title "Manager not here" --text="open-iscsi is not installed\nWould you proceed to this now ?"
+  if [ $? = 0 ]
+  then
+    apt-get install -y open-iscsi open-iscsi-utils
+  else
+    echo "Operation aborted"
+  fi
+  exit
+fi
+
+if [ x$1 = x ];
+then
+  zenity --error --title "Syntax" --text="You have to give the server (IP or URL)\n or -u to disconnect disks"
+  exit
+fi
+
+if [ "$1" != "-u" ];
+then
+  info=`iscsiadm --mode discovery --type sendtargets --portal $1`
+  pos=2
+  liste=""
+  while [ 1 ];
+  do
+    volume=`echo $info | cut -d ' ' -f $pos`
+    if [ "$volume" = "" ]; then break;fi
+    list=`echo "$list $volume"`
+    pos=`expr $pos + 2`
+  done
+  
+  disk=`zenity --list --title "Choose an iSCSI disk" --column="Target" $list`
+  if [ $? != 0 ]; then exit; fi
+
+  session=`iscsiadm -m session | grep $disk`
+  if [ "$session" != "" ]; then zenity --error --title "Error" --text="iSCSI disk already connected"; exit;fi
+
+  iscsiadm --mode node --targetname $disk \ --portal $1 --login
+  iscsiadm -m session
+else
+  sion=`iscsiadm -m session`
+  if [ "$sion" = "" ]; then zenity --error --title "Error" --text="No connected disk";exit;fi
+  sion=`iscsiadm -m session | cut -d ' ' -f 4`
+
+  name=`zenity --list --title "Choose an iSCSI disk" --column="Target" $sion`
+  if [ $? != 0 ]; then exit; fi
+
+  iscsiadm -m node -u -T $name
+fi
+</code>
+Sauvegardez ce scripte dans un fichier par exemple "iscsi-ctrl", rendez le exécutable et lancez le via 'sudo'
+<code>chmod +x iscsi-ctrl
+sudo ./iscsi-ctrl</code>
+===== Poste client Windows =====
+
+Concernant les machines sous Windows, ça n'a pas lieu d'être traité ici, même si il semblerait que sous Windows 8 Entreprise, il n'y ai pas de souci particulier pour connecter un disque via ISCSI et le formater en NTFS en quelques clics; [[http://technet.microsoft.com/fr-fr/library/ee338480%28v=ws.10%29.aspx|rendez vous sur la page ISCSI du support technique de Microsoft]] pour obtenir des informations à ce sujet.
+
+À noter qu'il y a eu des régressions entre Windows 7 et Windows 8, par exemple sous Windows 7 pro, il était possible de configurer sans problème le partage de fichiers via NFS, ce qui est absent de Windows 8 pro, et présent uniquement dans la version Entreprise.
+
+<del>Il est nécessaire d'avoir au minimum la version Business (ou Enterprise) pour Windows 7 également.</del>
+
+C'est totalement faux, on peut bien effectuer la manip sans soucis sur Windows 7 pro, dans les composants logiciels !
+
+----
+//Contributeurs:billou//
+//Contributeurs:Maisondouf//

@@ -1,0 +1,104 @@
+
+{{tag>tutoriel}}
+----
+
+====== Sauvegarder son système à chaud avec LVM ======
+
+
+Ce tutoriel décrit les étapes pour faire une sauvegarde à chaud de son système. Il faut avoir sa racine "/" encapsulée dans un volume LVM.
+Les étapes décrites se feront en ligne de commande, bien que certaines d'entre elles peuvent être faites via  [[apt://system-config-lvm|system-config-lvm]]
+
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Avoir son fichier racine / à sauvegarder dans un volume logique (lvm)
+  * Avoir un peu d'espace disque disponible
+
+===== Vérifications préalables =====
+
+Vérifier que nous disposons d'espace libre pour la sauvegarde et le snapshot dans notre volume group.
+  sudo vgs
+    VG        #PV #LV #SN Attr   VSize   VFree  
+  corsair     1   4   0 wz--n-  29,81g  18,32g
+  
+Ici notre groupe de volumes appelé "corsair" possède 18Go d'espace disponible
+
+===== Création du volume de sauvegarde =====
+  * On cherche a savoir quelle taille de données on va sauvegarder
+
+  df -h /
+  Sys. de fichiers            Taille  Uti. Disp. Uti% Monté sur
+  /dev/mapper/corsair-maracine
+                      4,0G  1,8G  2,0G  47% /
+Ici nous devons sauvegarder un peu moins de 2Go
+
+  * Création d'un volume de sauvegarde
+
+  sudo lvcreate -n monbackup -L 2G corsair
+  Logical volume "monbackup" created
+  
+Ici un nouveau volume appelé monbackup d'une taille de 2Go est créé dans le groupe de volume "corsair"
+
+  * Création d'un systeme de fichiers
+
+  sudo mkfs.ext4 /dev/corsair/monbackup
+
+Ici nous avons choisi ext4, mais il pourrait en être autrement.
+
+  * Montage du FileSystem de backup
+
+  sudo mkdir /ma_sauvegarde
+  sudo mount /dev/corsair/monbackup /ma_sauvegarde
+
+ Voila, nous avons notre File System /ma_sauvegarde qui pourra accueillir la sauvegarde.
+  
+===== Snapshot et copie =====
+
+  * Faire un snapshot du système de fichiers racine /  afin de pouvoir copier les données tranquillement.
+
+  sudo sync && sudo lvcreate -s -n monsnapshot -L 2G corsair/maracine
+
+Le volume de snapshot (temporaire) s'appelle "monsnapshot". En général, 2Go suffisent pour un snapshot de quelques heures de vie. Si le filesystem racine est beaucoup accédé/modifié, il faudra ajuster cette taille à la hausse.
+
+  * Montage du snapshot
+
+  sudo mkdir /mon_snapshot
+  sudo mount /dev/corsair/monsnapshot /mon_snapshot
+
+Ici nous avons donc une image fixe de / qui se trouve dans /mon_snapshot, nous pouvons la copier.
+
+  * Copie des données
+
+  sudo cp -ax /mon_snapshot/* /ma_sauvegarde/
+
+Ici nous avons donc copié notre snapshot dans notre volume de sauvegarde !
+
+  * Suppression du snapshot
+
+  sudo umount /mon_snapshot
+  sudo lvremove corsair/monsnapshot
+  Do you really want to remove active logical volume monsnapshot? [y/n]: y
+  Logical volume "monsnapshot" successfully removed
+
+
+===== Finitions =====
+
+Les étapes précédentes nous permettent d'avoir un volume "monbackup" qui est une copie de la racine /.
+
+Pour pouvoir rendre cette copie bootable, il faut rendre la  fstab cohérente :
+
+Modifier la fstab et changer le nom du volume de / par celui de la sauvegarde.
+Dans notre exemple, il faudra remplacer "maracine" par "monbackup"
+
+Editer le fichier /ma_sauvegarde/etc/fstab :
+
+  /dev/mapper/corsair-monbackup /               ext4    errors=remount-ro 0       1
+  
+Enfin, ajouter notre sauvegarde au menu boot de grub.
+  sudo update-grub
+
+
+===== Conclusion =====
+
+Nous avons sauvegardé notre système de fichiers racine / à chaud, et notre sauvegarde est même bootable !

@@ -1,0 +1,225 @@
+
+
+====== OPENLDAP + SAMBA + CLIENT WINDOWS 7 ======
+
+Bonjour, aprés avoir passé des nuits à se prendre la tête et quelque migraines, je veux en épargner quelques un.
+
+Voici l'installation de OPENLDAP + SAMBA + CLIENT WINDOWS 7
+
+
+
+
+Merci a:
+  * Flori@n de [[http://www.blogeek.ec0.fr]]
+  * senti de [[http://progenvrac.com]]
+  * Deajan le jeu de [[http://www.badministrateur.com]]
+
+{{::ldapworm.gif?200|}}   {{::bgheader.png?200 |}}   {{::windows7.jpg?200|}}
+
+----
+
+{{:ldapworm.gif?300 |}}
+
+
+===== Installation de Openldap : =====
+
+Caracteristique:
+  * Nom du serveur: ec0.local
+  * Domaine: ec0
+
+
+
+<code>
+apt-get install slapd ldap-utils
+</code>
+Suppression de l’annuaire créer lors de l’installation :
+
+Lorsque vous avez installé Openldap, l’installateur va créer par défaut une base, par souci de clarté nous allons la supprimé.
+<code>
+rm /etc/ldap/slapd.d/cn\=config/olcDatabase={1}hdb.ldif
+</code>
+Backup de la base par défaut :
+<code>
+tar -cvjf backup_ldap.tar.gz /var/lib/ldap
+</code>
+<code>
+tar -cvjf backup_ldap_config.tar.gz /etc/ldap/slapd.d
+</code>
+Suppression de la base par défaut :
+<code>
+rm /var/lib/ldap/*
+</code>
+Redémarrage du service LDAP :
+<code>
+/etc/init.d/slapd restart
+</code>
+Configuration de LDAP :
+
+Depuis les nouvelles versions LDAP nous avons dorénavant la possibilité d’intégrer la configuration de notre annuaire dans une base LDAP et non plus depuis un fichier de configuration.
+
+Ce mode de configuration à un avantage certain. Nous pouvons dorénavant effectuer des modifications à chaud de la configuration.
+
+Ce mode de fonctionnement trouve tout son intérêt dans un environnement professionnel.
+
+Nous pouvons dorénavant modifier à chaud les schémas, le mot de passe Manager, les droits d’accès, la manière d’indexer son annuaire ldap, etc …
+
+NB : Le backend cn=config ne sert que pour la partie configuration.
+Ajout des schémas :
+
+On va commencer par ajouter les schémas de base qui nous permettrons d’avoir un serveur LDAP fonctionnel.
+<code>
+ldapadd -Y EXTERNAL -H ldapi:/// -f /etc/ldap/schema/cosine.ldif
+</code>
+<code>
+ldapadd -Y EXTERNAL -H ldapi:/// -f /etc/ldap/schema/nis.ldif
+</code>
+<code>
+ldapadd -Y EXTERNAL -H ldapi:/// -f /etc/ldap/schema/inetorgperson.ldif
+</code>
+
+EN COUR DE REALISATION
+
+Nous allons identifier un utilisateur interne à la base LDAP, il sera nommé Manager, nous allons donc de suite configurer un mot de passe, pour des raisons des sécurités nous allons devoir au préalable hasher le mot de passe, car sinon celui-ci apparaitra en clair dans la configuration.
+
+Cryptage du mot de passe super user :
+
+# l'option -h {SSHA} indique que nous souhaitons crypter avec le hachage SSHA
+<code>
+slappasswd -h {SSHA}
+New password: MON_MOT_DE_PASSE
+Re-enter new password: MON_MOT_DE_PASSE
+{SSHA}XXXXXXXXXXXXXXXXX==
+</code>
+Plus d’information : http://www.openldap.org/doc/admin24/security.html
+
+Création de notre template de configuration :
+
+La création de notre configuration et la déclaration de notre base LDAP se font par le biais d’un fichier ldiff, comme pour une base LDAP traditionnelle.
+
+Ci dessous mon template de base ldap :
+<code>
+mkdir /etc/ldap/import_ldiff/
+</code>
+Nous allons stoker notre base ldap dans un dossier particulier, très pratique en cas de multibase LDAP :
+<code>
+mkdir /var/lib/ldap/ec0.local/
+
+chown -R openldap:openldap /var/lib/ldap/ec0.local
+
+vi /etc/ldap/import_ldiff/new_config_global.ldiff
+</code>
+
+#REMOVE COMMENT BEFORE IMPORT
+
+<code>
+dn: cn=config
+changetype: modify
+replace: olcLogLevel
+ 
+#Modifie le niveau de logs
+olcLogLevel: stats
+ 
+dn: cn=config
+changetype: modify
+replace: olcIdleTimeout
+ 
+#Modifie le timeout
+olcIdleTimeout: 30
+</code>
+
+<code>
+
+vi /etc/ldap/import_ldiff/new_config_module.ldiff
+
+</code>
+
+#REMOVE COMMENT BEFORE IMPORT
+
+<code>
+# Load dynamic backend modules
+dn: cn=module,cn=config
+objectClass: olcModuleList
+cn: module
+olcModulepath: /usr/lib/ldap
+olcModuleload: back_hdb.la
+</code>
+<
+code>
+vi /etc/ldap/import_ldiff/new_config_database.ldiff
+</code>
+
+#REMOVE COMMENT BEFORE IMPORT
+
+<code>
+# Database settings
+dn: olcDatabase=hdb,cn=config
+objectClass: olcDatabaseConfig
+objectClass: olcHdbConfig
+#Type de base
+olcDatabase: {1}hdb
+# OU de la base ldap
+olcSuffix: dc=ec0,dc=local
+# Dossier de stockage de la base ldap
+olcDbDirectory: /var/lib/ldap/ec0.local/
+# Definition du compte Manager interne
+olcRootDN: cn=admin,dc=ec0,dc=local
+# Definition du mot de passe associe au compte Manager
+olcRootPW: {SSHA}XXXXXXXXXXXXX
+# Nombre de resultat affiche lors d'une recherche
+olcSizeLimit: 500
+olcDbConfig: set_cachesize 0 2097152 0
+olcDbConfig: set_lk_max_objects 1500
+olcDbConfig: set_lk_max_locks 1500
+olcDbConfig: set_lk_max_lockers 1500
+#Gestion des Index
+olcDbIndex: objectClass eq
+olcLastMod: TRUE
+olcDbCheckpoint: 512 30
+# ACL sur la base LDAP
+olcAccess: to attrs=userPassword by dn="cn=admin,dc=<del>ec0</del>,dc=local" write by anonymous auth by self write by * none
+olcAccess: to attrs=shadowLastChange by self write by * read
+olcAccess: to dn.base="" by * read
+olcAccess: to * by dn="cn=admin,dc=ec0,dc=local" write by * read
+</code>
+
+Import de la configuration :
+
+<code>
+ldapadd -Y EXTERNAL -H ldapi:/// -f /etc/ldap/import_ldiff/new_config_global.ldiff
+ldapadd -Y EXTERNAL -H ldapi:/// -f /etc/ldap/import_ldiff/new_config_module.ldiff
+ldapadd -Y EXTERNAL -H ldapi:/// -f /etc/ldap/import_ldiff/new_config_database.ldiff
+</code>
+Test de la Configuration :
+
+<code>
+ldapsearch -LLL -Y EXTERNAL -H ldapi:/// -b "cn=config"
+</code>
+... Retourne l'ensemble des éléments ...
+
+<code>
+ldapsearch -LLL -Y EXTERNAL -H ldapi:/// -b "dc=ec0,dc=local"
+... Retourne une base vide, c'est normal ...
+</code>
+
+
+----
+
+===== Modification du registre windows: =====
+
+Voila il ne reste plus qu'a se connecter avec un pc Windows, mais un problème subsiste et la connexion est impossible:
+
+Eh bien les developpeurs de Samba ont eu leur petite idée. Il faut deux ingrédients:
+
+  * Faire une petite modification du registre de Windows Seven.
+  * Disposer au minimum de Samba 3.3.7 ou de Samba 3.4.0.
+
+ 
+Pour ce qui est de la modification registre, rendez-vous dans la clef suivante
+<code>
+HKLM\System\CurrentControlSet\Services\LanmanWorkstation\Parameters
+</code>
+et ajoutez les valeurs suivantes:
+<code>
+DWORD DomainCompatibilityMode = 1
+DWORD DNSNameResolutionRequired = 0
+</code>

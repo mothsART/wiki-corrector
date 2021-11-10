@@ -1,0 +1,143 @@
+
+{{tag> audio tutoriel}}
+
+----
+
+====== Configurer le serveur de streaming audio HTTP de MPD ======
+
+[[:MPD]] (Music Player Daemon) inclut depuis [[:Karmic]] un serveur de streaming qui permet d'écouter sa musique sur un autre ordinateur ou un smartphone, en déplacement ou sous sa douche. Ce tutoriel décrit la démarche à suivre pour le faire fonctionner.
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Avoir [[:tutoriel:comment_installer_un_paquet#pre-requis|lu les prérequis de comment installer un paquet]] (pour une configuration en mp3).
+
+===== Configuration pour un streaming en ogg Vorbis =====
+
+C'est le cas plus simple, la fonctionnalité existe de base. Il suffit de lire la partie "dans tous les cas"
+
+===== Configuration pour un streaming en mp3 =====
+
+Parfois le lecteur qu'on souhaite utiliser ne lit pas le ogg, il faut donc passer par du mp3 (par exemple si vous souhaitez écouter la musique sur iPhone). Ce format n'est pas un format libre, et donc mpd a été packagé dans Ubuntu sans cette fonctionnalité. Voici la marche à suivre pour la rajouter.
+
+Créez un répertoire de travail et placez-vous y :
+<code>mkdir mpd && cd mpd</code>
+
+Téléchargez les sources du paquet mpd de Ubuntu :
+<code>apt-get source mpd</code>
+
+Un nouveau répertoire est créé, allez dedans :
+<code>cd mpd*</code>
+
+[[:tutoriel:comment_modifier_un_fichier|modifiez le fichier]] debian/rules.
+
+Repérez la ligne
+<file>DEB_CONFIGURE_USER_FLAGS += $(WITH_TREMOR) --enable-sqlite --enable-un --enable-ao --disable-lame</file>
+et changez-la en :
+<file>DEB_CONFIGURE_USER_FLAGS += $(WITH_TREMOR) --enable-sqlite --enable-un --enable-ao --enable-lame-encoder</file>
+
+Avant de reconstruire le paquet, il faut installer toutes les dépendances dont mpd a besoin. Pour en connaitre la liste, tapez :
+<code>apt-cache showsrc mpd | grep Build-Depends</code>
+
+<note tip>Pour tout installer, vous pouvez directement utiliser :
+<code>sudo apt-get build-dep mpd</code>
+À cause d'une dépendances du paquet "xmlto" dont l'installation est recommandée, le paquet "dblatex" ainsi que toutes ses dépendances (texlive entre autres) s'installent inutilement. Installez donc le paquet "xmlto" séparément avec une de ces commandes :
+<code>sudo aptitude install --without-recommends xmlto
+sudo apt-get install --no-install-recommends xmlto
+</code>
+
+</note>
+
+N'oubliez pas d'installer également les paquets nécessaires à la compilation : allez [[:tutoriel:comment_installer_un_paquet#pre-requis|lire les prérequis de comment installer un paquet]] si vous ne l'avez pas fait au début du tuto.
+
+Installez ensuite la librairie qui permet d'encoder en mp3 :
+<code>sudo apt-get install libmp3lame-dev</code>
+
+Enfin nous allons pouvoir reconstruire le paquet. Vérifiez que vous êtes bien à la racine des sources de mpd (normalement vous y êtes) et tapez :
+<code>dpkg-buildpackage</code>
+
+Il ne vous reste plus qu'à installer le paquet créé :
+<code>cd .. && dpkg -i mpd_0*.deb</code>
+
+Vous pouvez supprimer le répertoire de travail : 
+<code>cd .. && rm -R mpd/</code>
+
+===== Dans tous les cas =====
+
+[[:tutoriel:comment_modifier_un_fichier|Modifiez le fichier]] de configuration de mpd, section "Audio Output". Vous devriez trouver les lignes suivantes :
+
+<file>
+# An example of a httpd output (built-in HTTP streaming server):
+#
+#audio_output {
+#        type            "httpd"
+#        name            "My HTTP MPD Stream"
+#        encoder         "vorbis"          # optional, vorbis or lame
+#        port            "8000"
+#        quality         "5.0"                   # do not define if bitrate is d$
+#        bitrate         "128"                   # do not define if quality is d$
+#        format          "44100:16:1"
+#}
+</file>
+
+Décommentez-les en prenant soin de choisir entre quality et bitrate. Voici un exemple qui fonctionne très bien pour un streaming en ogg vorbis :
+
+<file>
+# An example of a httpd output (built-in HTTP streaming server):
+#
+audio_output {
+        type            "httpd"
+        name            "Streaming ogg vorbis"
+        encoder         "vorbis"          # optional, vorbis or lame
+        port            "8000"
+#       quality         "5.0"                   # do not define if bitrate is d$
+        bitrate         "128"                   # do not define if quality is d$
+        format          "44100:16:2"
+}
+</file>
+
+Un autre exemple pour le mp3 :
+
+<file>
+# An example of a httpd output (built-in HTTP streaming server):
+#
+audio_output {
+        type            "httpd"
+        name            "Streaming ogg vorbis"
+        encoder         "lame"          # optional, vorbis or lame
+        port            "8000"
+#       quality         "5.0"                   # do not define if bitrate is d$
+        bitrate         "128"                   # do not define if quality is d$
+        format          "44100:16:2"
+}
+</file>
+
+Vous pouvez avoir besoin de diminuer le bitrate si votre connexion est lente, par exemple si vous streamez via les réseaux téléphoniques vers un smartphone. De la même manière augmentez-le (pas plus de 320) si la vitesse de votre connexion le permet (Par exemple si vous restez sur un réseau local).
+
+Redémarez mpd. Vous pouvez ensuite écouter la musique en ouvrant dans un lecteur  l'adresse suivante :  http://192.168.1.1:8000/mpd.ogg (si 192.168.1.1 est l'adresse IP de l'ordinateur où joue mpd). L'extension est bien .ogg dans les deux cas.
+
+
+===== Problèmes connus=====
+
+Si vous avez suivi la configuration en mp3, Ubuntu va tenter de mettre à jour mpd, considérant que la version des dépôts est prioritaire sur votre paquet personnalisé. Pour éviter ceci, il faut [[:tutoriel:comment_modifier_un_fichier|éditer le fichier]] /etc/apt/preferences
+et y placer les lignes :
+
+<file>
+Package: mpd
+Pin: version numéro_de_version 0
+Pin-priority: 1001
+</file>
+
+en remplaçant "numéro_de_version" par celui qui est installé. Pour le connaître :
+<code>apt-cache policy mpd | grep Installé</code>
+
+Depuis maverick cette technique ne fonctionnait pas chez moi. On m'a proposé sur le forum une autre solution :
+<code>echo mpd hold | sudo dpkg --set-selections</code>
+===== Voir aussi =====
+ * [[:mpd|Documentation MPD]]
+ * [[:mpd_client|Clients MPD]]
+
+//Contributeurs principaux : [[:utilisateurs:dibejo|dibejo]].//
+
+//Basé sur [[http://ubuntuforums.org/showpost.php?p=8776058&postcount=2|un bref exemple des forums officiels]]//

@@ -1,0 +1,398 @@
+
+{{tag>live_usb}}
+
+====== Extlinux : Live-Usb sur une partition Ext2/Ext3/Ext4 =====
+
+**Extlinux transforme la clef Usb Ext2, Ext3, Ext4 en Usb-Live**
+
+**Extlinux** est un paquet développé par H. Peter Anvin [[http://www.syslinux.org/wiki/index.php/EXTLINUX| EXTLINUX]]
+
+Il fait parti du projet [[http://www.syslinux.org|Syslinux]].
+
+<note>Cette documentation est là pour mieux comprendre l'utilité et le fonctionnement d'extlinux </note>
+ [[:unetbootin | Unetbootin]] permet d'automatiser ses tâches mais pas toujours de façon satisfaisante.
+
+En mars 2013 il n'est plus capable de rendre une partition ext3 bootable ce qu'il parvenait à faire auparavant
+
+<note important>Cette manipulation est réservé au **Disque Dur Externe USB**. 
+
+Elle est déconseillée sur un __Disque dur interne__ : elle peut en corrompre le démarrage . </note>
+
+<note important>L'ensemble de la procédure ci-dessous est à revoir et ne fonctionne plus</note>
+
+=====Installer extlinux=====
+[[:tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt>extlinux,syslinux-common |extlinux syslinux-common]]**
+
+=====Préparation du DD Externe ou d'une Clef USB=====
+Il est recommandé de partitionner son disque si ce n'est pas déjà fait.
+
+Méthode graphique: [[gparted|gparted]]
+
+Méthode en ligne de commande:[[fdisk|FDISK]] [[http://tldp.org/HOWTO/Partition/fdisk_partitioning.html]]
+
+Tuto Ubuntu [[tutoriel:partitionner_manuellement_avec_installateur_ubuntu|Installation d'Ubuntu : partitionnement manuel]]
+
+
+
+=====Mettre le LiveCd sur USB Cible EXT =====
+[[tutoriel:grub2_lancer_des_images_iso|Références de distributions GNU/Linux bootables (page grub2 iso)]]
+
+**Monter l'ISO obtenue dans le répertoire /tmp/cdrom :**
+<file>user@grUser-P5Q-E:~$ mkdir -p /tmp/cdrom
+user@grUser-P5Q-E:~$ mount -o loop,exec /path/to/systemrescuecd-x86-x.y.z.iso /tmp/cdrom
+</file>
+
+**Monter la partition dans un répertoire :**
+<file>
+user@grUser-P5Q-E:~$ mkdir /tmp/disk
+user@grUser-P5Q-E:~$ sudo mount /dev/sde1/ /tmp/disk
+</file>
+
+**Copier le contenu du LiveCd dans la partition cible :**
+<file>
+user@grUser-P5Q-E:~$ sudo cp -Rf /tmp/cdrom  /tmp/disk
+</file>
+=====Installation du chargeur de démarrage=====
+==== Rendre la partition Disque bootable ====
+=== copier MBR extlinux sur celui de la partition Ext ===
+<file>user@grUser-P5Q-E:~$ sudo dd if=/usr/lib/extlinux/mbr.bin of=/dev/sde1</file>
+==== Installer extlinux sur le disque cible ====
+== Installer EXTLINUX dans le répertoire ou sera configurer le menu de boot ==
+<file>
+user@grUser-P5Q-E:~$ sudo extlinux -i  /tmp/disk/isolinux
+user@grUser-P5Q-E:~$ sudo cp /usr/lib/syslinux/chain.c32 /tmp/disk/isolinux
+</file>
+
+Si le répertoire ** /tmp/disk/isolinux ** contient le fichier __ldlinux.sys__ :  **tout c'est bien passé !!! **
+
+
+=====Mettre un drapeau "boot" d'amorce sur la partition Cible=====
+====Vérification des drapeaux :====
+<code>sudo fdisk -l /dev/sdx</code>
+Dans la réponse, se sont les lignes suivantes qui nous intéressent : 
+<code>
+Périphérique Amorce  Début        Fin      Blocs     Id  Système
+/dev/sdx1           2048    18202623     9100288   83  Linux
+/dev/sdx2        18202624    71102463    26449920   83  Linux
+/dev/sdx3        71103751   625141759   277019004+   5  Étendue
+/dev/sdx5        71103753   619000514   273948381    b  W95 FAT32
+</code>
+
+**Si aucune *  astérisque n’apparaît alors aucune des partitions ne contient de drapeau de boot .**
+
+====Ajouter un drapeau de boot ====
+=== Fdisk ===
+<code>user@grUser-P5Q-E:~$ -P5Q-E:~$ sudo fdisk /dev/sde</code>
+**Entrer commande a ** 
+
+la machine demande le numéro de partition à marque comme bootable:
+<code>Numéro de partition (1-5): 1</code>
+**Entrer commande w (pour finaliser) l'écriture sur le disque**
+
+
+=== gparted (méthode graphique alternative)===
+
+** Lancer ** [[:gparted |Gparted]]
+
+Sélectionner la clef ou le DDExterne 
+Dans le menu se rendre à **Partitions** > **Gérer les drapeaux**. 
+
+**__Cocher la case en face de boot, comme l'image suivante nous le montre, puis refermer__**
+{{ :drapeaux-gparted.png?800 |}}
+
+
+
+
+
+=====Configurer le menu de démarrage extlinux.conf du Live-USB=====
+===Conditions de démarrage d'extlinux : ===
+   -  Le répertoire de démarrage doit comporter: 
+   - Un menu de démarrage : //**extlinux.conf**//  
+   - Un fichier //**vesamenu.c32**//
+==Si ces conditions ne sont pas respectée votre Live-Usb ne démarrera pas ! ==
+
+
+
+====Exemple Menu extlinux.conf d'une Live-USB personnalisée ===
+ obtenu à partir d'une ISO [[:remastersys | Remastersys]] clone de mon système ubuntu 12.04 LTS precise)
+<code>default vesamenu.c32
+prompt 0
+timeout 100
+
+menu title 2012maiUbuntu12.04
+menu background splash.png
+menu color title 1;37;44 #c0ffffff #00000000 std
+
+label persistent
+  menu label persistent - boot the Live System in Persistent Mode
+  kernel /casper/vmlinuz
+  append  file=/cdrom/preseed/custom.seed boot=casper initrd=/casper/initrd.gz persistent quiet splash --
+
+label live
+  menu label live - boot the Live System
+  kernel /casper/vmlinuz
+  append  file=/cdrom/preseed/custom.seed boot=casper initrd=/casper/initrd.gz quiet splash --
+
+label xforcevesa
+  menu label xforcevesa - boot Live in safe graphics mode
+  kernel /casper/vmlinuz
+  append  file=/cdrom/preseed/custom.seed boot=casper xforcevesa initrd=/casper/initrd.gz quiet splash --
+
+label install
+  menu label install - start the installer directly
+  kernel /casper/vmlinuz
+  append  file=/cdrom/preseed/custom.seed boot=casper only-ubiquity initrd=/casper/initrd.gz quiet splash --
+
+label memtest
+  menu label memtest - Run memtest
+  kernel /install/memtest
+  append -
+
+label hd
+  menu label hd - boot the first hard disk
+  localboot 0x80
+  append -
+</code>
+<note>L'option "persistent" dans le menu suivant permet au Live-USB de démarrer un fichier ou une partition nommée "casper-rw" fichier/partition de persistance</note>
+
+====Exemple Menu extlinux.conf  SystemRecueCd d'une Live-USB ===
+<code>
+label rescue64_bits direct Xorg
+menu label rescue64_bits direct Xorg
+kernel /SystemRescueCd/isolinux/rescue64
+append initrd=/SystemRescueCd//isolinux/initram.igz subdir=/SystemRescueCd/ setkmap=fr dostartx - 
+
+label rescue32_bits direct Xorg
+menu label rescue32_bits direct Xorg
+kernel /SystemRescueCd/isolinux/rescue32
+append initrd=/SystemRescueCd/isolinux/initram.igz subdir=/SystemRescueCd/ setkmap=fr dostartx -
+
+label rescue64_bits Xorg RAM
+menu label rescue64_bits Xorg RAM
+kernel /SystemRescueCd/isolinux/rescue64
+append initrd=/SystemRescueCd//isolinux/initram.igz subdir=/SystemRescueCd/ setkmap=fr dostartx docache- 
+
+label rescue32_bits Xorg RAM
+menu label rescue32_bits Xorg RAM
+kernel /SystemRescueCd/isolinux/rescue32
+append initrd=/SystemRescueCd/isolinux/initram.igz subdir=/SystemRescueCd/ setkmap=fr dostartx docache-
+
+label rescue64_bits direct altker Xorg
+menu label rescue64_bits direct altker Xorg
+kernel /SystemRescueCd/isolinux/altker64
+append initrd=/SystemRescueCd/isolinux/initram.igz subdir=/SystemRescueCd/ setkmap=fr dostartx-
+
+label rescue32_bits direct altker Xorg
+menu label rescue32_bits direct altker Xorg
+kernel /SystemRescueCd/isolinux/altker32
+append initrd=/SystemRescueCd/isolinux/initram.igz subdir=/SystemRescueCd/ setkmap=fr dostartx-
+
+label rescue64_bits console in high resolution
+menu label SystemRescue-64bits console in high resolution
+kernel /SystemRescueCd/isolinux/altker64 
+append initrd=/SystemRescueCd/isolinux/initram.igz subdir=/SystemRescueCd/ setkmap=fr nomodeset vga=791
+
+label rescue32_bits console in high resolution
+menu label SystemRescue-32bits console in high resolution
+kernel /SystemRescueCd/isolinux/altker32 
+append initrd=/SystemRescueCd/isolinux/initram.igz subdir=/SystemRescueCd/ setkmap=fr nomodeset vga=791
+
+MENU SEPARATOR
+
+LABEL rescue64_6
+MENU LABEL Boot an exising Linux OS 64 bit installed on the disk
+LINUX /SystemRescueCd/isolinux/rescue64
+INITRD /SystemRescueCd/isolinux/initram.igz
+APPEND root=auto
+TEXT HELP
+Detect partition where linux is installed and boot from it. You can use
+this to boot Linux if your boot loader (eg: Grub) is broken or has been
+removed by another OS.
+ENDTEXT
+
+LABEL rescue32_6
+MENU LABEL Boot an exising Linux OS 32 bit installed on the disk
+LINUX /SystemRescueCd/isolinux/rescue32
+INITRD /SystemRescueCd/isolinux/initram.igz
+APPEND root=auto
+TEXT HELP
+Detect partition where linux is installed and boot from it. You can use
+this to boot Linux if your boot loader (eg: Grub) is broken or has been
+removed by another OS.
+ENDTEXT
+
+MENU SEPARATOR
+
+LABEL Boot from first hard disk
+MENU LABEL *) Boot from first hard disk
+kernel  /SystemRescueCd/isolinux/chaine.c32
+append hd0
+TEXT HELP
+Boot local OS installed on first hard disk
+ENDTEXT
+
+LABEL Boot from second hard disk
+MENU LABEL *) Boot from second hard disk
+kernel  /SystemRescueCd/isolinux/chaine.c32
+append hd1
+TEXT HELP
+Boot local OS installed on second hard disk
+ENDTEXT
+
+MENU SEPARATOR
+
+MENU TITLE A) Run system tools from floppy disk image...
+
+LABEL memtest
+MENU LABEL MEMTEST: Memory test using Memtest86+
+kernel /SystemRescueCd/bootdisk/memtestp
+append -
+TEXT HELP
+Use this tool if you suspect your RAM from being damaged. Damaged memory can
+explain crashes or unexpected bahaviors on stable operating systems.
+ENDTEXT
+
+LABEL ntpass
+MENU LABEL NTPASSWD: Reset or edit Windows passwords
+kernel /SystemRescueCd/ntpasswd/vmlinuz
+append rw vga=1 initrd=/SystemRescueCd/ntpasswd/initrd.cgz,/SystemRescueCd/ntpasswd/scsi.cgz
+TEXT HELP
+This tool can be used to reset windows users accounts. It works with all
+windows user accounts including the administrator. You can use this tool if
+you forgot the administrator's password.
+ENDTEXT
+
+LABEL grubdisk
+MENU LABEL SGD: Super Grub2 Disk
+kernel /SystemRescueCd/isolinux/memdisk
+append initrd=/SystemRescueCd/bootdisk/grubdisk.img floppy raw
+
+LABEL freedos
+MENU LABEL FREEDOS: Clone of the MSDOS Operating System
+kernel /SystemRescueCd/isolinux/memdisk
+append initrd=/SystemRescueCd/bootdisk/freedos.img floppy
+TEXT HELP
+FreeDOS can be used to execute DOS programs such as BIOS upgrade tools
+ENDTEXT
+
+LABEL netboot
+MENU LABEL NETBOOT: Boot from the network
+kernel /SystemRescueCd/isolinux/netboot
+append -
+
+LABEL hdt
+MENU LABEL HDT: recent hardware diagnostics tool
+kernel /SystemRescueCd/isolinux/memdisk
+append initrd=/SystemRescueCd/bootdisk/hdt.img floppy
+TEXT HELP
+This diagnostic tool will give you information about your hardware
+ENDTEXT
+
+LABEL aida
+MENU LABEL AIDA: old hardware diagnostics tool
+kernel /SystemRescueCd/isolinux/memdisk
+append initrd=/SystemRescueCd/bootdisk/aida.img floppy
+
+LABEL gag
+MENU LABEL GAG: Graphical Boot Manager
+kernel /SystemRescueCd/isolinux/memdisk
+append initrd=/SystemRescueCd/bootdisk/gag.img floppy
+
+LABEL dban
+MENU LABEL DBAN: erase all data from the disk
+kernel /SystemRescueCd/bootdisk/dban.bzi
+append nuke="dwipe" silent
+
+LABEL mhdd
+MENU LABEL MHDD: Low-level Hard Drive diagnostic tool
+kernel /SystemRescueCd/isolinux/memdisk
+append initrd=/SystemRescueCd/bootdisk/mhdd.img floppy</code>
+
+====Exemple Menu extlinux.conf permettant de lancer d'autres sous menus ====
+<code>UI vesamenu.c32
+prompt 0
+timeout 100
+
+menu title usb_disk
+menu color title 1;37;44 #c0ffffff #00000000 std
+
+menu separator
+include AlbUbuntu.cfg
+
+menu separator
+include kubuntu_net.cfg
+
+menu separator
+include ubuntu_install_net.cfg
+
+menu separator
+include ubuntu_serveur.cfg
+
+menu separator
+include ../SystemRescueCd/isolinux/isolinux.cfg
+
+label memtest
+  menu label memtest - Run memtest
+  kernel /install/memtest
+  append -
+
+label hd
+  menu label hd - boot the first hard disk
+  localboot 0x80
+  append -
+</code>
+
+====Pour démarrer Windows, depuis le Live-USB====
+Editer le menu extlinux.conf et lui ajouter les lignes suivantes : 
+<code>label Windows
+ menu label windows -démarrer windows depuis le live-Usb
+ kernel chain.c32
+ append sda1</code>
+
+
+=====Personnaliser l'image de fond du menu de démarrage=====
+//Vesamenu.c32// extlinux permet d'afficher de jolies images au format **JPG** ou **PNG** au démarrage d'extlinux. 
+Il est conseillé de commencer par une résolution 640x480. (Attention: JPG progressif n'est pas pris en charge par **extlinux**)
+
+Une fois que vous avez votre image, copiez-la dans le répertoire du menu de démarrage (**/media/usbdisk/isolinux/**) boot / extlinux / et  nommer la ** splash.png ** ou **splash.jpg**.
+
+=====Démarrer le LIve-USB et tester=====
+Il est nécessaire de savoir si son BIOS permet de démarrer des LIve-USB: 
+- (Si le BIOS de l'ordi ne le permet pas, il est possible de graver une ISO qui le permet depuis le CD/DVD rom [[:disquette_boot_usb| PLoP]]).
+- Sinon sélectionner le bon média de démarrage avec le BIOS au moment du boot de la machine.
+
+=====Conclusion=====
+Extlinux permet de créer un Live-USB.
+
+<note important>Il ne permet par contre pas de lancer des ISO sans les décompresser</note>**
+Comparaison Extlinux et Unetbootin :**
+
+Comparer à Unetbootin, Extlinux "à la mano" est plus lent. Par contre les possibilités de personnalisations des menus sont plus étendues.
+
+**Comparaison Extlinux et Multisystem :**
+
+Multisystem reste un outil très efficace dont le seul inconvénient est d'avoir un démarrage plus lent.
+
+**Comparaison  Extlinux et Syslinux :** 
+
+Ils sont assez similaires, la différence est d'avantage liée au format des partitions utilisées pour le démarrage:
+
+Fat32 est montable sur tous les systèmes sans qu'il soit nécessaire de lui donner les droits d'écriture.
+La taille des fichiers ne peut par contre dépassée 4.3 Go. 
+
+Ext2,3,4 nécessite un montage et une modification des droits d'écriture pour pouvoir écrire dessus.
+
+=====Voir aussi=====
+En anglais:  
+  - [[http://www.syslinux.org|Syslinux Wiki]]  
+  - [[http://shallowsky.com/linux/extlinux.html | Documentation Source]]   
+  -  Forum Ubuntu : [[http://ubuntuforums.org/showthread.php?t=740924 | Reload this Page Howto Boot Ubuntu From Live USB using extlinux Bootloader]]
+  - [[http://www.sysresccd.org/Sysresccd-manual-en_How_to_install_SystemRescueCd_on_an_USB-stick| SystemRescueCd_on_an_USB-stick]]
+  - [[:unetbootin | Unetbootin qui permet d'automatiser ses opérations (à sa façon !!! )]]
+En français:
+  -  [[:live_usb | diverses méthodes pour créer un Live-USB]]
+  - [[:usb-creator | usb-creator]] (pour les partitions en fat32)
+
+Documentation sur le sujet Live-USB:
+  - [[tutoriel:grub2_lancer_des_images_iso]]
+

@@ -1,0 +1,248 @@
+
+{{tag>serveur À_RECYCLER}}
+
+<note warning>Cet article est quasi obsolète !
+Mais malgré l'âge d'Ubuntu 8.10, vous pouvez tout de même envisager de suivre ce tuto pour l'installation sur une version supérieure, RT étant aujourd'hui (Septembre 2010) toujours en version 3.8.x</note>
+
+====== Installation de Request-Tracker 3.8.2 sur Ubuntu 8.10 ======
+Request-Tracker est un outil de gestion des tickets d'incidents.
+Il est utilisé par de nombreuses sociétés et organisations telles que la NASA, le MIT et plusieurs universités américaines.
+
+Ce dernier repose sur un serveur web, est codé en Perl et nécessite une adresse  email dédiée pour être pleinement exploitable.
+
+**Du fait de la complexité pour mettre en oeuvre l'ensemble, ceci est plus une documentation rapide pour mettre en place cet outil.**
+
+**Nous intéresserons donc uniquement à la mise en service de RT et non la configuration des différents serveurs nécessaires.**
+
+Nous partons du principe que l'installation du système est récente et que vous cherchez à installer RT sur une base MySQL, en utilisant mod_perl 2.xx qui est installé en standard avec Apache2.
+
+Nous partons aussi du principe que vous ne voulez accéder à votre RT via 
+<code>http://<votre serveur/nom de domaine>/rt/</code>
+Bien qu'il semblerait que le site puisse aussi être accessible par 
+<code>http://rt.<<votre nom de domaine>>>/</code>
+
+<note important>Si vous comptez utiliser RT dans un cadre de production je ne saurais que trop vous conseiller de faire l'acquisition du livre rédigé par les créateurs de ce dernier: RT Essentials, qui s'avère être la seule référence pour administrer cet outil.
+Bien que la version couverte par ce dernier ne soit pas à jour, il s'agit d'un ouvrage à posséder absolument, ne serait-ce par les explications qu'il contient sur le bon usage et la bonne configuration de RT.
+[[http://rtbook.bestpractical.com/|Voir ici pour de plus amples informations.]]</note>
+
+===== Installation des serveur Apache2 PHP MySQL phpmyadmin=====
+
+Tapez dans un terminal
+<code>sudo apt-get install php5 mysql-server apache2 gcc</code>
+
+Ou cliquez simplement sur le lien suivant si vous êtes sur Ubuntu.
+[[apt://php5,mysql-server,apache2,phpmyadmin,gcc]]
+
+===== Récupération de l'archive de Request-Tracker =====
+<note important>Cette commande récupère la dernière version officielle de RT, cette dernière peut ne plus correspondre à celle de ce tutoriel.</note>
+Tapez dans un terminal
+<code>wget http://download.bestpractical.com/pub/rt/release/rt.tar.gz</code>
+
+Ou cliquez simplement sur le lien suivant pour télécharger avec votre navigateur
+[[http://download.bestpractical.com/pub/rt/release/rt.tar.gz]]
+
+===== Installation de Request-Tracker =====
+Dans sa configuration standard, RT s'installe dans le répertoire /opt/rt3/
+
+Tapez dans un terminal
+<code>cd <répertoire où se trouve le fichier rt.tar.gz>
+tar -zxvf rt.tar.gz
+sudo mv rt-3.8.2 /tmp
+cd /tmp/rt-3.8.2/
+sudo ./configure 
+sudo make testdeps
+</code>
+Vous devriez normalement vous faire gentiment rappeler à l'ordre du fait qu'il manque de nombreuses dépendances et si votre installation est récente de la nécessité d'initialiser CPAN.
+
+Pour se faire, tapez donc ceci
+<code>sudo perl -MCPAN -e shell</code>
+Vous devriez avoir tout un process de configuration, appuyez simplement sur la touche entrée pour valider toutes les demandes.
+Une fois que ceci est fait, pour sortir de CPAN, tapez
+<code>quit</code>
+
+Il manque toujours les dépendances de Perl.
+Pour y remédier, tapez
+<code>sudo make fixdeps</code>
+Attendez-vous à taper sur la touche Entrée de nombreuses fois avant la fin du processus d'installation ou utilisez la commande suivante qui répondra oui partout.
+<code>yes | sudo make fixdeps</code>
+Une fois fini, retapez
+<code>sudo make testdeps</code>
+Si vous avez un message indiquant qu'il manque des paquets refaites l'étape make fixdeps jusqu'à ce que tout soit installé.
+
+Il peut arriver qu'un paquet ne s'installe pas de lui-même. Vérifiez les messages renvoyés par make fixdeps, ceux-ci contiennent généralement la commande à taper pour corriger le souci.
+
+Les dépendances sont réglées, tout devrait être en place.
+Il ne reste plus qu'à taper
+<code>sudo addgroup rt
+sudo newgrp rt
+sudo make install</code>
+
+===== Configuration de Request-Tracker =====
+Une fois que tout est fini
+<code>sudo make initialize-database</code>
+
+Si un problème survient, tapez simplement
+<code>make dropdb
+sudo make install
+sudo make initialize-database</code>
+
+Il faut maintenant penser à ajouter nos préférences dans le fichier de configuration de RT.
+
+<code>cd /opt/rt3/etc/
+gksudo gedit RT_SiteConfig.pm</code>
+
+Et ajoutez juste avant la ligne contenant "1;"
+<code>
+Set($rtname, 'rt.<<votre nom de domaine>>');
+Set($Organization , "<<votre nom de domaine>>");
+Set($WebBaseURL , 'https://rt.<<votre nom de domaine>>');
+Set($WebPath , '/rt');
+</code>
+
+
+===== Configuration de Apache =====
+
+
+Tapez
+<code>gksudo gedit /etc/apache2/sites-enabled/000-default</code>
+
+et ajoutez-y le code suivant juste avant la balise </VirtualHost>
+<code>#RT is out of DocumentRoot
+Alias /rt/ "/opt/rt3/share/html/"
+<Directory /opt/rt3/share/html/>
+        Order allow,deny
+        Allow from all
+</Directory>
+
+PerlRequire /opt/rt3/bin/webmux.pl
+<Location /rt/>
+        AddDefaultCharset UTF-8
+        SetHandler perl-script
+        PerlHandler RT::Mason
+</Location>
+</code>
+
+Il faut maintenant redémarrer Apache
+<code>sudo /etc/init.d/apache2 restart</code>
+
+En cas de problèmes avec PerlRequire il faut installer le module adéquat pour Apache.
+<code>sudo apt-get install libapache2-mod-perl2</code>
+
+Vous devriez maintenant avoir accès à RT.
+
+L'utilisateur par défaut est "admin" et son mot de passe est "password".
+
+Il reste néanmoins à configurer la gestion des emails, afin de permettre à RT d'accepter des tickets par email, ce qui peut s'avérer d'une très grande utilité.
+
+===== Configurer la récupération des emails =====
+Il faut savoir que RT est en mesure de gérer plusieurs files de tickets. Chacune pouvant être affiliée à une adresse email (un peu comme les mailing lists).
+
+Nous voulons tout d'abord pouvoir récupérer nos emails.
+
+Il suffit d'abord d'installer Fetchmail
+
+<code>sudo apt-get install fetchmail</code>
+ou cliquez sur:[[apt://fetchmail]]
+
+Puis de le rendre actif en tant que Daemon.
+Pour cela, éditez le fichier **/etc/default/fetchmailrc**
+Et modifiez la ligne
+<code>Set START_DAEMON=no</code>
+en
+<code>Set START_DAEMON=yes</code>
+
+Editez maintenant le fichier **/etc/fetchmailrc** et ajoutez-y:
+<code>
+set daemon 60 # Vérifie toutes les 60s
+set invisible
+set no bouncemail
+set no syslog 
+set logfile /var/log/fetchmail.log # Ecrit toutes les erreurs et messages dans le fichier /var/log/fetchmail.log
+
+# support@example.org pour la création de tickets
+poll pop.example.org
+        protocol pop3
+        username "login-of-support-mailbox" password "verysecretpassword"
+        mda "/opt/rt3/bin/rt-mailgate --queue <Nom de la queue voulue> --action correspond --url http://support.example.org/rt/"
+        no keep
+
+# support-comment@example.org pour les commentaires
+poll pop.example.org
+        protocol pop3
+        username "login-of-supportcomment-mailbox" password "verysecretpassword"
+        mda "/opt/rt3/bin/rt-mailgate --queue <Nom de la queue voulue> --action comment --url http://support.example.org/rt/"
+        no keep
+</code>
+
+On crée maitenant le fichier qui va recevoir les erreurs et autres avertissements de Fetchmail
+<code>
+sudo touch /var/log/fetchmail.log
+sudo chown fetchmail /var/log/fetchmail.log
+</code>
+
+<note>Ma configuration requiert l'utilisation de GMail en mode IMAP.
+Il faut donc faire quelques étapes en plus.
+D'abord récupérer le certificat SSL de GMail et récupérer le code md5 correspondant :
+<code>openssl s_client -ign_eof -connect imap.gmail.com:993 > imap.cert
+openssl x509 -fingerprint -md5 -in imap.cert | grep MD5</code>
+Copiez la suite de caractères quelque part, elle va nous servir dans le fetchmailrc.
+<code>
+poll "imap.gmail.com"
+       with protocol IMAP
+       user "user account" password "account password"
+       nofetchall
+       nokeep
+       ssl
+       sslfingerprint "la suite de caractères que vous avez récupéré plus haut"
+       mda "/opt/rt3/bin/rt-mailgate --url http://<l'adresse de votre RT>/ --queue General --action correspond"
+</code>
+</note>
+
+Voilà !
+Il ne reste plus qu'à vérifier que RT reçoit bien les courriels qui lui sont adressés.
+
+Envoyez donc un courriel à l'adresse email à tester.
+
+Puis tapez dans un terminal afin de voir ce que fait fetchmail:
+<code>tail -f /var/log/fetchmail.log</code>
+Et dans un autre terminal
+<code>sudo /etc/init.d/fetchmail start</code>
+
+Vous devriez voir plusieurs messages indiquant que fetchmail trouve votre email envoyé précédement, et l'ajoute à RT dans la queue que vous avez choisi.
+
+Afin de vous assurer que le ticket correspondant a bien été créé, allez donc faire un tour sur votre installation de RT.
+Ce nouveau ticket devrait être visible dans le dashboard.
+
+===== Configuration de postfix pour Google Apps =====
+Google Apps requiert de la part de votre serveur postfix d'être muni d'un certificat d'autentification afin d'accepter les courriers envoyés par votre serveur au nom de Google.
+Heureusement pour nous, Canonical a pensé à nous !
+
+Pour cela, il suffit d'éditer le fichier **/etc/postfix/main.cf**
+Et de coller, à la place de la ligne
+<code>relayhost =</code>
+Le texte suivant:
+<code># GMail as relayhost
+relayhost = [smtp.gmail.com]:587
+smtp_sasl_auth_enable = yes
+smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+smtp_sasl_security_options = noanonymous
+smtp_tls_CAfile = /etc/postfix/cacert.pem
+smtp_use_tls = yes
+</code>
+Une fois ceci fait, il faut créer le fichier sasl_passwd.
+<code>sudo touch /etc/postfix/sasl_passwd</code>
+Editez enfin celui-ci
+<code>sudo nano /etc/postfix/sasl_passwd</code>
+Et indiquez dedans votre identifiant pour Google Apps de cette façon:
+<code>[smtp.gmail.com]:587    user.name@gmail.com:<votre mot de passe></code>
+Ceci fonctionne pour un compte Google, vous pouvez en ajouter autant que vous voulez à condition d'en mettre un par ligne.
+
+Une fois ceci fait, il faut convertir ce dernier afin qu'il soit lisible par postfix.
+<code>sudo chmod 400 /etc/postfix/sasl_passwd
+sudo postmap /etc/postfix/sasl_passwd</code>
+
+Il ne reste plus qu'à ajouter les certificats et relancer postfix.
+<code>cat /etc/ssl/certs/Thawte_Premium_Server_CA.pem | sudo tee -a /etc/postfix/cacert.pem
+sudo /etc/init.d/postfix reload</code>
+
+<note warning>A suivre ! Et à relire !</note>

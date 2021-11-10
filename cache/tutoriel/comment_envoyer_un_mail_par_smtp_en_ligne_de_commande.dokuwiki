@@ -1,0 +1,157 @@
+
+{{tag>Xenial réseau internet courriel tutoriel BROUILLON}}
+
+----
+
+====== Comment envoyer un courriel par smtp en ligne de commande  ======
+  * Il n'est pas nécessaire de surcharger son système d'applications serveur pour l'envoi de courriel. La solution la plus simple est l'utilisation d'un client smtp.
+  * Envoyer automatiquement des informations par courriel peut être utile, par exemple, pour récupérer l'IP externe de sa box. Voir le tuto [[tutoriel:Comment_envoyer_l_IP_de_sa_box_automatiquement_par_courriel]].
+===== Utilisation de msmtp =====
+==== Installation ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt://msmtp|msmtp]]**.
+
+Si vous aviez déjà installé des paquets désormais inutiles, un petit rappel sur [[:tutoriel:comment_supprimer_un_paquet|la suppression d'un paquet]].
+
+<note>Ce tutoriel se base sur l'utilisation de msmtp. Il existe bien sûr d'autres solutions pour envoyer des courriels en ligne de commande. ssmtp propose les mêmes fonctionnalités en se basant sur un fichier de configuration très semblable, par exemple.</note>
+
+==== Configuration ====
+
+  * [[:tutoriel:comment_modifier_un_fichier|Créez et ouvrez le fichier]] **~/.msmtprc** (dans votre dossier personnel).
+
+<note important>Ne pas utiliser de commande sudo. C'est bien l'utilisateur qui envoie les mails.</note>
+<code bash>nano ~/.msmtprc</code>
+  account default
+  host smtp.monfai.fr
+  from prenom.nom@monfai.fr
+  auth off
+  #auth on
+  #si jamais auth off ne passe pas
+  user prenom.nom
+  #si votre fai vous identifie plus clairement si vous reprécisez le domaine, alors plutôt cela :
+  #user prenom.nom@fai.fr
+  password monmotdepasse
+
+  * Dissimuler ce fichier qui contient votre mot de passe en clair
+<code bash>chmod 600 ~/.msmtprc</code>
+== Configurations spécifiques (en fin de tuto) ==
+<note>
+**Remarques :**
+  * la configuration de msmtp peut être beaucoup plus pointue, //man// et //documentation// peuvent vous aider.
+</note>
+  * Pour avoir plusiers comptes configurés:
+  il suffit de rajouter une ligne account //NomDuCompte// suivi de la configuration propre à ce compte.
+ 
+__exemple__:
+
+<file>
+account celuidelaposte
+host smtp.laposte.net
+from user@laposte.net
+tls on
+tls_certcheck off
+tls_starttls off
+auth on
+user user@laposte.net
+password motdepasse
+</file>
+
+Pour utiliser un compte plutôt que celui par défaut (//default//), on utilisera l'option -a: 
+
+//echo "bonjour, je viens d'un autre compte" | msmtp **-a** celuidelaposte toto@univers.net//
+
+  * fichier .msmtprc pour [[tutoriel:comment_envoyer_un_mail_par_smtp_en_ligne_de_commande#gmail|gmail]].
+
+==== Utilisation ====
+  * Pour envoyer le contenu d'un fichier texte comme message:
+<code bash>cat readme.txt | msmtp johnny@liday.ch</code>
+  * Pour envoyer un fichier binaire, ou compressé en pièce jointe :
+<code bash>uuencode application.zip | msmtp johnny@liday.ch</code>
+<note tip>Pour préciser le sujet du mail, il faut utiliser Subject://DeQuoiOnParle// en tête de message.
+Donc si on envoie un fichier readme.txt, à moins qu'il commence par Subject:... le message n'aura pas de sujet
+
+**Attention**: il faut alors un saut de ligne; une solution simple est d'utiliser //printf// plutôt que //echo//. 
+Exemple: <code bash>printf "Subject:DeQuoiOnParle\nLeCorpsDuMessage" | msmtp johnny@liday.ch</code></note>
+
+<note important>Ne pas oublier les tags ci dessous en début de votre message électronique sans quoi il ne sera pas forcement accepté par [[http://mail.google.com|gmail]] ou autre (non respect de la RFC2822)</note>
+   From: mon-adresse@domaine.xx
+   To: adresse-destination@domaine.xx
+   subject: le sujet de l'Email
+   le corps du texte commence à cette ligne
+==== Vérification ====
+  * Depuis votre client de messagerie, vérifiez que vous avez bien reçu le message attendu
+
+
+
+==== Configurations particulières ====
+=== gmail ===
+[[http://mail.google.com|gmail]] impose l'utilisation d'une couche [[wpfr>Transport_Layer_Security|TLS]]. La configuration doit le prendre en compte de cette façon : 
+
+<file>~/.msmtprc</file>
+  account default
+  tls on
+  host smtp.gmail.com
+  port 587
+  from nom_user@gmail.com
+  auth on
+  user nom_user
+  password password_user
+  tls_starttls on
+  tls_certcheck on
+  tls_trust_file /etc/ssl/certs/ca-certificates.crt
+
+La dernière ligne est spécifique aux systèmes basés sur debian. Elle pointe vers le fichier où sont stockés l'ensemble des certificats racine de conficance du système (cf : [[http://msmtp.sourceforge.net/doc/msmtp.html|manuel]])
+=== gmail - non sécurisé ===
+Il est aussi tout simplement possible de ne pas vérifier le certificat serveur est désactivant tls_certcheck. Ceci est non-recommandé car sensible à une attaque de type [[wpfr>Attaque_de_l'homme_du_milieu|MiM]]
+
+<file>~/.msmtprc</file>
+  account default
+  tls on
+  host smtp.gmail.com
+  port 587
+  from nom_user@gmail.com
+  auth on
+  user nom_user
+  password password_user
+  tls_starttls off
+  tls_certcheck off
+  
+=== Orange sécurisé ===
+L'opérateur historique Orange fonctionne avec [[wpfr>Transport_Layer_Security|TLS]] de la façon suivante (20/11/2015):
+
+<file>~/.msmtprc</file>
+  account default
+  host smtp.orange.fr
+  protocol smtp
+  auth login
+  tls on
+  tls_starttls off
+  tls_certcheck on 
+  tls_trust_file /etc/ssl/certs/ca-certificates.crt
+  from mon-adresse@orange.fr
+  maildomain orange.fr
+  port 465
+  user mon-adresse
+  password mon-motdepasse
+
+=== gandi.net ===
+Paramétrage pour l’utilisation de l'adresse fournie avec les noms de domaines achetés avec gandi.net
+<file>~/.msmtprc</file>
+  account default
+  host mail.gandi.net
+  from <adresse de l'émetteur>
+  tls on
+  tls_certcheck off
+  tls_starttls off
+  auth on
+  user <adresse Gandi/nom d'utilisateur utilisé pour se connecter à la boîte aux lettres électronique Gandi>
+  password <mot de passe boîte aux lettres électronique>
+  
+
+===== Références =====
+
+  * Le site officiel de msmtp : [[http://msmtp.sourceforge.net/]]
+
+
+-----------------
+Contributeurs : [[:utilisateurs:kerkael]] création de la page le 21/08/2009, simtris MAJ de la configuration de Gmail le 17/05/2010

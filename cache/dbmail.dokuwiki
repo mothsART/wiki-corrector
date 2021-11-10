@@ -1,0 +1,1230 @@
+
+{{tag>serveur serveurs_messagerie courriel ubuntu_server brouillon}}
+----
+
+====== DBMail : serveur de courrier IMAP et POP ======
+
+**DBMail** permet de stocker les courriels dans une base de données au lieu du disque, et d'y accéder en IMAP ou POP.
+
+Il travaille en conjonction avec [[Postfix]], l'agent de transfert de courriel (MTA) par défaut d'Ubuntu.
+
+===== Pré-requis =====
+  * Disposer d'un Nom de Domaine Déposé auprès d'un Registrar et d'un enregistrement MX.
+<code>sudo dig domain.tld && sudo dig mx domain.tld #doit exister</code> 
+  * Expérience vivement recommandée en LAMP et SSH, pour une meilleure méthodologie et débogage
+  * Cas particuliers auto-hébergement
+
+^     ^   Auto-hébergé         ^                   ^   Registrar type                ^ GANDI  ^  Paliatif                       ^  Smtp                                ^ Imap Pop^
+^  Cas   ^ IP fixe  ^dynamique  ^ DNS zone  ^ MX   ^ dyndns no-ip  ^   POSTFIX DBMAIL  ^^
+^1   |oui  |x        | [[http://www.isalo.org/wiki.debian-fr/index.php?title=Configuration_d%27un_serveur_mail_avec_Postfix#Un_exemple_de_configuration_de_DNS_chez_gandi.net|GANDI]]  | oui | x | Envoyer ET Recevoir |oui |
+^2   |    |               |[[http://guides.ovh.com/VotreServeurMail|OVH]]   |     |              |   
+^3   |x   | oui      | test.domain.tld | ok.dyndns.org | ok.dyndns.org | Envoyer ET Recevoir | test.domain.tld mail is handled by ok.dyndns.org.|
+^4   |x   |oui       |x     |x    |ok.dyndns.org     | Envoyer Uniquement  |ok.dyndns.org has no MX record. voir smtp_generic_maps | 
+^4   | --------------------> dbmail est inutile : Recevoir sur imap.fai.fr imap.gmail.com    ||||||canonical_maps relayhost /etc/aliases | 
+^5   | x   |oui               | x    |x    | ok.dyndns.org mxok.dyndns.org  |Envoyer ET Recevoir |ok.dyndns.org mail is handled by mxok.dyndns.org. |   
+^6  |    |             |     |     |              |           
+légende;    x=non,        host -t mx domain.tld
+>Cas 1,2,3 recommandés
+
+ ===== PostFix =====
+  * paquets
+<code>
+sudo apt-get install postfix postfix-cdb postfix-mysql postfix-pcre postfix-ldap postfix-doc pflogsumm
+sudo apt-get install libgsasl7 libsasl2-2 libsasl2-modules libsasl2-modules-sql sasl2-bin cyrus-sasl2-dbg cyrus-sasl2-doc
+sudo apt-get install php-auth-sasl php5-sasl libapache2-mod-authn-sasl
+</code>
+
+=== Configuration de postfix ===
+<code>
+sudo dpkg-reconfigure postfix
+</code> 
+  * Ajouter à la fin de sudo nano /etc/postfix/master.cf
+<code>
+dbmail-lmtp     unix    -       -       n       -       -       lmtp
+</code>
+
+=== mailname main.cf ===
+
+<code>sudo nano /etc/mailname
+domain.tld</code>
+
+  * //domain.tld// est le domaine en tant que domaine de messagerie
+  *// smtp.domain.tld// est le CNAME ou alias du MX, ou MX lui même.
+  * le mailto: //toto@domain.tld// est alors potentiellement possible 
+NB: valable également pour un //sous.domain.tld// en tant que domaine de messagerie
+  * /etc/hosts
+<code>sudo nano /etc/hosts
+127.0.0.1   www.domain.tld smtp.domain.tld dynamic.noip.tld ... local_name localhost
+#127.0.1.1   local_name
+# The following lines are desirable for IPv6 capable hosts
+::1   www.domain.tld smtp.domain.tld dynamic.noip.tld ip6-localhost ip6-loopback
+fe00::0 ip6-localnet
+ff00::0 ip6-mcastprefix
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+</code>
+Il n'est pas nécessaire de fixer //smtp.domain.tld// comme nom local de la machine. (hostname -s)
+<code>
+smtp_host_lookup = native, dns
+</code>
+  * man hostname dnsdomainname
+<code>
+hostname -s   # local_name
+ce_que_vous_voulez
+hostname -f   # fqdn
+www.mydomain.tld
+hostname -d   # domaine
+mydomain.tld
+</code>
+=== main.cf ===
+
+  * méthode //virtual//
+sudo nano /etc/postfix/main.cf
+<code>
+# maj 11 03 2013
+# Requis
+alias_database = hash:/etc/aliases
+alias_maps = hash:/etc/aliases
+append_dot_mydomain = no
+biff = no
+readme_directory = no
+config_directory = /etc/postfix
+recipient_delimiter = +
+smtpd_banner = $myhostname ESMTP $mail_name (Ubuntu)
+receive_override_options = no_address_mappings
+
+inet_interfaces = all
+inet_protocols = ipv4
+
+myhostname = smtp.domain.tld
+mydomain = domain.tld
+mynetworks = 127.0.0.1 192.168.1.x 11.22.33.44
+myorigin = $mydomain
+mydestination = localhost 
+relay_domains = $mydestination
+relay_recipient_maps = mysql:/etc/postfix/dbmail_recipients.cf
+relayhost = 
+transport_maps = hash:/etc/postfix/transport
+
+# Selon chaque config DNS
+smtp_host_lookup = native, dns
+smtp_cname_overrides_servername = yes
+
+# Requis Virtual
+virtual_mailbox_domains = mysql:/etc/postfix/dbmail_domains.cf
+virtual_mailbox_maps = mysql:/etc/postfix/dbmail_mailboxes.cf
+virtual_transport = dbmail-lmtp:localhost:24
+
+# Requis SASL
+broken_sasl_auth_clients = yes
+smtp_sasl_auth_enable = yes
+smtp_sasl_mechanism_filter = CRAM-MD5 PLAIN
+smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+smtp_sasl_security_options = noanonymous
+#smtp_sender_dependent_authentication = yes
+smtpd_sasl_auth_enable = yes
+smtpd_sasl_authenticated_header = no
+smtpd_sasl_local_domain = domain.tld list.domain.tld sous.domain.tld domain2.tld2
+smtpd_sasl_path = smtpd
+smtpd_sasl_security_options = noanonymous
+smtpd_sasl_type = cyrus
+
+# Requis STARTTLS/TLS/SSL
+smtp_tls_CAfile = /etc/...pem
+smtp_tls_CApath = /etc/ssl/certs
+smtp_tls_cert_file = /etc/...pem
+smtp_tls_key_file = /etc/....pem
+#smtp_tls_per_site = hash:/etc/postfix/smtp_tls_per_site
+smtp_tls_scert_verifydepth = 2
+smtp_tls_security_level = may
+smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
+smtp_tls_session_cache_timeout = 900s
+smtp_use_tls = yes
+
+smtpd_tls_CAfile = /etc/...pem
+smtpd_tls_CApath = /etc/ssl/certs
+smtpd_tls_ask_ccert = yes
+smtpd_tls_auth_only = yes
+smtpd_tls_ccert_verifydepth = 2
+smtpd_tls_cert_file = /etc/...pem
+smtpd_tls_key_file = /etc/....pem
+smtpd_tls_loglevel = 2
+smtpd_tls_mandatory_ciphers = medium
+smtpd_tls_mandatory_protocols = TLSv1, SSLv3
+smtpd_tls_received_header = no
+smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache
+smtpd_tls_session_cache_timeout = 900s
+smtpd_use_tls = yes
+tls_random_source = dev:/dev/urandom
+
+# Options Restrictions
+smtpd_sender_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_non_fqdn_sender,       reject_unknown_sender_domain, permit
+smtpd_recipient_restrictions = permit_sasl_authenticated,	permit_tls_clientcerts,	permit_mynetworks,	permit_auth_destination,        reject_non_fqdn_sender,        reject_non_fqdn_recipient,	reject
+
+# Option x509 client
+relay_clientcerts = hash:/etc/postfix/clientcerts
+
+# Option Limites 
+bounce_queue_lifetime = 36h
+maximal_queue_lifetime = 36h
+smtp_destination_concurrency_limit = 5
+smtp_destination_rate_delay = 1
+local_destination_concurrency_limit = 5
+default_destination_concurrency_limit = 10
+default_destination_recipient_limit = 25
+virtual_destination_concurrency_limit = 10
+virtual_destination_rate_delay = 1
+smtpd_client_connection_count_limit = 4
+smtpd_client_connection_rate_limit = 30
+smtpd_client_recipient_rate_limit = 30
+smtpd_error_sleep_time = 0
+smtpd_hard_error_limit = 4
+smtpd_recipient_limit = 30
+
+# Option clamsmtpd
+content_filter = scan:[127.0.0.1]:10025
+
+# Option dkim
+milter_default_action = accept
+milter_protocol = 2
+non_smtpd_milters = inet:localhost:8891
+smtpd_milters = inet:localhost:8891
+
+# Option Debogage Erreur Log
+# sudo pflogsumm /var/log/mail.log -d today  --smtpd_stats | more
+# master.cf         
+# smtp|submission|smtps      inet  ...       smtpd -v 
+# smtp      inet  ...       smtp -v 
+# postfix restart
+# main.cf
+# erreurs qui doivent être rapportées au postmaster
+notify_classes = bounce, 2bounce, delay, policy, protocol, resource, software
+#Ceci garde le message en file d'attente au lieu de le retourner à l'expéditeur
+#OK soft_bounce = yes
+soft_bounce = no
+debug_peer_list = 127.0.0.1 
+debug_peer_level = 4
+smtpd_tls_loglevel = 3
+smtp_tls_loglevel = 3
+</code>		
+
+sudo nano /etc/postfix/master.cf
+<code>
+#
+# Postfix master process configuration file.  For details on the format
+# of the file, see the master(5) manual page (command: "man 5 master").
+#
+# Do not forget to execute "postfix reload" after editing this file.
+#
+# ==========================================================================
+# service type  private unpriv  chroot  wakeup  maxproc command + args
+#               (yes)   (yes)   (yes)   (never) (100)
+# ==========================================================================
+smtp      inet  n       -       n       -       -       smtpd -v
+   -o content_filter=spamassassin:
+   -o cleanup_service_name=pre-cleanup
+   -o receive_override_options=no_unknown_recipient_checks,no_header_body_checks,no_milters
+   -o smtpd_sasl_auth_enable=yes
+   -o smtp_connect_timeout=1
+   -o smtp_destination_rate_delay=1
+submission      inet    n    -    n    -    -    smtpd -v
+        -o content_filter=spamassassin:
+        -o cleanup_service_name=pre-cleanup
+        -o receive_override_options=no_unknown_recipient_checks,no_header_body_checks,no_milters
+        -o smtpd_tls_security_level=encrypt
+        -o smtpd_sasl_auth_enable=yes
+        -o smtpd_client_restrictions=permit_sasl_authenticated,reject
+        -o smtp_connect_timeout=1
+        -o smtp_destination_rate_delay=1
+smtps     inet  n       -       n       -       -       smtpd -v
+  -o content_filter=spamassassin:
+  -o cleanup_service_name=pre-cleanup
+  -o receive_override_options=no_unknown_recipient_checks,no_header_body_checks,no_milters
+  -o smtpd_tls_wrappermode=yes
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_client_restrictions=permit_sasl_authenticated,reject
+  -o smtp_connect_timeout=1
+  -o smtp_destination_rate_delay=1
+# -o milter_macro_daemon_name=ORIGINATING
+#628       inet  n       -       -       -       -       qmqpd
+pickup    fifo  n       -       n       60      1       pickup
+  -o cleanup_service_name=pre-cleanup
+pre-cleanup unix    n       -       n       -       0       cleanup
+ -o virtual_alias_maps= 
+cleanup   unix  n       -       n       -       0       cleanup
+    -o mime_header_checks= 
+    -o nested_header_checks= 
+    -o body_checks= 
+    -o header_checks= 
+qmgr      fifo  n       -       n       300     1       qmgr
+#qmgr     fifo  n       -       n       300     1       oqmgr
+tlsmgr    unix  -       -       n       1000?   1       tlsmgr -v 
+rewrite   unix  -       -       n       -       -       trivial-rewrite
+bounce    unix  -       -       n       -       0       bounce
+defer     unix  -       -       n       -       0       bounce
+trace     unix  -       -       n       -       0       bounce
+verify    unix  -       -       n       -       1       verify
+flush     unix  n       -       n       1000?   0       flush
+proxymap  unix  -       -       n       -       -       proxymap
+proxywrite unix -       -       n       -       1       proxymap
+smtp      unix  -       -       n       -       -       smtp -v 
+direct    unix  -       -       n       -       -       smtp
+# When relaying mail as backup MX, disable fallback_relay to avoid MX loops
+relay     unix  -       -       n       -       1       smtp
+showq     unix  n       -       n       -       -       showq
+error     unix  -       -       n       -       -       error
+retry     unix  -       -       n       -       -       error
+discard   unix  -       -       n       -       -       discard
+local     unix  -       n       n       -       -       local
+virtual   unix  -       n       n       -       1       virtual
+        -o virtual_destination_rate_delay=1
+lmtp      unix  -       -       n       -       -       lmtp
+anvil     unix  -       -       n       -       1       anvil
+scache    unix  -       -       n       -       1       scache
+#
+# ====================================================================
+# Interfaces to non-Postfix software. Be sure to examine the manual
+# pages of the non-Postfix software to find out what options it wants.
+#
+# Many of the following services use the Postfix pipe(8) delivery
+# agent.  See the pipe(8) man page for information about ${recipient}
+# and other message envelope options.
+# ====================================================================
+# ...
+# ...
+#dbmail-smtp     unix    -       n       n       -       -       pipe
+#  flags=  user=dbmail argv=/usr/local/sbin/dbmail-smtp -d ${recipient} -r ${sender}
+dbmail-lmtp     unix    -       -        n       -       -       lmtp
+      -o disable_dns_lookups=yes
+# clamav clamsmtpd + spamassassin spamd
+scan      unix  -       -       n       -       5      smtp
+        -o smtp_send_xforward_command=yes
+127.0.0.1:10026 inet  n -       n       -       5      smtpd
+        -o content_filter=
+        -o receive_override_options=no_unknown_recipient_checks,no_header_body_checks,no_milters
+        -o smtpd_helo_restrictions=
+        -o smtpd_client_restrictions=
+        -o smtpd_sender_restrictions=
+        -o smtpd_recipient_restrictions=permit_mynetworks,reject
+        -o mynetworks_style=host
+        -o smtpd_authorized_xforward_hosts=127.0.0.1 
+spamassassin  unix  -   n     n     -   -   pipe
+    user=spamassassin    argv=/usr/bin/spamc -f  -e /usr/sbin/sendmail -oi -f ${sender} ${recipient}
+mailman unix  -       n       n       -       -       pipe
+      flags=FR user=list:list 
+      argv=/var/lib/mailman/bin/postfix-to-mailman.py ${nexthop} ${user}
+</code>      
+      
+=== Dbmail sql query ===
+
+Création de /etc/postfix/dbmail_domains.cf
+	sudo nano /etc/postfix/dbmail_domains.cf
+	user     = dbmail
+	password = password
+	hosts    = 127.0.0.1
+	dbname   = dbmail
+	query    = SELECT DISTINCT 1 FROM dbmail_aliases WHERE SUBSTRING_INDEX(alias, '@', -1) = '%s';
+
+Création de /etc/postfix/dbmail_mailboxes.cf
+	sudo nano /etc/postfix/dbmail_mailboxes.cf
+	user     = dbmail
+	password = password
+	hosts    = 127.0.0.1
+	dbname   = dbmail
+	query    = SELECT 1 FROM dbmail_aliases WHERE alias='%s';
+
+Création de /etc/postfix/dbmail_recipients.cf
+<code>
+sudo nano /etc/postfix/dbmail_recipients.cf
+user     = dbmail
+password = password
+hosts    = 127.0.0.1
+dbname   = dbmail
+query = SELECT alias FROM dbmail_aliases WHERE alias='%s'  ; 
+</code>
+
+
+=== Envoyer Directement ===
+
+  * relayhost=   #aucune valeur
+  * renseigner transport_maps
+
+  * transport_maps = hash:/etc/postfix/transport
+<code>
+sudo nano /etc/postfix/transport
+mydomain.tld    :
+#mydomain.tld    local:   #méthode non-virtual-sql
+</code>
+<code>
+sudo postmap hash:/etc/postfix/transport 
+</code>
+
+  * /var/log/mail.log
+<code>
+www postfix/smtp[3965]: 0A7ACA1A90: to=<kim@gmx.com>, relay=host[91.224.146.211]:25, delay=1, delays=0.09/0.01/0.72/0.2, dsn=2.0.0, status=sent (250 2.0.0 Ok: queued as D21C6817BF)
+</code>
+
+=== Envoyer Indirectement (par relais) ===
+
+  * relayhost=[smtp.sfr.fr]:587
+  * ou relayhost=   #aucune valeur  et renseigner transport_maps
+
+  * si le relais nécessite une //authentification//, renseigner //smtp_sasl_password_maps// = hash:/etc/postfix/sasl/sasl_passwd
+<code>
+sudo nano /etc/postfix/sasl/sasl_passwd
+[smtp.sfr.fr]:587 robert.pierre@sfr.fr:mot-de-passe
+</code>
+sudo postmap hash:/etc/postfix/sasl/sasl_passwd
+
+<code>
+sudo nano /etc/postfix/transport
+#cas 1
+#mydomain.tld    local:     #méthode non-virtual-sql
+mydomain.tld     :
+#cas 2
+#gmail.com smtp:[smtp.gmail.com]:587
+#yahoo.fr  smtp:[smtp.yahoo.fr]:587
+# cas 3
+*       smtp:[smtp.sfr.fr]:587
+</code>
+sudo postmap hash:/etc/postfix/transport
+
+  * exemples;
+<code>
+expéditeur -> destinataire (transport)
+toto@mydomain.tld envoie un mail vers tata@mydomain.tld  (cas 1)
+toto@mydomain.tld envoie un mail vers polo@gmail.com en utilisant le relais [smtp.gmail.com]:587  (cas2)
+toto@mydomain.tld envoie un mail vers arthur@orange.fr en utilisant le [smtp.sfr.fr]:587 (cas 3)
+</code>
+
+  * /var/log/mail.log
+<code>
+www postfix/smtp[2657]: 60462A2AFF: to=<kim@gmx.com>, relay=smtp.sfr.fr[93.17.128.85]:587, delay=0.5, delays=0.13/0.02/0.22/0.13, dsn=2.0.0, status=sent (250 2.0.0 Ok: queued as B3A817000087)
+</code>
+
+==  SMTP accès à partir d'un MUA type thunderbird ==
+
+D'après le main.cf master.cf;
+  - Interdit: depuis l'extérieur, pas d'authentification
+  - Autorisé : en 127.0.0.1, pas d'authentification
+  - filtrage spamd clamsmtpd 
+
+  * Serveur Sortant: smtp.domain.tld
+  * Port : 25,587,465,5678(option)
+  * Nom utilisateur: toto@domain.tld 
+  * Méthode d'authentification: mot de passe normal (plain), mot de passe chiffré (cram-md5)
+  * Sécurité de la connexion : STARTTLS, TLS/SSL
+
+==x509 client==
+
+  *  **Connexion forte**
+a/ Si un certficat x509 client (format .p12) dans le magasin des certificats de thunderbird est associé à toto@domain.tld, cela surcharge ”//Anonymous TLS connection//” par ”//Trusted TLS connection//”, matché par permit_tls_clientcerts=hash:/etc/postfix/clientcerts. Biensûr, lors de la création du certificat client, il faut prévoir CN=toto@domain.tld et ajouter votre CA (Autorité de Certification) sous smtp_tls_CApath smtp_tls_CAfile
+<code>
+sudo nano /etc/postfix/clientcerts
+A8:B0:66:2B:E8:4D:4E:06:BA:C1:BA:84:2B:61:43:47 toto@domain.tld
+</code>
+L'empreinte est en MD5(fingerprint) par défaut
+
+b/ Cela ouvre la possibilité d'avoir une exclusivité, un accès restrictif au possesseur du ledit x509 client.
+Par exemple en adaptant un port existant ou en ajoutant;
+
+<code>
+5678      inet  n       -       n       -       -       smtpd -v
+   -o content_filter=spamassassin:
+   -o receive_override_options=no_unknown_recipient_checks,no_header_body_checks,no_milters
+   -o smtpd_sasl_auth_enable=no
+   -o smtp_sasl_auth_enable=no
+   -o smtpd_enforce_tls=yes
+   -o smtpd_tls_ask_ccert=yes
+   -o smtpd_tls_req_ccert=yes
+   -o smtpd_client_restrictions=permit_tls_clientcerts,reject
+   -o smtpd_relay_restrictions=permit_tls_clientcerts,reject
+   -o smtpd_sender_restrictions=reject_unlisted_sender,permit
+</code>
+Au niveau du MUA type thunderbird, on a: 
+-nom du serveur SMTP= smtp.domain.tld
+-Port= 5678
+-Nom utilisateur= non spécifié
+-Méthode d'authentification= pas d'authentification
+-Sécurité de la connexion= STARTTLS obligatoire
+
+//telnet avec x509client//
+<code>
+openssl s_client -connect smtp.domain.tld:5678 -starttls smtp -cert toto@domain.tld-cert.pem -key toto@domain.tld-key.pem
+....
+Acceptable client certificate
+</code>
+Pour le telnet, il faut le format certificat.pem et key.pem au lieu du p12
+
+//telnet sans x509client//
+<code>
+openssl s_client -connect smtp.domain.tld:5678 -starttls smtp
+...
+No client certificate presented
+</code>
+La session échoue après le ehlo.
+
+  *  **Signature forte**
+Pour signer votre mail, il vous faut le format .p12 (pkcs12). La signature sera traduite en pkcs7.
+
+  * **Chiffrement fort**
+Pour chiffrer un mail en utilisant une authentification forte, il faut le x509 client du destinataire au format pem, sans sa clef privée. Si Toto veut envoyer un mail chiffré (SMIME pkcs7) à Tata, alors toto doit avoir dans le magasin des certficats x509 thunderbird: toto-cert.p12 + tata-cert.pem
+
+== Service ==
+
+<code>
+sudo postfix <start|stop|reload>
+</code>
+
+====== Dbmail ======
+
+=====  Dbmail 3.x =====
+
+   * gestion et stockage via les tables mysql, postgresql, oracle 
+  * adapté à la messagerie de masse et aux méthodes virtuelles de Postfix.
+ 
+sudo nano /etc/apt/sources.list
+<code>
+# stable all deb
+deb http://debian.nfgd.net/debian/ stable main
+# sid
+deb http://debian.nfgd.net/debian/ sid main
+# lucid
+deb http://debian.nfgd.net/debian/ lucid main
+# ppa Leonel Nunez
+deb http://ppa.launchpad.net/leonelnunez/ppa/ubuntu precise main 
+deb-src http://ppa.launchpad.net/leonelnunez/ppa/ubuntu precise main 
+</code>
+<code>sudo apt-get update && sudo apt-get upgrade</code>
+<code>sudo apt-get install dbmail</code>
+
+[[http://www.dbmail.org/index.php?page=download|Téléchargement]]
+
+=== build-packages-from-source ===
+
+  * /etc/apt/sources.list
+<code>deb-src http://debian.nfgd.net/debian unstable main</code>
+  * Chacun des appels apt-get va se plaindre de dépendances manquantes (*note). Juste les installer manuellement, et émettre à nouveau la commande.
+<code>
+sudo apt-get -b source libsieve
+sudo dpkg -i libsieve*.deb
+sudo apt-get -b source libzdb
+sudo dpkg -i libzdb*.deb
+sudo apt-get -b source dbmail
+sudo dpkg -i dbmail*.deb
+</code>
+
+=== build-from-tar.tgz===
+
+  * Installer les lib-dev relatives à GLIB, GMIME, SIEVE, MHASH, ZDB, LIBEVENT (*note)
+<code>
+./configure --with-zdb=/usr --with-sieve --with-ldap --localstatedir=/var/run/dbmail --sysconfdir=/etc/dbmail --with-logdir=/var/log/dbmail
+
+ DM_LOGDIR:                 /var/log/dbmail
+ DM_CONFDIR:                /etc/dbmail
+ DM_STATEDIR:               /var/run/dbmail
+ USE_DM_GETOPT:             
+ CFLAGS:                    -g -O2 -pthread -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include   -D_LARGEFILE64_SOURCE -pthread -I/usr/include/gmime-2.4 -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include   -I/usr/include/zdb -W -Wall -Wpointer-arith -Wstrict-prototypes
+ GLIB:                      -Wl,--export-dynamic -pthread -lgmodule-2.0 -lrt -lglib-2.0  
+ GMIME:                     -pthread -lgmime-2.4 -lgobject-2.0 -lgthread-2.0 -lrt -lglib-2.0  
+ SIEVE:                     -lsieve
+ LDAP:                      -lldap
+ SHARED:                    yes
+ STATIC:                    no
+ CHECK:                     
+ SOCKETS:                   
+ MATH:                      -lm
+ MHASH:                     -lmhash
+ LIBEVENT:                  -levent
+ OPENSSL:                   -lssl
+ ZDB:                       -lzdb
+
+make all
+sudo make install
+</code>
+Les fichiers sont copiés par défault dans /usr/local/sbin/ Prévoir un ln -s ou cp pour /usr/sbin
+
+
+==== Dbmail 2.2 (obsolète)====
+
+
+===== Configuration =====
+==== dbmail 3.0 ====
+[[http://www.iredmail.org/wiki/index.php?title=Integration/DBMail.iRedMail.with.MySQL.backend/RHEL#Summary|Complément d'informations]] 
+
+
+==== dbmail 2.2 ====
+
+=== la base de données ===
+
+Création du schema dbmail
+	mysql -uroot -p
+	mysql> CREATE schema dbmail;
+	mysql>ALTER DATABASE  `dbmail` DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;
+
+Récupération et décompression du modèle de table :
+	cp /usr/share/doc/dbmail-mysql/examples/create_tables.mysql.gz ~/
+	gzip --decompress ~/create_tables.mysql.gz
+
+Création des tables
+	mysql -uroot -p dbmail < ~/create_tables.mysql
+
+Création d'un utilisateur dbmail
+	mysql -uroot -p
+	GRANT ALL ON dbmail.* to dbmail@localhost identified by 'password';
+
+=== dbmail ===
+
+Modification des lignes suivantes dans /etc/dbmail/dbmail.conf
+	sudo vim /etc/dbmail/dbmail.conf
+	driver = mysql
+	authdriver = sql
+	host = localhost
+	sqlsocket = /var/run/mysqld/mysqld.sock
+	user = dbmail
+	pass = password
+	db = dbmail
+	SIEVE_NOTIFY = no
+
+Modification de /etc/default/dbmail pour le démarrage de l'imap et lmtp
+	sudo vim /etc/default/dbmail
+	START_IMAPD=1
+	START_LMTPD=1
+	START_SIEVE=1
+
+Redémarrage de dbmail
+	sudo service dbmail restart
+
+==== Compte Boîte aux Lettres - Mailbox  ====
+**sudo dbmail-users**
+  * -a  //ajouter un nouveau Compte//
+  * -w  //mot de passe//
+  * -p  //type_password//   md5, plaintext, crypt, md5-hash, md5-digest, crypt-raw, md5-hash-raw, md5-digest-raw, md5-base64, md5-base64-raw 
+  * -c  //mise à jour du compte//
+  * -s  //créer// une adresse mail ou plusieurs alias  -s toto@domain.tld,titi@domain.tld
+  * -S  //supprimer// une adresse mail ou plusieurs alias
+  * -m  //quota// -m 50M 
+  * -d   //supprimer un compte//
+  * -x toto@domain.tld -t forward@domain2.tld2   //ajouter un forward //
+  * -x toto@domain.tld -T forward@domain2.tld2   //supprimer un forward//
+
+** Ajouter & Créer un nouveau compte toto@domain.tld avec son adresse mail toto@domain.tld**
+<code>
+sudo dbmail-users -a toto@domain.ltd -w mypass -p md5 -s toto@domain.ltd
+Adding INBOX for new user... ok.
+[toto@domain.tld]
+Done
+</code>
+
+Supprimer un compte
+<code>
+sudo dbmail-users -d toto@domain.tld
+</code>
+http://www.dbmail.org/dokuwiki/doku.php/manage_users
+
+ ====SASL  ====
+
+Dbmail utilise saslauthd comme démon d'authentification (sasl authentication server).
+Rimap (Requête d'authentification au près du serveur IMAP) est exploité dans ce tuto.
+Pam n'est pas vraiment adapté pour la messagerie de masse et il y a toujours moyen de convertir un user unix/pam en virtual/rimap par exemple. Avec les solutions Webmail, ce sentiment est renforcé.
+
+ === Convertir un utilisateur Unix/Pam en Virtual/Rimap ===
+
+sudo nano /etc/postfix/sender_canonical
+<code>
+user_unix   user_virtual@domain.tld
+user_unix@domain.tld   user_virtual@domain.tld
+</code>
+<code>
+sudo postmap hash:/etc/postfix/sender_canonical
+sudo postconf -e 'sender_canonical_maps = hash:/etc/postfix/sender_canonical'
+sudo dbmail-users -a user_virtual@domain.tld -s user_virtual@domain.tld -w mot_de_passe
+</code>
+user_virtual@domain.tld sert de récipient.
+
+===  /etc/default/saslauthd ===
+ 
+  * avec RIMAP
+<code>
+START=yes
+NAME="saslauthd"
+MECHANISMS="rimap"
+MECH_OPTIONS="localhost"
+THREADS=5
+OPTIONS="-c -m /var/spool/postfix/var/run/saslauthd"
+</code>
+  * Service 
+<code>
+sudo service saslauthd restart|reload
+</code>
+==== postfix sasl====
+=== main.cf ===
+à titre d'information
+
+== smtp_sasl_password_maps ==
+Sert principalement à s'authentifier auprès d'un relais serveur smtp dans le but de s'en servir comme transporteur.
+( voir relayhost, transport_maps )
+
+sudo nano /etc/postfix/sasl_passwd
+<code>
+[11.22.22.44]:587 compte@fai.fr:mot_de_passe
+[smtp.gmail.com]:587 compte@gmail.com:mot_de-passe
+</code>
+<code>
+sudo postmap /etc/postfix/sasl_passwd
+sudo postconf -e 'smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd'
+</code>
+=== master.cf ===
+
+<code>
+submission      inet    n    -    n    -    -    smtpd
+	....
+	-o smtpd_sasl_auth_enable=yes
+	-o smtpd_client_restrictions=permit_sasl_authenticated,reject
+</code>
+Optionnellement, la même chose pour smtp,smtps, si on veut du permit_sasl_authenticated,reject
+
+==== Mise en place du CRAM-MD5 ====
+
+  - authentification en clair : PLAIN, LOGIN 
+  - authentifcation chiffrée : CRAM-MD5, DIGEST-MD5 
+  * le mech_list n'a aucun rapport avec le type de stockage des mots de passe.
+  * cram-md5 a un stockage //plaintext// "But remember, that this will work only with 'plain' passwords in database."
+[[http://www.postfix.org/SASL_README.html|Source Cyrus SASL Plugins - auxiliary property plugins]]  ""CRAM-MD5, DIGEST-MD5 and NTLM. These mechanisms send credentials encrypted but their verification process requires the password to be available in plaintext. Consequently passwords cannot (!) be stored in encrypted form""
+<code>
+sudo dbmail-users -c toto@domain.tld -p plaintext -w password
+</code>
+  * /etc/postfix/sasl/smtpd.conf peut être obtenu par lien symbolique 
+<code>
+sudo ln -s /usr/lib/sasl2/smtpd.conf /etc/postfix/sasl/smtpd.conf
+sudo ln -s /usr/lib64/sasl2/smtpd.conf /etc/postfix/sasl/smtpd.conf
+</code>
+
+  * pwcheck_method: saslauthd
+<code>
+pwcheck_method: saslauthd
+mech_list: PLAIN LOGIN
+</code>
+Ne pas préciser d'autres mécanismes que mech_list PLAIN ou LOGIN lors de l'utilisation saslauthd. Il ne peut gérer que ces deux mécanismes, et l'authentification échouera si les clients sont autorisés à choisir d'autres mécanismes.
+
+  * pwcheck_method: auxprop
+<code>
+pwcheck_method: auxprop
+mech_list: CRAM-MD5 PLAIN
+auxprop_plugin: sql
+log_level: 2
+sql_engine: mysql
+sql_hostnames: 127.0.0.1
+sql_user: dbmail
+sql_passwd: pass
+sql_database: dbmail
+sql_verbose: yes
+sql_select: SELECT passwd FROM dbmail_users WHERE userid = '%u@%r'
+</code>
+NB:  userid = '%u@%r' si vous avez stocké sous la forme toto@domain.tld 
+[[http://asyd.net/docs/cyrus-options.html|Options SASL]]
+
+  * postfix main.cf
+<code>
+smtp_sasl_mechanism_filter = cram-md5 plain
+</code>
+  * /var/log/auth.log & smtp_sasl
+<code>
+postfix/smtpd[23801]: sql plugin create statement from cmusaslsecretCRAM-MD5 toto domain.tld
+postfix/smtpd[23801]: sql plugin doing query SELECT passwd FROM dbmail_users WHERE userid='toto@domain.tld' ;
+</code>
+
+  * testsaslauthd (login,plain)
+<code>
+sudo testsaslauthd -f /var/spool/postfix/var/run/saslauthd/mux -u toto@domain.tld -p password
+0: OK "Success."
+</code>
+  * test avec roundcube
+<code>
+18:49:46 www roundcube: [77EB] C: A0001 ID ("name" "Roundcube Webmail" "version" "0.7.1" "php" "5.3.2-1ubuntu4.14" "os" "Linux" "command" "/roundube/?_task=mail&_action=moveto")
+18:49:46 www roundcube: [77EB] S: * ID ("name" "dbmail" "version" "3.0.1" "os" "Linux" "os-version" "2.6.32-41-generic")
+18:49:46 www roundcube: [77EB] S: A0001 OK ID completed
+18:49:46 www roundcube: [77EB] C: A0002 AUTHENTICATE CRAM-MD5
+18:49:46 www roundcube: [77EB] S: + MTM0MzA2MjE4Ni4xOTIzMy4yNkAobm9uZSk=
+18:49:46 www roundcube: [77EB] C: dG90b0Bkb21haW4udGxkIDI1NmMyNmIxYmY4MjE5YjJlZjUxMTNlNTVjYjAwYmFk
+18:49:46 www roundcube: [77EB] S: A0002 OK [CAPABILITY IMAP4rev1 ACL RIGHTS=texk NAMESPACE CHILDREN SORT QUOTA THREAD=ORDEREDSUBJECT UNSELECT IDLE 
+STARTTLS ID] User toto@domain.tld authenticated
+</code>
+
+==== Statistiques des connexions  & dbmail_authlog ====
+ 
+  * /etc/dbmail/dbmail.conf
+<code>
+authlog               = yes  
+</code>
+  * Rafraîchir en supprimant les 8000 premières lignes & enregistrements.
+<code>
+delete from dbmail_authlog where id < 8000;
+</code>
+  * Lister les 10 dernières connexions.
+<code>
+SELECT * FROM dbmail_authlog order by id desc limit 10;
+</code>
+  * Les traces des 10 derniers mails par date/time.
+<code>
+SELECT * FROM dbmail_physmessage order by internal_date desc limit 10;
+</code>
+
+=====  Alias et Forward =====
+ 
+ ====  Alias ====
+
+Losque les domaines appartiennent au même mx, il s'agit plutôt d'alias et dérivés. Les domaines partagent également le même démon d'authentification (saslauthd)
+
+<code>
+sudo dbmail-users -c toto@domain.tld -s toto@domain.tld,tata@domain.tld,oto@domain2.tld2,tata@domain3.tld3
+</code>
+<code>
+smtpd_sasl_local_domain = domain.tld domain2.tld2 domain3.tld3
+</code>
+ ==== Forward ====
+Lorsque les mx sont différents, cela ressemble plutôt à des méthodes de type forward
+
+=== Pour envoyer, reécrire l'expéditeur ===
+
+pour envoyer des mails, sender_canonical_maps est suffisant
+
+sudo nano /etc/postfix/sender_canonical
+<code>
+yoko       babar@monmail.com
+yoko@domain.tld      babar@monmail.com
+</code>
+<code>
+sudo postmap hash:/etc/postfix/sender_canonical
+sudo postconf -e 'sender_canonical_maps = hash:/etc/postfix/sender_canonical'
+</code>
+
+test
+<code>
+yoko@pc:~$ echo 'bonjour' | mail -s 'test' toto@sfr.fr
+</code>
+yoko devient babar@monmail.com, qui envoie au destinataire final toto@sfr.fr
+
+=== Recevoir et Faire Suivre automatiquement le courrier===
+
+le courrier à destination de toto@domain.tld est renvoyé chez casimir@free.fr
+<code>
+sudo dbmail-users -x toto@domain.tld -t casimir@free.fr
+</code>
+
+=== Créer un clone de Mailbox d'un mx différent===
+
+>sudo apt-get install imapsync
+Dans l'exemple qui suit, la boîte aux lettres de gmail est copié sur une boîte aux lettres récemment crée de votre domaine.
+  * host1 est la source, host2 est la destination.
+
+  * Simuler avec --dry
+<code>
+imapsync --host1 imap.gmail.com --user1 compte@gmail.com --password1 motdepasse_gmail --port1 993 --ssl1 --authmech1 LOGIN --host2 mail.domain.tld --user2 yoko@domain.tld --password2 motdepasse_yoko --dry
+</code>
+  * Copier réellement
+<code>
+imapsync --host1 imap.gmail.com --user1 compte@gmail.com --password1 motdepasse_gmail --port1 993 --ssl1 --authmech1 LOGIN --host2 mail.domain.tld --user2 yoko@domain.tld --password2 motdepasse_yoko
+</code>
+
+=== Recevoir et Rapatrier du courrier ===
+
+>sudo apt-get install fetchmail
+fetchmailconf sert à rien et risque de vous induire en erreurs.
+
+Dans l'exemple ci-dessous, le courrier est rapatrié d'un compte gmail
+
+sudo nano /etc/fetchmailrc
+<code>
+# Read the ISP accounts every 3600 seconds
+set syslog 
+set daemon 3600 
+
+# Configure the ISP accounts (POP server, users and respective passwords)
+poll imap.gmail.com with protocol IMAP: 
+user "babar@monmail.com" with pass "motdepasse-de-babar" with ssl with sslcertck is "yoko@domain.tld" here keep
+smtphost smtp.domain.tld
+</code>
+[[http://fetchmail.berlios.de/fetchmail-man.html#5|Options Fetchmail]]
+
+Fetchmail relève toutes les heures les mails de babar@monmail.com et les rapatrie directement sur yoko@domain.tld.
+  * keep signifie que fetchmail crée une copie du mail sans le détruire sur le serveur distant.
+  * sender_canonical_maps a été défini.
+  * sudo service fetchmail restart # pour relançer le démon.
+
+Fetchmail fait un doublon, voir inutile,  si vous avez délà roundcube, qui fait déjà du //fetch//. 
+  * exemple en modifiant le main.inc.php de roundcube
+
+<code>
+$rcmail_config['default_host'] = array(
+        .... 
+	'imap.free.fr:143' => 'FREE',
+	'ssl://imap.gmail.com:993' => 'GMAIL',
+	'imap.gmx.com:143' => 'GMX',
+	'ssl://imap.orange.fr:993' => 'ORANGE',
+	'imap.sfr.fr:143' => 'SFR',
+	'ssl://imap.domain.tld:993' => 'mondomaine',
+	'ssl://imap.mail.yahoo.com:993' => 'YAHOO');
+</code>
+
+//Fetchmail// peut servir à créer des Shared Mailboxes dbmail complexes, en rapatriant des mailboxes de domaines de mx différents.
+
+===== Notifications =====
+ 
+==== dbmail_auto_notifications ====
+
+>/etc/dbmail/dbmail.conf
+<code>
+AUTO_NOTIFY           = yes  
+# Defaults to AUTO_NOTIFY_SUBJECT ="NEW MAIL NOTIFICATION"
+# AUTO_NOTIFY_SUBJECT        = 
+# Defaults to AUTO_NOTIFY_SENDER "autonotify@dbmail"
+AUTO_NOTIFY_SENDER        = webmaster@domain.tld
+</code>
+
+notify_address:Mail-Address, where the notification should go to
+<code>
+INSERT INTO dbmail_auto_notifications ( user_idnr, notify_address ) VALUES ( '9', 'admin.perso@fai.fr' );
+</code>
+
+Dès qu'un mail arrive chez modo@domain.tld(user_idnr='9'), un mail "NEW MAIL NOTIFICATION" est envoyé par webmaster@domain.tld pour admin.perso@fai.fr 
+
+Attention, autonotify@dbmail génère une erreur car évidemment le récipient n'est pas connu.
+
+==== dbmail_auto_replies ====
+
+Chaque utilisateur peut spécifier un message de réponse automatique à tous les messages entrants. 
+>/etc/dbmail/dbmail.conf
+AUTO_REPLY            = yes
+<code>
+INSERT INTO dbmail_auto_replies ( user_idnr, start_date, stop_date, reply_body ) VALUES ( '4', '2012-10-22 00:00:00', '2013-01-01 00:00:00', 'Votre mail est bien arrive' );
+</code>
+=====  Filtrer les Headers & dbmail_filters =====
+
+dbmail_filters permet principalement de rediriger un mail vers une mailbox en fonction du header.
+  * pour lister les identifiants; select user_idnr, userid from dbmail_users;
+  * Pour lister les mailboxes; select name from dbmail_mailboxes where owner_idnr='25';
+<code>
+insert into dbmail_filters ( user_id, headername, headervalue, mailbox) value ( '25', 'From', 'bank@bnp.fr', 'Compta' ); 
+insert into dbmail_filters ( user_id, headername, headervalue, mailbox) value ( '46', 'cc', 'compte-fai-fetch@domain.tld', 'inbox/sent' ); 
+</code>
+dbmail_filters est insensible à la casse de polices, et comprendre user_id comme user_idnr (lapsus avec userid).
+
+  * Annexe Header
+<code>
+select headername from dbmail_headername order by headername; 
+</code>
+
+===== Shared Mailboxes =====
+Ces boîtes sont appelées boîtes aux lettres partagées - Elles sont décrites dans la table //dbmail_subscription//. Les droits d'accès appropriés sont décrits dans la table //dbmail_acl//.
+
+Lister les identifiants et récupérer le user_idnr 
+<code>
+select user_idnr,userid,passwd from dbmail_users; 
++-----------+--------------------------------+------------------------------------+
+|  user_idnr |    userid                    | passwd                          |
++-----------+--------------------------------+------------------------------------+
+|         1 | __@!internal_delivery_user!@__ |                                    |
+|         2 | anyone                         |                                    |
+|         3 | __public__                     |                                    |
+....
+sudo dbmail-users -l __public__ | awk -F: '{print$3}'    # renvoit 3
+</code>
+==== dbmail-acl.sh ====
+[[http://linux.bononline.nl/linux/dbmail/src/dbmail-acl.sh|Téléchargement]]
+Ce script permet de créer plus facilement les boîtes aux lettres partagées.
+
+<code>
+mkdir ~/dbmail ; cd ~/dbmail
+wget http://linux.bononline.nl/linux/dbmail/src/dbmail-acl.sh
+sudo cp /etc/dbmail/dbmail.conf .
+sudo chown votre_user:votre_user ./dbmail.conf 
+sudo chmod +x dbmail-acl.sh 
+</code>
+Renseigner la partie
+<code>
+DBMAIL[_dbmail_mysqldatabase]="dbmail"
+DBMAIL[_dbmail_mysqluser]="dbmail"
+DBMAIL[_dbmail_mysqlpassword]="gdhgybvudo"
+DBMAIL[_dbmail_mysqlhost]="localhost"
+DBMAIL[_dbmail_conffile]="/home/votre_user/dbmail/dbmail.conf"
+DBMAIL[_dbmail_driver]="mysql"
+</code>
+modifier pour dbmail 3.x à proximité de function get_all_acls() 
+<code>
+$MYSQL_CLIENT -N -e "SELECT lookup_flag, read_flag, seen_flag, write_flag, insert_flag, post_flag, create_flag, delete_flag, deleted_flag, expunge_flag, administer_flag FROM dbmail_acl WHERE mailbox_id = $mailbox_idnr and user_id = $user_idnr;"
+</code>
+et acl_add()
+<code>
+ $MYSQL_CLIENT -e "INSERT INTO dbmail_acl values ($user_idnr, $mailbox_idnr, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1);"
+</code>
+=== Utilisation ===
+
+  * dbmail-acl.sh add|del user owner [mailbox]
+
+Ajoute ou supprime une mailbox partagée du propriétaire qui peut être accédée par tel utilisateur. La valeur par défaut est la boîte de réception (INBOX)
+  * dbmail-acl.sh add|del user owner '*'
+
+Pour avoir accès à toutes les boîtes de propriétaire, entrez un astérisque ( Recommandé si vous voulez rapatrier un compte au complet ou un compte FAI)
+ 
+
+  * dbmail-acl.sh list [command]
+
+command est acl ou mailbox. La valeur par défaut est acl.
+
+  * dbmail-acl.sh list acl [userid]
+
+Liste les ACL pour tel userid. La valeur par défaut est tous les userid sont sélectionnés.
+
+  * dbmail-acl.sh list mailbox [userid]
+
+Liste toutes les mailboxes pour tel userid. La valeur par défaut est toutes les mailboxes sont sélectionnées.
+==== Mailbox ====
+
+Au besoin, si dbmail-acl.sh ne crée pas les mailboxes.
+
+  * création manuelle mailbox anyone
+<code>
+insert INTO dbmail_mailboxes (owner_idnr, name, seen_flag, answered_flag, deleted_flag, flagged_flag, recent_flag, draft_flag, no_inferiors, no_select, permission, seq ) VALUES ( '2', 'INBOX', '0', '0', '0', '0', '0', '0', '0', '0', '2', '0' );
+</code>
+  * création manuelle mailbox public
+<code>
+insert INTO dbmail_mailboxes (owner_idnr, name, seen_flag, answered_flag, deleted_flag, flagged_flag, recent_flag, draft_flag, no_inferiors, no_select, permission, seq ) VALUES ( '3', 'INBOX', '0', '0', '0', '0', '0', '0', '0', '0', '2', '0' );
+</code>
+
+==== #Users ====
+en supposant que vous ayez 3 comptes distincts;
+<code>
+sudo dbmail-users -a t1@domain.tld -s t1@domain.tld -w t1
+sudo dbmail-users -a t2@domain.tld -s t2@domain.tld -w t2
+sudo dbmail-users -a t3@domain.tld -s t3@domain.tld -w t3
+</code>
+
+**t1@mdomain.tld partage sa mailbox avec t2@domain.tld et t3@domain.tld**
+<code>
+sudo bash ~/dbmail/dbmail-acl.sh add t2@domain.tld t1@mdomain.tld 
+Taking default mailbox INBOX
+Adding (full) acl rights for 26 to 60.
+Adding subscription of 26 to 60.
+sudo bash ~/dbmail/dbmail-acl.sh add t3@domain.tld t1@domain.tld 
+Taking default mailbox INBOX
+Adding (full) acl rights for 27 to 60.
+Adding subscription of 27 to 60.
+ </code>
+
+=== Messagerie de t2@domain.tld ===
+ 
+La messagerie t1@domain.tld est partagée et incluse dans celle de t2@domain.tld.
+
+{{:dbmail:dbmail-partage-users.png?direct&700 |}}
+
+
+==== #Public ====
+en supposant que vous ayez 1 compte distinct;
+<code>
+sudo dbmail-users -a entreprise@domain.tld -s entreprise@domain.tld -w entreprise
+</code>
+
+<code>
+sudo bash ~/dbmail/dbmail-acl.sh add entreprise@domain.tld __public__ 
+Taking default mailbox INBOX
+Adding (full) acl rights for 28 to 51.
+Adding subscription of 28 to 51.
+</code>
+
+ajouter une adresse mail 'project@domain.tld' pour #Public
+<code>
+insert into dbmail_aliases ( alias, deliver_to, client_idnr ) value ( 'project@domain.tld', '3', '0' )
+</code>
+{{:dbmail:dbmail:dbmail-partage-public.png?direct&700 |}}
+
+
+
+===== Mailman =====
+==== Ajouter les Recipients ====
+C'est l'équivalence de virtual-aliases pour d'autres serveurs imap. Il n'y a pas besoin également de rajouter des aliases dans /etc/aliases. Les récipients des listes se trouvent dans la table dbmail_aliases 
+
+sudo nano dbmail-add-list
+<code>
+#!/bin/bash
+#14/07/2012
+# sudo bash dbmail-addl-list <list_name>
+#DOMAINNAME est le domaine de messagerie
+
+if [ "x$1" == "x" ]; then
+echo "No maillist specified"
+echo "Usage: dbmail-add-list <list_name>"
+exit 1
+fi
+
+DOMAINNAME="@list.domain.tld"
+#DOMAINNAME="@domain.tld" si vous n'avez pas beaucoup de listes.
+
+MAILLIST=$1
+
+echo "dbmail-users -x $MAILLIST$DOMAINNAME -t \"|/usr/lib/mailman/mail/mailman post $MAILLIST\""
+dbmail-users -x $MAILLIST$DOMAINNAME -t "|/usr/lib/mailman/mail/mailman post $MAILLIST"
+
+for i in admin bounces confirm join leave owner request subscribe unsubscribe;
+do
+echo "dbmail-users -x $MAILLIST-$i$DOMAINNAME -t \"|/usr/lib/mailman/mail/mailman $i $MAILLIST\""
+dbmail-users -x $MAILLIST-$i$DOMAINNAME -t "|/usr/lib/mailman/mail/mailman $i $MAILLIST"
+done 
+</code>
+=== exemple pour la liste "pub" ===
+  * Création<code>sudo newlist pub</code>
+  * Ajouter les Récipients
+sudo bash /home/.../dbmail-add-list pub
+<code>
+dbmail-users -x pub@list.domain.tld -t "|/usr/lib/mailman/mail/mailman post pub"
+[|/usr/lib/mailman/mail/mailman post pub]
+Done
+dbmail-users -x pub-admin@list.domain.tld -t "|/usr/lib/mailman/mail/mailman admin pub"
+[|/usr/lib/mailman/mail/mailman admin pub]
+Done
+...
+.......
+dbmail-users -x pub-subscribe@list.domain.tld -t "|/usr/lib/mailman/mail/mailman subscribe pub"
+[|/usr/lib/mailman/mail/mailman subscribe pub]
+Done
+dbmail-users -x pub-unsubscribe@list.domain.tld -t "|/usr/lib/mailman/mail/mailman unsubscribe pub"
+[|/usr/lib/mailman/mail/mailman unsubscribe pub]
+Done
+</code>
+  * Lister les listes
+<code>
+sudo list_lists 
+  2 listes correspondantes trouvées 
+     Mailman 
+      Pub 
+</code>
+  *  Supprimer une liste
+<code>
+sudo rmlist pub 
+</code>
+
+ ==== Annexe mailman ====
+ 
+  * master.cf
+<code>
+mailman unix  -       n       n       -       -       pipe
+      flags=FR user=list:list 
+      argv=/var/lib/mailman/bin/postfix-to-mailman.py ${nexthop} ${user}
+</code>
+  * transport_maps
+<code>
+list.domain.tld	   mailman:
+</code>
+  * check permissions
+<code>
+sudo check_perms;  sudo check_perms -f  # pour fixer les problèmes
+</code>
+  * Problème éventuel de Redirection  entre la web_page_url de la liste et et du hostname (GUI MAILMAN & Apache)
+<code>sudo withlist -l -a -r fix_url </code>
+[[http://wiki.list.org/display/DOC/4.27+Securing+Mailman%27s+web+GUI+by+using+Secure+HTTP-SSL|source]]
+===== Web-based DbmailAdmin =====
+ Les interfaces graphiques à base de LAMP ou équivalent, pas obligatoires pour manager son dbmail.
+  - [[http://code.google.com/p/simple-dbmail-admin/|Simple-dbmail-admin ]] nouveau projet 06/2012
+  - [[http://dbmailadmin.org/|Web DbmailAdmin ]]
+
+ ===== Pare-feu =====
+ 
+Ne pas oublier d'ouvrir les ports du pare-feu
+
+Exemple avec shorewall : 
+	sudo vim /etc/shorewall/rules
+	IMAP/ACCEPT          net             $FW
+	SMTP/ACCEPT          net             $FW
+
+redémarrage du pare-feu
+	sudo /etc/init.d/shorewall restart
+
+===== Auth Basic Apache SASL SMTP=====
+
+Juste un extra de configuration, qui exploite le SASL pour une authentification basique, sur une page http, grace au module libapache2-mod-authn-sasl, qui supporte seulement le sasldb
+
+  * Ajouter sasldb à MECHANISMS dans le /etc/default/saslauthd
+<code>
+MECHANISMS="rimap sasldb"
+</code>
+/etc/postfix/sasl/smtpd.conf
+<code>
+pwcheck_method: auxprop saslauthd 
+mech_list: CRAM-MD5 PLAIN LOGIN
+saslauthd_path: /var/spool/postfix/var/run/saslauthd/mux
+sasldb_path: /var/spool/postfix/var/run/saslauthd/sasldb
+auxprop_plugin: sql sasldb
+log_level: 7
+sql_engine: mysql
+sql_hostnames: 127.0.0.1
+sql_user: dbmail
+sql_passwd: pass
+sql_database: databasename
+sql_verbose: yes
+sql_select: SELECT passwd FROM dbmail_users WHERE userid='%u@%r' 
+</code>
+  * Virtualhost apache
+<code>
+#requis saslauthd + sasldb
+
+Alias /example1  "/..."
+<Directory "/...">
+...
+        AuthType Basic
+        AuthName "Restricted to Staff users"
+        AuthBasicProvider sasl
+        AuthBasicAuthoritative On
+        AuthSaslPwcheckMethod sasldb
+        AuthSaslRealm domain.tld
+        AuthSaslDbPath /var/spool/postfix/var/run/saslauthd/sasldb
+        AuthSaslServiceName smtp
+        Require user toto@domain.tld  
+</Directory>
+</code>
+<code>
+sudo ln -s /etc/sasldb /var/spool/postfix/var/run/saslauthd/sasldb
+#creation de toto@domain.tld
+sudo saslpasswd2  -f /etc/sasldb2 toto@domain.tld
+#listing de la database
+sudo sasldblistusers2 -f /etc/sasldb
+</code>
+login: toto@domain.tld ; mot-de-passe: totopass ; url http:../exemple1
+
+===== Auth Digest Apache dbmail_users =====
+
+Dans l'exemple ci-dessous, le SASL n'est pas utilisé. Une requête sql est directement invoquée pour dbmail_users, permettant une authentification //Digest// http. 
+
+Virtualhost avec mod_auth_digest, mod_dbd
+<code>
+DBDriver mysql
+DBDParams "host=127.0.0.1 port=3306 dbname=dbmail3 user=dbmail3 pass=motdepasse"
+DBDMin  1
+DBDKeep 2
+DBDMax  3
+DBDExptime 240
+
+Alias /example2 "/..."
+<Directory "/...">
+   Options Indexes FollowSymLinks Multiviews
+   AllowOverride None
+   Order allow,deny
+   Allow from all
+AuthType Digest
+AuthDigestAlgorithm MD5
+AuthName "hello"
+AuthDigestProvider dbd
+Require valid-user
+# passwd a été stocké en plaintext
+AuthDBDUserRealmQuery "SELECT md5(concat(userid,':hello:',passwd)) from dbmail3.dbmail_users WHERE userid = %s"
+</Directory>
+</code>
+
+===== Voir aussi =====
+
+  * **(en)** [[http://www.dbmail.org/dokuwiki/doku.php/setup_postfix/|le tutoriel officiel de DBMail]]
+  * [[http://dbmail.org/dokuwiki/doku.php|Wiki dbmail]]
+  * [[http://www.mail-archive.com/dbmail%40dbmail.org/|Archive 1 Dbmail ]]
+  * [[http://www.gossamer-threads.com/lists/dbmail/users/|Archive 2 Dbmail]]
+----
+
+//Contributeurs : [[:utilisateurs:Flavea]]. Titouan//

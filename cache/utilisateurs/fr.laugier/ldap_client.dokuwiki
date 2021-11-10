@@ -1,0 +1,206 @@
+
+{{tag>ldap}}
+
+----
+
+====== LDAP client ======
+
+===== À qui cela s'adresse =====
+
+Cette page est pour n'importe qui voulant rendre son Ubuntu capable de s'authentifier auprès d'un serveur [[wpfr>OpenLDAP]] préalablement installé.
+
+
+===== Introduction =====
+Cette page explique la configuration d'une machine sous Ubuntu 14.04 / Linux Mint 17 afin d'authentifier les utilisateurs enregistrés dans un LDAP
+
+===== Installation des paquets client =====
+Sur la machine cliente, [[:tutoriel:comment_modifier_sources_maj#recharger_la_liste_des_paquets|rechargez la liste des paquets]] puis [[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>libpam-ldap,nscd|libpam-ldap nscd]]** présents dans les dépôts officiels.
+<code>sudo apt-get update
+sudo apt-get install libpam-ldap nscd</code>
+l'installation de nscd necessite de répondre à quelques question :
+  * ldap server Uniform Resource Identifier : 
+indiquer l'adresse de votre serveur :
+<code>ldap://xxx.xxx.xxx.xxx</code> ou <code>ldap://monldap.a.moi.com</code>pour indiquer un nom de domaine.
+Vous pouvez également indiquer plusieurs adresses comme un serveur principal et un serveur de secours, ou encore, l'IP privée puis l'IP publique de votre serveur (si vous avec par exemple à utiliser le même compte dans vos locaux ou à l'exterieur)
+<code>ldap://ipprivée ldap://ippublique</code>
+<note important>Remplacez bien la chaine <code>ldapi:///</code> proposée par défaut par <code>ldap://</code> (pas de i et seulement 2 slash)</note>
+  * Distinguish name of the search base:
+vous devez renseigner le dn de votre base
+exemple
+<code>dc=test,dc=com</code>
+  * LDAP Version
+choisissez 3, la version 2 tends à devenir obsolète et est moins sécurisée
+  * Make local root Database admin :
+YES
+  * Does the LDAP database require login? 
+No
+  * LDAP account for root:
+Saisissez le compte admin de votre base
+Exemple :
+<code>"cn=admin,dc=test,dc=com"</code>
+puis le mot de passe de ce compte admin
+
+En cas d'erreur vous pourrez toujours relancer la configuration avec la commande
+<code>sudo dpkg-reconfigure ldap-auth-config</code>
+
+===== Configuration des logiciels =====
+Il faut maintenant faire quelques modifications dans les fichiers de conf concernant l'authentification :
+
+Tout d'abord, éditez le fichier /etc/nsswitch.conf, j'utilise ici l'éditeur nano [[https://doc.ubuntu-fr.org/nano]] 
+<code>sudo nano /etc/nsswitch.conf</code>
+
+Modifiez les 3 lignes passwd, group et shadow en ajoutant ldap à la fin de la ligne :
+<code>
+passwd : files ldap
+group : files ldap
+shadow : files ldap
+</code>
+<note tip>Ajoutez bien la mention "ldap" en fin de ligne afin d'accélerer les authentifications qui ne requiert pas LDAP, en effet, les différentes possibilités d'authentification sont traitées dans l'ordre que vous indiquez dans ce fichier.</note>
+
+Attaquons nous maintenant à la configuration de PAM (Pluggable Authentication Module)
+Editez le fichier /etc/pam.d/common-session
+<code>sudo nano /etc/pam.d/common-session</code>
+Allez à la fin du ficher et ajoutez cette ligne :
+<code>session required    pam_mkhomedir.so skel=/etc/skel umask=0022</code>
+Cela permet de créer le squelette d'un répertoire utilisateur lors de la première connexion sur cette machine.
+Cette configuration est suffisante pour permettre l'authentification LDAP, mais vous pouvez aller plus loin avec ces quelques éléments :
+ <note>
+===== Configuration de PAM =====
+
+La configuration de PAM est divisée en 4 fichiers : common-account, common-auth, common-password and common-session
+
+==== /etc/pam.d/common-account ====
+
+  sudo vi /etc/pam.d/common-account
+
+
+Changez la configuration par ces lignes :
+
+  account	sufficient	pam_ldap.so
+  account	required	pam_unix.so
+
+
+==== /etc/pam.d/common-auth ====
+
+  sudo vi /etc/pam.d/common-auth
+
+Changez la configuration par ces lignes :
+
+  auth	sufficient	pam_ldap.so
+  auth	required	pam_unix.so nullok_secure use_first_pass
+
+
+==== /etc/pam.d/common-password ====
+
+=== Configuration standard ===
+
+  sudo vi /etc/pam.d/common-password
+
+
+Changez la configuration par ces lignes :
+
+  password	sufficient	pam_ldap.so
+  password	required	pam_unix.so nullok obscure min=4 max=8 md5
+
+
+===== Utilisez des mots de passe plus complexes =====
+
+Pour l'utilisation de mots de passe plus difficiles à casser, il vous suffit d'installer le paquet ''libpam-cracklib'' :
+
+  sudo apt-get install libpam-cracklib
+
+
+Vous avez besoin de modifier la configuration du fichier **/etc/pam.d/common-password** :
+
+  sudo vi /etc/pam.d/common-password
+
+
+Changez la configuration par ces lignes :
+
+  password        required        pam_cracklib.so retry=3 minlen=6 difok=3
+  password        sufficient      pam_ldap.so use_authtok nullok md5
+  password        required        pam_unix.so use_authtok use_first_pass
+
+
+==== /etc/pam.d/common-session ====
+
+=== standard configuration ===
+
+  sudo vi /etc/pam.d/common-session
+
+
+Changez la configuration par ces lignes :
+
+  session	sufficient	pam_ldap.so
+  session	required	pam_unix.so
+
+
+===== Création automatique du répertoire home à la première connexion =====
+
+Si vous voulez que la création automatique du répertoire home soit faite à la première connexion vous allez devoir éditer **common-session** encore une fois :
+
+  sudo vi /etc/pam.d/common-session
+
+
+Changez la configuration par ces lignes :
+
+  session required        pam_unix.so
+  session required        pam_mkhomedir.so skel=/etc/skel/
+  session optional        pam_ldap.so
+</note>
+
+Il faut maintenant redémarrer le service nscd pour prendre en compte les modifications :
+<code>sudo /etc/init.d/nscd restart</code>
+Vous pouvez vérifier que votre machine interroge bien la base LDAP en tapant la commande 
+<code>getent passwd</code>
+qui listera l'ensemble des comptes locaux mais aussi LDAP!
+
+===== Permissions =====
+Il est judicieux d'avoir un groupe nommé admin dans votre base LDAP. En effet si votre utilisateur LDAP appartient à ce groupe, il devient possible de lui attribuer les droits sudo sur la machine grâce au fichier /etc/sudoers.
+
+Pour éditer ce fichier, préférez la commande <code>sudo visudo</code>
+Cherchez la ligne :
+<code>%admin ALL=(ALL) ALL</code>
+Si elle est commentée (commence par un #), ce groupe sera sans effet sur votre système.
+Si elle n'est pas commentée, un user LDAP appartenant au groupe admin peut prendre les droits root !
+
+===== Se connecter en tant qu'utilisateur LDAP =====
+
+Votre machine est maintenant capable d'accepter une authentification LDAP sans que l'utilisateur n'existe préalablement sur la machine (en local).
+Pour le tester, vous pouvez tenter d'ouvrir une session SSH sur cette machine. Par exemple pour l'utilisateur monty :
+<code>ssh monty@127.0.0.1</code>
+Si l'utilisateur ne s'est jamais connecté depuis cette machine, son dossier utilisateur sera alors créé. Vous pouvez le vérifier avec la commande <code>pwd</code>
+
+Si cela ne fonctionne pas, reprenez chacune des étapes pas à pas.
+
+===== Permettre l'authentification LDAP en mode déconnecté =====
+Et oui, les laptops (ordinateurs portables) ayant la facheuse tendance à être utilisés aussi en mode déconnecté, voici de quoi garder une copie locale de votre base LDAP afin de pouvoir ouvrir une session même si votre serveur LDAP n'est pas joignable. Et en cas de panne du serveur LDAP, c'est aussi bien pratique ;)
+
+Commençons par installer le nécessaire avec les paquets [[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>nss-updatedb,libnss-db,libpam-ccreds,nslcd|nss-updatedb libnss-db libpam-ccreds nslcd]]**
+<code>
+sudo apt-get install nss-updatedb libnss-db libpam-ccreds nslcd
+sudo nss_updatedb ldap
+</code>
+[[:tutoriel:comment_modifier_un_fichier|Editer le fichier]] **/etc/nsswitch.conf** tel que:
+<file>
+passwd:         files ldap [NOTFOUND=return] db
+group:          files ldap [NOTFOUND=return] db
+</file>
+ensuite [[:tutoriel:comment_modifier_un_fichier|Editer le fichier]] **/etc/pam.d/common-account** pour remplacer la ligne 
+<file>
+account	[success=1 default=ignore]	pam_ldap.so 
+</file>
+par
+<file>
+account    [success=1 authinfo_unavail=1 default=ignore]    pam_ldap.so
+</file>
+il suffira maintenant d'un :
+<code>sudo nss_updatedb ldap</code>
+pour mettre à jour la copie locale des users LDAP
+<note help>a noter que pour qu'un utilisateur puisse se connecter hors ligne, il aura du préalablement se logguer sur cette machine alors qu'elle pouvait contacter le serveur LDAP pour un premier check du mot de passe</note>
+
+===== Crédits =====
+https://www.digitalocean.com/community/tutorials/how-to-use-pam-to-configure-authentication-on-an-ubuntu-12-04-vps
+
+
+//Contributeur principal : [[utilisateurs:fr.laugier]].//

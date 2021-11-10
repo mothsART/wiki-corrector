@@ -1,0 +1,92 @@
+
+====== Notes pour installation personnelle ======
+
+===== Index des configurations =====
+
+^  Machine  ^  Designation  ^  OS/Firmware  actuel  ^  OS/Firmware précédents  ^  Topic  ^
+|  //Laptop//\\ **draco-ultrabook**\\ 192.168.10.10 - SSH  |  HP ENVY Sleekbook 6-1260sf\\ (D0X03EA#ABF)  |  Xubuntu 16.04\\ Windows 8.1  |  Xubuntu 13.10/14.04\\ Linux Mint 13 Cinamon/MATE  |  UEFI, Intel SmartBoot (SSD cache), A2DP, pulseaudio  |
+|  //PC tour gaming//\\ **draco-desktop**\\ 192.168.10.15  SSH Telnet  |  Intel Core i5 720 / 16 Go DDR3 / nVidia GeForce GTX 560 Ti / 1 SSD + 5 HDD (mini)  |  Xubuntu 14.04\\ Windows 7\\ TODO Windows 10  |   Ubuntu 7.10-12.04   |  Dolphin-emu, NFS  |
+|  //Multi-fonction laser//\\ **draco-printer**\\ 192.168.10.7  [[http://draco-printer.local/general/status.html|Web]]  |  Brother MFC9330-CDW  |  Linux ?  |    |    |
+|  //Media center//\\ **draco-xtreamer**\\ 192.168.10.25  telnet  |  Xtreamer Prodigy Sliver\\ double tuner TNT HD  |  V4.2.7 (Linux bridé/custom)\\ Android 2.3 embarqué  |   Ver 3.0.x, Ver 3.5 RC\\ Ver 4.0, Ver 4.1\\ Ver 4.2, Ver 4.2.x   |  NFS, android  |
+|  //NAS//\\ **nasbox918**\\ 192.168.10.200 SSH <del>telnet</del> [[http://nasbox918.local:5000/webman/index.cgi|Web]]  |  Synology DS918+  |  DSM 6.2 (linux custo spk)  |  N/A   |  NFS, Docker  |
+|  //Laptop//\\ **julie-laptop**\\ 192.168.10.xx  SSH ?  |  Dell Vostro V131  |  Xubuntu 15.10\\ Windows 7  |    |    |
+|  //Single Board//\\ **draco-libreelec**\\ 192.168.10.92  SSH  |  Raspberry Pi 3  |  LibreElec/Recalbox  |  RetroPie, Raspbian  |  Kodi, NOOBS  |
+|  //Single Board//\\ **draco-yunohost**\\ 192.168.10.251  SSH  |  Raspberry Pi 3  |  Yunohost / Raspbian  |  N/A  |  auto-hébergement  |
+|  //Box Fibre//\\ **livebox**\\ 192.168.1.254  telnet ?  |  Livebox Play  |  linux ?  |  N/A  |  Wifi G/N faible portée, lag/reboot livebox TV  |
+|  //Router//\\ **router.asus.com**\\ 192.168.10.254  telnet ?  |  ASUS RT-AC66U  |  asus-wrt  |  N/A  |  Wifi ac, routage LAN, VPN  |
+|  //switch//\\ 192.168.10.250  telnet ?  |  TP-Link TL-SG108E  |  linux/bsd ?  |  N/A  |  Ethernet, VLAN  |
+
+===== Anciennes configurations =====
+
+^  Machine  ^  Designation  ^  OS/Firmware  actuel  ^  OS/Firmware précédents  ^  Topic  ^
+|  //NAS//\\ **nasbox82fr**\\ 192.168.10.20 SSH telnet [[http://nasbox82fr.local:5000/webman/index.cgi|Web]]  |  Synology DS409+  |  DSM 4.2 (linux custo spk) + ipkg  |  DSM 3.x\\ DSM 4.0, 4.1   |  NFS, SATA link error (SMART)  |
+|  //Box ADSL//\\ **bbox.lan**\\ 192.168.1.254  telnet ?  |  BBox Sagem F@st 3504b (la merde qui rame dès 2 connexions Ethernet)  |  linux ?  |  N/A  |  Wifi G/N, perte synchro ADSL, débit faible, etc  |
+
+===== Astuces & problèmes =====
+
+==== Disques ====
+
+=== SSD ====
+
+TODO
+
+=== HDD ===
+
+  *  Accès disque après hibernation
+
+Voir bug LP #607560 : jbd2 writing block every 5 - 10 seconds, preventing disk spin-down and making noise
+
+> jbd2 doesn't respect the commit interval for everyone most likely because pm-utils remount partitions with changed commit value.
+<file "" /usr/lib/pm-utils/power.d/journal-commit>JOURNAL_COMMIT_TIME_AC=${JOURNAL_COMMIT_TIME_AC:-0}             #will remount partition on AC power with commit=0.</file>
+
+  * Dump HDD activity :
+
+<code bash>
+#block_dump
+#"leafpad" is a lightweight text editor, should be in ubuntu by default but not sure.
+sudo -i                                         #go into root shell
+leafpad /etc/rsyslog.conf               #comment line starting with "$ModLoad imklog". This will prevent receiving kernel messages by syslog and thus lessen disk activity.
+restart rsyslog                         #restart syslog
+mkdir /tmp/mytemp                       #create temporary directory
+mount -t tmpfs -o size=100000000 none /tmp/mytemp       #create temporary FS in RAM, roughly 100MB in size.
+dmesg -c                                        #empty kernel messages buffer (contains lots of data from boot time)
+echo 1 > /proc/sys/vm/block_dump                                #enable hdd activity dumping.
+watch "dmesg -c >> /tmp/mytemp/trace_01.txt"    #this dumps hdd trace into trace_01.txt every 2secs. Wait some time... Do something...
+
+echo 0 > /proc/sys/vm/block_dump                                #disable hdd activity dumping
+umount /tmp/mytemp              #unmount temporary directory. DON'T FORGET TO COPY TRACE RESULTS!
+leafpad /etc/rsyslog.conf       #uncomment "#$ModLoad imklog"
+restart rsyslog                         #after restart, hdd activity dump will be in syslog. Basically you can skip creating temporary directory if you don't plan to trace your hdd for too long.
+exit                                                   #exit from root shell
+</code>
+
+  * Fix 1
+<file "" /etc/pm/config.d/10_journal_commit_time>JOURNAL_COMMIT_TIME_AC=30</file>
+
+=== RAID ===
+
+[[https://wiki.ubuntu.com/ReliableRaid]]
+
+[[https://bugs.launchpad.net/ubuntu/+source/mdadm/+bug/990913|LP #990913 - mdadm]]
+
+==== NFS ====
+
+[[https://bugs.launchpad.net/ubuntu/+source/nfs-utils/+bug/1270445|LP #1270445 - nfs-utils]]
+
+==== CPU ====
+
+=== Intel Core i3/i5/i7 ===
+
+[[https://bugs.launchpad.net/ubuntu/+source/linux/+bug/1188647|LP #1188647 - linux]]
+
+==== Imprimante ====
+
+[[https://bugs.launchpad.net/ubuntu/+source/poppler/+bug/293832|LP #293832 - poppler : printer prints page at wrong position, page cut]]
+
+==== USB ====
+
+[[https://bugs.launchpad.net/ubuntu/+source/linux-source-2.6.20/+bug/88746|LP #88746]]
+
+==== Firefox ====
+
+[[https://support.mozilla.org/fr/kb/utiliser-interface-firefox-autres-langues#w_comment-changer-la-langue-de-linterface-utilisateur|Langue française]]

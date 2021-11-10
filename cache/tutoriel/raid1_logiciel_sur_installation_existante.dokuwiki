@@ -1,0 +1,543 @@
+
+{{tag>Lucid RAID tutoriel BROUILLON}}
+
+----
+
+====== Configurer un RAID 1 logiciel sur une installation existante ======
+
+<note warning>
+**ATTENTION !** Cette page est en cours de rédaction ; elle n'est donc pas terminée et la procédure qu'elle détaille n'est pas complète.\\
+À moins de bien savoir ce que vous faites, ne suivez pas ces instructions.
+</note>
+
+===== Préambule =====
+
+==== Objectif ====
+
+J'explique dans ce tutoriel la marche à suivre pour ajouter un disque dur en RAID 1 logiciel sur une installation existante de Ubuntu Server Lucid Lynx (10.04), version 32 bits.
+
+==== Limite de responsabilité ====
+
+Plutôt qu'un véritable guide, il s'agit d'une synthèse des étapes par lesquelles je suis moi-même passé pour y parvenir. N'étant pas du tout un spécialiste de la question, je ne fournis aucune garantie sur le résultat que vous pourriez obtenir en suivant ces instructions ; vous êtes prévenus que certaines d'entre elles peuvent rendre votre système inutilisable et vous contraindre à le réinstaller. Je vous invite vivement à faire une sauvegarde complète de vos données avant de commencer.
+
+==== Sources ====
+
+Ce tutoriel est très largement basé sur celui de Falko Timme que vous trouverez à cette adresse : http://www.howtoforge.com/software-raid1-grub-boot-debian-etch.
+Je l'ai traduit, légèrement adapté pour Ubuntu 10.04, et actualisé pour ce qui concerne la configuration de [[:grub-pc|GRUB2]].
+Il faut noter que Falko Timme est allé au bout de l'installation avec prise en compte de GRUB2 dans l'article suivant qui semble être une mise à jour du précédent : https://www.howtoforge.com/how-to-set-up-software-raid1-on-a-running-system-incl-grub2-configuration-ubuntu-10.04 .
+===== Pré-requis =====
+
+Avant de commencer, je disposais :
+  * d'une installation fonctionnelle de Ubuntu Server Lucid Lynx (10.04) sur un disque de 500 Go (''/dev/sda'') ;
+  * des droits d'administration ;
+  * d'un disque de 500 Go, identique au premier, complètement vierge (ni formaté, ni partitionné), branché et reconnu par le système (''/dev/sdb'') ;
+  * d'un Live CD d'Ubuntu Server Lucid Lynx (10.04) ;
+  * du tutoriel (soit imprimé, soit affiché sur un autre ordinateur).
+
+<note important>
+J'avais au préalable copié l'intégralité du disque ''sda'' sur un autre ordinateur (je sais, je l'ai déjà dit, mais il faut vraiment sauvegarder vos données).
+</note>
+
+===== Notes préliminaires =====
+
+Le disque ''/dev/sda'' est divisé en trois partitions :
+  * ''/dev/sda1'' pour la racine, qui contient tout le système (''/'');
+  * ''/dev/sda2'' pour du stockage, monté dans un dossier (''/multimedia'') ;
+  * ''/dev/sda3'' pour la partition d'échange (''swap'').
+
+Je souhaite aboutir à la situation suivante :
+  * ''/dev/md0'' composé des partitions ''/dev/sda1'' et ''/dev/sdb1'' ;
+  * ''/dev/md1'' composé des partitions ''/dev/sda2'' et ''/dev/sdb2'' ;
+  * ''/dev/md2'' composé des partitions ''/dev/sda3'' et ''/dev/sdb3''.
+
+<note tip>
+**Autres variantes d'Ubuntu**\\
+Je n'ai pas installé d'environnement de bureau sur mon serveur, raison pour laquelle toutes les instructions qui suivent sont en ligne de commande. Dans le doute, comme je ne sais pas si elles s'exécuteraient correctement en mode graphique, je vous suggère de fermer votre session graphique et d'appuyer sur ''CTRL+ALT+F1'' pour vous connecter dans une console.
+</note>
+
+Voici donc la situation actuelle :
+
+<code>
+blueduck@serveur:~$ df -h
+
+Sys. de fich.        Tail.   Occ. Disp. %Occ. Monté sur
+/dev/sda1              39G  7,2G   30G    20% /
+none                  244M  200K  244M     1% /dev
+none                  249M  4,0K  249M     1% /dev/shm
+none                  249M  352K  249M     1% /var/run
+none                  249M     0  249M     0% /var/lock
+none                  249M     0  249M     0% /lib/init/rw
+none                   39G  7,2G   30G    20% /var/lib/ureadahead/debugfs
+/dev/sda2             420G  367G   32G    93% /multimedia
+
+blueduck@serveur:~$ sudo fdisk -l
+
+Disque /dev/sda: 500.1 Go, 500107862016 octets
+255 têtes, 63 secteurs/piste, 60801 cylindres
+Unités = cylindres de 16065 * 512 = 8225280 octets
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Identifiant de disque : 0x000860a2
+  
+Périphérique Amorce  Début        Fin      Blocs     Id  Système
+/dev/sda1   *           1        5099    40957686   83  Linux
+/dev/sda2            5100       60670   446374057+  83  Linux
+/dev/sda3           60671       60801     1052257+  82  Linux swap / Solaris
+  
+Disque /dev/sdb: 500.1 Go, 500107862016 octets
+255 têtes, 63 secteurs/piste, 60801 cylindres
+Unités = cylindres de 16065 * 512 = 8225280 octets
+  
+Le disque /dev/sdb ne contient pas une table de partition valide
+</code>
+
+===== Installer mdadm =====
+
+Il faut [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt://mdadm|mdadm]]** pour configurer le RAID.
+
+Puis, après avoir redémarré votre machine, exécutez :
+
+  sudo cat /proc/mdstat
+
+ce qui devrait vous afficher quelque chose comme :
+
+<file>
+Personalities : [linear] [multipath] [raid0] [raid1] [raid6] [raid5] [raid4] [raid10]
+unused devices: <none>
+</file>
+
+===== Préparer le second disque dur =====
+
+==== Cloner la table des partitions ====
+
+Afin d'être sûr que le second disque dur (''/dev/sdb'') sera divisé en partitions absolument identiques à celles du premier disque dur (''/dev/sda''), on clône la table des partitions du premier pour l'appliquer au second :
+  
+  sudo sfdisk -d /dev/sda | sudo sfdisk /dev/sdb
+
+Ce qui doit provoquer l'affichage suivant :
+
+<file>
+Vérification qu'aucun autre n'utilise le disque en ce moment ...
+OK
+
+Disque /dev/sdb : 60801 cylindres, 255 têtes, 63 secteurs/piste
+Vieille situation:
+Unités= cylindres de 8225280 octets, blocs de 1024 octets, décompte à partir de 0
+
+   Périph Amor Début     Fin   #cyls    #blocs    Id  Système
+/dev/sdb1          0       -       0          0    0  Vide
+/dev/sdb2          0       -       0          0    0  Vide
+/dev/sdb3          0       -       0          0    0  Vide
+/dev/sdb4          0       -       0          0    0  Vide
+
+Nouvelle situation:
+Unités= secteurs de 512 octets, décompte à partir de 0
+
+   Périph Amorce  Début       Fin   #secteurs Id  Système
+/dev/sdb1   *        63  81915434   81915372  83  Linux
+/dev/sdb2      81915435 974663549  892748115  83  Linux
+/dev/sdb3     974663550 976768064    2104515  82  Linux swap / Solaris
+/dev/sdb4             0         -          0   0  Vide
+Succès d'écriture de la nouvelle table de partitions
+
+Relecture de la table de partitions ...
+
+Si vous créez ou modifiez une partition DOS, /dev/foo7, par exemple, alors
+utiliser dd(1) pour mettre à zéro les premiers 512 octets:
+dd if=/dev/zero of=/dev/foo7 bs=512 count=1
+(Consulter fdisk(8).)
+</file>
+
+La commande :
+
+  sudo fdisk -l
+
+doit montrer que les deux disques durs ont maintenant exactement la même structure :
+
+<file>
+Disque /dev/sda: 500.1 Go, 500107862016 octets
+255 têtes, 63 secteurs/piste, 60801 cylindres
+Unités = cylindres de 16065 * 512 = 8225280 octets
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Identifiant de disque : 0x000860a2
+
+Périphérique Amorce  Début        Fin      Blocs     Id  Système
+/dev/sda1   *           1        5099    40957686   83  Linux
+/dev/sda2            5100       60670   446374057+  83  Linux
+/dev/sda3           60671       60801     1052257+  82  Linux swap / Solaris
+
+Disque /dev/sdb: 500.1 Go, 500107862016 octets
+255 têtes, 63 secteurs/piste, 60801 cylindres
+Unités = cylindres de 16065 * 512 = 8225280 octets
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Identifiant de disque : 0x4caa4880
+
+Périphérique Amorce  Début        Fin      Blocs     Id  Système
+/dev/sdb1   *           1        5099    40957686   83  Linux
+/dev/sdb2            5100       60670   446374057+  83  Linux
+/dev/sdb3           60671       60801     1052257+  82  Linux swap / Solaris
+</file>
+
+Plus simple et rapide que de partitionner à la main, non ;-) ?
+
+==== Changer le type des partitions (sdb) ====
+
+Ensuite, il faut régler le type des partitions sur //Linux raid autodetect//. On continue d'utiliser ''[[:fdisk|fdisk]]''.\\
+Rapidement, je rappelle que ''fdisk'' est une ligne de commande : chaque commande est une lettre, que l'on valide avec ''ENTRÉE''. Les modifications ne sont pas appliquées tant qu'on ne les a pas écrites avec la commande ''w''. La commande ''m'' affiche les commandes disponibles :
+
+<code>
+  blueduck@serveur:~$ sudo fdisk /dev/sdb
+
+  Commande (m pour l'aide): m
+  Commande d'action
+     a   bascule le fanion d'amorce
+     b   éditer l'étiquette BSD du disque
+     c   basculer le fanion de compatibilité DOS
+     d   supprimer la partition
+     l   lister les types de partitions connues
+     m   afficher ce menu
+     n   ajouter une nouvelle partition
+     o   créer une nouvelle table vide de partitions DOS
+     p   afficher la table de partitions
+     q   quitter sans enregistrer les changements
+     s   créer une nouvelle étiquette vide pour disque de type Sun
+     t   modifier l'id de système de fichiers d'une partition
+     u   modifier les unités d'affichage/saisie
+     v   vérifier la table de partitions
+     w   écrire la table sur le disque et quitter
+     x   fonctions avancées (pour experts seulement)
+  
+  Commande (m pour l'aide):
+</code>
+
+Pour changer le type d'une partition, on utilise la commande ''t'' :
+
+<code>
+  Commande (m pour l'aide): t
+</code>
+
+Il faut ensuite indiquer le numéro de la partition à modifier (ici la ''1'') :
+
+<code>
+  Numéro de partition (1-4): 1
+</code>
+
+Puis le code du type de partition voulu (''L'' affiche la liste des codes possibles) :
+
+<file>
+  Code Hexa (taper L pour lister les codes): L
+  
+   0  Vide            24  NEC DOS         81  Minix / Linux a bf  Solaris
+   1  FAT12           39  Plan 9          82  Linux swap / So c1  DRDOS/sec (FAT-
+   2  XENIX root      3c  PartitionMagic  83  Linux           c4  DRDOS/sec (FAT-
+   3  XENIX usr       40  Venix 80286     84  OS/2 cachée di  c6  DRDOS/sec (FAT-
+   4  FAT16 <32M      41  PPC PReP Boot   85  Linux étendue   c7  Syrinx
+   5  Etendue         42  SFS             86  NTFS volume set da  Non-FS data
+   6  FAT16           4d  QNX4.x          87  NTFS volume set db  CP/M / CTOS / .
+   7  HPFS/NTFS       4e  QNX4.x 2nd part 88  Linux plaintext de  Dell Utility
+   8  AIX             4f  QNX4.x 3rd part 8e  Linux LVM       df  BootIt
+   9  AIX amorçable   50  OnTrack DM      93  Amoeba          e1  DOS access
+   a  OS/2 Boot Manag 51  OnTrack DM6 Aux 94  Amoeba BBT      e3  DOS R/O
+   b  W95 FAT32       52  CP/M            9f  BSD/OS          e4  SpeedStor
+   c  W95 FAT32 (LBA) 53  OnTrack DM6 Aux a0  IBM Thinkpad hi eb  BeOS fs
+   e  W95 FAT16 (LBA) 54  OnTrackDM6      a5  FreeBSD         ee  GPT
+   f  W95 Etendue (LB 55  EZ-Drive        a6  OpenBSD         ef  EFI (FAT-12/16/
+  10  OPUS            56  Golden Bow      a7  NeXTSTEP        f0  Linux/PA-RISC b
+  11  Cachée FAT12    5c  Priam Edisk     a8  UFS Darwin      f1  SpeedStor
+  12  Compaq diagnost 61  SpeedStor       a9  NetBSD          f4  SpeedStor
+  14  Cachée FAT16 <  63  GNU HURD or Sys ab  Amorce Darwin   f2  DOS secondaire
+  16  Cachée FAT16    64  Novell Netware  af  HFS / HFS+      fb  VMware VMFS
+  17  Cachée HPFS/NT  65  Novell Netware  b7  BSDI fs         fc  VMware VMKCORE
+  18  AST SmartSleep  70  DiskSecure Mult b8  BSDI swap       fd  Linux raid auto
+  1b  Cachée W95 FAT  75  PC/IX           bb  Boot Wizard hid fe  LANstep
+  1c  Cachée W95 FAT  80  Minix ancienne  be  Amorce Solaris  ff  BBT
+  1e  Cachée W95 FAT
+</file>
+
+Le type //Linux raid autodetect// correspond au code ''fd'' :
+
+<file>
+  Code Hexa (taper L pour lister les codes): fd
+
+  Type système de partition modifié de 83 à fd (Linux raid autodetect)
+  
+  Commande (m pour l'aide):
+</file>
+
+On répète l'opération pour les deux autres partitions (la ''2'' et la ''3'') :
+
+  Commande (m pour l'aide): t
+  Numéro de partition (1-4): 2
+  Code Hexa (taper L pour lister les codes): fd
+  Type système de partition modifié de 83 à fd (Linux raid autodetect)
+  
+  Commande (m pour l'aide): t
+  Numéro de partition (1-4): 3
+  Code Hexa (taper L pour lister les codes): fd
+  Type système de partition modifié de 82 à fd (Linux raid autodetect)
+  
+  Commande (m pour l'aide):
+Et on termine en appliquant les changements :
+  Commande (m pour l'aide): w
+
+  La table de partitions a été altérée!
+  
+  Appel de ioctl() pour relire la table de partitions.
+  Synchronisation des disques.
+
+== Vérifier les partitions ==
+
+Pour s'assurer qu'il n'y a pas de restes d'une précédente installation RAID, on exécute les commandes suivantes :
+  blueduck@serveur:~$ sudo mdadm --zero-superblock /dev/sdb1
+  blueduck@serveur:~$ sudo mdadm --zero-superblock /dev/sdb2
+  blueduck@serveur:~$ sudo mdadm --zero-superblock /dev/sdb3
+S'il ne reste rien d'une précédente installation, chacune de ces commandes renverra une erreur de ce type :
+  mdadm: Unrecognised md component device - /dev/sdb1
+Dans le cas contraire, rien ne s'affichera.
+
+===== Configurer le RAID 1 =====
+
+==== Créer les grappes ====
+
+On crée ''/dev/md0'' avec ''/dev/sdb1'' ; ''/dev/md1'' et ''/sdv/sdb2'' : ''/dev/md2'' à partir de ''/dev/sdb3''. Les partitions correspondantes du premier disque ne peuvent pas être ajoutées pour le moment, car le système fonctionne dessus. C'est pourquoi on les remplace par le mot ''missing'' dans les commandes suivantes :
+
+  sudo mdadm --create /dev/md0 --level=1 --raid-disks=2 missing /dev/sdb1
+  sudo mdadm --create /dev/md1 --level=1 --raid-disks=2 missing /dev/sdb2
+  sudo mdadm --create /dev/md2 --level=1 --raid-disks=2 missing /dev/sdb3
+
+La commande : 
+
+  sudo cat /proc/mdstat
+
+devrait maintenant montrer que vous avez trois grappes RAID dégradées :
+
+<file>
+  Personalities : [linear] [multipath] [raid0] [raid1] [raid6] [raid5] [raid4] [raid10]
+  md2 : active raid1 sdb3[1]
+        1052160 blocks [2/1] [_U]
+  
+  md1 : active raid1 sdb2[1]
+        446373952 blocks [2/1] [_U]
+  
+  md0 : active raid1 sdb1[1]
+        40957568 blocks [2/1] [_U]
+  
+  unused devices: <none>
+</file>
+
+<note>
+Les indicateurs [_U] ou [U_] signifient qu'une grappe est dégradée, alors que [UU] signifie que la grappe est normale.
+</note>
+
+==== Créer les systèmes de fichiers (sdb) ====
+
+On peut désormais choisir le système de fichiers de chaque grappe, //ext4// pour ''/dev/md0'' et ''/dev/md1'', //swap// pour ''/dev/md2'' :
+
+  blueduck@serveur:~$ sudo mkfs.ext4 /dev/md0
+ 
+  mke2fs 1.41.11 (14-Mar-2010)
+  Étiquette de système de fichiers=
+  Type de système d'exploitation : Linux
+  Taille de bloc=4096 (log=2)
+  Taille de fragment=4096 (log=2)
+  Stride=0 blocks, Stripe width=0 blocks
+  2564096 i-noeuds, 10239392 blocs
+  511969 blocs (5.00%) réservés pour le super utilisateur
+  Premier bloc de données=0
+  Nombre maximum de blocs du système de fichiers=0
+  313 groupes de blocs
+  32768 blocs par groupe, 32768 fragments par groupe
+  8192 i-noeuds par groupe
+  Superblocs de secours stockés sur les blocs :
+          32768, 98304, 163840, 229376, 294912, 819200, 884736, 1605632, 2654208,
+          4096000, 7962624
+  
+  Écriture des tables d'i-noeuds : complété
+  Création du journal (32768 blocs) : complété
+  Écriture des superblocs et de l'information de comptabilité du système de
+  fichiers : complété
+  
+  Le système de fichiers sera automatiquement vérifié tous les 24 montages ou
+  après 180 jours, selon la première éventualité. Utiliser tune2fs -c ou -i
+  pour écraser la valeur.
+
+Continuer avec :
+
+  sudo mkfs.ext4 /dev/md1
+
+et
+
+  sudo mkswap /dev/md2
+
+==== Mettre à jour le fichier mdadm.conf ====
+
+À présent, adaptez le fichier ''/etc/mdadm/mdadm.conf'', qui ne contient encore aucune information concernant les grappes, à la nouvelle situation. Faites d'abord une copie du fichier existant (on ne sait jamais) :
+
+  sudo cp /etc/mdadm/mdadm.conf /etc/mdadm/mdadm.conf-dist
+
+puis faites un scan de la configuration RAID qui sera ajoutée au nouveau fichier :
+
+  sudo mdadm --examine --scan | sudo tee -a /etc/mdadm/mdadm.conf
+
+
+Vérifiez que votre fichier ''/etc/mdadm/mdadm.conf'' ressemble à ça :
+  blueduck@serveur:~$ sudo cat /etc/mdadm/mdadm.conf
+
+<file>
+  # mdadm.conf
+  #
+  # Please refer to mdadm.conf(5) for information about this file.
+  #
+  
+  # by default, scan all partitions (/proc/partitions) for MD superblocks.
+  # alternatively, specify devices to scan, using wildcards if desired.
+  DEVICE partitions
+  
+  # auto-create devices with Debian standard permissions
+  CREATE owner=root group=disk mode=0660 auto=yes
+  
+  # automatically tag new arrays as belonging to the local system
+  HOMEHOST <system>
+  
+  # instruct the monitoring daemon where to send mail alerts
+  MAILADDR root
+  
+  ARRAY /dev/md0 level=raid1 num-devices=2 UUID=e5e23f0a:be11ad51:2b872d8f:382c1990
+  ARRAY /dev/md1 level=raid1 num-devices=2 UUID=057ec4b9:88398a79:2b872d8f:382c1990
+  ARRAY /dev/md2 level=raid1 num-devices=2 UUID=18366108:daee6e7a:2b872d8f:382c1990
+</file>
+
+==== Monter les grappes ====
+
+Les grappes sont prêtes à être montées, afin de pouvoir y accéder. Créez deux points de montage, par exemple ''/mnt/md0'' et ''/mnt/md1'' :
+
+  sudo mkdir /mnt/md0
+  sudo mkdir /mnt/md1
+
+puis montez les deux grappes formatées en //ext4// :
+
+  sudo mount /dev/md0 /mnt/md0
+  sudo mount /dev/md1 /mnt/md1
+
+La grappe d'échange (''/dev/md2'') n'a pas besoin d'être montée pour le moment.
+Vous devriez voir les deux grappes en tapant la commande :
+
+  blueduck@serveur:~$ sudo mount
+
+  /dev/sda1 on / type ext4 (rw,errors=remount-ro)
+  proc on /proc type proc (rw)
+  none on /sys type sysfs (rw,noexec,nosuid,nodev)
+  none on /sys/fs/fuse/connections type fusectl (rw)
+  none on /sys/kernel/debug type debugfs (rw)
+  none on /sys/kernel/security type securityfs (rw)
+  none on /dev type devtmpfs (rw,mode=0755)
+  none on /dev/pts type devpts (rw,noexec,nosuid,gid=5,mode=0620)
+  none on /dev/shm type tmpfs (rw,nosuid,nodev)
+  none on /var/run type tmpfs (rw,nosuid,mode=0755)
+  none on /var/lock type tmpfs (rw,noexec,nosuid,nodev)
+  none on /lib/init/rw type tmpfs (rw,nosuid,mode=0755)
+  none on /var/lib/ureadahead/debugfs type debugfs (rw,relatime)
+  /dev/sda2 on /multimedia type ext4 (rw,acl)
+  rpc_pipefs on /var/lib/nfs/rpc_pipefs type rpc_pipefs (rw)
+  nfsd on /proc/fs/nfsd type nfsd (rw)
+  /home/blueduck/.Private on /home/blueduck type ecryptfs (ecryptfs_sig=5cc2cd19b7f74f7e,ecryptfs_fnek_sig=37dc806e941db751,ecryptfs_cipher=aes,ecryptfs_key_bytes=16)
+  /dev/md0 on /mnt/md0 type ext4 (rw)
+  /dev/md1 on /mnt/md1 type ext4 (rw)
+==== Mettre à jour les fichiers fstab et mtab ====
+
+<note important>
+Je ne vais pas entrer ici dans le détail : les pages sur [[:mount_fstab#le_fichier_fstab|fstab]] et les [[:uuid_et_label|UUID]] ne manquent pas. Soyez simplement extrêmement prudents avec ce fichier, dans lequel une erreur peut facilement empêcher votre système de démarrer.
+</note>
+
+===== Dupliquer les données =====
+
+Maintenant que les grappes sont montées, on peut copier dessus le contenu du premier disque dur :
+
+  sudo cp -dpRx / /mnt/md0
+  sudo cp -dpRx /multimedia/ /mnt/md1
+
+<note>Le slash (/) à la fin de /multimedia**/** a son importance : 
+  * s'il est présent, **le contenu** du dossier /multimedia sera copié dans /mnt/md1 ;
+  * s'il est absent, c'est **le dossier** /multimedia qui sera copié dans /mnt/md1, c'est-à-dire qu'on obtiendra dans /mnt/md1 un dossier ''multimedia''.
+
+Comme ici /multimedia sera un point de montage vers /dev/md1, il faut que ce slash soit présent.
+
+
+__Rappel sur les options utilisées de la commande cp :__
+  * **-d** préserve les liens symboliques ;
+  * **-p** préserve les propriétés des fichiers et dossiers (droits d'accès, propriétaires, heure de la dernière modification) ;
+  * **-R** demande une copie récursive ;
+  * **-x** demande de ne pas sortir du système de fichier contenant le dossier à copier, ainsi même si **/** contient **/proc**, le contenu de **/proc** ne sera pas copié car **/proc** est dans un système de fichier virtuel (nommé //proc//, cf. ''/etc/fstab'') différent du système de fichier //ext4// contenant **/** ;
+  * l'option **-u** pourrait être rajoutée en cas de copie interrompue (ne copie les fichiers que s'ils sont plus récents, ou n'ont pas encore été copiés).
+
+</note>
+
+<note tip>
+Pour ma part, j'ai préféré utiliser ''[[:rsync|rsync]]'' :
+
+  sudo rsync -av --progress --stats --filter "- /mnt" / /mnt/md0
+  sudo rsync -av --progress --stats /multimedia /mnt/md1
+
+Compte-tenu des quantités de données à déplacer (plus de 400 Go depuis ''/dev/sda2''), cela me permettait en cas de besoin d'interrompre la synchronisation, et de la reprendre plus tard.
+
+<note important>FIXME
+Il serait bien que quelqu'un précise si l'on peut sans risque substituer comme je l'ai fait ''rsync'' à ''cp''. D'autre part, il doit être possible d'éviter la synchronisation de certains dossiers en ajoutant des filtres (je pense notamment à ''/proc'', ''/tmp'', ...) : à confirmer.
+</note>
+</note>
+
+===== Premier redémarrage =====
+
+==== Configuration de GRUB (première partie) ====
+
+FIXME
+
+
+==== Après le premier redémarrage ====
+
+Si tout s'est bien passé, vous devriez obtenir le résultat suivant avec la commande ''df'' :
+  blueduck@serveur:~$ df -h
+
+  Sys. de fich.        Tail.   Occ. Disp. %Occ. Monté sur
+
+Et toujours :
+
+  blueduck@serveur:~$ sudo cat /proc/mdstat
+
+  Personalities : [linear] [multipath] [raid0] [raid1] [raid6] [raid5] [raid4] [raid10]
+
+
+===== Ajouter le premier disque dur =====
+
+==== Modifier le type des partitions (sda) ====
+
+De même que pour ''/dev/sdb'' précédemment, nous utilisons ''fdisk'' pour changer le type des partitions de ''/dev/sda'' en //Linux raid autodetect//.
+
+==== Intégrer le premier disque dur à la grappe ====
+
+Le temps est venu d'intégrer les partitions de ''/dev/sda'' dans les grappes ''/dev/md0'', ''/dev/md1'' et ''/dev/md2''.
+
+==== Mettre à jour le fichier mdadm.conf ====
+
+Une nouvelle fois, il faut scanner la configuration RAID pour mettre à jour le fichier ''/etc/mdadm/mdadm.conf''.
+
+==== Configuration de GRUB (deuxième partie) ====
+
+FIXME
+
+==== Après le deuxième redémarrage ====
+
+FIXME
+
+===== Test : simuler la panne d'un disque dur =====
+
+FIXME
+===== Liens =====
+
+  * http://forum.debian-fr.org/viewtopic.php?f=8&t=27585 : un tutoriel approchant celui-là, sauf que le RAID mis en place n'inclut pas le système. Des exemples de maintenance à la fin.
+  * https://www.system-linux.eu/index.php?post/2010/04/30/RAID1-logiciel-sous-GNU/Linux.-%28partie-1/2%29 : un tutoriel plutôt bien fait
+
+----
+
+//Contributeur principal : [[:utilisateurs:blueduck]].//

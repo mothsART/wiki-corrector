@@ -1,0 +1,314 @@
+
+{{tag>matériel BROUILLON}}
+----
+
+====== Lecteurs de carte mémoire ======
+
+L'objet de ce tutoriel est d'activer les lecteurs de carte mémoire parfois présents sur les PC portables mais non reconnus par défaut.
+
+===== Détection du type de lecteur =====
+
+La première étape est de déterminer quel est le lecteur dans votre portable, pour cela :
+<code>lspci
+  02:06.0 CardBus bridge: Texas Instruments PCIxx21/x515 Cardbus Controller
+  02:06.3 Mass storage controller: Texas Instruments PCIxx21 Integrated FlashMedia Controller</code>
+
+Dans le cas de mon pc (un Acer Extensa 3001WLMi) il s'agit du contrôleur Texas Instruments PCIxx21
+
+Ou :
+<code>lspci
+  03:01.1 Class 0805: Ricoh Co Ltd R5C822 SD/SDIO/MMC/MS/MSPro Host Adapter (rev 19)
+  03:01.2 System peripheral: Ricoh Co Ltd Unknown device 0843 (rev 01)
+  03:01.3 System peripheral: Ricoh Co Ltd R5C592 Memory Stick Bus Host Adapter (rev 0a)
+  03:01.4 System peripheral: Ricoh Co Ltd xD-Picture Card Controller (rev 05)</code>
+
+Dans le cas de mon pc (le Dell Inspiron 9400 de Pezzos), il s'agit du contrôleur Ricoh.
+
+
+===== Texas Instruments PCIxx21 =====
+
+
+==== Recompiler le pilote V2 ====
+
+<note>Tiré de http://ubuntuforums.org/showthread.php?t=797031.
+Fonctionne sous Ubuntu 9.04 pour les lecteurs de carte Texas Instrument PCIxx21.
+
+Merci de préciser si ça marche pour d'autres versions ou d'autres lecteurs.
+</note>
+
+Le pilote nécessaire pour l'utilisation des cartes mémoires est présent dans le [[kernel]], mais n'a pas été compilé dans la version distribuée. 
+
+<note important>
+Compiler un kernel prend du temps (1h - 1h30 suivant votre système), alors préparez quelque chose à faire pendant ce temps là. ^_^
+</note>
+
+
+=== Méthode manuelle ===
+
+  * Activer les [[tutoriel:comment_modifier_sources_maj|dépôts sources]] pour votre [[versions|distribution]] (le dépôt main est suffisant)
+  * Ouvrir un [[:terminal]] (non, non n'ayez par peur :) )
+  * Récupérer les "outils de développement"
+<code>
+sudo apt-get build-dep linux-image-`uname -r`
+</code>
+  * Récupérer les fichiers sources du kernel
+<code>
+sudo apt-get source linux-image-`uname -r`
+</code>
+  * Entrer dans le répertoire où ont été téléchargé les fichiers sources
+<code>
+cd linux-`uname -r`
+</code>
+ou
+<code>
+cd linux-`eval "uname -r" | cut -f1 -d-`
+</code>
+suivant lequel fonctionne.
+  * Activer la compilation du pilote des lecteurs de carte mémoire
+Si vous utiliser un système 32 bit :
+<code>
+sudo gedit debian/config/i386/config
+</code>
+Si vous utiliser un système 64 bit :
+<code>
+sudo gedit debian/config/amd64/config
+</code>
+
+<note tip>
+Rapportez vous à votre CD d'installation pour savoir quel est votre système d'exploitation.
+</note>
+  * Rechercher la ligne :
+<code>
+# CONFIG_MEMSTICK is not set
+</code>
+  * Remplacer par :
+<code>
+CONFIG_MEMSTICK=m
+</code>
+  * Enregistrer et fermer la fenêtre.
+  * Dans le terminal taper :
+<code>
+sudo AUTOBUILD=1 NOEXTRAS=1 skipabi=true fakeroot debian/rules binary-generic
+</code>
+  * Mettre en place le nouveau pilote et l'activer
+<code>
+sudo cp -r debian/linux-image-`uname -r`/lib/modules/`uname -r`/kernel/drivers/memstick /lib/modules/`uname -r`/kernel/drivers/
+sudo depmod -a
+</code>
+  * Insérer la carte, ça marche sans avoir besoin de redémarrer 8-)
+
+
+=== Méthode automatique ===
+
+<note>Si vous n'aimez pas le terminal, il est possible d'utiliser un petit script fait par [[http://ubuntuforums.org/showthread.php?t=797031&page=4|sapmemailek]]</note>
+
+  * Ouvrez [[nautilus]] (l'explorateur)
+  * Clic droit --> Créer un document --> Fichier vierge
+  * Copier-coller ce qui suit :
+<code>
+#!/bin/sh
+if [ "$1" = "" ]; then
+echo "Vous ne m'avez pas donné le type d'architecture de votre ordinateur, par exemple pour Intel : i386 ; pour AMD64 : amd64"
+return
+fi
+cd tmp_kernel_files && echo "Je dois être utilisé dans un répertoire où il n'y a pas de sous-répertoire nommé : tmp_kernel_files" && return
+echo "Création du répertoire temporaire : ./tmp_kernel_files"
+#0.) Création du répertoire temporaire : ./tmp_kernel_files
+mkdir tmp_kernel_files
+cd tmp_kernel_files
+#1.) Télécharge les fichiers sources du dernier noyau linux :
+apt-get build-dep linux-image-`uname -r`
+apt-get source linux-image-`uname -r`
+cd linux-`uname -r` || cd linux-`eval "uname -r" | cut -f1 -d-`
+#2.) Ajoute "CONFIG_MEMSTICK=m" à debian/config/i386/config
+echo CONFIG_MEMSTICK=m >> debian/config/$1/config || return
+#3.) Compile le noyau entier :
+AUTOBUILD=1 NOEXTRAS=1 skipabi=true fakeroot debian/rules binary-generic
+#4.) Copie le pilote "Memory Stick" dans le noyau du système :
+cp -r debian/linux-image-`uname -r`/lib/modules/`uname -r`/kernel/drivers/memstick /lib/modules/`uname -r`/kernel/drivers/
+#5.) Applique les changements au système:
+depmod -a
+#6.) Nettoie les fichiers temporaires :
+cd ..
+cd ..
+rm -r -f tmp_kernel_files
+echo "Répertoire temporaire : ./tmp_kernel_files effacé"
+</code>
+  * Enregistrer sous : ~/memstick.sh
+  * Fermer le fichier et le rendre [[permissions|exécutable]]
+  * Ouvrir un terminal et taper :
+<code>
+  * chmod 755 ~/memstick.sh
+</code>
+ ou
+  * Utiliser la méthode graphique décrite [[permissions|ici]] et permettre l'exécution.
+  * Et ben... maintenant, il faut ouvrir un terminal (là il n'y a pas le choix) ;-)
+<code>
+sudo apt-get install fakeroot
+sudo sh ~/memstick.sh
+</code>
+<note tip>Lors de l'exécution du script, il est demandé si le système est un **i386** ou un **AMD64**</note>
+  * Une fois fini, insérer une carte, elle devrait fonctionner.
+
+
+
+===== Ricoh Co Ltd R5C822 =====
+
+Note: aucune de ces 2 méthodes ne fonctionne pour le Ricoh Co Ltd R5C822.
+
+Note 2: pensez à blacklister le module sdhci sur les versions récentes (10.04+), pour cela ajouter "blacklist sdhci" au fichier /etc/module (testé sous hp dv9000 avec Ricoh Co Ltd R5C822 SD/SDIO/MMC/MS/MSPro)
+
+=== 1 ere méthode ===
+
+J'ai un portable Dell Inspiron 9400 qui intègre un lecteur de carte SD Ricoh. Ce lecteur marche très bien d'origine sur Windows XP mais n'est pas automatiquement détecté sur mon installation Ubuntu.
+Ce que ne voulons est simple, que la carte SD monte automatiquement dès son insertion dans le slot.
+
+\\  
+Pour ceci, il suffit d'éditer le même fichier que pour le contrôleur Texas après avoir fait peut-être une petite sauvegarde :
+
+  sudo cp /etc/modules /etc/modules.bak
+\\ 
+Nous allons maintenant simplement éditer le fichier /etc/modules :
+
+  gksu gedit /etc/modules
+\\ 
+Et rajouter à la fin de ce fichier dans une nouvelle ligne :
+
+  tifm_sd
+\\ 
+Lors du redémarrage, votre lecteur de carte sera fonctionnel (normalement). 
+
+<note>Pour tester avant de modifier /etc/modules, on peut se contenter de:
+  sudo modprobe tifm_sd
+\\
+</note> 
+
+
+Sous 12.04, il peut être utile d'ajouter aussi au fichier **/etc/modules** non pas le module tifm_sd mais ceux là : <file>
+pciehp
+acpiphp
+jmb38x_ms
+sdhci-pci
+flash_bd
+xd_card
+jmb38x_xd</file>
+Ou encore :
+<file>tifm_7xx1
+tifm_core
+tifm_ms
+tifm_sd
+mmc_block
+mmc_spi</file>
+
+
+<note>Sur xubuntu 12.04, inspiron 6400, j'ai blacklisté le module shdci-pci, en ajoutant blacklist sdhci-pci dans /etc/modprobe.d/blacklist</note>
+
+<note>Sur debian wheezy 7.0, Dell inspiron 6400, j'ai blacklisté le module r852 en ajoutant blacklist r852 dans /etc/modprobe.d/blacklist.conf</note>
+
+
+=== 2 ieme méthode ===
+\\ 
+Il existe une autre méthode pour activer votre lecteur de carte (testé avec un DELL inspiron 6400 )
+\\ 
+tapez la commande : 
+  lspci
+\\ 
+vous allez avoir une liste, dans cette liste repérer la ligne qui contient :
+  SD Host controller: Ricoh Co Ltd R5C822 SD/SDIO/MMC/MS/MSPro Host Adapter
+\\ 
+à gauche de cette ligne vous avez quelque chose de ce genre :
+  03:01.1
+\\ 
+ensuite il suffit de taper ces commandes en changeant le 03:01.1 par ce que vous avez vous  :
+  sudo setpci -s 03:01.1 0xCA=0x57          ( write enable )
+  sudo setpci -s 03:01.1 0xCB=0x02          ( MMC Disable )
+  sudo setpci -s 03:01.1 0xCA=0x00          ( write disable )
+
+\\ 
+et ca marche pour une carte du type MMC !
+
+\\ \\ 
+source :
+http://intr.overt.org/blog/?p=59
+
+===== ENE Technology Inc CB-712/4 =====
+
+Pour que votre lecteur fonctionne, il faut [[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/etc/modules** avec les [[:sudo|droits d'administration]] et rajoutez les 2 lignes suivantes à la fin du fichier : <file>
+tifm_sd
+mmc_core</file>
+
+===== O2 Micro Inc Oz776 SmartCard Reader =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt> libccid]]**.
+
+Le tarball (tar.bz2) - fichier archive des sources du pilote - est disponible dans [[http://packages.ubuntu.com/fr/trusty/libccid|Dépôt du paquet libccid dans Trusty Universe]].
+
+  * Décompressez l'archive;
+  * Aller dans le dossier qui contient l'archive décompressée
+  * Cliquer droit entre les fichiers > menu "Ouvrir dans un terminal";
+  * Entrez votre mot de passe pour exécuter la compilation en tant qu'Administrateur <code> sudo su </code>
+
+<note important>Télécharger le paquet check Install afin de créer un paquet DEB à partir des sources</note>
+
+<code>sudo apt-get install -f --fix-missing checkinstall</code>
+
+Retour à nos moutons:
+  * Entrez la commande de compilation <code>./configure </code>
+Si vous obtenez un message d'erreur, ne vous inquiétez pas! cette procédure n'est pas obligatoire mais nécessaire si la procédure est initiée par le processus de compilation.
+Poursuivez le processus de compilation du pilote;
+  * Entrez <code>make && make install && depmod && checkinstall</code>
+
+CheckInstall vous demande le nom du paquet DEB des sources du pilote;
+  * Entrez <code>O2 Micro Inc Oz776 SmartCard Reader </code>
+  * Faîtes Entrée deux fois;
+Checkinstall créé le paquet dans le répertoire des sources.
+
+===== Realtek Card Reader RTL8411 Device 5286/5289 =====
+
+<note important>Bien que le driver de ce lecteur (rtsx_pci) ait été intégré au noyau sur les versions récentes (12.04.4 et ultérieur), il ne semble pas fonctionner chez tout le monde.
+
+Une méthode de contournement consiste à utiliser l'ancien module (rts_bpp), comme décrit ci-après.
+
+**En attendant que ce problème soit résolu, __merci de ne pas supprimer cette section__**. Hélas cette méthode ne fonctionne plus sous [[16.04|Ubuntu 16.04]].</note> 
+
+Le problème vient du fait que proc-info n'est plus présent dans les noyaux récents. Voir [[https://forums.gentoo.org/viewtopic-t-974708-start-0.html|ici]]
+
+Il faut donc supprimer les assertions relatives à ''proc_info'' :
+  - Télécharger [[https://bugs.launchpad.net/ubuntu/+source/udisks/+bug/971876/+attachment/2991730/+files/rts_bpp.tar.bz2|les sources]] depuis launchpad : 
+  - Extraire l'archive, [[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] ''rtsx.c'' (ou remplacez le par [[https://launchpadlibrarian.net/163687981/rtsx.c|celui-ci]] déjà modifié) :
+    - Supprimer "_ _devinit" juste avant "rtsx_probe" à la ligne 893 
+    - Supprimer "_ _devexit" juste avant "rtsx_remove" à la ligne 1048
+    - Enlever "_ _devexit_p()" autour de "rtsx_remove" à la ligne 1074
+    - Supprimer les lignes 125 à 156<file>static int proc_info (struct Scsi_Host *host, char *buffer,
+char **start, off_t offset, int length, int inout)
+{
+char *pos = buffer;
+
+if (inout)
+return length;
+
+SPRINTF(" Host scsi%d: %s\n", host->host_no, CR_DRIVER_NAME);
+
+SPRINTF(" Vendor: Realtek Corp.\n");
+SPRINTF(" Product: Barossa Plusplus\n");
+SPRINTF(" Version: %s\n", DRIVER_VERSION);
+SPRINTF(" Build: %s\n", __TIME__);
+
+/*
+* Calculate start of next buffer, and return value.
+*/
+*start = buffer + offset;
+
+if ((pos - buffer) < offset)
+return (0);
+else if ((pos - buffer - offset) < length)
+return (pos - buffer - offset);
+else
+return (length);
+}</file>
+    - Supprimer la ligne 259 (227 si vous avez déjà supprimé les lignes précédentes) <file>.proc_info = proc_info,</file>
+  - Compiler avec "make" (les paquets "build-essential", "fakeroot" et "checkinstall" sont nécessaires, voir le [[tutoriel:compilation|tutoriel:compilation]])
+  - Puis "sudo make install"
+  - Puis "sudo modprobe rts_bpp"(Si cela ne fonctionne pas faire 'sudo depmod -a' et réessayer)
+  - Blacklister rtsx_pci dans le fichier /etc/modprobe.d/rtsx_blacklist.conf en ajoutant sur une nouvelle ligne "blacklist rtsx_pci" (créer le fichier si il n'existe pas)
+   - Redémarrer

@@ -1,0 +1,97 @@
+
+{{tag>Xenial installation tutoriel}}
+
+----
+
+====== Comment sauvegarder son MBR ? ======
+
+Ce tutoriel vous permettra de sauvegarder le [[wpfr>Master_boot_record|MBR]] de votre PC (sur clé USB, sur email, ou autre), pour pouvoir le restaurer si besoin est.
+
+C'est la première chose à faire avant d'installer Ubuntu si vous suspectez votre PC d'être [[:pc_tatoué|tatoué]], ou si vous souhaitez (ré)installer Windows.
+
+<note important>Cette opération ne présente aujourd'hui plus d'intérêt. Elle ne sert à rien dans le cas de tous les PCs récents (>2010) équipés de "nouveaux Bios" appelés [[:UEFI]] car leurs disques sont généralement partitionnés en [[wpfr>GUID_Partition_Table|GPT]] dans lequel le MBR n'existe plus. Et même pour les PCs plus anciens le seul cas où la sauvegarde de MBR peut être utile est le cas des PCs [[:pc_tatoué|tatoués]], dont l'existence reste encore à démontrer.</note>
+
+===== Qu'est-ce que le MBR ? =====
+
+Pour les PCs partitionnés en Ms-Dos seulement.
+
+Le MBR est le premier secteur du disque. On trouve aussi au début de chaque partition étendue un EBR qui est son équivalent pour décrire les partitions logiques emboîtées. 
+
+{{:tutoriel:mbr1.png|}}
+
+Le //**M**aster **B**oot **R**ecord//, zone d'amorçage principale, est une zone de 512 octets découpée ainsi :
+  * les 446 premiers octets constituent le bootloader, code exécutable qui permet l'accès initial aux informations du disque ainsi que les messages d'erreur.
+  * les 64 suivant contiennent l'arrangement de votre disque dur : la //table des partitions primaires// (64 octets, soit 16 octets pour chacune des partitions primaires possibles)
+  * et enfin deux octets "magiques" 55 AA indiquant que le secteur est amorçable.
+
+{{:tutoriel:mbr2.png|}}
+
+Lors du démarrage de l'ordinateur, le [[http://fr.wikipedia.org/wiki/Basic_Input_Output_System|BIOS]] scrute successivement les différents périphériques à la recherche de cette signature pour charger le secteur en mémoire.
+
+Dans certains cas (manipulation hasardeuse des partitions, extinction brutale lors d'un redimensionnement, virus de MBR attrapé avec un autre OS...) il arrive de perdre ces informations. Dans le meilleur des cas, une ou plusieurs partitions sont inaccessibles. Dans le pire des cas, le disque apparaît comme "non formaté". Il `//suffit//` alors d'écrire à nouveau ce MBR en lieu et place de celui qui est corrompu. Encore faut-il en avoir fait une copie avant. Nous vous proposons donc ici de sauvegarder le MBR au complet, et les commandes de restauration permettant de ne restaurer que le bootloader, que la table de partitions, ou tout le MBR. Il est évident qu'un fichier de sauvegarde de ce type ne doit pas être conservé sur le disque qu'il faudrait "réparer", mais sur un autre support de sauvegarde (CD, clé USB, etc).
+
+=====Procédure de sauvegarde du MBR et de la table de partition complète =====
+
+Les 2 méthodes ci-dessous peuvent être réalisées sans installer Ubuntu, aussi bien depuis un live-CD qu'une session Ubuntu installée.
+
+==== Graphiquement ====
+
+    - il suffit de lancer le logiciel [[:Boot-Repair]], puis de cliquer sur "Options avancées", puis sur le bouton "Sauvegarder les tables de partitions". 
+    - puis enregistrez le fichier ZIP sur clé USB ou envoyez-le-vous par courriel. Ce fichier ZIP contient les sauvegardes de MBR (fichiers .img) et de tables de partitions (fichiers .dmp) de tous les disques de votre ordinateur.
+
+
+==== En ligne de commande ====
+
+  - pour sauvegarder le MBR : saisissez dans un [[:terminal]] la commande suivante qui va créer un fichier nommé ''mbr.img'' dans votre Dossier Personnel((Cette commande crée une copie exacte du contenu de votre MBR, ainsi que les 62 secteurs suivants qui permettront d'aider la résolution de [[https://bugs.launchpad.net/ubuntu/+source/grub2/+bug/441941|ce bug]] perpétuel.)): <code>sudo dd if=/dev/sda of=~/mbr.img bs=512 count=1</code>
+  - pour sauvegarder la table des partitions complète (avec les partitions logiques) :<code>sudo sfdisk -d /dev/sda > table_partitions_sda_$(date +%Y%m%d).dmp</code>
+  - puis enregistrez ces 2 fichiers sur clé USB ou envoyez-les-vous par courriel. 
+
+Remarques:
+  * Si vous souhaitez sauver le MBR d'un autre disque que sda, n'oubliez pas d'adapter la commande.
+  * Si votre ordinateur possède plusieurs disques, répétez la procédure pour chaque disque.
+
+===== Procédure de restauration du MBR =====
+
+Cette procédure restaure le MBR sans restaurer la table de partition.
+
+  - Bootez votre ordinateur sur un [[:Live CD]] Ubuntu((il est possible de restaurer le MBR depuis une session installée, mais c'est à proscrire si les partitions utilisées subissent des modifications. De plus, si l'on fait une restauration depuis une session active, il faudra faire prendre en compte les modifications de table de partition par le noyau en utilisant la commande sudo hdparm -z /dev/sdX))
+  - placez votre sauvegarde dans votre dossier personnel, renommez-la en mbr.img , puis saisissez dans un **[[:terminal]]**:
+<code>
+sudo dd if=~/mbr.img of=/dev/sda bs=446 count=1
+</code>
+
+
+
+===== Procédure de restauration de la table de partitions =====
+
+<note important>Attention, restaurer votre table de partition peut vous empêcher d'accéder à vos partitions si elles ont été modifiées après avoir effectué la sauvegarde.</note>
+
+==== Si vous disposez d'une sauvegarde de table de partitions complète (.dmp) ====
+
+**Pour restaurer la table des partitions complète** (à partir d'un fichier .dmp créé via Boot-Repair ou sfdisk, cf procédures ci-dessus) : bootez votre ordinateur sur un [[:Live CD]] Ubuntu((il est possible de restaurer le MBR depuis une session installée, mais c'est à proscrire si les partitions utilisées subissent des modifications. De plus, si l'on fait une restauration depuis une session active, il faudra faire prendre en compte les modifications de table de partition par le noyau en utilisant la commande sudo hdparm -z /dev/sdX)), placez votre sauvegarde dans votre dossier personnel, renommez-la en table_partitions.dmp , puis saisissez dans un **[[:terminal]]**:
+<code>sudo sfdisk /dev/sda < table_partitions.dmp</code>
+
+
+==== Si vous disposez d'une sauvegarde de MBR (.img) ====
+
+  * **Pour ne restaurer que la table de partition primaire** (à partir d'un fichier .img créé via Boot-Repair ou dd, cf procédures ci-dessus) : bootez votre ordinateur sur un [[:Live CD]] Ubuntu((il est possible de restaurer le MBR depuis une session installée, mais c'est à proscrire si les partitions utilisées subissent des modifications. De plus, si l'on fait une restauration depuis une session active, il faudra faire prendre en compte les modifications de table de partition par le noyau en utilisant la commande sudo hdparm -z /dev/sdX)), placez votre sauvegarde à un endroit accessible comme par exemple votre dossier personnel((Ce n'est pas un impératif, car de fait vous pouvez le placer à tout emplacement pratique pour vous (clé usb, disque dur externe, répertoire partagé...), à partir du moment où vous connaissez son chemin d'accès. Dans ce cas adaptez en conséquence les lignes de commande qui vont suivre et qui sont basées sur l'hypothèse de l'utilisation du dossier personnel)), renommez-la en mbr.img , puis saisissez dans un **[[:terminal]]**:
+<code>
+sudo dd if=~/mbr.img of=/dev/sda bs=1 skip=446 seek=446 count=66
+</code>
+  * **Pour restaurer le MBR et la table de partition primaire**: bootez votre ordinateur sur un [[:Live CD]] Ubuntu((il est possible de restaurer le MBR depuis une session installée, mais c'est à proscrire si les partitions utilisées subissent des modifications. De plus, si l'on fait une restauration depuis une session active, il faudra faire prendre en compte les modifications de table de partition par le noyau en utilisant la commande sudo hdparm -z /dev/sdX)), placez votre sauvegarde dans votre dossier personnel, renommez-la en mbr.img , puis saisissez dans un **[[:terminal]]**:
+<code>
+sudo dd if=~/mbr.img of=/dev/sda bs=512 count=1
+</code>
+
+=====Voir aussi=====
+
+  * [[wpfr>Master_boot_record|page "MBR" sur Wikipedia]]
+  *[[:pc_tatoué|Tatouage des ordinateurs]]
+  *[[tutoriel:comment_reinstaller_un_mbr_compatible_windows]]
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=416251|Discussion à propos de GRUB et du MBR]] sur le forum ubuntu-fr
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=390336|Le MBR exploré en profondeur]] sur le forum ubuntu-fr
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=447877|Et en cas d'erreur, les secours pour vous aider]] sur le forum ubuntu-fr
+
+----
+
+// Contributeurs : [[:utilisateurs:yannubuntu|YannUbuntu]], [[:utilisateurs:rmy|RmY]]//

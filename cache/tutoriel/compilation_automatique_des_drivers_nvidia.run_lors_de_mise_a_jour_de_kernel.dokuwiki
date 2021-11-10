@@ -1,0 +1,69 @@
+
+{{tag>système compilation tutoriel}}
+
+----
+
+====== Compilation automatique des pilotes nvidia.run lors des mises a jour de noyau (kernel Linux) ======
+
+===== Versions concernées =====
+Toutes.
+
+=====Introduction=====
+Si vous avez installé manuellement le pilote [[:nvidia]] du site officiel, vous devez recompiler celui-ci à chaque nouvelle version du kernel.
+Ce guide va vous permettre d'automatiser ce processus lors de l'installation des nouveaux kernels.
+
+<note important>Ce tutoriel suppose que vous ayez correctement installé le pilote [[:nvidia]] du site officiel. \\
+Ce guide n'est pas destiné aux utilisateurs qui ont installé les pilotes par l'intermédiaire du mécanisme par défaut d'Ubuntu.</note>
+
+=====Mise en place=====
+La première chose à faire est de déplacer le pilote que vous voulez utiliser vers **/usr/src** et de créer un lien vers celui-ci. \\
+Par exemple:
+<code>
+sudo mv NVIDIA-Linux-x86-173.14.05-pkg1.run /usr/src                         # NOTE : À remplacer par le nom du fichier utilisé pour installer le pilote
+sudo ln -s /usr/src/NVIDIA-Linux-x86-173.14.05-pkg1.run /usr/src/nvidia-driver
+</code>
+
+La raison de ce lien est que si vous souhaitez changer de version du pilote, vous n'aurez qu'à déplacer le lien sans avoir besoin de modifier le script de compilation automatique.
+
+Le script d'automatisation est le suivant:
+
+<file>
+#!/bin/bash
+#
+
+# Set this to the exact path of the nvidia driver you plan to use
+# It is recommended to use a symlink here so that this script doesn't
+# have to be modified when you change driver versions.
+DRIVER=/usr/src/nvidia-driver
+
+
+# Build new driver if it doesn't exist
+if [ -e /lib/modules/$1/kernel/drivers/video/nvidia.ko ] ; then
+    echo "NVIDIA driver already exists for this kernel." >&2
+else
+    echo "Building NVIDIA driver for kernel $1" >&2
+    sh $DRIVER -K -k $1 -s -n 2>1 > /dev/null
+
+    if [ -e /lib/modules/$1/kernel/drivers/video/nvidia.ko ] ; then
+        echo "   SUCCESS: Driver installed for kernel $1" >&2
+    else
+        echo "   FAILURE: See /var/log/nvidia-installer.log" >&2
+    fi
+fi
+
+exit 0
+</file>
+
+Son travail est de vérifier que le kernel qui vient d'être installé contient une version du pilote nvidia. Si non, il va compiler automatiquement le module pour ce noyau.
+
+Nommez le script **update-nvidia** et installez-le de cette façon:
+<code>
+sudo mkdir -p /etc/kernel/postinst.d
+sudo install update-nvidia /etc/kernel/postinst.d
+</code>
+
+Et voilà ! La prochaine fois que vous installerez un kernel qui ne contient pas le pilote Nvidia, celui-ci sera automatiquement compilé pour cette version du kernel,
+et votre serveur X démarrera normalement au prochain redémarrage.
+
+----
+//Rédacteur: [[utilisateurs:DisasteR]]//

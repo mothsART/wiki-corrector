@@ -1,0 +1,83 @@
+
+{{tag>matériel audio vidéo baladeur}}
+----
+
+====== MP4 Rockchip ======
+
+Les MP4 de la marque Rockchip sont des lecteurs Musique/Vidéo. Ces derniers posent malheureusement beaucoup de problèmes quant à la connexion avec un PC et aussi pour l'encodage des films afin qu'ils soient compatibles avec le lecteur.
+
+
+
+===== Le Problème de Connexion =====
+
+Prenez l'habitude de toujours brancher votre lecteur sur le même port USB, ce qui devrait simplifier les choses.
+
+
+Dans une [[console]] :
+
+<code>ls /dev/sd*</code>
+
+branchez ensuite le lecteur et retapez la commande précédente.
+
+<code>ls /dev/sd*</code>
+
+Deux nouvelles lignes ont fait leur apparition, une correspond à la mémoire interne au lecteur, l'autre au lecteur de cartes MiniSD).
+
+Toujours dans votre console, tapez alors :
+
+<code>
+sudo echo 128 > /sys/block/sdX/device/max_sectors
+sudo echo 128 > /sys/block/sdY/device/max_sectors
+</code>
+
+en remplaçant sdX et sdY par les nouvelles valeurs apparues en branchant le lecteur.
+
+Et voila maintenant le lecteur fonctionne et vous pouvez y transférer vos fichiers.
+
+<note tip>
+L'interêt de toujours utiliser le même port USB est de faire un script shell:
+<code>
+#!/bin/bash
+sudo echo 128 > /sys/block/sdX/device/max_sectors
+sudo echo 128 > /sys/block/sdY/device/max_sectors
+</code>
+(il faut remplacer sdX et sdY)
+Vous devez ajouter les droits d'exécution à ce fichier grâce à 
+<code>chmod +x nom_du_script.sh</code>
+Vous pouvez ensuite le mettre dans les programmes au démarrage (Système->Préférences->Sessions).
+</note>
+
+==== Automatisation ====
+
+On va créer un fichier de règles associées à notre périphérique : ouvrez la console et tapez :
+
+<code>sudo gedit /etc/udev/rules.d/15-RockChip.rules
+</code>
+
+puis on y insère la règle suivante :
+ 
+<code># udev rules file for RockChip MP4 reader
+BUS=="scsi", SYSFS{vendor}=="RockChip", RUN+="/bin/sh -c '/bin/echo 128 > /sys/block/%k/device/max_sectors'"
+</code>
+
+On sauvegarde le fichier, on teste en branchant le lecteur, et en essayant de lire/écrire un fichier volumineux (mp3/avi...).
+
+Et voilà. De plus, il n'est plus nécéssaire de brancher le périphérique toujours sur le même port USB.
+
+<note warning>Comme pour tout périphérique USB, n'oubliez pas de l'éjecter avant de le débrancher (via les icones apparues sur votre bureau ou depuis le gestionnaire de fichiers</note>
+
+===== Encoder vos film =====
+
+==== De quoi avons nous besoin ? ====
+
+Il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **mencoder** [[apt://mencoder|{{apt.png}}]]
+
+==== Utilisation ====
+
+Rien de plus simple : ouvrez la console et rendez-vous dans le dossier contenant la vidéo puis tapez :
+
+<code>mencoder <nom_du_fichier> -ofps 22 -vf-add scale=320:240 -vf-add expand=320:240:-1:-1:1 -srate 44100 -ovc xvid -xvidencopts bitrate=550:max_bframes=0:quant_type=h263:me_quality=4 -oac lavc -lavcopts acodec=mp2:abitrate=128 -o <nom_de_sortie>.avi
+</code>
+
+<note warning>L'extension de sortie doit toujours être avi et non MP4 sinon il ne les lit pas.
+Par contre un grand nombre de formats pour la vidéo originale sont pris en charge (AVI, FLV (vidéos flash)</note>

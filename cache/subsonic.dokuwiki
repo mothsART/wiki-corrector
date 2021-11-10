@@ -1,0 +1,410 @@
+
+{{tag>Trusty Xenial serveur streaming}}
+
+====== Subsonic ======
+
+{{ subsonic_logo.png?80nolink}}
+
+Subsonic est un serveur de contenu audio et vidéo en streaming avec une interface web (via http ou https) et une gestion de plusieurs utilisateurs, ainsi que l'authentification [[http://guide.ubuntu-fr.org/server/openldap-server.html|LDAP]].
+
+La musique est encodée à la volée, par défaut grâce à [[ffmpeg|FFmpeg]] et lame en MP3 pour l'audio et FLV pour la vidéo. Ces paramètres se changent très aisément. Un grand nombre de format est reconnu par défaut, ainsi que les tags correspondant avec la possibilité d'édition, notamment pour les formats MP3, AAC, OGG, FLAC, WMA et APE.
+
+Subsonic est traduit dans de nombreuses langues, dont le français, avec 24 thèmes par défaut. Il offre la possibilité de lire la musique dans le lecteur web, comme dans un lecteur externe (avec gestion des playlists), de contrôler la musique à distance grâce à votre téléphone, ainsi que de télécharger la musique, piste par piste, comme un album entier.
+
+Des applications existent pour Android, iPhone/iPad, Windows Phone 7/8, Windows, Mac, Linux et BlackBerry PlayBook.
+Il y a une gestion de la bande passante en limitant le bitrate, la musique sera automatiquement réencodée avec le bon débit binaire.
+
+Subsonic fonctionne sur la plupart des plateformes grâce à la technologie Java, notamment sur Windows, Mac, Linux et autres variantes Unix. 
+<note important>Les sources de Subsonic ne sont plus disponibles depuis la version 6 [[http://forum.subsonic.org/forum/viewtopic.php?f=4&t=16604#p71128|Source]]. Les versions antérieurs sont toujours disponibles en open-source sous licence [[http://www.gnu.org/copyleft/gpl.html|GPL]]. Un fork conservant la licence gpl est maintenu sur github: https://github.com/airsonic/airsonic/</note>
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Avoir [[:tutoriel:comment_installer_un_paquet|installé]] **[[java]]**.
+
+===== Installation =====
+
+Si vous souhaitez essayer Subsonic avant de l'installer vous pouvez vous rendre [[http://subsonic.org/demo/index.view|ici.]]
+
+Téléchargez ensuite la dernière version de Subsonic [[http://www.subsonic.org/pages/download.jsp|ici]] en choisissant Debian/Ubuntu.
+
+Double-cliquez ensuite sur le fichier, l'installation se lancera ou en [[https://fr.wikipedia.org/wiki/Command-line_interface|CLI]]:
+
+<code bash>sudo dpkg -i subsonic-6.1.3.deb</code>
+
+Le [[http://fr.wikipedia.org/wiki/Daemon_(informatique)|Daemon]] ne se lance pas automatiquement après l'installation, pour lancer Subsonic nous allons faire:
+
+<code bash>sudo systemctl start subsonic</code>
+
+Félicitation!, vous venez d'installer votre propre serveur de streaming audio/vidéo, le port d'écoute qu'utilise Subsonic par défaut et le port 4040, ouvrez donc votre navigateur internet puis saisissez dans la barre d'adresse ceci:
+
+<code bash>http://localhost:4040</code>
+
+Vous obtiendrez quelque chose semblable à ceci, je dis semblable car vous aurez pas ce thème par défaut à votre premier lancement de Subsonic ;-) :
+
+{{subco.png?550nolink}}
+
+<note warning>Attention vous devez définir un nouveau mot de passe dès votre premier lancement de Subsonic, le nom d'utilisateur par défaut est admin et le mot de passe est admin !.</note>
+
+Vous pouvez changer la langue en vous rendant dans **Settings** > **Personal**, puis suivre les instructions de la page d'accueil. 
+
+Une fois le ou les dossiers contenant les médias choisi, le service est fonctionnel. L'utilisation et la configuration sont très intuitives et ne présentent aucune difficulté particulière.
+
+Il existe différentes [[http://www.subsonic.org/pages/apps.jsp|applications disponible sur le site officiel]]. Pour contrôler la musique à distance grâce à un téléphone, se rendre sur cette page :
+
+<code bash>http://votre_ip_ou_votre_nom_de_domaine:4040/wap</code>
+
+
+=====Configuration=====
+
+Si vous désirez changer le port de Subsonic, allouer plus de mémoires vives à Java ou bien sais-je .. vous devez éditer le fichier suivant:
+
+<code bash>/etc/default/subsonic</code>
+
+Voici à quoi ressemble ce fichier de configuration:
+
+{{visubsonic.png?500nolink}}
+
+Étudions maintenant à quoi servent les variables de ce fichier m( :
+
+La variable **SUBSONIC_ARGS** permet de définir le port d'écoute de Subsonic, la mémoire allouée à Java, de définir le port https si vous désirez utiliser le SSL pour cette application.
+
+La variable **SUBSONIC_USER** permet de définir sous quel utilisateur tournera le Daemon Subsonic, par défaut Subsonic utilise root !.
+
+Les logs de Subsonic se trouvent dans:
+
+<code bash>/var/subsonic/</code>
+
+Voici à quoi ressemble le subsonic.log :
+
+{{logsubsonic.png?500nolink}}
+
+
+===== Utiliser un certificat signé par une autorité de certification avec Subsonic =====
+
+Ici nous allons voir comment utiliser un certificat acheté chez [[http://www.namecheap.com/|Namecheap]], vous pouvez obtenir chez eux un certificat Comodo pour [[http://www.namecheap.com/ssl-certificates/comodo.aspx|€8,23/yr]].
+
+Ici nous verrons pas comment générer un CSR etc, je pars du principe que vous avez votre .zip avec ces 3 fichiers: 
+
+  * AddTrustExternalCARoot.crt.
+  
+  * PositiveSSLCA2.crt.
+   
+  * trucmuche.crt.
+  
+et bien sûr votre **clé privé**.
+
+Nous devons absolument stopper notre daemon Subsonic auparavant:
+
+<code bash>sudo systemctl stop subsonic</code>
+
+
+
+Bon trêve de blabla on passe à la pratique, voici les commandes que vous devez effectuer pour utiliser votre certificat signé par l'autorité Comodo ;-).
+
+Ici nous allons combiner **3 fichiers**, **votre clé privé**, **le certificat du serveur**, et le **certificat intermédiaire** pour se faire nous allons faire:
+
+<code bash>cat myserver.key trucmuche.crt AddTrustExternalCARoot.crt > subsonic.crt</code>
+
+Ensuite nous devons convertir notre certificat **subsonic.crt** à la norme [[http://fr.wikipedia.org/wiki/PKCS12|PKCS12]], c'est ce qu'utilise notre [[http://fr.wikipedia.org/wiki/Apache_Tomcat|Tomcat]] ne l'oublions pas ;-).
+
+<code bash>openssl pkcs12 -in subsonic.crt -export -out subsonic.pkcs12</code> 
+
+<note important>On vous demandera un mot de passe, veuillez saisir le mot de passe suivant: **subsonic**, sinon votre daemon Subsonic ne se lancera pas au prochain redémarrage.</note>
+
+Ensuite nous devons créer notre **Java keystore** pour se faire nous allons faire ceci:
+
+<code bash>keytool -importkeystore -srckeystore subsonic.pkcs12 -destkeystore subsonic.keystore -srcstoretype PKCS12 -srcalias 1 -destalias tomcat</code>
+
+<note important>Idem vous devez absolument saisir comme mot de passe: subsonic .</note>
+
+Ensuite nous importons notre **subsonic.keystore** dans le **subsonic-booter-jar-with-dependencies.jar**.
+
+<code bash>zip /usr/share/subsonic/subsonic-booter-jar-with-dependencies.jar subsonic.keystore</code>
+
+Et voilà, ensuite vous devez configurer votre **/etc/default/subsonic** pour qu'il utilise **https** :
+
+<code bash>sudo nano /etc/default/subsonic</code>
+
+
+Chercher la ligne suivante:
+
+
+{{subsonic_args.png?nolink}}
+
+Modifier le **--port=blah** et le **--https-port=blah**, vous pouvez mettre **--port=0** pour désactiver le **http** et **--https-port=4242** pour activer le **SSL** sur le **port 4242**, mais **attention!**, vous devez absolument choisir un port **> à 1024** si votre daemon ne tourne pas en **root**, ce qui est préférable d'ailleurs ;-).
+
+Ensuite nous relançons notre daemon Subsonic via la commande suivante:
+
+<code bash>sudo systemctl start subsonic</code>
+
+Et zou **magie**  m( vous aurez plus aucune erreur de certificat sur votre navigateur web, comme vous pouvez voir ci dessous:
+
+{{comodo.png?400nolink}}
+
+
+===== Les entrailles de Subsonic =====
+
+==== Dossier de musique ====
+
+{{dossiermusiquestest.png?720nolink}}
+
+La fonction **Dossier de musique** permet de déterminer l'emplacement de vos musiques ainsi que de vos vidéos, comme vous pouvez voir, vous pouvez en définir plusieurs, c'est grâce à cette fonction que Subsonic sera où trouver vos vidéos ainsi que vos musiques.
+
+La fonction **Scan media folders** permet de déterminer la date à laquelle Subsonic effectuera un scan de vos dossiers ou de votre dossier .. à fin de mettre à jour votre bibliothèque.
+
+La fonction **Scan media folders now** permet de scanner dans l'immédiat les dossiers ou bien le dossier .. que vous avez prédéfinis auparavant à fin de mettre à jour votre bibliothèque, vous devez re scanner vos/votre dossier(s) après avoir appliqué cette fonction ;-).  
+
+La fonction **Fast access mode** permet de minimiser l'accès à vos disques, cette fonction peut être utile si vous utilisez un [[http://fr.wikipedia.org/wiki/Stockage_en_r%C3%A9seau_NAS|NAS]] par exemple :-). 
+
+La fonction **Clean-up database** permet comme indique la fonction, de nettoyer la base de donnée de Subsonic, Subsonic stocke des informations dans vos fichiers multimédias.  
+
+
+
+==== Général ====
+
+{{general1.png?640x207nolink}}
+
+<note>
+
+**Extensions des fichiers audio**: Permet d'indiquer les types de fichier reconnu quand vous naviguez dans vos dossiers audio.
+
+**Extensions des fichiers vidéo**: Permet d'indiquer les types de fichier reconnu quand vous naviguez dans vos dossiers vidéo.
+
+**Extensions des fichiers des jaquettes**: Permet d'indiquer les types de fichier utilisés pour les jaquettes des  albums.
+
+**Index**: Permet de régler l'affichage de l'index (situé à gauche de l'écran). Les fichiers et dossiers situés directement à la racine du dossier de musiques/vidéos seront facilement accessibles en utilisant cet index. Les éléments de la liste des entrées de l'index doivent être séparés par un espace. Normalement chaque entrée est un caractère simple, mais vous pouvez choisir d'en afficher plusieurs. Par exemple, l'entrée **Les** rassemblera les dossiers et fichiers dont les noms commencent par **Les**. Vous pouvez également créer une entrée entre parenthèse qui regroupes plusieurs caractères. Par exemple, l'entrée **A-E(ABCDE)** affichera **A-E** et regroupera tous les fichiers et dossiers dont les noms commencent par **A,B,C,D** ou **E**. Cette option peut être utile pour regrouper les caractères les moins utilisés (comme les lettres **x,y et z**) ou les caractères accentués (comme **À**). Les fichiers et dossiers non indexés seront regroupés à l'entrée **#** . 
+
+**Articles à ignorer**: Permet de lister les articles à ignorer hors de la création de l'index (par exemple, "le", "The"....).
+
+**Raccourcis**: Permet d'afficher une liste de raccourcis au sommet de la liste des dossiers, par exemple: **Nouveau Podcast**.
+
+**Langue par défaut**: Permet de choisir la langue utilisé par défaut.
+
+**Thème par défaut**: Permet de choisir le thème utilisé (couleurs, apparence, polices,images...) par défaut.
+
+</note>
+
+
+==== Avancé ====
+
+{{subsonicavance.png?nolink}}
+
+**Nombre maximum de jaquettes**: Permet de définir le nombre maximum de jaquettes à afficher sur une page, le nombre **0** équivaut à illimité.
+
+**Limite de la vitesse de téléchargement (Kbps)**: Permet de limiter l'utilisation de la bande passante pour les téléchargements de fichiers, le nombre **0** équivaut à illimité.
+
+**Port pour les flux non-SSL**: Cette option n'est utile que si vous utilisez Subsonic sur un serveur utilisant la technologie SSL (HTTPS). Certain lecteurs (comme Winamp) ne supportent pas le streaming par SSL. Si vous ne voulez pas que le flux soit transmis par SSL, indiquez un numéro de port pour une utilisation http (généralement 80 ou 4040). Notez que ce flux ne sera pas chiffré, (0 = Désactivé).
+
+**Autoriser l'authentification LDAP**: Les utilisateurs peuvent être authentifiés par un serveur [[http://guide.ubuntu-fr.org/server/openldap-server.html|LDAP]] externe (dont Windows Active Directory). Quand ces utilisateurs se connectent sur Subsonic, leur nom d'utilisateur et mot de passe sont vérifiés par le serveur externe et non par Subsonic.
+
+
+<note>Nous passons directement à la fonction Encodage, les fonctions:  **Personnel, Utilisateurs, Lecteurs, Shared media, Réseau**, sont vraiment très clairs, rien ne sert de s'y attarder.</note>
+
+==== Encodage  ====
+
+{{subsonic_avance.png?nolink}} 
+
+Je sais ce que vous allez me dire, mais c'est quoi ce charabia 8-o, vous allez voir c'est relativement simple, ici je vais vous détailler les options de ffmpeg ;-).
+
+
+=== Audio ===
+
+ffmpeg **-i %s -ab %bk -v 0 -f mp3** - 
+
+
+Cette commande a pour but de ré-encoder à la volée les formats audio: **ogg, oga, aac, m4a, flac, wav, wma, aif, aiff, ape, mpc, shn** au format **mp3** nous allons voir à quoi ressemble cette commande.
+
+  * Le **-i** signifie input file, ce qui signifie entrée du fichier.
+  
+  * Le **-ab** permet de choisir le codec.
+  
+  * Le **-v** est le mode verbose ou bien verbeux en Français ;-), par défaut il est à 0.
+  
+  * Le **-f** veut dire force, ici on force le format MP3.
+  
+  * **%s** est le chemin du fichier à transcoder.
+
+  * **%bk** est le maximum du débit binaire utilisé pour l'encodage final vers le format MP3, le **k** signifie **kilobyte**.
+
+
+==== Modification des sources ====
+
+Se placer dans le dossier contenant les sources :
+<code bash>cd subsonic-code</code>
+
+Le patch à appliquer est le suivant :
+<code bash>Index: subsonic-main/src/main/java/net/sourceforge/subsonic/service/SettingsService.java
+===================================================================
+--- subsonic-main/src/main/java/net/sourceforge/subsonic/service/SettingsService.java	(revision 4101)
++++ subsonic-main/src/main/java/net/sourceforge/subsonic/service/SettingsService.java	(working copy)
+@@ -647,14 +647,11 @@
+     }
+ 
+     public boolean isLicenseValid() {
+-        return isLicenseValid(getLicenseEmail(), getLicenseCode()) && licenseValidated;
++        return true;
+     }
+ 
+     public boolean isLicenseValid(String email, String license) {
+-        if (email == null || license == null) {
+-            return false;
+-        }
+-        return license.equalsIgnoreCase(StringUtil.md5Hex(email.toLowerCase()));
++        return true;
+     }
+ 
+     public LicenseInfo getLicenseInfo() {
+@@ -1264,36 +1261,8 @@
+     private void validateLicense() {
+         String email = getLicenseEmail();
+         Date date = getLicenseDate();
+-
+-        if (email == null || date == null) {
+-            licenseValidated = false;
+-            return;
+-        }
+-
+         licenseValidated = true;
+-
+-        HttpClient client = new DefaultHttpClient();
+-        HttpConnectionParams.setConnectionTimeout(client.getParams(), 120000);
+-        HttpConnectionParams.setSoTimeout(client.getParams(), 120000);
+-        HttpGet method = new HttpGet("http://subsonic.org/backend/validateLicense.view" + "?email=" + StringUtil.urlEncode(email) +
+-                "&date=" + date.getTime() + "&version=" + versionService.getLocalVersion());
+-        try {
+-            ResponseHandler<String> responseHandler = new BasicResponseHandler();
+-            String content = client.execute(method, responseHandler);
+-            licenseValidated = content != null && !content.contains("false");
+-            if (!licenseValidated) {
+-                LOG.warn("License key is not valid.");
+-            }
+-            String[] lines = StringUtils.split(content);
+-            if (lines.length > 1) {
+-                licenseExpires = new Date(Long.parseLong(lines[1]));
+-            }
+-
+-        } catch (Throwable x) {
+-            LOG.warn("Failed to validate license.", x);
+-        } finally {
+-            client.getConnectionManager().shutdown();
+-        }
++        return;
+     }
+ 
+     public synchronized void scheduleLicenseValidation() {
+Index: pom.xml
+===================================================================
+--- pom.xml	(revision 4101)
++++ pom.xml	(working copy)
+@@ -102,6 +102,13 @@
+                 <module>subsonic-assembly</module>
+             </modules>
+         </profile>
++        <profile>
++            <id>debian</id>
++            <modules>
++                <module>subsonic-booter</module>
++                <module>subsonic-installer-debian</module>
++            </modules>
++        </profile>
+ 
+     </profiles>
+ 
+@@ -170,4 +177,4 @@
+ 
+         </plugins>
+     </build>
+-</project>
+\ No newline at end of file
++</project>
+</code>
+
+Pour appliquer un patch, copiez le contenu du patch ci-dessus dans un nouveau fichier nommé "no_license.patch", et placez-le dans le dossier "subsonic-code". Appliquez ensuite le patch grâce à la commande :
+<code bash>patch -p0 < no_license.patch</code>
+
+Il reste à compiler tout ça :
+<code bash>mvn -P debian install</code>
+Maven va télécharger de nombreux plugins, cela peut prendre du temps ;) Si tout s'est bien passé, vous devriez obtenir :
+<code bash>[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary:
+[INFO] 
+[INFO] Subsonic .......................................... SUCCESS [1.889s]
+[INFO] Subsonic Main ..................................... SUCCESS [15.290s]
+[INFO] Subsonic Booter ................................... SUCCESS [5.499s]
+[INFO] Subsonic Installer for Debian ..................... SUCCESS [10.345s]
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time: 33.277s
+[INFO] Finished at: Thu Jan 09 22:06:15 CET 2014
+[INFO] Final Memory: 13M/106M
+[INFO] ------------------------------------------------------------------------
+</code>
+
+Il ne nous reste plus qu'à installer le paquet créé :
+<code bash>sudo dpkg -i subsonic-installer-debian/target/subsonic*.deb</code>
+
+==== Ça marche pas... ====
+
+Si vous avez un problème de compilation (le patch fonctionne pour la révision 4101, version 5.0 de Subsonic, mais il ne pourrait plus fonctionner pour les versions ultérieures), voici quelques explications qui vous permettront d'adapter les modifications vous-même.
+
+Tout d'abord, dans le fichier "pom.xml", on ajoute le profil "debian", pour ne compiler que ce qui est nécessaire à Ubuntu, grâce aux lignes 105 à 111 ([[http://pastebin.com/dybE0N5B|fichier exemple modifié, révision 4101]]) :
+<code bash>        <profile>
+            <id>debian</id>
+            <modules>
+                <module>subsonic-booter</module>
+                <module>subsonic-installer-debian</module>
+            </modules>
+        </profile></code>
+
+Ensuite, pour le fichier de licence proprement dit "subsonic-main/src/main/java/net/sourceforge/subsonic/service/SettingsService.java", 3 méthodes sont modifiées :
+<code bash>    public boolean isLicenseValid() {
+        return true;
+    }
+
+    public boolean isLicenseValid(String email, String license) {
+        return true; 
+    }
+    
+    private void validateLicense() {
+        String email = getLicenseEmail();
+        Date date = getLicenseDate();
+        licenseValidated = true;
+        return;
+    }</code>
+    
+Voici la source avec la [[http://pastebin.com/4Znmw8Pz|licence active]], et la source avec la [[http://pastebin.com/58CKtqmZ|licence désactivée]] (valable pour la révision 4101). Bon courage !
+
+
+===== Désinstallation =====
+
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée. Les journaux du système, et les fichiers de préférence des utilisateurs dans leurs dossiers personnels sont toujours conservés.
+
+----
+
+===== Fork de Subsonic : Supersonic & Madsonic =====
+
+Il est à noter que Subsonic étant davantage reconnu comme un logiciel [[wpfr>Open Source]] qu'un [[wpfr>Logiciel Libre]], un [[wpfr>Fork_(d%C3%A9veloppement_logiciel)|fork]] s'est mis en place sous le nom de Supersonic [[https://github.com/Mach5/supersonic|ici]] ; le forum de discussion à ce propos commence par [[http://forum.subsonic.org/forum/viewtopic.php?f=3&t=3521|là]]((Ce projet ne semble cependant plus soutenu -> (timoreimann authored on **22 Feb 2013** latest commit 330ab98e6fe0a7c6b4e768f6a7cb9da05aeecae2).)).
+
+Un autre [[wpfr>Fork_(d%C3%A9veloppement_logiciel)|fork]] nommé **Madsonic** est toujours actif [[http://www.madsonic.org/|ici]].
+
+Sans parler [[https://airsonic.github.io|d'Airsonic]], Open Source et Libre, compatible avec Subsonic et disponible sur des multiples plate-formes.
+
+----
+
+===== Voir aussi =====
+
+  * **(en)** [[http://www.subsonic.org/pages/index.jsp|Site officiel de Subsonic]]
+  * [[:jinzora|Jinzora]],  un autre serveur de streaming.
+  * [[:iceCast2]],  un autre serveur de streaming.
+  * [[:gnump3d|Gnump3d]], un serveur de streaming plus simple, mais avec moins de fonctionnalités.
+  * [[http://sorrodje.alter-it.org/index.php?article19/installation-de-subsonic-sur-un-vps-gandi|Tuto d'installation sur un serveur dédié]]
+  * [[http://www.sublimigeek.fr/subsonic-serveur-streaming-audio-video|un autre tuto d'installation sur un serveur dédié avec Debian]]
+
+
+----
+
+
+//Contributeurs principaux : [[utilisateurs:clement.analogue|clement.analogue]], //[[:utilisateurs:beaver|BeAvEr]] (Refonte de la documentation).//

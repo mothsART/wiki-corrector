@@ -1,0 +1,338 @@
+
+{{tag>Xenial serveur gestion_de_projet bug VÉTUSTE}}
+
+----
+
+
+====== Trac : environnement de suivi de projet technique ======
+
+Instructions pour installer et configurer Apache2, Trac et Subversion sous Ubuntu. Trac intègre aussi un wiki et un système de //bug tracking// évolué.
+
+<note>Mise à jour nécessaire.</note>
+
+
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+
+
+===== Installation =====
+
+Ceci fait, voici la liste des [[:tutoriel:comment_installer_un_paquet|paquets à installer]] : **[[apt>subversion,libapache2-svn,libapache2-mod-python,trac|subversion libapache2-svn libapache2-mod-python libapache2-mod-wsgi trac]]**.
+
+On crée le répertoire système pour les instances de Trac, par exemple dans « /var/trac » sans oublier de le rendre accessible en écriture par Apache :
+
+  sudo mkdir /var/trac
+  sudo chown www-data:www-data /var/trac
+
+
+===== Création d'une instance Trac pour votre projet =====
+
+Il nous faut maintenant importer un projet dans Subversion. Pour l'exemple, nous créerons un projet nommé « monzouliprojet ». Pour cela, rien de plus simple... sauf pour les feignants. En étant moi-même un des plus féroces, j'ai pensé à mes compatriotes et leur ai créé un script qui leur permettra d'importer automatiquement leurs projets dans Subversion et de les rendre ainsi facilement accessibles à l'instance de Trac que nous créerons par la suite. Vous [[http://www.prendreuncafe.com/blog/share/bash/create_svn_repo.sh|trouverez le code ici]] (certainement très perfectible, contributions bienvenues).
+
+Vous pouvez sauvegarder ce script dans un fichier « create_svn_repo.sh » par exemple, sans oublier de le rendre exécutable :
+
+  chmod +x create_svn_repo.sh
+
+Il faudra bien sûr le lancer au moyen de « sudo » afin d'avoir les droits d'écriture dans les répertoires système concernés. Pour importer un nouveau projet Subversion à partir de vos sources existantes, il suffit de lancer le script et de répondre aux questions posées :
+
+<note important>semble ne plus fonctionner sur intrépide et trac 0.11 besoin d'être mis a jour.\\
+Voir [[http://trac.edgewall.org/wiki/0.11/TracOnUbuntu]]</note>
+
+<code>
+niko@nikobox:~$ sudo sh create_svn_repo.sh  
+#######################################
+Création d'un nouveau projet Subversion
+#######################################
+
+Tapez le nom du nouveau projet :
+monzouliprojet
+Tapez maintenant le chemin du répertoire source :
+(Note: les répertoires trunk, branches et tags seront créés automatiquement)
+/home/niko/monzouliprojet/
+Création du projet monzouliprojet depuis /home/niko/monzouliprojet/...
+Adding         /tmp/svn/monzouliprojet/trunk
+Adding         /tmp/svn/monzouliprojet/trunk/test
+Adding         /tmp/svn/monzouliprojet/trunk/test/main
+...
+
+Committed revision 1.
+
+Projet subversion monzouliprojet créé avec succès !
+</code>
+
+{{icons:iconnote.png  }}
+>Vous pouvez éditer le fichier du script pour y spécifier notamment le chemin de la racine subversion : <file>SVN_ROOT="/var/svn"</file>
+
+Ensuite, il faut initialiser l'environnement trac pour notre projet récemment importé dans Subversion, ce que l'on fait au moyen de la série de commande suivante :
+
+<del>sudo mkdir /var/trac</del> //si on execute cette commande la suite ne fonctionne pas car trac-admin va créer le répertoire.//
+
+  sudo trac-admin /var/trac/monzouliprojet initenv
+  sudo chown -R www-data /var/trac/
+
+Notez encore une fois que je crée la racine trac dans « /var/trac » mais vous pouvez tout à fait utiliser un autre emplacement.
+
+
+
+===== Créer un ou plusieurs utilisateurs Trac et Subversion, gérer les autorisations =====
+
+Par défaut, une instance Trac permet à tous les visiteurs anonymes d'en modifier les contenus ; bien évidemment, c'est un comportement de l'application particulièrement risqué, ne serait-ce qu'en regard du pourriel potentiel que vous pourriez récolter. Nous allons donc successivement créer un utilisateur subversion, puis désactiver les contributions anonymes pour Trac et ajouter un utilisateur possédant les droits d'administration Trac. Notez que nous utiliserons le même fichier de stockage des noms d'utilisateurs et de mots de passe pour Trac et Subversion ; ce fichier sera appelé au niveau de notre fichier de configuration Apache - défini un peu plus bas dans ce tutoriel.
+
+Créons tout d'abord le fichier de stockage des mots de passe Trac/Subversion et ajoutons un utilisateur « maintener » :
+
+  sudo htpasswd2 -c /etc/apache2/dav_svn.passwd maintener
+
+Attribuez-lui un mot de passe. Bien, cet utilisateur aura par la suite officiellement accès à notre dépôt Subversion. Donnons-lui maintenant les droits d'administration totale de Trac :
+
+  sudo trac-admin /var/trac/monzouliprojet permission add maintener TRAC_ADMIN
+
+On peut également imaginer la création d'un compte utilisateur développeur, qui peut créer des tickets, en fermer et maintenir le wiki :
+
+  sudo htpasswd2 /etc/apache2/dav_svn.passwd dev
+  sudo trac-admin /var/trac/monzouliprojet permission add dev WIKI_CREATE WIKI_MODIFY TICKET_CREATE TICKET_MODIFY
+
+Il nous reste à désactiver les contributions anonymes :
+
+  sudo trac-admin /var/trac/monzouliprojet permission remove anonymous WIKI_CREATE WIKI_MODIFY TICKET_CREATE TICKET_MODIFY
+
+Par la suite, vous pourrez effectuer la plupart de ces opérations par le biais du plugin WebAdmin dont nous détaillerons l'installation dans la partie suivante. 
+
+Vous trouverez plus d'informations sur les privilèges de Trac sur [[http://trac.edgewall.org/wiki/TracPermissions|la page qui lui est consacrée]].
+
+Côté Subversion, il nous faut autoriser les //checkouts// anonymes mais s'assurer que l'utilisateur est authentifié avant d'accepter ses //commits//. Cela se configure très facilement dans le fichier « /var/svn/monzouliprojet/conf/svnserve.conf », dans lequel vous pouvez saisir :
+
+<file>
+[general]
+anon-access = read
+auth-access = write
+password-db = passwd 
+# authz-db = authz
+realm = MonZouliProjet Subversion Repository
+</file>
+
+
+
+===== Installer Trac WebAdmin ( Trac version < 0.11 ) =====
+
+<note important>L'utilisation de mod_python n'est pas conseillée pour de nouvelles installations de Trac. Voir [[http://trac.edgewall.org/wiki/TracModPython]]</note>
+
+[[http://trac.edgewall.org/wiki/WebAdmin|Trac WebAdmin]] est une interface web d'administration de votre ou vos instances Trac offrant un confort appréciable pour administrer vos projets et en gérer les paramètres. Même si nous n'avons pas encore défini d'hôtes virtuels Apache, rien ne nous empêche d'installer le greffon, qui passe d'abord par l'installation des « setuptools » :
+
+  wget http://peak.telecommunity.com/dist/ez_setup.py
+  sudo python ez_setup.py
+
+Ceci fait, téléchargez le fichier de plugin [[http://trac.edgewall.org/wiki/TracWebAdmin|http://trac.edgewall.org/wiki/WebAdmin]] sur le site de Trac, et installez-le au moyen du programme « easy_install » précédemment installé, comme suit :
+
+<del>sudo easy_install http://svn.edgewall.com/repos/trac/sandbox/webadmin</del>
+(l'url a changé:)
+  sudo easy_install http://svn.edgewall.org/repos/trac/plugins/0.10/webadmin/
+
+[[:tutoriel:comment_editer_un_fichier|Éditez]] votre fichier de configuration d'instance Trac (« /var/trac/monzouliprojet/conf/trac.ini ») et ajoutez-y la section suivante (si elle n'existe pas) :
+
+<file>
+[components]
+webadmin.* = enabled
+</file>
+
+Enregistrez le fichier et quittez.
+
+
+===== Créer un hôte virtuel Apache =====
+
+Cette section s'applique uniquement si vous souhaitez configurer Trac avec Apache et ModPython. Trac (0.11) est distribué avec son propre serveur internet, [[http://trac.edgewall.org/wiki/TracStandalone|tracd]], qui est la méthode la plus simple pour mettre son serveur en ligne.
+
+Nous devons rendre accessible par le web notre instance de Trac ainsi que le dépôt Subversion associé, par le biais d'un hôte virtuel apache dédié :
+
+  sudo vi /etc/apache2/sites-available/trac.mondomaine.org
+
+On y écrit les paramètres de notre hôte dédié, en admettant que nous disposons du domaine « mondomaine.org » nanti d'un sous-domaine « trac » :
+
+<file>
+<VirtualHost *> 
+    ServerAdmin webmaster@mondomaine.org
+    ServerName trac.mondomaine.org
+    
+    DocumentRoot /var/trac/monzouliprojet
+    <Location />
+        SetHandler mod_python
+        PythonHandler trac.web.modpython_frontend
+        PythonOption TracEnv /var/trac/monzouliprojet
+        PythonOption TracUriRoot /
+        PythonPath "sys.path + ['/var/trac/monzouliprojet']"
+    </Location>
+
+    ErrorLog  /var/log/apache2/error.trac.domaine.org.log
+    CustomLog /var/log/apache2/access.trac.domaine.org.log combined
+    
+    <Location /svn>
+        DAV svn
+        SVNPath /var/svn/monzouliprojet
+        AuthType Basic
+        AuthName "Monzouliprojet Subversion repository"
+        AuthUserFile /etc/apache2/dav_svn.passwd
+        <LimitExcept GET PROPFIND OPTIONS REPORT> 
+            Require valid-user
+        </LimitExcept>
+    </Location>
+    
+    <Location "/login">
+        AuthType Basic
+        AuthName "Trac login"
+        AuthUserFile /etc/apache2/dav_svn.passwd
+        Require valid-user
+    </Location>
+
+</VirtualHost>
+</file>
+
+Vous devrez bien entendu enregistrer le domaine et le sous domaine dans votre fichier de configuration DNS, voire simplement dans votre fichier « /etc/hosts » si vous disposez d'un service de gestion DNS décentralisé comme celui que propose la société [[http://www.gandi.net|Gandi]]. Par exemple :
+
+<file>
+## Fichier /etc/hosts
+127.0.0.1         localhost localhost.localdomain mamachine
+123.124.125.126   trac.mondomaine.org
+</file>
+
+Nous utilisons « mod_python » (précédemment installé), n'oublions pas de l'activer :
+
+  sudo a2enmod mod_python
+
+ou en cas d'erreur (13.04+) :
+ 
+ sudo a2enmod python
+
+Ceci fait, il nous reste à activer le nouvel hôte apache et à relancer ce dernier :
+
+  sudo a2ensite trac.mondomaine.org
+  sudo /etc/init.d/apache2 restart
+
+Pour vérifier que tout s'est déroulé correctement, faites pointer votre navigateur préféré vers l'adresse « trac.mondomaine.org », vous devriez accéder sans encombres à votre instance nouvellement créée. Vous pouvez vous identifier en cliquant sur le lien « Login » et en fournissant les paramètres d'accès utilisateur que vous avez définis précédemment. Si vous vous identifiez en administrateur Trac, vous devriez disposer du menu « Admin » donnant accès à l'extension WebAdmin où vous pourrez ajuster les paramètres de votre instance aux petits oignons.
+
+Côté subversion, vous pouvez effectuer un //checkout// de votre projet de cette façon :
+
+  svn co http://trac.mondomaine.org/svn/trunk/ .
+
+Un commit nécessitera cependant l'authentification ; vous pourrez forcer le nom d'utilisateur à utiliser :
+
+  svn commit -m "test de commit" main/test/toto.txt --username mainteneur
+
+
+
+
+
+
+===== Personnaliser Trac =====
+
+==== Mettre en couleur le code ====
+
+Lorsque vous vous logez sur Trac, et que vous utilisez le **Browse Source**, le code est entièrement en noir sur fond blanc, et basta.
+
+Bien, je vous annonce que comme dans les éditeurs de textes, Trac gère la coloration syntaxique !
+
+Pour l'installer, ca n'est pas difficile ! Un apt-get et c'est bon !
+Et le voici le petit apt-get:
+<code>sudo apt-get install python-pygments enscript</code>
+
+Voila, maintenant votre code est en couleur... C'est mieux hun !? 8-)
+
+
+
+
+
+
+==== Personnaliser le logo ====
+
+Il est possible de changer le logo de trac en éditant le fichier trac.ini dans le dossier /conf du projet.
+<code>gedit /var/trac/monzouliprojet/conf/trac.ini</code>
+
+Dans celui-ci il faut modifier cette partie:
+<code>[header_logo]
+src = site/my_logo.gif
+alt = My Project
+width = 300
+height = 100
+</code>
+
+Il faut changer le my_logo.gif par ce que vous voulez. Moi j'ai créé un fichier logo.png.
+
+Pour que le trac s'adapte à la taille de votre image, il faut mettre **-1** pour width et height.
+
+Ensuite, il ne reste plus qu'à placer votre image dans le dossier **htdocs/** du projet et voila ! 8-)
+
+
+ ===== Dépannage =====
+
+
+==== No module named scripts.admin ====
+
+Si vous obtenez cette erreur :
+<code>Traceback (most recent call last):
+  File "/usr/bin/trac-admin", line 21, in <module>
+    from trac.scripts.admin import run
+ImportError: No module named scripts.admin</code>
+
+Il vous faut redéfinir la variable d'environnement PYTHONPATH.
+Pour ce faire :
+<code>export PYTHONPATH=$PYTHONPATH:/usr/lib/svn-python</code>
+
+
+==== ClearSilver not installed ====
+
+Si vous obtenez cette erreur :
+<code>TracError: ClearSilver not installed (No module named neo_cgi)</code>
+
+Et si vous êtes en 64bits, il faut installer ce paquet: [[http://mathiasson.nu/debian/pool/main/c/clearsilver/python-clearsilver_0.10.4-1.0pm0_amd64.deb]]
+Ticket LaunchPad: [[https://bugs.launchpad.net/ubuntu/+source/clearsilver/+bug/86685]]
+
+Et voila ! ;-)
+
+
+==== mod_python: This module does not exist! ====
+
+Si vous avez cette erreur quand vous faites **sudo a2enmod mod_python** c'est que normalement vous n'avez pas installé le paquet libapache2-mod-python vous répondront les gens. Dans 98% des cas, ce sera vrai ! 
+
+Mais je viens de vivre le cas où j'ai le paquet installé ... mais rien à faire.
+
+Pourquoi ? je sais pas... mais le fichier **mod_python.load** n'a pas été créé.
+J'ai d'ailleurs tenté de réinstaller le paquet etc .. mais rien à faire !
+
+Que cela ne tienne !
+C'est pas mon PC qui va me dicter sa loi... donc on va le créer ce fichier manquant !
+
+<code>sudo gedit /etc/apache2/mods-available/mod_python.load</code>
+
+Et on colle dedans la ligne :
+<code>LoadModule python_module /usr/lib/apache2/modules/mod_python.so</code>
+
+Et voila ! Maintenant :
+<code>sudo a2enmod mod_python</code>
+
+=== Solution alternative ===
+En fait, il semble que a2enmod n'ai plus besoin du préfixe "mod_" pour retrouver les modules installés.
+Voici donc une alternative à cet ensemble de commandes : 
+<code> sudo a2enmod python</code> 
+
+
+==== No module named svn ====
+
+Cette fois, vous avez sur le site trac ce message qui s'affiche :
+<code>Unsupported version control system "svn": "No module named svn"</code>
+
+Damned ! Quel journée !
+Heureusement je me suis fais avoir avant vous ... et j'ai trouvé la solution ! :-D
+
+Il suffit d'installer le paquet python-subversion et de redémarrer apache ... et voila !! 8-)
+
+<code>sudo apt-get install python-subversion</code>
+<code>sudo /etc/init.d/apache2 restart</code>
+
+ ===== Références =====
+
+  * Cet article est la reprise d'un [[http://www.prendreuncafe.com/blog/2006/09/05/489-installer-et-configurer-apache2-trac-et-subversion-sur-ubuntu|billet]] publié sur le blog de [[http://www.prendreuncafe.com|Nicolas Perriault]] sous licence [[http://creativecommons.org/licenses/by-sa/2.0/fr/|CC BY-SA]].
+  * **(en)** La doc officielle : https://trac.edgewall.org/wiki/TracInstall
+
+----
+
+//Contributeurs : [[:utilisateurs:Blackpegaz]], [[:utilisateurs:Ju]], [[:utilisateurs:Teke]], [[:utilisateurs:zedtux]].//

@@ -1,0 +1,349 @@
+
+{{tag>Focal Bionic sécurité chiffrement}}
+
+----
+====== Chiffrez aisément vos répertoires avec EncFS ======
+===== De quoi s'agit-il ? =====
+
+Apprendre à installer et utiliser le système de chiffrement EncFS qui fonctionne de façon **simple** sur tout système de fichiers grâce à [[:fuse]]. Pour en savoir plus sur le chiffrement: [[wpfr>Chiffrement]].
+
+<note warning>Sous **Ubuntu 16.04 LTS**, lors de l'installation, ce message apparait : <code>Information de sécurité pour EncFS
+
+Selon un audit de sécurité mené par Taylor Hornby (Defuse Security), la
+version actuelle de Encfs est vulnérable ou potentiellement vulnérable à
+plusieurs types d'attaques. Par exemple, un attaquant qui aurait les
+droits en lecture/écriture sur les données chiffrées, pourrait baisser
+le niveau de complexité pour déchiffrer des données, sans qu'un
+utilisateur légitime ne s'en aperçoive, ou bien pourrait utiliser
+l'analyse temporelle pour récupérer des informations.
+                                                                      
+Tant que ces problèmes ne sont pas résolus, encfs ne devra pas être   
+considéré comme un endroit sûr pour les données sensibles, dans les 
+situations qui permettent ce type d'attaques.</code>
+
+Pour plus de précisions, voir **(en)** [[https://defuse.ca/audits/encfs.htm|l'audit]] en question. Il date de février 2014, et le problème ne semble donc pas avoir été résolu depuis.
+
+On peut lire aussi cette [[https://linuxfr.org/users/vincent14/journaux/encfs-declare-relativement-peu-sur|discussion]] sur **Linux.org**, dont voici un [[https://linuxfr.org/users/vincent14/journaux/encfs-declare-relativement-peu-sur#comment-1601056|passage]], lui-même traduction d'un passage de l'audit par le forumeur Jiehong :
+
+<note>En conclusion, Encfs est un outil utile même s'il ignore beaucoup de pratiques standardisés considérées comme bonnes. (…) Encfs est probablement sûr tant qu'un adversaire n'obtient qu'une seule copie des données chiffrées. Mais Encfs n'est pas sûr si un adversaire a l'opportunité d'obtenir au moins 2 instantanées (« snapshots ») des données chiffrées à différents moments. Encfs fait de son mieux pour essayer de protéger les données contre des modifications externes, mais cette partie souffre de sérieux problèmes. NDLR: les fonctions assurant l'intégrité des données sont mal implémentés, peuvent être simplement désactivés par un adversaire, et peuvent également être cassés par « brute force » due à leur faible taille (ou, plus précisément, dû à la faible taille de l'espace des possibilités qui est de 264).</note>
+
+On voit donc les limites de la séduisante idée du [[https://doc.ubuntu-fr.org/davfs2#renforcer_la_securite_du_chiffrement|couplage EncFS/montage WebDAV]], utilisée par exemple pour manipuler très simplement, depuis son gestionnaire de fichiers, ses données synchronisées dans le cloud, tout en les cryptant.
+</note>
+===== Introduction =====
+Vous souhaitez conserver des données sensibles et/ou privées, mais sans chiffrer tout votre disque dur. Idéalement, vous voudriez pouvoir restreindre l'accès à certains répertoires seulement, par mot de passe. Les données stockées dans ce(s) répertoire(s) seraient chiffrées et accessibles //uniquement// après authentification.
+
+EncFS permet de réaliser cela très simplement. Pour ce faire, vous allez utiliser deux répertoires :
+  - un premier répertoire dans lequel seront //stockées// les données //chiffrées// ("//source directory//") ;
+  - un second répertoire dans lequel vous pourrez créer des données //en clair//, après authentification ("//mount directory//").
+L'idée est la suivante : vous donnez temporairement accès au second répertoire en fournissant un mot de passe (initialement choisi par vous), et créez vos données en clair dans ce répertoire. Ensuite, vous refermez l'accès à ce répertoire. EncFS s'occupe de "copier" les données du second répertoire (accès temporaire) vers le premier (stockage permanent), tout en les chiffrant. Après avoir fermé l'accès au second répertoire, ce dernier apparaît vide, tandis que le premier répertoire contient les fichiers chiffrés, donc inaccessibles. Pour pouvoir de nouveau modifier les données conservées dans le répertoire de stockage, il faut redonner accès par mot de passe au second répertoire, qui sert donc de répertoire de travail.
+
+Note technique : EncFS gère donc des couples de fichiers « en clair / chiffré ». Dans le répertoire de stockage, les noms de fichiers sont par ailleurs chiffrés. Les avantages d'EncFS par rapport aux autres programmes de chiffrement de données sont principalement sa simplicité et sa souplesse d'utilisation. Voyez en fin de page les avantages/défauts courants.
+
+===== Installation =====
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>encfs]]**
+
+Pour un usage simple, installez [[gnome-encfs-manager]].
+
+
+==== Création des répertoires ====
+Dans notre exemple, le répertoire de stockage des données chiffrées sera ''~/.coffre'' et le répertoire « de travail » (pour manipuler les données en clair après authentification) sera ''~/coffre_open''. Tapez donc :
+
+  encfs /home/$USER/.coffre/ /home/$USER/coffre_open/
+
+Attention, la commande ''encfs'' attend des chemins complets : écrivez donc ''/home/$USER/'' et pas le raccourci ''~/'' !
+
+La première fois qu'elle est écrite, cette commande permet de créer et paramétrer les répertoires utilisés pour stocker et manipuler les données chiffrées par EncFS. Voici un exemple de ce que vous devriez obtenir dans votre terminal :
+
+<code bash>
+  [user@yop ~] encfs /home/$USER/.coffre/ /home/$USER/coffre_open
+  The directory "/home/user/.coffre/" does not exist. Should it be created? (y,n) y
+  The directory "/home/user/coffre_open" does not exist. Should it be created? (y,n) y
+  Création d'un nouveau volume chiffré.
+  Veuillez choisir au moins une des options suivantes :
+  entrez "x" pour le mode de configuration expert,
+  entrez "p" pour un mode pré-configuré paranoïaque,
+  n'importe quoi d'autre ou une ligne vide sélectionnera le mode standard.
+  ?> p
+  
+  Configuration paranoïaque sélectionnée.
+  
+  Configuration terminée. Le système de fichiers sur le
+  point d'être créé a les caractéristiques suivantes :
+  Chiffrement de système de fichiers "ssl/aes", version 2:1:1
+  Encodage du nom de fichier : "nameio/block", version 3:0:1
+  Taille de clé : 256 bits
+  Taille de bloc : 512 octets, y compris 8 octets d'en-tête MAC
+  Chaque fichier comprend un en-tête de 8 octets avec des données IV uniques.
+  Nom de fichiers chiffrés en utilisant le mode de chaînage IV.
+  L'IV des données du fichier est chaînée à l'IV du nom de fichier.
+
+  -------------------------- AVERTISSEMENT --------------------------
+    The external initialization-vector chaining option has been
+    enabled.  This option disables the use of hard links on the
+    filesystem. Without hard links, some programs may not work.
+    The programs 'mutt' and 'procmail' are known to fail.  For
+    more information, please see the encfs mailing list.
+    If you would like to choose another configuration setting,
+    please press CTRL-C now to abort and start over.
+
+    Vous devez entrer un mot de passe pour votre système de fichiers.
+    Vous devez vous en souvenir, car il n'existe aucun mécanisme de récupération.
+    Toutefois, le mot de passe peut être changé plus tard à l'aide d'encfsctl.
+
+    Nouveau mot de passe : votre_passe
+    Vérifier le mot de passe : votre_passe
+</code>  
+  
+
+À la question « Veuillez choisir au moins une des options suivantes », vous pouvez choisir le mode « paranoïaque » en tapant ''p'' puis ''[Entrée]''. Ce mode est le plus sécurisé.
+
+Trouvé sur la [[https://github.com/vgough/encfs|page Github]]<sup>(en)</sup> d'EncFS.
+
+
+**Vérifiez le montage du répertoire chiffré :**
+
+     cat /proc/mounts
+
+vous donnera, entre autres, une entrée de ce type :
+
+
+     encfs /home/$USER/coffre_open fuse rw,nosuid,nodev,user_id=1000,group_id=1000,default_permissions 0 0
+
+**Note** : si vous chiffrez des fichiers en utilisant ce mode « paranoïaque », certaines applications pourront ne pas fonctionner normalement en utilisant ces fichiers chiffrés. Cela vient du fait que les liens (//hard//) ne peuvent être recopiés dans le dossier de stockage. Si vous rencontrez des problèmes de ce type, recréez un couple de répertoires et changez de mode.
+
+**Note2** : le répertoire des données en clair (ici "coffre") peut être changé à volonté. Il n'y a pas de lien définitif entre les deux répertoires. Veillez toutefois dans ce cas à ce que :
+  * le nouveau répertoire ait bien été créé et soit vide
+  * il y ait concordance entre le chemin de montage et celui de démontage.;-)
+
+===== Utilisation =====
+Elle est basique puisqu'il vous suffit de deux commandes du type ON/OFF
+
+1. **ON** Pour //accéder// aux données en clair, il suffit de réutiliser la même commande qu'au début, à savoir, dans notre exemple :
+
+  encfs /home/$USER/.coffre/ /home/$USER/coffre_open/
+
+Contrairement à la première fois, EncFS détecte qu'une initialisation a déjà été faite sur ces deux répertoires et se contente de demander le mot de passe pour débloquer l'accès au répertoire « de travail » (qu'il montera pour vous avec la commande ''fusermount'').
+
+**Toute donnée créée/copiée/déplacée en clair dans le répertoire de travail (ici, ''~/coffre_open'') sera //automatiquement// stockée sous forme chiffrée dans le répertoire de stockage (ici, ''~/.coffre'').**
+
+2. **OFF** Pour ne //plus pouvoir accéder// aux données en clair, il suffit de démonter le répertoire « de travail », soit dans notre exemple :
+
+  fusermount -u /home/$USER/coffre_open
+
+===== Exemples sur un terminal =====
+Vous trouverez sur la page [[:encfs_exemples]] quelques exemples d'utilisation  à partir d'un terminal. 
+
+Notez en particulier que, puisque vous utilisez fuse, il vous est possible de travailler sur un couple de répertoires placé sur une partition NTFS.
+
+Nota : la plus récente version du pilote  [[:tutoriel:ntfs|ntfs-3g]] en version bêta, basée notamment sur la version 2.6 de [[:fuse]] permet d'écrire sur les partitions NTFS. Elle ne fonctionne pas encore avec des données chiffrées. Avant d'utiliser conjointement ces deux programmes sur une partition NTFS, vérifiez si cette information est toujours d'actualité. 
+
+==== Changement du mot de passe ====  
+Le mot de passe peut être changé, grâce à la commande (nom du répertoire à adapter si différent) :
+
+  encfsctl passwd ~/.coffre
+  
+À l'invite, entrer l'ancien mot de passe et 2 fois le nouveau.
+ 
+===== Automatiser le lancement/arrêt =====
+   * Pour automatiser sur une session, choisissez **pam_mount**
+   * Sur une interface Gnome ou Unity, choisissez **Gnome EncFS** Manager ou **Cryptkeeper**, qui sont écrits en gtk"
+   * Sur une interface KDE, choisissez **Fusible**.
+
+Pour les autres cas, voyez les autres méthodes.
+
+==== pam_mount ====
+Il est possible de configurer Ubuntu pour qu'il monte le système de fichier chiffré au démarrage de la session et ceci de manière automatique et sans redemander le mot de passe additionnel.
+
+**Note**: Il est impératif que le mot de passe de la session soit identique à celui d'encfs. En effet, pam_mount va transmettre le mot de passe tapé lors de l'ouverture de la session à encfs pour le déchiffrement du système de fichiers.
+FIXME exemple à recycler\\
+L'exemple suivant montre comment utiliser cette technique pour sécuriser des données qui seront ensuite synchronisées sur [[ubuntuone|Ubuntu One]]. Vous devez au préalable avoir créé un répertoire ~/Ubuntu One/.Encrypted comme décrit dans le début de cet article.
+
+Installer pam_mount
+
+    sudo apt-get install  libpam-mount libpam-encfs
+
+Créer le répertoire de stockage sécurisé et le point de montage
+
+    cd
+    mkdir ~/Encrypted/
+    ln -s ~/Ubuntu\ One/.Encrypted/ .Encrypted
+
+Editer le fichier /etc/security/pam_mount.conf.xml
+Rechercher la ligne <!-- Volume definitions -->
+Ajouter la ligne suivante juste après en remplaçant <<utilisateur>> par votre login
+
+    <volume user="<<utilisateur>>" fstype="fuse" path="encfs#/home/<<utilisateur>>/.Encrypted" mountpoint="/home/<<utilisateur>>/Encrypted" />
+
+A la prochaine ouverture de session, le système de fichier encrypté sera automatiquement monté dans le répertoire ~/Encrypted et les données de ce répertoire seront automatiquement encryptées et sauvegardées grâce à [[ubuntuone|Ubuntu One]]. 
+
+==== Sirikali ====
+Sirikali gère l'ENCFS (montage, démontage du dossier crypté), il a l'avantage d'être dans les dépôts, [[apt>sirikali]]
+  
+Lors de la première utilisation, changer la langue dans "Menu" => "Settings" => "Select Language" et cocher "fr_FR".
+
+Il comporte de nombreuses options, permettant notamment un lancement automatique au démarrage.
+
+==== En ligne de commande ====
+Vous pouvez créer deux commandes pour ouvrir et fermer rapidement l'accès au répertoire de travail :
+
+  sudo nano /usr/bin/decrypt
+
+Copiez-y le texte suivant :
+
+  #!/bin/sh
+  encfs /home/$USER/.coffre/ /home/$USER/coffre_open/
+
+  sudo nano /usr/bin/encrypt
+
+Copiez-y le texte suivant :
+
+  #!/bin/sh
+  fusermount -u /home/$USER/coffre_open
+
+Vérifiez que vous utilisez bien les noms de répertoires que vous avez choisis ! Ensuite, donnez les droits nécessaires à ces deux commandes :
+
+  sudo chown $USER /usr/bin/decrypt /usr/bin/encrypt
+
+  chmod 700 /usr/bin/decrypt /usr/bin/encrypt
+
+Désormais, vous pouvez taper ''decrypt'' pour libérer l'accès au répertoire de travail et manipuler vos données chiffrées, puis ''encrypt'' pour refermer l'accès. Vous pouvez aussi utiliser ces commandes pour créer des lanceurs/raccourcis.
+
+==== avec un script  ====
+Vous trouverez ici un script qui vous permettra de monter et démonter aisément votre répertoire de travail. Il peut remplacer les deux commandes ci-dessus.
+
+Code :
+
+     #!/bin/bash
+     # Script de montage de dossier chiffré avec encfs et fuse.
+     # A utiliser avec Thunar ou Nautilus, ou en ligne de commande :
+     # ./mount_enc ~/dossier_de_montage
+     # Variable à modifier : repertoire contenant les fichiers chiffrés CRYPTEDFOLDER=/home/$USER/.coffre 
+     gksudo -p -m "Entrez le mot de passe" | encfs -S $CRYPTEDFOLDER $1
+     zenity --info --text="Cliquez sur valider pour démonter"
+     fusermount -u $1
+
+Ce programme prend comme argument le dossier à monter. Une fois que le dossier est monté, il fait apparaître une boîte de dialogue grâce à Zenity. Et quand on ferme la boîte de dialogue, le dossier chiffré est démonté.
+
+Pour en savoir plus à ce sujet :
+
+http://ratur.ovh.org/index.php?post/2006/08/22/Cryptez-vos-donnees-avec-Encfs-et-Fuse
+
+Nota : si vous préférez voir une icône dans le systray au lieu d'une boîte de dialogue, remplacer l'expression :
+     zenity --info --text="Cliquez sur valider pour démonter"
+par celle-ci :
+     zenity --notification --text="Démonter EncFs"
+  
+Voila un autre script simple qui permet de monter et démonter le dossier chiffré sans devoir laisser la boîte de dialogue et le terminal ouvert:
+lancer le script, une foi le dossier monté le terminal se ferme; Relancez le script quand vous souhaitez démonter le dossier. 
+     #!/bin/bash
+     # Définition de la variable N, chemin du dossier Normal (à modifier avec votre propre chemin)
+     N=/home/user/coffre/
+     # Définition de la variable C, chemin du dossier chiffré (à modifier avec votre propre chemin)
+     C=/home/user/.coffre/
+     # Définition de la variable T, chemin du fichier de test de condition (créer un fichier quelconque caché dans le répertoire chiffré, par exemple ".pointeur.txt")
+     T=/home/user/coffre/.pointeur.txt
+     # Test de condition (Est ce que le fichier ".pointeur.txt" existe?, si oui démonte le dossier chiffré, sinon monte le dossier)
+     if [ -e "$T" ]; then
+     # Démontage du dossier chiffré
+     echo "démontage du répertoire chiffré"	
+     # L'utilisation de la ligne suivante est facultative, elle permet juste de créer une fenetre pour confirmer le démontage
+     zenity --info --text="Cliquez sur OK pour démonter le répertoire chiffré"
+     fusermount -u $N
+     # Interdiction d'écriture dans le dossier Normal.
+     chmod 440 $N
+     exit
+     else
+     # Autorisation d'écriture sur le dossier déchiffré
+     chmod 750 $N
+     # Montage du dossier chiffré
+     echo "Montage du répertoire chiffré, entrer le mot de passe"
+     encfs $C $N
+     # Ouverture du dossier dans Nemo
+     nemo $N
+     fi
+     exit
+(Ne pas oublier de créer un fichier (de préference caché) vers lequel le script va pointer dans votre dossier chiffré. Il est possible aussi de pointer vers un fichier existant mais il faudra prendre garde à ne pas l'effacer, le déplacer ou le renommer)
+==== un script qui résume et qui va bien par bhubuntu :====
+(modifié)
+
+    #!/bin/sh
+    # script pour ouvrir .coffre et le fermer facilement
+    # 2 Variables à modifier = 2 répertoires contenant 1) fichiers chiffré et 2) fichiers à monter déchiffré
+    # la commande set attribue les valeurs à $1 et $2
+    set /home/$USER/.coffre/dossier_crypte_encfs /home/$USER/.coffre/dossier_montage 
+    # on autorise l'écriture sur le dossier déchiffré (voir plus bas)
+    chmod 750 $2
+    gksudo -p -m "Entrez le mot de passe pour ouvrir .coffre" | encfs -S $1 $2
+    # on teste si le dossier par exemple ici 'Perso' est présent
+    # si le mot de passe était faux le dossier montage apparaitrait vide donc on passe à else
+    #
+    if [ -e $2"/Perso" ]; then
+    # on affiche le dossier crypté dans nautilus
+    nautilus $2
+    # notification dans le systray pour masquer le dossier crypté
+    zenity --notification --text "cliquer ici pour fermer votre dossier décrypté"
+    fusermount -u $2
+    zenity --warning --title=Fermeture --text "votre dossier décrypté a été définitivement fermé et masqué"
+    else
+    zenity --info --title=Erreur --text "mot de passe erroné: recommencez !"
+    # on interdit l'écriture dans le dossier déchiffré. Cela permet d'éviter d'enregistrer par erreur un document non chiffré s'il était encore ouvert.
+    chmod 440 $2
+    fi
+    exit
+
+Pour utiliser ce script, il faut le copier dans un fichier texte, puis rendre le fichier exécutable. Ensuite, il suffit de cliquer sur l'icône du fichier dans nautilus.
+
+===== Problèmes connus =====
+Sous **Ubuntu 14.04LTS** (Trusty Thar) lors de la création d'un nouveau dossier chiffré la zone de sélection du répertoire de destination est écrasée, il est extrêmement difficile voire impossible de visualiser le répertoire sélectionné.
+
+==== Accès impossible ? ====
+**Important** : pour pouvoir accéder aux données en clair, il est nécessaire //en plus du mot de passe// de vérifier si le fichier ''.encfs5'' est bien présent dans le répertoire de l'utilisateur. 
+
+Le fichier .encfs5 se trouve dans le répertoire chiffré à la racine du répertoire de stockage. Ce [[:dossiers_et_fichiers_caches|fichier caché]] contient notamment les données propres au chiffrement. Il ne doit donc en aucun cas être supprimé sous peine de perte de vos données. Si vous devez faire une sauvegarde des répertoires de travail encfs (répertoire chiffré et répertoire ouvert), il faut penser à sauvegarder aussi le fichier .encfs5 correspondant.
+
+==== Module ''fuse'' ====
+Vérifier 
+  * - la présence du module //fuse// ( lsmod | grep fuse) 
+  * - que l'utilisateur a les droits requis (grep "fuse" "/etc/group")
+
+Au cas où le module //fuse// n'est pas trouvé au moment du chargement, il se peut qu'il faille modifier le noyau (ce ne devrait //pas// être le cas sous Breezy, Dapper ou Edgy). Dans ce cas, faire :
+
+  sudo apt-get install module-assistant
+
+puis :
+
+  sudo module-assistant
+puis ''prepare'', puis ''select'', puis ''fuse'', puis ''build'', puis appuyer sur [Entrée] au moment du "The source package may not be installed...", puis ''exit'''. Arrivé là, le ''modprobe fuse'' devrait fonctionner.
+
+===== Avantages/défauts =====
+Il existe beaucoup d'autres méthodes pour chiffrer des données sous Linux, mais celle-ci a beaucoup d'avantages :
+  * une installation en quelques commandes, une utilisation basique avec deux commandes,
+  * l'installation est durable. Aucune compilation ou réinstallation n'est nécessaire en cas de mise à jour du kernel, 
+  * il n'est pas nécessaire de créer de fichier/répertoire d'une taille //fixe// dédié à l'espace chiffré,
+  * l'utilisateur a le libre choix des répertoires,
+  * le fait de voir le nombre de fichiers chiffrés, leur taille et droits d'accès peut être utile, et représente un avantage lors de l'utilisation de //backups// incrémentaux par exemple ;
+  * les performances semblent correctes (contrairement à d'autres solutions).
+  * fonctionnement possible sur différents types de système de fichier (dont NTFS)
+
+Parmi les défauts, ou désavantages, on peut citer :
+  * le fait que le dossier de stockage soit visible et donne donc accès à quelques méta-données (nombre de fichiers chiffrés -mais pas leur nom-, leur taille et droits d'accès...),
+  * le fait que les données chiffrées doivent obligatoirement utiliser le système de fichier utilisé pour les données en clair (même partition).
+  * absence de [[https://fr.wikipedia.org/wiki/D%C3%A9ni_plausible|déni plausible]] ou de volume caché.
+
+===== Voir aussi =====
+Pour plus de détails less /usr/share/doc/encfs/README.gz
+
+EncFS peut faire un peu plus que ce que cette aide n'a présenté. Pour plus d'informations, voyez :
+
+  * [[https://www.arg0.net/encfs|Site officiel d'EncFS]]
+  * [[http://www.arg0.net/encfsintro|Introduction détaillée à EncFS]]  (Lien Mort à supprimer)
+  * [[http://manpages.ubuntu.com/cgi-bin/search.py?q=encfs|Page man d'EncFS]] (ou ''man encfs'' dans votre terminal)
+  * [[http://en.wikipedia.org/wiki/EncFS|Article « EncFS » sur en.wikipedia.org]]
+  * [[https://forum.ubuntu-fr.org/viewtopic.php?pid=22418362#p22418362|Installer et utiliser EncFS sous Ubuntu Gnome 20.04 compatible avec la version EncFSMP (Windows)]]
+  * [[davfs2#astucenuage_et_vie_privee|Utiliser EncFs dans le nuage]]
+  * [[gnome-encfs-manager|Gnome Encfs Manager]] une interface graphique pour Encfs.
+
+ ----
+//Contributeurs : [[utilisateurs:Uggy]], [[utilisateurs:jd]], [[utilisateurs:Spomky]], [[utilisateurs:Zakhar]] (changelog avril 2010) //
+
+// Basé sur : [[http://blog.uggy.org/post/2006/05/17/90-chiffrer-ses-donnees-avec-encfs|ce billet original]]. Équivalent anglophone disponible sur ce [[http://ubuntuforums.org/showthread.php?t=148600|topic d'ubuntuforums.org]].//

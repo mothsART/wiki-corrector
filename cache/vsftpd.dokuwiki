@@ -1,0 +1,562 @@
+
+{{tag>ftp serveur sécurité}}
+
+----
+
+<note warning>Attention cette documentation présentait des failles de sécurité importantes (partie connexion depuis le web)!
+Je n'ai pas tout vérifié en détail mais je vous conseille de vérifier les paramètres donnés avec le man du site officiel!</note>
+
+====== Préambule : FTP et "FTP-Like" sécurisés ====== 
+
+Au niveau des protocoles de transfert de fichiers, il y a le FTP classique: Tout y passe en clair (y compris les infos de login/mot de passe). Ce protocole utilise un canal de contrôle et un canal de données (par défaut, port 21 en destination pour le canal contrôle).
+
+Ce tutoriel explique les possibilités de sécurisation du FTP c'est a dire FTP sur SSL/TLS (parfois nommé FTPS).
+
+Il est important de ne pas confondre cette évolution sécurisée de FTP, basée sur le protocole d'origine, avec SFTP.
+
+La proximité des acronymes prête en effet à confusion !
+
+En effet, SFTP n'est nullement basé sur FTP, mais sur SSH ! Il fait d'ailleurs partie de OpenSSH server et n'utilise par défaut que l'unique port 22 de SSH.
+
+SFTP peut être vu comme un SCP (comme le CP de fichiers classique, mais chiffré avec SSH) avec une interface de commande proche de FTP, les mêmes possibilités d'utilisation sur un lien peu fiable (une copie avortée par une perte de connexion ne devra pas être reprise de zéro, mais reprendra de là ou elle en était une fois le lien ré-établi)... D'ailleurs la plupart des clients FTP classiques supportent SFTP (parfois dénommé FTP sous SSH2).
+
+D'où une possible confusion côté client : si cela ne fonctionne pas, vérifier.
+
+Autre corollaire: Ceux qui ont déjà OpenSSH Server sur leur machine peuvent éviter un doublon et préférer utiliser SFTP. Cependant, SFTP donnant accès à toute l'arborescence (A priori il y a une option pour changer cela dans le CVS), il faudra souvent restreindre l'accès à l'utilisateur créé : cet utilisateur sera créé avec un shell restreint (type rssh) ne donnant accès qu'aux commandes SFTP et/ou SCP. Il faudra par ailleurs lui créer un environnement chrooté pour le bloquer dans une sous-arborescence (son home par exemple). D'autres tutoriels traitent ces points.
+
+===== Serveur FTP : Very secure FTP daemon =====
+
+VsFTPd est un serveur FTP conçu avec la problématique d'une sécurité maximale. Contrairement aux autres serveurs FTP (ProFTPd, PureFTPd, etc.), aucune faille majeure de sécurité n'a jamais été décelée dans VsFTPd.
+
+Néanmoins deux  [[http://www.debian.org/security/2011/dsa-2305|failles permettant un DoS]] avaient été détectées, la première était due à une faille d'un vieux noyau linux (avant 2.6.35), et la deuxième a été très vite corrigée.
+
+Ce serveur est utilisé à grande échelle, notamment par des entreprises telles que Red Hat.
+
+La configuration __par défaut__ de VsFTPd est très restrictive : 
+
+  - Seul le compte **anonyme** est autorisé à se connecter au serveur
+  - En **lecture seule**
+  - Les **utilisateurs** ne peuvent pas accéder à leurs répertoires
+<note>
+Aussi sécurisé que soit un serveur ftp, le protocole ftp en lui même **n'est pas sûr** ! En effet l'échange du nom d'utilisateur et du mot de passe transite en clair sur le réseau.
+Si vous utilisez ce serveur sur votre LAN, pas de soucis, mais attention si vous comptez utiliser le serveur ftp depuis internet. De fait, n'utilisez pas un compte qui a les droits sudo via ftp (en fait n'utilisez de l'extérieur ce compte QUE via ssh ou tout autre protocole sécurisé, POPs, etc.)</note>
+
+
+
+===== Installation =====
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>vsftpd]]**.
+<code bash> sudo apt install vsftpd </code>
+Il est parfois nécessaire de créer un compte ftp, l'absence de l'option *system* crée une faille de sécurité et bloque la désinstallation du paquet.
+<code bash>sudo useradd --system ftp </code>
+Pensez à redémarrer le service :
+<code bash>sudo systemctl restart vsftpd</code>
+Vérifier l'état du service.
+<code bash>sudo systemctl status vsftpd</code>
+<code bash>sudo systemctl enable vsftpd</code>
+Et à ouvrir les ports de votre pare-feu si nécessaire :
+<code bash>sudo ufw allow 20/tcp
+sudo ufw allow 21/tcp
+sudo ufw status</code>
+===== Configuration de vsftpd =====
+
+La configuration de VsFTPd est centralisée dans un seul et même fichier **/etc/vsftpd.conf**. Choisissez [[:tutoriel:comment_editer_un_fichier|votre éditeur de texte favori]] (en mode [[:sudo|super utilisateur]]) et appliquez les modifications suivantes en fonction du mode de fonctionnement de VsFTPd.
+
+==== Configuration de base ====
+  * Vous pouvez personnaliser le texte de connexion au serveur : <file bash>ftpd_banner=Bienvenue sur le serveur ftp de LUCAS</file>
+
+  * Pour permettre des utilisateurs anonymes de se connecter au serveur en lecture seule : <file bash>
+anonymous_enable=YES
+anon_upload_enable=NO
+anon_mkdir_write_enable=NO
+anon_other_write_enable=NO
+anon_world_readable_only=YES
+anon_root=<Path_du_répertoire_anonyme>
+</file>
+  * Pour permettre à vos utilisateurs locaux (ceux qui ont un compte sur la machine) de se connecter au serveur et d'écrire: <file bash>local_enable=YES
+write_enable=YES
+local_umask=022</file>
+  * Pour permettre à vsftpd de charger une liste d'utilisateurs décommentez la ligne : <file bash>userlist_enable=YES</file>
+Il faudra alors ajouter le nom des utilisateurs qui auront les accès dans le fichier **etc/vsftpd.userlist**
+
+  * Vous pouvez « emprisonner » certains utilisateurs dans leur dossier personnel afin qu'il ne puissent pas naviguer dans le système de fichier.
+Il faut créer le fichier dédié à la configuration de vsftpd **/etc/vsftpd/chroot.list**, [[sudo|avec les droits d'administration]].
+
+Les identifiants des utilisateurs concernés doivent être renseignés dans ///etc/vsftpd/chroot.list// sous la forme d'une simple liste : <file>utilisateur_1
+utilisateur_2
+...</file>
+
+Il faut ensuite modifier la configuration générale (/etc/vsftpd.conf) et ajouter ces lignes:
+<file bash>
+# Pas besoin d'avoir un accès root
+chroot_local_user=NO
+# Emprisonner dans son répertoire home les utilisateurs
+chroot_list_enable=YES        
+# La lise des prisonniers
+chroot_list_file=/etc/vsftpd.chroot_list
+# Evite l'erreur 500 OOPS: vsftpd: refusing to run with writable root inside chroot().
+# Les prisonniers peuvent écrire dans leur propre répertoire     
+allow_writeable_chroot=YES
+</file>
+<note important>Attention, si ''chroot_list_enable'' est à NO, cette liste devient la liste des utilisateurs qui ne seront PAS dans leur "prison" </note>
+
+==== Configuration avancée ====
+
+Si vous voulez changer le port pour transmettre les commandes qui est par défaut (21) :
+<file>listen_port=222</file>
+
+  * Pour avoir un monitoring  basique (voir les utilisateurs connectés) :
+<file>setproctitle_enable=YES</file>
+
+ Ensuite, pour voir la liste des utilisateurs il suffit de taper la commande suivante dans un terminal :
+<code bash>ps -aef | grep vsftpd</code>
+
+ou pour suivre les connexions en continu :
+<code bash>watch -n 1 'ps ax | grep vsftpd | grep -v grep'</code>
+
+ **Attention, tous les utilisateurs du système ayant accès à la commande "ps"  pourront également visualiser la liste des utilisateurs connectés.**
+
+* Monitoring d'après le fichier de log
+
+ Aucun changement à effectuer dans vsftp.conf. Pas de problème de sécurité car la commande est accessible en mode super-utilisateur seulement. Tapez dans un terminal :
+   sudo tail -f /var/log/vsftpd.log
+
+Après chaque changement sur la configuration, pensez à relancer le serveur pour les prendre en compte :
+
+   sudo service vsftpd reload
+
+Plus d'infos sur la configuration de vsftpd: [[http://vsftpd.beasts.org/vsftpd_conf.html|(en) Documentation vsFTPd]]
+
+
+
+==== Partage de dossier et chroot ====
+
+Les utilisateurs étant chrootés dans leur home (ce n'est pas obligatoire mais conseillé) il faut trouver un moyen de leur permettre de naviguer dans un dossier a l'extérieur de leur home.\\
+ln pour faire un lien symbolique ne fonctionne pas : problème de droit.\\
+La commande à utiliser est mount avec l'option --bind
+
+<code>mkdir ~/PointDeMontage
+sudo mount --bind <path_complet_du_dossier_à_relier> /home/<utilisateur>/PointDeMontage</code>
+
+Si vous souhaitez monter ce dossier automatiquement au démarrage de l'ordinateur il faut éditer le fichier fstab :
+
+<code>gksu gedit /etc/fstab</code>
+
+et y ajouter cette ligne :
+
+<code><path_complet_du_dossier_à_relier> /home/<utilisateur>/PointDeMontage  none  bind  0  0</code>
+
+
+
+
+
+===== vsftpd et SSL =====
+
+[[http://www.brennan.id.au/14-FTP_Server.html|Principale source d'informations]]
+
+Le principal défaut du protocole FTP est que le couple nom d'utilisateur / mot de passe transite en clair sur le réseau. Il est cependant possible d'ajouter une couche de sécurité supplémentaire, à savoir SSL, pour chiffrer les échanges d'authentification et/ou de données.
+
+Le fichier **/usr/share/doc/vsftpd/README.ssl** fourni avec vsftpd contient certaines mises en garde de sécurité.
+
+=== Création du certificat ===
+
+Il vous faut [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>openssl]]**
+
+   sudo openssl req -new -x509 -days 365 -nodes -out /etc/ssl/private/vsftpd.cert.pem -keyout /etc/ssl/private/vsftpd.key.pem
+
+Openssl va vous poser quelques questions, la plus critique est celle ci : 
+
+  Common Name (eg, YOUR name) []:
+
+Il faut écrire le nom ou l'ip que les clients utiliseront. 
+Il est possible de faire un certificat signé par sa propre autorité de certification et donc générer des certificats valides, une fois que vos clients ont reconnu votre autorité de certification : [[http://www.debian-administration.org/articles/284|Creating and Using a self signed SSL Certificates in debian]]
+
+Un certificat (vsftpd.cert.pem) ainsi qu'une clé privée (vsftpd.key.pem) ont été générés dans le dossier /etc/ssl/private/. 
+Sécurisons-les :
+  sudo chown root:root /etc/ssl/private/vsftpd.cert.*
+  sudo chmod 600 /etc/ssl/private/vsftpd.cert.*
+
+<note>Vsftp s'exécute avec les droits de l'utilisateur //nobody// mais il se lance en tant que root et donc lit le certificat en tant que root.</note>
+
+=== Configuration de vsftpd.conf / Partie SSL ===
+
+À la fin de votre fichier **/etc/vsftpd.conf**
+
+<file>
+# Options for SSL
+# encrypted connections.
+
+ssl_enable=YES
+allow_anon_ssl=NO
+force_local_data_ssl=NO
+force_local_logins_ssl=YES
+# require_ssl_reuse=NO # Certains clients FTP nécessitent cette ligne
+
+ssl_tlsv1=YES
+ssl_sslv2=YES
+ssl_sslv3=YES
+
+rsa_cert_file=/etc/ssl/private/vsftpd.cert.pem
+rsa_private_key_file=/etc/ssl/private/vsftpd.key.pem
+</file>
+force_local_data_ssl=NO  <-- vous pouvez mettre à "YES" si vous utilisez Kasablanca.
+A priori, un : 
+  sudo service vsftpd reload 
+devrait bien se passer.
+
+=== Configuration du serveur pour un accès à partir d'Internet ===
+
+Si vous voulez accéder à votre serveur FTP depuis internet, ou si celui-ci se trouve derrière un firewall ou un routeur, il est nécessaire de rajouter les lignes suivantes dans votre fichier **/etc/vsftpd.conf**. Ces lignes font passer votre serveur ftp en mode passif.
+
+<file>
+pasv_enable=YES
+pasv_promiscuous=NO
+pasv_min_port=40000
+pasv_max_port=40100
+pasv_address=XX.XX.XX.XX ou domaine.com avec pasv_addr_resolve=YES
+port_promiscuous=NO
+</file>
+**pasv_enable** Utilisez cette option pour activer le mode passif.
+
+**pasv_promiscuous** Si vous voulez désactiver le contrôle de sécurité PASV qui assure que la connexion de données provienne de la même adresse IP que le contrôle de connexion. Utilisez si vous savez ce que vous faites! Le seul usage légitime à cela est dans un environnement de tunnels sécurisés, ou peut-être pour faciliter l'utilisation de FXP.
+Défaut: NO
+
+**pasv_address** Utilisez cette option pour écraser l'adresse IP à laquelle vsftpd répondra à la commande PASV. Fournissez une adresse IP numérique.
+
+[On peut toutefois lui donner un nom de domaine en lui ajoutant l'option de résolution DNS:
+pasv_addr_resolve=YES.]
+
+Cette option est par défaut à NON: L'adresse est reprise de la précédente socket .
+
+**port_promiscuous** Utilisez cette option si vous voulez désactiver le PORT contrôle de sécurité qui garantit que les connexions de données sortantes peuvent uniquement se connecter au client. A modifier si vous savez ce que vous faites!
+Défaut: NO
+
+**pasv_min_port** et **pasv_max_port** correspondent respectivement au port d'écoute mini et maxi du serveur ftp en mode passif (les valeurs saisies ici sont arbitraires, vous pouvez en saisir d'autres). Cette plage de port doit être ouverte sur votre pare-feu (udp et tcp) et redirigée vers votre serveur FTP.
+
+  sudo ufw allow proto tcp to any port 40000:40100
+  sudo ufw allow proto udp to any port 40000:40100
+
+Il vous reste :
+1- à redémarrer le serveur avec la commande suivante
+
+<codebash>sudo service vsftpd reload
+</code>
+
+2- puis éventuellement configurez votre routeur (e.g. Freebox) pour que cette même plage de ports (TCP:40000 à TCP:40100) soit redirigée vers l'adresse IP locale de votre serveur FTP.
+
+3- et à configurer votre client ftp de façon à ce que celui-ci réalise des connexions en mode passif (mode passif dans les paramètres du pare-feu de Filezilla par exemple)
+
+<note important>Attention : Les versions inférieures ou égales à 2.0.6 de vsFTPd ont un défaut de négociation de la connexion avec SSL et il faut utiliser la version 2.0.7 ou supérieure qui corrige ce problème. À l'heure actuelle, vous pouvez utiliser la dernière version (hautement recommandé) qui est donc la 2.3.0. Autrement, il faut donc compiler le serveur soi-même (plus compliqué mais bien utile quand on s'en sert correctement). Voir [[http://forum.filezilla-project.org/viewtopic.php?f=2&t=7688 | ce lien]].</note>
+
+===== Configurer VSFTPD pour utiliser des utilisateurs virtuels =====
+
+Nous allons configurer VSFTPD pour utiliser seulement des utilisateurs virtuels et non pas les utilisateurs locaux de votre machine.
+Pour cela nous allons créer des dossiers afin d'y placer nos futurs fichiers de configuration: 
+
+<code>
+sudo mkdir -p /etc/vsftpd/vsftpd_user_conf
+</code>
+
+Sauvegardons nos fichiers de configuration actuels :
+
+<code>
+sudo cp /etc/vsftpd.conf /etc/vsftpd.conf.default.bak
+sudo cp /etc/pam.d/vsftpd /etc/pam.d/vsftpd.default.bak
+</code>
+
+====Créer la base de données des utilisateurs virtuels====
+
+<note tip>Vous allez avoir maintenant besoin d'installer un programme permettant d'interragir avec des fichiers sous forme de base de donnée: [[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>libdb5.1,db5.1-util,db5.1-doc|libdb4.8 db4.8-util db4.8-doc]]**. Il est conseillé d'utiliser la version la plus récente qui est à ce jour la 4.8 mais qui est susceptible d'évoluer au cours du temps, n'oubliez donc pas d'adapter le tutoriel.</note>
+
+<note tip>Si les paquets sont introuvables, recherchez une autre version, par exemple : [[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>libdb5.3,db5.3-util]]**, remplacez plus loin la ligne de commande db4.8_load par db5.3_load</note>
+
+Création du fichier PAM :
+Il faut effacer le contenu du fichier **/etc/pam.d/vsftpd** et le remplacer par : 
+
+<file>
+auth required /lib/security/pam_userdb.so db=/etc/vsftpd/login
+account required /lib/security/pam_userdb.so db=/etc/vsftpd/login
+</file>
+
+<note important>Attention si vous êtes en Ubuntu x86_64 le contenu de **/etc/pam.d/vsftpd** devra être :
+<file>
+auth required /lib64/security/pam_userdb.so db=/etc/vsftpd/login
+account required /lib64/security/pam_userdb.so db=/etc/vsftpd/login
+</file>
+Sinon il risque d'avoir des problèmes de liens symboliques dans certains cas.
+</note>
+
+<note important>Attention pour **Ubuntu 12.04 x86_64** le contenu de **/etc/pam.d/vsftpd** devra être :
+<file>
+auth    required /lib/x86_64-linux-gnu/security/pam_userdb.so db=/etc/vsftpd/login
+account required /lib/x86_64-linux-gnu/security/pam_userdb.so db=/etc/vsftpd/login
+</file>
+Sinon il risque d'avoir des problèmes de liens symboliques dans certains cas.
+</note>
+
+Créons un fichier **login.txt** dans **/etc/vsftpd/** , avec vos utilisateurs et mots de passe : 
+
+<file>
+util1
+mdp1
+util2
+mdp2
+</file>
+
+Les 2 utilisateurs sont donc ici ''util1'' et ''util2'' et leurs mots de passe respectifs ''mdp1'' et ''mdp2''.
+
+<note important>Attention : le fichier ''login.txt'' doit impérativement se terminer par un saut de ligne pour que ''db4.8_load'' le lise et l’interprète correctement.</note>
+
+Il faut maintenant le convertir au format "db":
+
+<code>
+sudo db4.8_load -T -t hash -f /etc/vsftpd/login.txt /etc/vsftpd/login.db
+</code>
+
+on sécurise nos fichiers : 
+
+<code>
+sudo chmod 600 /etc/vsftpd/login.*
+</code>
+====Configuration du fichier /etc/vsftpd.conf====
+
+<file bash>
+# Ceci configure vsFTPd en mode "standalone"
+listen=YES
+
+# On désactive les connexions anonymes
+# et on active les non-anonymes(c'est le cas des utilisateurs virtuels):
+anonymous_enable=NO
+local_enable=YES
+
+# Pour des raisons de sécurité on interdit toute action d'écriture:
+write_enable=NO
+anon_upload_enable=NO
+anon_mkdir_write_enable=NO
+anon_other_write_enable=NO
+
+# 'guest_enable' est très important: cela active les utilisateurs virtuels!
+# 'guest_username' fait correspondre tous les utilisateurs virtuels à
+# l'utilisateur 'ftp' que nous avons défini plus haut, et au home
+# correspondant: '/home/ftp/'.
+guest_enable=YES
+guest_username=ftp
+
+# On veut que les utilisateurs virtuels restent chez eux: '/home/ftp/'
+chroot_local_user=YES
+
+# On défini le nombre maximum de sessions à 200(les nouveaux clients recevront
+# un message du genre: "erreur: serveur occupé").
+# On défini le nombre maximum de sessions par IP à 4
+max_clients=200
+max_per_ip=4
+
+####################################
+# Debian customization             #
+####################################
+# Some of vsftpd's settings don't fit the Debian filesystem layout by
+# default.  These settings are more Debian-friendly.
+#
+# This option should be the name of a directory which is empty.  Also, the
+# directory should not be writable by the ftp user. This directory is used
+# as a secure chroot() jail at times vsftpd does not require filesystem
+# access.
+secure_chroot_dir=/var/run/vsftpd
+#
+# This string is the name of the PAM service vsftpd will use.
+pam_service_name=vsftpd
+#
+# This option specifies the location of the RSA certificate to use for SSL
+# encrypted connections.
+rsa_cert_file=/etc/ssl/certs/vsftpd.pem
+
+
+## Activer la configuration per-user
+user_config_dir=/etc/vsftpd/vsftpd_user_conf
+</file>
+
+Relançons le serveur : 
+
+<code>
+  sudo /etc/init.d/vsftpd reload
+</code>
+
+<note important>attention après un **"YES"** ou **"NO"** dans le fichier de configuration il faut bien un **retour a la ligne seul ** et **ne pas laisser trainer** un **espace** suivi du **retour a la ligne**. Vous arriverez peut-être à relancer le démon mais à la connexion vous obtiendrez une erreur du style **"500 OOPS: bad bool value in config file for:"** suivie du nom de l'option où il y a l'espace en fin de ligne, en le supprimant tout revient dans l'ordre.</note>
+
+==== Gérer les droits des utilisateurs virtuels ====
+
+Par défaut les utilisateurs virtuels n'ont aucun droit, il faut donc les définir pour chacun d'entre eux :
+
+Pour celà il faut créer un fichier de configuration pour chacun de vos utilisateurs dans le dossier **/etc/vsftpd/vsftpd_user_conf/**\\ 
+Par exemple pour 'util1' il faut configurer le fichier **/etc/vsftpd/vsftpd_user_conf/util1**
+
+Exemple de fichier : 
+
+<file>
+## l'utilisateur est enfermé dans un dossier déterminé
+local_root=/chemin_du_dossier/
+
+## on ne souhaite pas de lecture seule (Lecture seulement)
+anon_world_readable_only=NO
+
+## droit d'écriture(upload)
+write_enable=YES
+anon_upload_enable=YES
+
+## créer des dossiers
+anon_mkdir_write_enable=YES
+
+## droit de renommer, supprimer...
+anon_other_write_enable=YES
+
+## pour gérer le chmod de l'utilisateur
+## activer l'option
+virtual_use_local_privs=YES
+## définir l'option local_umask
+local_umask=022
+anon_umask=022
+</file>
+
+<note important>Ne pas oublier de rajouter 
+  ## Activer la configuration per-user
+  user_config_dir=/etc/vsftpd/vsftpd_user_conf
+à la fin du fichier /etc/vsftpd.conf</note>
+1
+==== Script pour automatiser la création/suppression d'utilisateurs virtuels ====
+
+<code>
+sudo sh "nom_du_script"
+</code>
+
+Ce scripte donne tous les droits à chacun de vos utilisateurs virtuels et ne supprime pas le dossier d'un utilisateur lors de sa suppression de la base de données.\\ 
+Libre à vous de modifier ce script ou de changer les droits utilisateurs dans vos fichiers de configuration.
+
+<file>
+#!/bin/bash
+
+USER_CONFIG_DIR=/etc/vsftpd/vsftpd_user_conf
+
+## Création du fichier de diff
+diff /etc/vsftpd/.login_tmp.txt /etc/vsftpd/login.txt | grep "<"|tr -s "<" " "  >> /etc/vsftpd/login_diff.txt
+db4.7_load -T -t hash -f /etc/vsftpd/login_diff.txt /etc/vsftpd/login_diff.db
+chmod 600 /etc/vsftpd/login_diff.db
+
+## Sauvegarde du fichier login.txt
+cp /etc/vsftpd/login.txt /etc/vsftpd/.login_tmp.txt
+
+## Création du fichier db utilisateurs
+rm /etc/vsftpd/login.db
+db4.7_load -T -t hash -f /etc/vsftpd/login.txt /etc/vsftpd/login.db
+chmod 600 /etc/vsftpd/login.db
+
+## Pour tous les noms figurant dans la base de données:
+        for user in ` db4.7_dump -p /etc/vsftpd/login.db | sed -n 's/^ //p' | sed -n '1,${p;n;}' `
+          do
+          ## Création des répertoires personnels pour les utilisateurs virtuels
+          if [ ! -d /home/ftp/$user ]; then
+              echo ": ajout du répertoire personnel /home/ftp/$user pour l'utilisateur virtuel '$user'"
+              mkdir -p /home/ftp/$user/
+              chmod 770 /home/ftp/$user/
+	      chown ftp:nogroup /home/ftp/$user/
+          else
+              echo "[warning]: /home/ftp/$user: omission, ce répertoire existe déja."
+          fi
+          ## Mise en place chroot des utilisateurs virtuels
+          if ! grep -q "^local_root=" $USER_CONFIG_DIR/$user 2>/dev/null; then
+              echo ": on chroote '$user'"
+              echo "local_root=/home/ftp/$user" >> $USER_CONFIG_DIR/$user
+	      echo "anon_world_readable_only=NO" >>  $USER_CONFIG_DIR/$user
+	      echo "write_enable=YES" >>  $USER_CONFIG_DIR/$user
+              echo "anon_upload_enable=YES" >>  $USER_CONFIG_DIR/$user
+              echo "anon_mkdir_write_enable=YES" >>  $USER_CONFIG_DIR/$user
+              echo "anon_other_write_enable=YES" >>  $USER_CONFIG_DIR/$user
+          else
+              echo "[warning]: $USER_CONFIG_DIR/$user: '$user' est déjà en chroot."
+          fi
+        done
+    
+## Suppression des configurations personnelles pour les utilisateurs virtuels
+for user in ` db4.7_dump -p /etc/vsftpd/login_diff.db | sed -n 's/^ //p' | sed -n '1,${p;n;}' `
+            do
+                echo ": suppression de la configuration personnelle pour l'utilisateur virtuel '$user'"
+                rm -rf /etc/vsftpd/vsftpd_user_conf/$user
+            done
+
+## Suppression des fichiers temporaires
+rm /etc/vsftpd/login_diff.txt
+rm /etc/vsftpd/login_diff.db
+</file>
+
+D'autres scripts de création, modification et suppression d'utilisateurs se trouvent ici :
+[[http://vsftpd-virtualuser-bash-scripts.blogspot.com/|Blogspot]]
+
+( Tuto "utilisateurs virtuels" librement inspiré par http://www.andesi.org/index.php?node=121#A11 )
+
+[[http://vsftpd.beasts.org/vsftpd_conf.html|man officiel]]
+
+===Les clients qui supportent ssl===
+
+== Sous  Windows==
+  * FileZilla ou smartFtP option :  "FTP over TLS Explicit" 
+  * Winscp
+  * CoreFTP Lite
+  * FlashFXP option : "Auth TLS"
+
+== Sous Mac OS X ==
+  * CyberDuck option "FTP-SSL (FTP over SSL/TLS)"
+  * Transmit (SSL implicite ou TLS/SSL)
+
+==Sous Linux==
+  * ftp-ssl - Le client ftp avec chiffrement SSL ou TLS
+  * ftp (sans chiffrement)
+  * lftp [[http://lftp.yar.ru/|home page]]
+  * kasablanca - Kasablanca est un client graphique FTP. Parmi ses fonctions, on peut citer le support du chiffrement (par authentification TLS, et non SFTP),FXP (accès direct entre deux serveurs FTP,un gestionnaire de signets et un système de mise en queue. 
+     Tourne sous Kde (mais aussi sous gnome avec les lib Kde) [[http://kasablanca.berlios.de/|home page]]
+  * Kftpgrabber (FTP utilisant TLS/SSL explicite et implicite)
+  * gftp sous Debian/Ubuntu ne supporte pas ssl [[http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=251121|rapport de bogue]]
+Par contre, il supporte parfaitement le SFTP (selectionner SSH2 à la place de FTP), qui ne pose pas les problèmes de licence de SSL.
+
+  * FireFTP, extension pour Firefox
+
+  * Filezilla, 
+  * Nautilus, 
+  * gftp sous ubuntu, 
+  * et... si vous en connaissez un autre ---> "Éditer" :-D
+
+
+===== Problèmes courants =====
+
+==== 500 OOPS: vsftpd: refusing to run with writable root inside chroot() ====
+
+La version 2.3.5 de vsftpd contient une sécurité qui empêche l'utilisation du mode « prison » (chroot) avec accès en écriture dans le dossier racine, d'où l'erreur « //500 OOPS: vsftpd: refusing to run with writable root inside chroot()// ».
+
+Une des raison de cette sécurité est décrite [[https://unix.stackexchange.com/questions/323711/what-are-the-dangers-of-having-writable-chroot-directory-for-ftp/332571#332571|ici]].
+
+=== Retirer l'accès en écriture ===
+
+La solution préférable d'un point de vue sécurité consiste à suivre la recommandation de vsftp et de supprimer l'accès en écriture du répertoire racine, et à ajouter un sous-répertoire avec accès en écriture.
+
+Ainsi, pour la configuration proposée plus haut pour les utilisateurs virtuels, il suffit d'avoir les répertoires suivants :
+
+  $ ls -ld /chemin_du_dossier
+  dr-xr-xr-x 3 ftp ftp 4096 févr.  3 11:45 /chemin_du_dossier
+
+  $ ls -ld /chemin_du_dossier/sous-dossier
+  drwxr-xr-x 2 ftp ftp 4096 févr.  3 13:03 /chemin_du_dossier/sous-dossier
+
+Les utilisateurs ne peuvent pas écrire dans le dossier racine /chemin_du_dossier (erreur « //553 Could not create file.// »), mais peuvent écrire dans le sous-dossier.
+
+=== Forcer vsftp à passer outre la protection par défaut ===
+
+Il est possible de forcer vsftp à démarrer même avec une racine accessible en lecture via le fichier /etc/vsftpd.conf :
+
+  allow_writeable_chroot=YES
+
+et redémarrer Vsftpd
+
+  $ service vsftpd restart
+
+====Voir aussi====
+  * [[https://www.tecmint.com/install-ftp-server-in-ubuntu/|Procédure complète d'installation d'un serveur ftp]] (en)
+----
+
+//Contributeur : [[utilisateurs:ju]], [[utilisateurs:sginer]], Yoann Vareille, [[utilisateurs:snoopy_p]], [[utilisateurs:capripot]], [[utilisateurs:kujakuchan]], [[utilisateurs:kwakpiper]], [[utilisateurs:McPeter]]//

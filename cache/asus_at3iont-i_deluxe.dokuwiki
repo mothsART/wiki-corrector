@@ -1,0 +1,100 @@
+
+===== En un coup d'œil =====
+
+
+Tableau comparatif, il utilise les notations suivantes :
+  * {{icons:icon-ubuntu.png|Fonctionne immédiatement}} : **Fonctionne immédiatement**
+  * {{icons:important.png|Fonctionne après config}} : **Fonctionne après quelques manipulations**
+  * {{icons:process-stop.png?36|Ne fonctionne pas}} : **Ne fonctionne pas**
+  * {{icons:icon-support.png|Pas testé}} : **Pas d'informations disponibles**
+
+==== Installation ====
+ - Live CD
+
+==== Problèmes ====
+=== Télécommande ===
+La télécommande ne fonctionne pas convenablement, la moitiés des boutons ne sont pas reconnus
+
+== Installation == 
+
+Solution (trouvé [[http://ubuntuforums.org/showthread.php?t=1458300&page=2|ici]])
+
+1 - Récupérer le code et installer
+<code>sudo apt-get install dkms linux-headers-`uname -r`
+sudo apt-get install vim git
+git clone https://github.com/arcusfelis/asus-at3iont-i-deluxe.git
+cd asus-at3iont-i-deluxe
+sudo dpkg -i asus-at3iont-i-deluxe-dkms_1.0.1_all.deb
+sudo apt --fix-broken install
+</code>
+2 - Modiffier le fichier /usr/src/asus-at3iont-i-deluxe-1.0.1/drivers/hid-philips-asus/mappings.h (adapté pour [[kodi|Kodi]]) : <code>sudo vi /usr/src/asus-at3iont-i-deluxe-1.0.1/drivers/hid-philips-asus/mappings.h</code>
+
+^ Modifier                                      ^ Par                                             ^
+| #define BUTTON_POWER            KEY_POWER     | #define BUTTON_POWER           KEY_S            |
+| #define BUTTON_PLAYPAUSE	  KEY_PLAYPAUSE | #define BUTTON_PLAYPAUSE	 KEY_SPACE        |
+| #define BUTTON_PREVIOUS         KEY_PREVIOUS  | #define BUTTON_PREVIOUS        KEY_PREVIOUSSONG |
+| #define BUTTON_STOP	          KEY_STOP      | #define BUTTON_PLAYPAUSE	 KEY_X            |
+| #define BUTTON_NEXT             KEY_NEXT      | #define BUTTON_NEXT            KEY_NEXTSONG     |
+| #define BUTTON_OK               KEY_OK        | #define BUTTON_OK              KEY_ENTER        |
+| #define BUTTON_MUSIC            KEY_LANGUAGE  | #define BUTTON_MUSIC           KEY_I            |
+| #define BUTTON_DTS              KEY_SUBTITLE  | #define BUTTON_DTS             KEY_L            |
+| #define BUTTON_FULLSCREEN       KEY_ZOOM      | #define BUTTON_FULLSCREEN      KEY_TAB          |
+| #define BUTTON_HOMETHEATER      KEY_MENU      | #define BUTTON_HOMETHEATER     KEY_C            |
+
+3 - Reconstruire le module (a refaire pour chaque modif précédente et chaque changement de noyaux) : <code>sudo dpkg-reconfigure asus-at3iont-i-deluxe-dkms
+sudo chmod 777 /usr/src/asus-at3iont-i-deluxe-1.0.1/drivers/hid-philips-asus/load-module.sh
+</code>
+4 - Lancer le script : <code>sudo sh /usr/src/asus-at3iont-i-deluxe-1.0.1/drivers/hid-philips-asus/load-module.sh</code>
+5 - Mettre le script au démarrage de la machine :
+<code>sudo vim /lib/systemd/system/asus-hid.service</code>
+<file>
+[Unit]
+Description=asus-hid
+Documentation= man:systemd.service
+
+[Install]
+WantedBy=default.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/src/asus-at3iont-i-deluxe-1.0.1/drivers/hid-philips-asus/load-module.sh
+</file>
+<code>sudo chmod u+x /lib/systemd/system/asus-hid.service</code>
+6 - Démarrer le service
+<code>sudo systemctl start asus-hid.service
+sudo systemctl enable asus-hid.service</code>
+
+----
+
+Tester la télécommande
+
+  - Installer [[apt://evtest]] : <code>sudo apt-get install evtest</code>
+  - Lancer la commande puis essayer les touches : <code>sudo evtest /dev/input/by-id/usb-PHILIPS_MCE_USB_IR_Receiver-_Spinel_plusf0r_ASUS-event-ir</code>
+
+----
+
+== Desinstaller ==
+<code>sudo apt-get autoremove --purge asus-at3iont-i-deluxe-dkms</code>
+
+=== Son ===
+== 13.04 ==
+Activer le pilot propriétaire NVIDIA 313
+Installer alsamixer
+<code>sudo apt-get install gnome-alsamixer</code>
+Parametrer
+<code>alsamixer</code>
+
+=== Microcode ===
+== 13.04 ==
+Probleme de microcode au demarrage
+<code>dmesg | grep -i micro</code>
+<file>
+[    4.228385] microcode: CPU0 sig=0x106c2, pf=0x8, revision=0x219
+[    4.279315] Modules linked in: rc_rc6_mce microcode(F+) mceusb(+) rc_core arc4(F) asus_atk0110 snd_hda_intel(+) snd_hda_codec ath9k snd_hwdep(F) ath9k_common snd_pcm(F) ath9k_hw nfsd(F) auth_rpcgss(F) nfs_acl(F) wmi nfs(F) lockd(F) ath sunrpc(F) snd_page_alloc(F) fscache(F) mac80211 snd_seq_midi(F) snd_seq_midi_event(F) snd_rawmidi(F) snd_seq(F) snd_seq_device(F) snd_timer(F) cfg80211 btusb shpchp psmouse(F) mac_hid bluetooth serio_raw(F) snd(F) nvidia(POF) soundcore(F) i2c_nforce2 lp(F) parport(F) pata_acpi r8169 ahci(F) libahci(F)
+[    5.083273] microcode: CPU1 sig=0x106c2, pf=0x8, revision=0x219
+[    5.134882] microcode: CPU2 sig=0x106c2, pf=0x8, revision=0x219
+[    5.145465] microcode: CPU3 sig=0x106c2, pf=0x8, revision=0x219
+[    5.152965] microcode: Microcode Update Driver: v2.00 <tigran@aivazian.fsnet.co.uk>, Peter Oruba
+</file>
+Installer amd64-microcode
+<code>sudo apt-get install amd64-microcode</code>

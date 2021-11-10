@@ -1,0 +1,225 @@
+
+{{tag>serveur sécurité pare-feu }}
+
+----
+====== Bannir des IP avec fail2ban - v2020 ======
+
+{{ :fail2ban_logo.png?90}}
+**fail2ban** est une application qui analyse les logs de divers services (SSH, Apache, FTP...)  en cherchant des correspondances entre des motifs définis dans ses filtres et les entrées des logs. Lorsqu'une correspondance est trouvée une ou plusieurs actions sont exécutées. Typiquement, fail2ban cherche des tentatives répétées de connexions infructueuses dans les fichiers journaux et procède à un bannissement en ajoutant une règle au pare-feu [[:iptables]] ou [[:nftables]] pour bannir l'adresse IP de la source.
+===== Installation =====
+
+[[tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>fail2ban]]** disponible dans les [[:depots#universe_et_multiverse|dépôts Universe]]. \\
+
+Il convient ensuite de lancer le service fail2ban
+<code>systemctl start fail2ban</code>
+
+puis d'en créer le démarrage automatique
+<code>systemctl enable fail2ban</code>
+
+Et enfin de contrôler la bonne installation
+<code>systemctl status fail2ban</code>
+
+Si la réponse comporte du rouge et le mot "failed" " sur la ligne commençant par "Active :", les dernières lignes du message indiquent les raisons de l'échec et permettent sa correction avant un nouvel essai, à tenter après lecture du reste de cet article.
+
+Si la réponse comporte du vert et les mots "active (running)" sur la ligne commençant par "Active :", le service est installé et actif. 
+
+===== Configuration =====
+<note important>Il est vivement déconseillé de modifier les fichiers de configuration **/etc/fail2ban/fail2ban.conf** et **/etc/fail2ban/jail.conf** (notamment car ils peuvent être écrasés par une mise à jour). Ces fichiers contiennent les configurations de base qu'on peut **surcharger** au moyen d'un ou plusieurs fichiers enregistrés dans **/etc/fail2ban/jail.d**\\ Le fichier **/etc/fail2ban/jail.conf**  doit servir uniquement de référence et de documentation.</note>
+==== Généralités ====
+
+**Fail2ban ne doit pas être considéré comme un outil de sécurisation absolu d'un service**. Ses objectifs sont d'éviter de surcharger les logs du système avec des milliers de tentatives de connexion et de limiter la portée des attaques répétées provenant d'une même machine.\\
+Un serveur avec un accès SSH sur le port standard, par exemple, recevra très rapidement des centaines, voire des milliers de tentatives de connexions provenant de différentes machines. Ce sont généralement des attaques par force brute lancées par des robots.\\
+Fail2ban en analysant les logs permet de bannir les IP au bout d'un certain nombre de tentatives ce qui limitera le remplissage des logs et l'utilisation de la bande passante. \\
+Ceci va également rendre les attaques par force brute ou par dictionnaire beaucoup plus difficiles mais ce n'est pas une sécurité absolue contre ce type d'attaque.
+
+**Mais cela n'améliore en rien la sécurité du service concerné**. Si l'accès SSH n'est pas suffisamment sécurisé (mot de passe faible par exemple) fail2ban n'empêchera pas un attaquant d'arriver à ses fins.\\
+Autrement dit, utilisez votre temps de travail pour analyser vos configurations et sécuriser vos services plutôt que d'installer et paramétrer des outils d'analyse de logs plus ou moins gourmands en ressources système.
+
+==== Paramétrage par défaut ====
+
+Les paramètres par défaut sont visibles dans le fichier **/etc/fail2ban/jail.conf**
+
+La durée de bannissement d'une IP est définie par la directive **bantime** avec une valeur en secondes. La valeur par défaut est de 600 s, soit 10 minutes, ce qui est beaucoup trop court. Il est plus réaliste d'avoir des durées de bannissement d'une ou plusieurs heures, voir plusieurs jours.\\
+
+Une autre directive importante est **findtime** qui définit en secondes le temps depuis lequel une anomalie est recherchée dans les logs. Il ne faut pas mettre une valeur trop élevée (1 heure suffit) sans quoi la quantité de logs à analyser pourrait devenir très importante et donc avoir un impact sur les performances.
+
+La directive **ignoreip** permet de définir la liste des IP à ignorer. Il est utile d'y mettre sa propre IP afin de ne pas risquer de se faire bannir.
+
+Il faut créer le fichier dans **/etc/fail2ban/jail.d/custom.conf** (ou un autre nom de votre choix) contenant :
+
+<code>[DEFAULT]
+ignoreip = 127.0.0.1 124.32.5.48
+findtime = 10m
+bantime = 24h
+maxretry = 3</code>
+
+  * ignoreip ⇒ votre IP (ici 124.32.5.48) en plus de l'interface de bouclage ;
+  * findtime = 10m (10 minutes), 3600 secondes (une heure)
+  * bantime = 24h (24 heures) ou 86400 secondes 
+  * maxretry = 3 (une IP sera bannie après 3 tentatives de connexion avortées).
+
+==== Configurer fail2ban pour les services actifs ====
+
+Pour spécifier à **fail2ban** quels services il doit surveiller, il faut activer les « jails » (prisons) correspondantes.
+
+Si vous regardez le fichier **/etc/fail2ban/jail.conf**, dans la partie //jail// vous trouverez des blocs du type :
+<file - /etc/fail2ban/jail.conf>
+[sshd]
+
+port    = ssh
+logpath = %(sshd_log)s
+backend = %(sshd_backend)s
+</file>
+Il indique :
+  * **port** = les ports à bloquer au moyen des règles [[:iptables]] ;
+  * **logpath** = l'emplacement des fichiers de log à surveiller ; 
+  * **backend** = le moteur de surveillance des logs.
+Les valeurs représentées ainsi **%(sshd_logs)s** sont des variables qui sont définies dans d'autres fichiers de configuration : **paths_common.conf** et **paths_debian.conf** notamment.
+
+Pour activer la surveillance des connexion SSH, il suffit d'ajouter dans le fichier /etc/fail2ban/jail.d/custom.conf :
+<file - /etc/fail2ban/jail.d/custom.conf >
+[sshd]
+enabled = true
+</file>
+
+Procédez de même pour les autres services.\\
+Il est bien entendu inutile d'activer des prisons pour des services qui ne sont pas utilisés sur le serveur.
+
+Si vous avez besoin de spécifier un port (par exemple, quand SSH n'est pas en écoute sur un port standard, un fichier de log particulier, ou un nombre de tentatives différent de la valeur par défaut, précisez-le :
+
+<file - /etc/fail2ban/jail.d/custom.conf >
+[sshd]
+enabled = true
+port = 2222
+logpath = /var/log/auth.log
+maxretry = 5
+</file>
+
+<note tip>D'une manière générale, il est important d'effectuer des tests pour vérifier le bon fonctionnement de fail2ban ! Voir ci-dessous comment procéder.</note>
+
+
+Relancez la configuration avec
+<code>sudo systemctl restart fail2ban</code>
+
+Vous pouvez alors vérifier si les prisons ont été correctement lancées avec :
+<code>sudo fail2ban-client status
+Status
+|- Number of jail:      3
+`- Jail list:           apache, proftpd, sshd
+</code>
+
+
+Les prisons peuvent être contrôlées séparément avec les mots clés //start//,//stop//,//status//
+Par exemple :
+<code>sudo fail2ban-client stop sshd
+Jail stopped
+</code>
+
+Pour plus d'informations, référez-vous aux pages de //[[:man]]//.
+
+==== Vérifier le bon fonctionnement de votre configuration Fail2Ban  ====
+
+Pour vérifier le bon fonctionnement de fail2ban  vous pouvez essayer de vous identifier plusieurs fois en saisissant un mauvais mot de passe.
+Si Fail2ban fonctionne, vous devriez être interdit d'accès au serveur au bout d'un certain nombre d'essais (précisés dans la configuration à la ligne maxretry) à condition de ne pas avoir mis votre IP dans la directive **ignoreip**.\\
+Attention ! Pensez à régler la valeur de **bantime** sur un temps assez court si vous faites ce genre d’essais afin de pouvoir vous reconnecter à votre serveur.
+
+Côté serveur vous pouvez également surveiller ce qu'il se passe avec la commande 
+<code>sudo fail2ban-client status sshd</code>
+qui dans ce cas vous retournera le statut de la prison « sshd » (avec le nombre de tentatives échouées et la liste des IP bannies)
+
+Si vous utilisez un service sujet à de nombreuses attaques par force brute, comme sshd sur le port standard 22, vous devriez très rapidement voir les premiers bannissements.
+
+Vous pouvez aussi examiner les logs de fail2ban pour voir les actions effectuées :
+<code>tail -f /var/log/fail2ban.log</code>
+
+===== Configuration avancée =====
+
+==== Configurer les actions ====
+
+Les actions  exécutées par fail2ban lorsqu'une correspondance est trouvée entre un filtre et une entrée de log sont définies par la directive **action**. Pour plus d'information consultez la partie **ACTIONS** du fichier **/etc/fail2ban/jail.conf**.\\
+L'action par défaut est un simple bannissement par ajout d'une règle iptables.\\
+
+Les actions peuvent être définis globalement dans la section [DEFAULT] ou par « jails » dans leur propre .section
+
+Il est possible de recevoir un courriel après chaque bannissement d'une adresse IP.\\
+Pour cela vous pouvez définir globalement l'adresse du destinataire dans la section [DEFAULT] du fichier **/etc/fail2ban/jail.d/custom.conf** : 
+<code>destemail = adresse@example.com</code>
+Il faut que le système soit correctement configuré pour l'envoi de courriels, par exemple avec [[ssmtp|ssmtp]].
+
+La valeur par défaut est root@localhost dans la section [DEFAULT] de /etc/fail2ban/jail.conf et concerne donc toutes les prisons. Il reste cependant possible de spécifier un //destemail// particulier dans une prison donnée.
+
+Pour voir les messages locaux (si vous avez laissé une adresse e-mail du type @localhost), il vous faudra ouvrir un terminal et taper la commande "mail" ou, plus simplement encore, consulter le fichier **/var/mail/votrelogin**.
+
+**Pour activer l'envoi de courriels**, ajoutez la ligne dans la section [DEFAULT] du fichier **/etc/fail2ban/jail.d/custom.conf**
+
+<code>action = %(action_mw)s </code>
+
+ou : (pour envoyer un mail avec le whois ainsi que les logs)
+
+<code>action = %(action_mwl)s </code>
+
+Pensez à redémarrer fail2ban pour que cette modification soit prise en compte
+<code>sudo systemctl restart fail2ban</code>
+
+Des informations complémentaires sont disponibles sur le site officiel de Fail2ban : 
+[[http://www.fail2ban.org/wiki/index.php/FAQ_french#J.27utilise_Postfix_sur_mon_syst.C3.A8me_mais_je_n.27ai_pas_de_commande_.22mail.22._Comment_recevoir_les_notifications_par_mail.3F|FAQ Fail2ban]]
+
+Il existe de nombreuses autres possibilités de configuration des actions : envoi automatiques de courriels au service « //abuse// » concerné, bannissement d'utilisateur, envoi des IP et du motif de bannissement à des service externes comme [[https://www.abuseipdb.com/|AbuseIPDB]], etc.
+
+==== Configurer les filtres ====
+
+À chaque prison ou service est associé un fichier de filtrage du même nom dans le dossier **/etc/fail2ban/filter.d**
+
+Ces fichiers contiennent une ou plusieurs expressions rationnelles qui servent de motif de recherche pour les lignes correspondantes dans les logs. Les expressions rationnelles sont définies par la directive **failregex**.
+
+Exemple dans le fichier /etc/fail2ban/filter.d/sshd.conf :
+
+<code>failregex = ^%(__prefix_line)s(?:error: PAM: )?[aA]uthentication (?:failure|error|failed) for .* from <HOST>( via \S+)?\s*$</code>
+
+Cette expression rationnelle entrera en correspondance avec toutes les lignes du fichier de log contenant des erreurs ou échec authentification.
+
+Vous pouvez ajouter ou modifier des expressions rationnelles dans ces fichiers (attention au risque d'écrasement lors d'une mise à jour). Mais cela exige une bonne maîtrise des expressions rationnelles et de la syntaxe particulière de fail2ban. D'autre part fail2ban a beaucoup évolué et des configurations personnalisées faîtes sur une version risquent de ne plus fonctionner sur la suivante…
+
+==== Tester les filtres ====
+
+Si vous avez créé vos propres filtres, modifié des filtres existants, ou si vous voulez simplement tester un filtre sur un fichier de log particulier, l'outil fail2ban-regex est fait pour vous.\\
+
+Par exemple, pour tester le filtre apache-badbots sur le fichier journal d'Apache :
+
+<code>fail2ban-regex /var/log/apache2/access.log /etc/fail2ban/filter.d/apache-badbots.conf</code>
+
+===== Gestion du bannissement =====
+:-) Il est possible de spécifier une plage d'adresses. Par exemple, x.y.z.0/24 désigne les adresses de x.y.z.0 à x.y.z.255.
+==== Voir le status des jails ====
+Pour savoir si votre jail est actif, vous devriez le voir affiché, après avoir taper cette commande :
+<code>fail2ban-client status</code>
+//Cette commande affiche tous les jails que fail2ban traite.//
+
+
+Pour savoir si une de vos jails de votre fail2ban a bannis une ou plusieurs IP, taper cette commande :
+<code>fail2ban-client status [Nom du jail]</code>
+//Cette commande va afficher le nombre de tentative lu dans vos logs, le nombre de bannis et, le plus intéressant, les IPs qui sont bannis temporairement.//
+
+==== Dé-bannir une IP de l'un de vos jails ====
+Une de vos adresse IP se retrouve blacklisté suite à une mauvaise manips répété ou un test de sécurité. Vous pouvez le retirer de la liste des IP blacklisté de fail2ban avec cette commande :
+<code>fail2ban-client set [nom du jail] unbanip [IP concerné]</code>
+
+==== Bannir manuellement une IP sur l'un de vos jails ====
+Vous voulez tester plus rapidement l'interdiction d'un accès d'un PC, ou bloquer une personne malveillante. Renseignez son IP dans cette commande : 
+<code>fail2ban-client set [nom du jail] banip [IP à bannir]</code>
+<note important>Une fois la commande validée, votre pare-feu, iptables, va empêcher la machine en question de se connecter. ATTENTION, de ne pas mettre votre propre adresse IP, si vous le faites à distance.</note>
+
+===== Alternatives à fail2ban =====
+
+  * [[https://yalis.fr/git/yves/pyruse/|Pyruse]] Pyruse est une alternative légère à fail2ban qui utilise systemd-journal
+  * [[https://github.com/clearlinux/tallow|Tallow]] Tallow est une alternative légère à fail2ban qui utilise systemd-journal
+
+===== Ressources =====
+  * (en) [[https://github.com/fail2ban/fail2ban|fail2ban sur github (depuis 2011) avec un wiki!]]
+  * (en) [[http://www.fail2ban.org/wiki/index.php/Main_Page|Le site de fail2ban]]
+
+  * (fr) [[https://wiki.visionduweb.fr/index.php?title=Installer_et_utiliser_Fail2ban|Wiki non officiel de fail2ban]] (Commandes fail2ban, Exemples fail2ban, ressources complémentaires...)
+
+
+--- //[[:utilisateurs:bruno|bruno]] Le 15/03/2018, 10:24//
+--- //[[:utilisateurs:Zer00CooL|Zer00CooL]] Le 25/03/2020, 15:45//

@@ -1,0 +1,133 @@
+
+{{tag>"wifi_0bda.b720" brouillon}}
+
+http://manpages.ubuntu.com/manpages/xenial/man8/dkms.8.html Tout casser sur une stable c'est encore mieux \\
+http://lea-linux.org/documentations/HOWTO_Dkms \\
+https://doc.ubuntu-fr.org/wifi_bt_mt7630e \\
+https://help.ubuntu.com/community/RocketRaid \\
+https://www.google.fr/search?client=ubuntu&channel=fs&dcr=0&biw=1333&bih=663&ei=T0H2WYLJJMP6UKTmi4AG&q=github+dkms+linux&oq=github+dkms+linux&gs_l=psy-ab.12...15434.17052.0.19374.6.6.0.0.0.0.625.1067.0j2j1j5-1.4.0....0...1.1.64.psy-ab..2.1.207...0i7i5i30k1j0i8i7i30k1.0.b1ReKft_lbY Parce qui si google sait que je cherche dkms il va arreter de me vendre des matelas ou de me parler de gens malades, si tu comprends pourquoi je dis ca c'est que tu regarde toutes les conneries que je mets en commentaires \\
+
+/etc/modprobe.d/blacklist-mon-blocage-wifi.conf
+<code>blacklist rtl8xxxu</code> parce que je trouve ca mieux que <file>file</file> et que c'est un brouillon de brouillon \\
+
+====== Comment installer le driver wifi pour un périphérique qui a l'ID  0bda:b720. ======
+
+Si la commande **lsub** vous a listé un périphérique avec l'ID  0bda:b720 l'installation de ce driver vous sera sûrement utile.
+
+<note important>**Les périphériques ayant cet ID peuvent nécessiter le driver rtl8723au, les 2 modèles ont le même ID**</note>
+
+Le github du driver est : https://github.com/lwfinger. \\
+Le bluetooth est pris en charge par Ubuntu sans modification depuis la 16.04 \\
+<note>Sur Ubuntu 16.04 , après son installation nm-applet , qui vous affiche l'icone réseau peut nécessiter un redémarrage.
+<code> killall nm-applet && sleep 2 && nm-applet</code>Dans un terminal devrait résoudre le problème.</note>
+Pour ces dongles : \\
+- https://www.amazon.fr/iFun4U-adapteur-Bluetooth-vitesse-Compatible/dp/B01JS0CLR2 \\
+- https://www.amazon.fr/gp/product/B01IT7GJRI/ref=oh_aui_detailpage_o01_s00?ie=UTF8&psc=1 \\
+**Le driver 8723bu est le bon choix.** \\
+\\
+La première fois que vous installerez le driver, **un blacklistage sera à faire** dans : /etc/modprobe.d/blacklist.conf \\
+Dans un terminal :
+Avec les [[:sudo|droits d'administration]] [[:tutoriel:comment_modifier_un_fichier|modifiez le fichier]] **/etc/modprobe.d/blacklist.conf** pour y ajouter à la fin 
+<file>##### PERSO #####
+## rtl8723bu
+blacklist rtl8xxxu
+</file>
+Il ne vous reste qu'a suivre les indications données sur le dépôt github. \\
+
+Un script qui fait le travail pour vous , **mais qui ne blackliste pas encore**. \\
+Recopiez son contenu dans un fichier que vous nommerez à votre convenance avec l'extension sh (Mon_driver_wifi.sh par exemple). \\
+Rendez ce fichier exécutable. \\
+
+Dès que le script a terminé vous pouvez vous connecter sans redémarrer.
+
+<note important>La mise à jour d'un nouveau noyau nécessite de refaire cette procédure d'installation</note>
+
+<code>#!/bin/sh
+###MAJ cle wifi rtl8723bu
+set -
+cd ~
+
+sudo apt-get install git build-essential linux-headers-$(uname -r)
+
+if [ -d "rtl8723bu-old" ]
+then
+	if [ -d "rtl8723bu" ]
+	then
+		echo "#########################"
+		echo "Dossier Origine et sauvegarde existants"
+		rm -rf rtl8723bu-old
+		echo "#########################"
+		echo "Dossier sauvegarde efface"
+		mv rtl8723bu rtl8723bu-old
+		echo "#########################"
+		echo "Dossier Origine sauvegarde"
+	fi
+	else
+		if [ -d "rtl8723bu" ]
+		then
+			echo "#########################"
+			echo "Dossier Origine seul existant"
+			mv rtl8723bu rtl8723bu-old
+			echo "#########################"
+			echo "Dossier Origine sauvegarde"
+		else
+			echo "#########################"
+			echo "#########################"
+			echo "Aucun driver n'est disponible en local"
+			echo "#########################"
+			echo "#########################"
+			
+		fi
+fi
+sleep 5
+
+## rm rtl8723bu-old
+
+git clone https://github.com/lwfinger/rtl8723bu.git
+STATUS=$?
+if [ "$STATUS" -eq 0 ]  ## si git ok
+then
+	echo "#########################"
+	echo "Clonage git termine"
+	sed -i 's/EXTRA_CFLAGS += -DCONFIG_CONCURRENT_MODE/#EXTRA_CFLAGS += -DCONFIG_CONCURRENT_MODE/g' ~/rtl8723bu/Makefile
+	echo "#########################"
+	echo "Parametrage du fichier make effectue"
+	cd rtl8723bu/
+	make -j 8
+	echo "#########################"
+	echo "make termine"
+	sudo make install
+	echo "#########################"
+	echo "make install termine"
+	sudo modprobe -v 8723bu
+	echo "#########################"
+	echo "Driver charge"
+	notify-send --icon=/usr/share/notify-osd/icons/Humanity/scalable/status/notification-wifi-enabled.svg "Driver rlt8723bu wifi cle usb" "Driver installe et charge."
+else
+	echo "#########################"
+	echo "ERREUR clonage git"
+	if [ -d "rtl8723bu-old" ]
+	then
+		cp -rf rtl8723bu-old rtl8723bu
+		echo "#########################"
+		echo "recuperation ancienne version sauvegardee"
+		cd rtl8723bu/
+		make -j 8
+		echo "#########################"
+		echo "make termine"
+		sudo make install
+		echo "#########################"
+		echo "make install termine"
+		sudo modprobe -v 8723bu
+		echo "#########################"
+		echo "Driver charge"
+		notify-send --icon=/usr/share/notify-osd/icons/Humanity/scalable/status/notification-wifi-enabled.svg "Driver rlt8723bu wifi cle usb" "Driver installe et charge."
+	else
+		echo "#########################"
+		echo "Pas de driver a compiler et pas de sauvegarde"
+		notify-send --icon=/usr/share/notify-osd/icons/Humanity/scalable/status/notification-network-wireless-disconnected.svg "Driver rlt8723bu wifi cle usb" "Pas de driver a compiler et pas de sauvegarde."
+		exit 0
+	fi
+fi
+
+##sleep 120</code>

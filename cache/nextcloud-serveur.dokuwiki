@@ -1,0 +1,266 @@
+
+{{tag>Partage Cloud serveur sauvegarde}}
+----
+====== Serveur Nextcloud ======
+
+{{ :utilisateurs:filerem1:nextcloud:nextcloud_logo.small.png?direct&200|}}
+
+[[:Nextcloud]] est une solution de stockage et de [[:partage|partage]] de fichiers en ligne. 
+
+Nextcloud permet également de synchroniser agendas et carnets d'adresses. Il existe de nombreuses autres fonctionnalités disponibles grâce à des modules externes.
+
+Sa grande force réside dans le fait que vous contrôlez entièrement vos données, l'emplacement du stockage, le partage, la suppression, etc. Tout reste sous votre contrôle, à la différence des services comme //Dropbox// ou //Google Drive//, dont on ne peut être sûr de ce qu'ils font de vos données.
+
+<note>Cette page traite de l'installation et de la configuration d'un **serveur Nextcloud**. Pour une approche plus générale de ce projet consultez [[:nextcloud|cette page de la documentation]].</note>
+
+Nextcloud étant une solution de cloud centralisé, elle requiert la mise en place d'un serveur. Si vous ne vous sentez pas l'âme d'un administrateur système vous pouvez profiter des services d'[[nextcloud#prestataires|un prestataire]] qui s'occupera de cet aspect particulièrement technique.
+
+Nous allons voir ici comment déployer et utiliser ce service sur un serveur privé (ou éventuellement mutualisé). La procédure complète est décrite [[https://docs.nextcloud.com/server/latest/admin_manual/installation/example_ubuntu.htm|ici]] en anglais
+
+===== Pré-requis ===== 
+
+  * Disposer d'un [[:serveur|serveur]]
+  * Avoir un [[:lamp|serveur Web avec PHP]] installé dessus (ici [[:apache2|Apache2]]), avoir activé le [[:tutoriel/securiser_apache2_avec_ssl#mise_en_application_avec_le_serveur_http_apache2|mode SSL d'apache]] (https), avoir un [[:openssh|serveur ssh]] (conseillé), ainsi qu'une base de données (ici [[:mysql|mysql]]).
+  * Savoir ajouter une tâche [[:cron|CRON]]
+  * Savoir installer et activer des [[:php#modules|modules php]] et [[:apache2|apache]].
+  * Savoir créer une base de données [[:mysql|MySQL]].
+  * Avoir un PC client avec un navigateur web et un client SSH.
+  * Disposer des [[:sudo|droits d'administration]] sur le serveur.
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Savoir utiliser le [[:terminal|terminal]]
+<note tip>La procédure décrite ici concerne une installation sur un serveur Ubuntu/Debian nu (fresh install). Il vous faudra l'adapter en fonction de vos besoins, par exemple si vous l'installez sur un hébergement mutualisé, un VPS avec une interface d'adiministration web type [[:webmin|webmin]],  [[:virtualmin|virtualmin]], cpanel ou autre.</note>
+===== Installation ===== 
+==== Téléchargement et Extraction de Nextcloud ====
+
+Le téléchargement se fait via [[https://nextcloud.com/install/#instructions-server|le site officiel]].
+
+L’installateur se présente sous la forme d'une archive [[:zip|ZIP]], à [[archivage|dézipper]] à la racine de votre serveur web.
+En supposant que votre archive à été téléchargée dans le dossier Téléchargement, [[archivage|décompressez]] y le zip. L'extraction va créer un dossier nextcloud. Ouvrez un terminal dans le dossier Téléchargements, et déplacez le contenu du dossier nextcloud à la racine du serveur avec la commande suivante :
+<code>sudo cp -r nextcloud /var/www/nextcloud</code>
+N.B. : l’emplacement /var/www/nextcloud n'est qu'un exemple. Vous pouvez utiliser le répertoire de votre choix.
+
+====Créer la base de données et l'utilisateur MySQL / Mariadb====
+Ouvrez la console d'administration mysql /mariadb :
+<code>sudo mysql</code>
+ou si vous avez activé authentification par mot de passe de l'utilisateur //root//
+<code>sudo mysql -uroot -p</code>
+
+Créez les utilisateurs pour mariadb et la base de données : <code mysql>
+
+CREATE USER 'username'@'localhost' IDENTIFIED BY 'password';
+CREATE DATABASE IF NOT EXISTS nextcloud CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+GRANT ALL PRIVILEGES ON nextcloud.* TO 'username'@'localhost';
+FLUSH PRIVILEGES;</code>
+
+Remplacez username et password par vos identifiant et mot de passe.
+
+====Installer les paquets PHP requis====
+Un certain nombre de modules PHP sont indispensables. Pour les installer, si ce n'est déjà fait :
+<code>sudo apt install php-gd php-mysql php-curl php-mbstring php-intl php-gmp php-bcmath php-imagick php-xml php-zip</code>
+
+====Configurez Apache====
+Créez le fichier ''/etc/apache2/sites-available/nextcloud.conf'' avec les droits d'administration, et copiez-y le contenu suivant :
+<file bash>
+<VirtualHost *:80>
+    ServerAdmin webmaster@localhost
+    ServerName nextcloud.localhost
+    DocumentRoot /var/www/nextcloud
+
+    <Directory /var/www/nextcloud/>
+      Require all granted
+      AllowOverride All
+      Options FollowSymLinks MultiViews
+    <Directory>
+</VirtualHost>
+</file>
+Si vous avez un nom de domaine, utilisez-le dans la directive ServerName à la place du nom local (nextcloud.localhost).
+Puis activez ce nouvel hôte virtuel :
+<code>a2ensite nextcloud.conf</code>
+Activez les modules Apache indispensables :
+<code>a2enmod headers
+a2enmod env
+a2enmod dir
+a2enmod mime</code>
+
+Donnez les droits adéquats aux fichiers et répertoires : <code>chown -R www-data:www-data /var/www/nextcloud/</code>
+Finalement, redémarrez apache : <code>sudo systemctl restart apache2</code>
+
+==== Assistant d'installation de Nextcloud ====
+{{ :utilisateurs:filerem1:nextcloud:nextcloud_install_server-2.png?direct&200|}}
+Rendez-vous avec votre navigateur sur la page web de votre serveur, soit par son domaine si vous l'avez configuré, soit par son nom local. Dans notre exemple, il s'agit de : ''http://nextcloud.localhost''
+
+La fenêtre va vous demander de définir un nom d'utilisateur et un mot de passe pour l'administrateur. C'est ce compte qui servira à créer d'autres comptes, à mettre à jour, à installer des applications, etc.\\
+
+Il faudra aussi indiquer le nom de la base de données. Dans notre exemple ci-dessus, elle s'appelle //nextcloud//, l'utilisateur et son mot de passe définis plus haut. Par défaut le nom d'hôte est //localhost// et le port 3306.
+
+Pour le choix du répertoire des données, il est conseillé de changer l'emplacement pour qu'il soit en dehors du répertoire racine de l'application (/var/www/nextcloud dans notre exemple). Si vous changez l'emplacement, il vous faudra [[:droits|donner les droits]] (dans notre exemple changer le propriétaire et le groupe par www-data)au serveur web pour pouvoir y accéder.
+
+Pour finir ensuite sur **"Terminer l'installation"** , l'installation prend un moment en fonction de la puissance de votre serveur. Si vous tombez sur une **"Erreur 500"**, rechargez la page jusqu'à ce que l'installation finisse (F5).
+Lorsque la page de connexion apparaît, l'installation est terminée. Procédez ensuite au réglage des performances du serveur Nextcloud.
+
+
+
+
+==== Applications ====
+Une fois installé, vous disposez des partages de base: //Fichiers//, //Galerie//\\
+Il est possible d'en ajouter d'autre, notamment: **//Agenda//, //Contacts//, //Task (tâches)//**, … partage social : //Diaspora//, Chat voir visioconférence avec //Talk//…\\
+Pour cela, cliquez sur votre icône en haut à droite puis dans le menu, **//+ Applications//**\\
+Dans la liste de gauche, vous avez **//Pack d'applications//**, dans la liste, il suffit de cliquer le bouton sur la droite **//Activer//**
+
+<note important>Tout ce qui suit cet avertissement n'a ni été relu, ni actualisé. Il ya donc sans doute pas mal d'informations obsolètes.</note>
+
+===== Réglage des performances =====
+Connectez vous avec vos identifiant et mot de passe choisis à l'installation, puis cliquez sur la roue dentée {{:utilisateurs:filerem1:nextcloud:nextcloud_icone_parametre-2.png?nolink&20|}} en haut à droite, sur le bandeau bleu, et enfin sur "**Administration/Paramètres de Base**"
+
+Vous voyez en haut de la page le titre **"Avertissement de sécurité & configuration"**, nous allons nous occuper de tout cela.
+
+==== Redirection HTTPS automatique ====
+Par défaut, même après avoir activé le mode SSL d'apache et déclaré votre site, l'accès en HTTP fonctionne toujours. Nous allons paramétrer une redirection automatique de HTTP vers HTTPS, comme le[[ https://docs.nextcloud.com/server/9/admin_manual/configuration_server/harden_server.html#use-https|préconise la documentation Nextcloud]].
+<note>Partie à revoir</note>
+Ouvrez votre session SSH en administrateur, et modifiez le fichier de configuration de votre site qui se trouve dans ce dossier : 
+<code>$ nano /etc/apache2/sites-available/"votre-site.conf"   # remplacer "votre-site.conf par le nom correct de votre fichier de configuration</code>
+Rajouter en dessous de la ligne **"ServerName cloud.nextcloud.com"**:
+<code>
+ServerSignature Off
+RewriteEngine On
+RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,QSA,R=permanent]
+</code>
+Un petit **CTRL + O** pour enregistrer, un **CTRL + X** pour quitter. On active le module **rewrite** d'apache2 pour que ces lignes soient prise en compte :
+<code>$ a2enmod rewrite </code>
+Puis on redémarre le serveur web pour prendre en compte la configuration:
+<code>$ service apache2 restart </code>
+On rafraîchit la page web. Si vous n'avez pas de certificat validé par une autorité, cela vous occasionnera une erreur SSL. Passez outre la recommandation, vous pourrez changer de certificat SSL plus tard.
+
+==== Utilisation HTTP/2 pour le HTTPS ====
+Si votre site est configuré pour le HTTPS, il est conseillé d'activer également le protocole HTTP/2.
+Il faut commencer par activer le module http2 d'Apache.
+<note important>Ce module n'est pas disponible par défaut dans Ubuntu 16.04. Vous pouvez cependant l'installer, à vos risques et périls, via la procédure décrite ici : [[https://websetnet.net/fr/set-apache-http2-support-ubuntu-16-04/|Comment configurer Apache avec le support HTTP / 2 sur Ubuntu 16.04]]</note>
+<code>$ a2enmod http2</code>
+Rajoutez les lignes suivantes à votre fichier de configuration d'hôte virtuel HTTPS :
+<code>
+    <IfModule mod_http2.c>
+      Protocols h2 http/1.1
+    </IfModule>
+</code>
+Puis on redémarre le serveur web pour prendre en compte la configuration:
+<code>$ systemctl restart apache2 </code>
+==== Activer HSTS ( HTTP Strict-Transport-Security ) ====
+Toujours en accord avec les [[https://docs.nextcloud.com/server/9/admin_manual/configuration_server/harden_server.html#enable-http-strict-transport-security|recommandations officielles]], "HTTP Strict Transport Security" ([[https://fr.wikipedia.org/wiki/HTTP_Strict_Transport_Security|wikipedia]]) est un mécanisme de sécurité supplémentaire contre les attaques de type man-in-the-middle. Il est recommandé de l'activer.
+
+Pour ce faire, nous allons retourner dans notre session SSH et modifier le fichier de configuration d'hôte virtuel HTTPS.
+
+Rajouter en dessous de "**ServerName**" : 
+<code>
+<IfModule mod_headers.c>
+Header always set Strict-Transport-Security "max-age=15768000; includeSubDomains; preload"
+</IfModule>
+</code>
+On enregistre, on quitte l'éditeur, puis on active le module correspondant dans apache, pour que ces lignes soient prises en compte : 
+<code>a2enmod headers</code>
+On redémarre le serveur apache pour que la configuration soit prise en compte, puis on recharge la page web du serveur Nextcloud. La ligne traitant de "HTTP Strict-Transport-Security" à disparu, nous pouvons continuer.
+==== Cache mémoire ====
+Le cache mémoire est conseillé pour améliorer la réactivité de votre serveur. Les fichiers les plus demandés sont mis en cache mémoire pour une plus grande disponibilité.  
+
+Dans la [[https://docs.nextcloud.com/server/9/admin_manual/configuration_server/caching_configuration.html#configuring-memory-caching|documentation officielle]], le cache php-apc est désigné comme obsolète. Elle préconise d'utiliser [[https://docs.nextcloud.com/server/9/admin_manual/configuration_server/caching_configuration.html#id4|REDIS]] ou [[https://docs.nextcloud.com/server/9/admin_manual/configuration_server/caching_configuration.html#id2|APCu]] que nous utiliserons ici.
+
+Reprenez votre session SSH, allez à la racine de votre serveur nextcloud **( en général dans /var/www/html ) **
+
+On installe et on active le module php-apcu
+<code>
+$ apt install php-apcu
+$ phpenmod apcu
+</code>
+Puis on modifie le fichier config.php se trouvant dans le dossier config du serveur.
+
+Rajoutez une ligne à la fin, avant la dernière parenthèse : 
+<code>'memcache.local' => '\OC\Memcache\APCu',</code>
+Enregistrez, redémarrez le serveur web, puis rechargez la page web Nextcloud : la ligne concernant le cache est partie.
+
+
+
+
+
+
+==== PHP OPcache ====
+L'OPcache est une recommandation de la [[https://docs.nextcloud.com/server/12/admin_manual/configuration_server/server_tuning.html#enable-php-opcache|documentation]]. Il est [[https://mnt-tech.fr/blog/opcache-configuration-et-fonctionnement/|complémentaire]] du cache mémoire Apcu ou Redis.\\
+Nous allons éditer le fichier php.ini, pour activer la prise en charge d'OPcache.
+<code>$ nano /etc/php/7.x/apache2/php.ini    # remplacez 7.x par votre version de php</code>
+rajouter, tout en bas du fichier : 
+<code>
+opcache.enable=1
+opcache.enable_cli=1
+opcache.interned_strings_buffer=8
+opcache.max_accelerated_files=10000
+opcache.memory_consumption=128
+opcache.save_comments=1
+opcache.revalidate_freq=1
+</code>
+ On enregistre, on quitte, on redémarre le serveur web, et on recharge la page web Nextcloud : tous les tests on réussi, le serveur est correctement configuré.
+Pour autant, il reste une dernière configuration à effectuer : la tâche [[:cron|CRON]].
+==== Configurer le CRON ====
+Nextcloud utilise une tâche //cron// pour lancer des scripts à intervalles réguliers. Par défaut, il est configuré pour utiliser [[https://fr.wikipedia.org/wiki/Ajax_(informatique)|AJAX]], mais qui à le désavantage de ne fonctionner que via l'explorateur web. Pour une utilisation via l'application, il est [[https://docs.nextcloud.com/server/12/admin_manual/configuration_server/background_jobs_configuration.html#cron|recommandé]] d'utiliser le [[:cron|CRON]] de votre serveur, paramétré avec l'utilisateur qui gère votre site (par défaut www-data)
+
+Nous allons appeler le fichier cron.php se trouvant à la racine de votre serveur web toutes les 5 minutes, par l'utilisateur www-data. ( à adapter selon votre configuration serveur)
+<code>
+$ crontab -u www-data -e
+</code>
+À la dernière ligne, rajouter le cron de 5 minutes : 
+/!\Attention de bien modifier le chemin vers votre fichier cron.php ex: /var/www/html/nextcloud/cron.php, ou tout autre chemin selon votre configuration, sinon le cron ne fonctionera pas. /!\
+<code>
+*/5  *  *  *  * php -f /var/www/cron.php
+</code>
+Quittez en enregistrant, puis vérifiez la configuration par 
+<code>$ crontab -u www-data -l
+*/5  *  *  *  * php -f /var/www/cron.php
+</code>
+
+ 
+Votre serveur Nextcloud est maintenant installé et configuré selon les recommandations de l'éditeur. Pour configurer le client, voir la page dédié au [[:nextcloud-client|Client Nextcloud]]
+
+Pour vérifier le bon fonctionnement de cron depuis votre interface d'administration Nextcloud, vous pouvez forcer le redémarrage de cron afin que le fichier cron.php soit appelé directement et ne pas devoir attendre le délais de 15min, pour cela redémarrer cron avec 
+<code>$ sudo service cron restart
+</code>
+
+Si tout est correct, vous obtiendrez le message suivant depuis l'interface d'administration Nextcloud :
+
+"Tâches de fond  | Dernière tâche exécutée il y a 1 minute" (ou inférieur)
+
+===== Paramétrage Divers =====
+
+==== Langue ====
+Vous pouvez définir une langue par défaut à chaque création d'utilisateur, et les paramêtre régionnaux correspondant.
+ 
+Pour ce faire, rajoutez ces lignes dans le fichier config/config.php : 
+
+<code>
+'default_language' => 'fr_FR',
+'force_language' => 'fr_FR',
+'default_locale' => 'fr_FR',
+'force_locale' => 'fr_FR',
+</code>
+
+Adaptez cette valeur à la langue que vous souhaitez. 
+
+Source : [[https://docs.nextcloud.com/server/12.0/admin_manual/configuration_server/language_configuration.html|Nextcloud Language Configuration]]
+
+==== Thème ====
+Pour que l'interface web adapte les icônes automatiquement à vos couleur, installez ceci : 
+<code>$ sudo apt install php-imagick libmagickcore-6.q16-3-extra</code>
+On Active le module php :
+ <code>$ phpenmod imagick</code>
+
+puis on redémarre le serveur Apache :
+
+ <code>$ service apache2 restart</code>
+
+Source : [[https://docs.nextcloud.com/server/17/admin_manual/configuration_server/theming.html?highlight=imagick#theming-of-icons|Nextcloud Theming of Icons]] 
+===== Voir aussi =====
+
+ 
+  * [[https://nextcloud.com/fr_FR/|Site officiel du logiciel]]
+  * [[:Nextcloud]]
+  * [[:nextcloud-client|Client Nextcloud]]
+  * [[https://nextcloud.com/collaboraonline/|CollaboraOnline]] - [[:LibreOffice]] intégré sur le serveur NextCloud pour le travail collaboratif.
+
+----
+//Contributeurs principaux : [[utilisateurs:filerem1]], [[utilisateurs:bcag2]].//

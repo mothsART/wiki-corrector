@@ -1,0 +1,187 @@
+
+{{tag>Xenial antivirus}}
+
+----
+
+====== P3scan ======
+P3scan permet de scanner a l'aide d'un antivirus les messages entrants 
+d'un client email. Il est en outre possible de l'utiliser avec un client antispam //(tel spamassassin)//.
+
+
+===== Intérêt ? =====
+
+Si vous utilisez conjointement [[Thunderbird]] sous Ubuntu et Windows, que vous ne voulez pas infecter d'autres ordinateurs en renvoyant des messages reçus, ou tout simplement si vous êtes parano. De plus cela ne touche en rien votre configuration de client email et est valable pour tous les utilisateurs du système sans qu'ils ne le sachent. C'est pourquoi il peut être très utile pour un réseau domestique.
+
+
+===== Fonctionnement =====
+
+P3scan va s'intercaler entre le client (//par exemple [[Thunderbird]]//) et le serveur (//par exemple pop.free.fr//). Il se fait passer du coté client pour le serveur et du coté serveur pour le client. Ainsi il peut traiter les mails  de manière transparente pour le serveur et le client (aucun des deux ne se rend compte qu'il y a P3scan entre les deux). 
+Explication simple :
+
+  * Le client demande au serveur les mails
+  * Grace au pare-feu, on renvoie tout ce qui rentre du port pop3 vers le port où attend p3scan.
+  * P3scan se fait alors passer d'un coté pour le serveur et de l'autre pour le client.
+  * Il sauvegarde dans un dossier sur votre disque les messages pour les traiter avec l'antivirus.
+  * Si aucun message n'est infecté alors il renvoie les messages au travers du port pop3 vers votre client.
+  * Si un message est infecté, il remplace le corps du message par un message d'information et le renvoie.
+
+===== Pré-requis =====
+  * Disposer des [[:sudo|droits d'administration]] ;
+  * Disposer d'une connexion à Internet configurée et activée.
+
+=====Installation=====
+Commencez par installer une antivirus, par exemple [[:Clamav]]. Mais d'autres antivirus sont supportés par P3scan.
+
+Puis [[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>p3scan]]**. \\
+
+===== Configuration =====
+
+[[:tutoriel:comment_editer_un_fichier|éditer le fichier]] /etc/p3scan/p3scan.conf.
+
+==== Configuration commune ====
+  * **Explication simple du fichier de configuration :**
+
+^    Pour la configuration du réseau                                         ^^
+|  pidfile       |  Endroit où inscrire le fichier indiquant le fonctionnement du programme      |
+|  maxchilds     |  Connexion maximum du programme (10 scans à la fois)               |                                
+|  ip            |  Adresse réseau sur laquelle attendre le mail                                  |
+|  port          |  Port où le mail doit arriver au programme                           |
+^    Pour la configuration du  système                                           ^^
+|  user        |  Nom que le démon utilise pour travailler   (utile pour les   permissions)                            |
+|  notifydir   |  Répertoire où le programme inscrit les notifications et repertoire temporaire de travail                       |                        
+|  virusdir    |  Répertoire de sauvegarde des fichiers infectés         |
+|  justdelete  |  Effacement du fichier infecté sans sauvegarde          |   
+^    Pour la configuration de l'antivirus                                      ^^                                           
+|  scannertype |  Type de programme antivirus                            |
+|  scanner     |  Endroit où se situe l'exécutable de l'antivirus                              |
+|  viruscode   |  Expression du résultat du scan                                       |
+|  virusregexp |  Nom du virus à inclure dans la notification                                         |                        
+|  demime      |  Scanner en fonction du type de fichier (zip,jpg,...) et pas tel que recu par le client  |
+^    Pour la configuration de l'antispam                                        ^^
+|  checkspam   |  Vérifier le spam                                     |
+|  spamcheck   |  Endroit où se situe l'exécutable de l'antipsam                               |
+^    Pour la configuration des notifications dans le mail                                  ^^
+|  template    |  Fichier à renvoyer à la place du fichier infecté       |
+|  subject     |  Sujet du message à la place du fichier infecté         |
+|  notify      |  Notification dans le message avec l'option justdelete  |
+
+
+  * **Exemple concret :**
+<file>
+pidfile = /var/run/p3scan.pid
+maxchilds = 10
+ip = 0.0.0.0
+port = 8110
+user = p3scan
+notifydir = /var/spool/p3scan/notify
+virusdir = /var/spool/p3scan
+justdelete
+template = /etc/p3scan/p3scan-fr.mail
+subject = [virus] dans un message pour vous:
+notify = Pour information, le message a été détruit.
+</file>
+
+
+ ==== Exemple avec Clamav ====
+<file>
+scannertype = basic
+scanner = /usr/bin/clamscan --no-summary -i
+virusregexp = .*: (.*) FOUND
+</file>
+
+==== Exemple avec Clamav-daemon ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **clamav-daemon**. \\
+<file>
+scannertype = basic
+scanner = /usr/bin/clamdscan --no-summary -i
+virusregexp = .*: (.*) FOUND
+</file>
+
+Vous devez ajouter clamav au groupe p3scan pour pouvoir lire dans les fichiers temporaires de P3scan :
+
+<code>sudo adduser clamav p3scan</code>
+
+{{icons:iconnote.png  }}
+>Avec cette méthode, le scan des mails est légèrement plus rapide.
+
+ ==== Exemple pour F-Prot Antivirus : ====
+<file>
+scannertype = basic
+scanner = /usr/bin/f-prot -archive -ai
+viruscode = 3,8
+virusregexp = (?=Infection\:)[[:space:]]*(.*)$
+demime
+</file>
+ 
+==== Exemple de filtrage de spam  ====
+
+<file>
+checkspam
+spamcheck = /usr/bin/spamc     ## avec le démon spamassassin
+</file>
+
+{{icons:iconnote.png  }}
+>**Le fichier de configuration est bien détaillé, d'autres exemples sont indiqués**.
+
+
+==== Configuration du pare-feu ====
+//Pour de plus amples informations sur le pare feu par défaut, je vous renvoie sur la page [[iptables|iptables]]//
+
+>**Pour que p3scan puisse fonctionner, il faut rediriger les mails entrants sur le port 110 //(port par défaut)// vers le port ou p3scan attend.**
+Ça c'est très bien mais comment fait-on ? Ma messagerie ne fonctionne plus maintenant!!!!!!!!!!!
+
+ === Avec Iptables === 
+<code>
+sudo iptables -t nat -A OUTPUT  -p tcp --dport pop3 -m owner --uid-owner <UID> -j ACCEPT
+sudo iptables -t nat -A OUTPUT  -p tcp --dport pop3 -j REDIRECT --to 8110
+</code>
+
+En mettant l'UID que votre système a attribué à P3scan, pour l'obtenir :
+<code>sudo id p3scan</code>
+
+\\
+Pour ceux qui utiliseraient encore //Firestarter//, pour la persistance des règles, il suffit de copier les 2 règles iptables dans le fichier user-pre de //Firestarter//. Faites au préalable les tests à l'aide de //telnet// décrit plus bas. 
+<code>
+sudo vi /etc/firestarter/user-pre
+</code>
+
+Pour obtenir le contenu suivant :\\
+iptables -t nat -A OUTPUT  -p tcp --dport pop3 -m owner --uid-owner <UID> -j ACCEPT\\
+iptables -t nat -A OUTPUT  -p tcp --dport pop3 -j REDIRECT --to 8110
+
+=== Avec Shorewall === 
+//[[Shorewall]] est un pare-feu basé sur [[:iptables]] , seul la manière de le paramétrer diffère.//  \\
+
+[[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] /etc/shorewall/rules :
+<code>REDIRECT fw 8110 tcp pop3 - - - !p3scan</code>
+
+==== Test de fonctionnement ==== 
+
+//Pour cela on va utiliser une [[:console]] telnet qui est un protocole de communication entre internet et son ordinateur dépourvu d'interface graphique.//
+
+  - On demande une connexion telnet au serveur de messagerie sur le port 110 
+  - On indique son login et son mot de passe.
+  - On recherche ses message.
+  - On télécharge le premier message.
+
+<code>
+telnet pop.votrefournisseur.fr 110
+user votrelogindemessagerie
+pass votremotdepassedemessagerie
+list
+retr 1
+</code>
+
+Si tous se passe bien vous devriez avoir en réponse quelque chose comme :
+<code>
+retr 1
++OK P3Scan'ing...
+</code>
+pour quitter : <code>quit</code>
+
+===== Ressources externes =====
+  * [[http://p3scan.sourceforge.net/|Site officiel de P3scan]].
+
+------
+//Contributeurs : [[utilisateurs:coolaman]]//

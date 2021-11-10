@@ -1,0 +1,69 @@
+
+{{tag>PHP LAMP serveur droits  apache }}
+
+====== Comment installer un simple serveur PHP ======
+
+Ce tutoriel décrit la démarche pour installer un simple serveur PHP.
+
+===== Installer le serveur =====
+
+L'installation peut se faire sur une machine physique ou sur une machine virtuelle.
+Depuis la version 12-04 LTS, ubuntu est pris en charge en tant que VM par HyperV et accepte le pointage de souris. Il faut alors créer une VM avec une carte réseau hérité
+
+  - Installer une version Ubuntu Serveur LTS 
+  - Pendant l'installation, choisir les composants : LAMP et l'envoi des mails.
+  *   LAMP = Linux Apache MySQL PHP
+
+===== Paramétrer le réseau =====
+
+  - Paramétrer l'adresse IP statique : sudo nano /ets/network/interfaces :
+
+		auto eth1
+		iface eth1 inet static
+			adress 	192.168.62.40
+			netmask	255.255.255.0
+			gateway	192.168.62.201
+			dns-nameservers 192.168.62.30
+
+  - redémarrer le service réseau : sudo /etc/init.d/networking/ restart
+  - supprimer le dhcp : faire un apt-get remove resolvconf 
+
+===== Partager le dossier contenant les applications =====
+
+  - Installer Samba s'il n'est pas installé.
+  - Surcharger le fichier de config samba : sudo nano /etc/samba/smb.conf :
+	
+	# dossier applications PHP
+		[applications]
+		path = /opt/applications
+		comment = applications PHP/MySQL
+		read only = no
+		valid user = administrateur
+	
+
+Recharger le service samba : sudo service smbd reload
+
+===== Créer les groupes et donner les droits =====
+  - ajouter un groupe : sudo groupadd sambausers
+  - ajouter un utilisateur au groupe : sudo user add -s /bin/false -d /dev/null -g sambausers ybernard
+  - créer un mot de passe pour l'utilisateur : sudo smbpasswd -a ybernard
+  - Affecter le dossier à partager au groupe : sudo chgrp -R sambausers /opt/applications/
+  - Ajouter tous les droits sur le dossier pour le groupe : sudo chmod 770 -R /opt/applications
+
+===== Enrichir l'installation de LAMP =====
+
+  - Installer PhpMyAdmin : sudo apt-get install phpmyadmin
+  - Installer la librairie PEAR : sudo apt-get install php-pear
+  - Installer la librairie DB : sudo apt-get install php-db
+
+Pour mon cas j'utilise des librairies extérieures qu'il faut installer : openmairie et fpdf.
+
+  4. Copier les librairies dans  /usr/share/php5/include
+    - créer le dossier include : sudo mkdir /usr/share/php5/include
+    - copier la librairie openmairie : sudo cp –r <SOURCE>/openmairie  /usr/share/php5/include
+    - copier la librairie fpdf : sudo cp –r <SOURCE>/fpdf16  /usr/share/php5/include	
+  5. Editer le fichier /etc/php5/apache2/php.ini en modifiant le path :
+    - ouvrir le fichier à éditer : sudo nano /etc/php5/apache2/php.ini
+    - et ajouter : include_path = ".:/usr/share/php:/usr/share/php/include:/usr/share/php/include/fpdf16:/usr/share/php/include/openmairie"
+
+  6. Redémarrer apache : sudo service apache2 restart

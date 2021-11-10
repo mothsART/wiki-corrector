@@ -1,0 +1,155 @@
+
+{{tag>audio jack multimedia}}
+
+====== JACK - Jack Audio Connection Kit ======
+
+<note tip>Vous trouverez une autre documentation francophone sur le même sujet sur l'excellent [[http://linuxmao.org/Jack|LinuxMAO.org]]</note>
+
+Il existe sur Ubuntu de nombreuses applications dédiées à la [[:MAO|création musicale]] et au traitement audio en temps réel. C'est le serveur de son JACK qui permet d'utiliser tous ces logiciels ensemble et de manière optimale.
+
+<note tip>JACK peut être un peu compliqué à installer et à paramétrer. D'autre distributions GNU/Linux viennent avec un serveur JACK prêt à l'emploi comme l'excellent **[[:KXStudio]]**, ou le projet francophone **[[http://librazik.tuxfamily.org/|LibraZik]]**.</note>
+
+<note>On suppose dans cette page que votre carte son est correctement reconnue par le driver ALSA (voir la page [[:audio]]).</note>
+
+===== Présentation =====
+
+==== JACK ====
+
+Impossible actuellement de prétendre faire de la [[:MAO]] sous GNU/Linux sans installer JACK au préalable. JACK est un [[:audio#les_serveurs_de_sons|serveur de sons]]. Il a l'avantage sur ses concurrents d'être taillé pour l'audio en temps réel, de permettre de router l'audio de toutes les applications et matériels compatibles avec une grande souplesse et de proposer quelques fonctionnalités propres à la MAO.
+
+JACK permet de lier virtuellement les différents programmes manipulant le son entre eux, exactement comme on pourrait se servir de câbles audio avec des machines dédiées (séquenceurs, instruments, effets). \\ Cela permet d'envisager des interactions poussées entre les différents programmes, et incite les développeurs à concevoir des applications simples, dédiées à une tâche en particulier. C'est donc un univers assez différent de ce qu'on trouve sur Mac OS ou Windows : de gros studios (DAWs) à tout faire qui ne supportent pas la cohabitation. \\
+Pour plus d'informations à ce sujet, voir le chapitre sur [[:mao#jack_et_les_gestionnaires_de_session|JACK et les gestionnaires de session]].
+
+==== Temps de latence ====
+
+En [[:MAO]], on a souvent besoin de jouer le son //en temps réel//. Malheureusement le matériel électronique et les ordinateurs en particulier introduisent un problème qu'on appelle le //**temps de latence**// : il s'agit du délai qui apparaît entre le moment où on demande à la machine de reproduire un son (en appuyant sur une touche d'un clavier par exemple), et celui où le son sort effectivement des haut-parleurs.\\
+Il est souvent court (on l'exprime en millisecondes), mais si on peut négliger ce délai lorsqu'on appuie sur une touche play, le problème devient beaucoup plus épineux pour jouer de la batterie électronique ou pour appliquer un effet sur sa voix sans s'entendre en double.\\
+Diverses [[#optimisation|optimisations]] permettent de le réduire au maximum.
+
+===== Installation =====
+
+==== jackd ====
+
+Pour installer JACK il suffit d'[[:tutoriel:comment_installer_un_paquet#paquet_present_dans_les_depots|installer le paquet]] **[[apt>jackd]]**.
+
+<note>Le paquet porte le **d** de //daemon// à la fin, il existe aussi un paquet //jack// sans rapport avec notre serveur de son.</note>
+
+==== JACK sink ====
+
+Sur Ubuntu cependant le serveur de son installé par défaut est [[:PulseAudio]], et par défaut il accapare les ressources ALSA (la carte son), ce qui empêche le démarrage de JACK. Par ailleurs il est compliqué à arrêter (il redémarre automatiquement), et mieux vaut ne pas le supprimer parce que les applications audio du bureau sont généralement incapables d'utiliser JACK.\\
+À moins d'utiliser 2 cartes sons différentes (une pour le bureau et une pour JACK), la solution est d'[[:tutoriel:comment_installer_un_paquet#paquet_present_dans_les_depots|installer le paquet]]  **[[apt>pulseaudio-module-jack|pulseaudio-module-jack]]**. Ce logiciel permet d'utiliser PulseAudio et JACK en même temps, en créant une sortie virtuelle de PulseAudio vers JACK (au lieu d'ALSA) lorsque JACK est lancé, ce qui permet de conserver le son du bureau en toute circonstance.\\
+Il faut pour cela choisir la sortie //JACK sink// dans les paramètres de [[:Pavucontrol]].
+
+Il semblerait que pour charger automatiquement les modules jack2 (dans mon cas, non testé pour jack1) et rediriger les logiciels en cours vers jack, il faille en plus passer par qjackctl. Pour cela [[:tutoriel:comment_installer_un_paquet|installez les paquets]] **[[apt>jack2,pavucontrol,qjackctl,pulseaudio-module-jack|jack2 pavucontrol qjackctl pulseaudio-module-jack]]**.
+
+Cliquez sur "Règlages" > Onglet "Paramètres". Vérifiez que la bonne carte son de sortie est cochée dans "Interface" (J'ai également mis dans l'onglet "Avancé" la valeur "pasuspender -- jackd" dans le préfixe, mais pas sur que ça soit nécessaire). Ensuite allez dans l'onglet "Options", cochez la case "Exécuter un script après le démarrage", que vous mettez à la valeur
+
+    pactl load-module module-jack-sink && pactl load-module module-jack-source && pactl set-default-sink jack_out && pacmd set-default-source jack_in && pacmd list-sink-inputs | grep index | sed 's/ *index: *//g' | xargs -I{} pacmd move-sink-input "{}" jack_out
+
+(cette ligne charge les modules, change la carte par défaut, et ça redirige tous les logiciels actuellements ouverts vers la "fausse" carte graphique.
+
+Ajoutez aussi "un script après l'extinction" en mettant dans la zone de texte :
+
+    pacmd suspend false
+
+(ceci permet de relancer pulseaudio quand on quitte jack)
+
+Et voila ! Il ne reste plus qu'à valider les changements avec "OK", et à cliquer sur "Démarrer" pour que toutes les applications pulseaudio soient redirigées vers Jack. Quand vous voulez quitter jack, il vous suffit de cliquer sur "Arrêter", et pulseaudio reprend la main. Magique non ! ;)
+
+NB: dans pavucontrol les logiciels devraient maintenant être passés sur le périphérique Jack sink !
+
+==== Priorité temps réel ====
+
+Depuis Ubuntu 10.04, le noyau Linux générique implémente des fonctionnalité permettant d'optimiser le calcul en temps réel (//realtime//), ce qui permet de traiter l'audio en outrepassant certaines règles (généralement liées à la sécurité) auxquelles sont soumis les autres processus. Cela permet de réduire la consommation du processeur pour un même temps de latence.
+
+On peut activer cette option en choisissant de donner la priorité //realtime// et le privilège //memlock// au groupe //audio// lors de l'installation de JACK. La contrepartie est qu'on risque un gel complet du système si 100% de la mémoire RAM est occupé. 
+
+Pour en profiter il faut ajouter l'utilisateur courant au groupe //audio// :
+<code>sudo gpasswd -a $USER audio</code>
+Redémarrez ensuite votre session pour prendre en compte les changements.\\ 
+On pourra alors activer l'option temps réel dans la configuration de JACK.
+
+Certaines versions du noyau linux se proposent d'optimiser encore les calculs en temps réel. Il faut pour cela installer et démarrer sur un [[linux-lowlatency|noyau low-latency]]. Cela se fait encore au détriment de la sécurité et de la fiabilité générale du système, mais reste une bonne idée pour une machine dédiée spécifiquement à la [[:MAO]]. ((//(en)// [[https://www.phoronix.com/scan.php?page=article&item=linux414-lowlatency-liquorix|voir ici]] pour les différences entre le noyau generic et le noyau low-latency))
+
+===== Démarrage et configuration =====
+
+Il y a plusieurs moyens de gérer JACK : en ligne de commande ou via une interface graphique. L'interface graphique est généralement préférable, puisqu'elle permet de visualiser les liens entre chaque ressource audio (matérielle ou logicielle). La ligne de commande est surtout pratique pour débugger le serveur.
+
+==== Ligne de commande ====
+
+Tout d'abord il faut repérer la carte son qu'on souhaite utiliser par son identifiant, pour cela on liste les cartes sons disponibles :
+<code>aplay -l</code>
+
+Ensuite pour lancer JACK en ligne de commande, on entre par exemple :
+<code>jackd -Rd alsa -d hw:0 -r 48000 -p 1024 -n 2</code>
+  * L'option //-R// indique qu'il faut utiliser les fonctionnalités temps réel du processeur.\\
+  * La première option //-d// indique le driver à utiliser (on utilisera à peu près toujours //alsa//).\\
+Les options suivantes sont des options propres à ALSA :\\
+  * //-d// est le numéro de la carte à utiliser, tel que retourné par //aplay -l// : //hw:0//, //hw:1// ...\\
+  * //-r// est la fréquence d'échantillonnage (//sample rate//) à utiliser, en hertz.\\
+  * //-p// est la période, le nombre d'échantillons que le processeur doit traiter à chaque calcul (//period//)\\
+  * //-n// est le nombre de périodes à stocker dans le tampon de donnée (//buffer//)\\
+
+Pour le réglage de ces 3 derniers paramètres, consultez la section [[#optimisation]].
+
+==== Interface graphique ====
+
+Il existe plusieurs interfaces graphiques qui peuvent être d'une grande utilité que ce soit pour la configuration ou l'utilisation de JACK : **[[:QjackCtl]]** est la plus courante, on trouve aussi **Cadence**, **Catia** ou **Claudia** (qui sont des logiciels de la distribution **[[:KXStudio]]**).
+
+Pour [[:QjackCtl]], une fois lancé, il faut cliquer sur le bouton //Réglages// pour accéder à l'interface qui règle les paramètres de démarrage du serveur jack (onglets //Paramètres// et //Avancé//). Dans l'onglet //Divers//, on a la possibilité de demander à QjackCtl de lancer le serveur automatiquement quand il démarre. On peut ensuite cliquer le bouton //Démarrer// et apprécier d'éventuels messages d'erreur dans la fenêtre **Messages** (bouton du même nom).
+
+En plus de configurer JACK, ces interfaces permettent en général de tirer des câbles audio virtuels entre les différentes applications (et avec le matériel), et parfois aussi de gérer des [[:mao#jack_et_les_gestionnaires_de_session|sessions]], ce qui est une autre fonctionnalité importante de JACK.
+
+==== Optimisation ====
+
+Pour diminuer le temps de latence, il faut modifier certains paramètres de JACK : le //nombre d'échantillons par période// et le //nombre de périodes par tampon//.\\
+Plus ces nombres sont petits, plus faible est la latence, mais plus le processeur est sollicité. Si il est sollicité à 100% le son décroche et on entend des sortes de crépitements. C'est ce qu'on appelle des //[[http://linuxmao.org/tiki-index.php?page=FAQ%20xrun&structure=Accueil%20Systeme&redirectpage=FAQ%20xrun|XRuns]]//.\\
+On peut également diminuer la latence en augmentant la //fréquence d'échantillonnage//. Cela influe aussi (théoriquement) sur la qualité audio, mais 44100Hz ou 48000Hz sont généralement suffisants, l'oreille n'entend pas la différence avec 96000Hz. Ça peut être utile de monter au dessus pour un travail de mastering par ex.
+
+Pour diminuer la consommation du processeur on peut aussi activer l'[[#priorite_temps_reel|option temps réel]] ou évidemment réduire la consommation processeur générale de son système, en limitant l'execution d'éventuels processus inutiles en arrière-plan.
+
+<note important>Pour obtenir les meilleures performances avec une carte son connectée **en USB**, utilisez toujours une fréquence de 48000Hz, 3 périodes par tampon, et un nombre d'échantillons par période qui soit une puissance de 2 (16, 32, 64, 128 etc.) ou l'une des combinaisons en gras dans [[https://wiki.linuxaudio.org/wiki/list_of_jack_frame_period_settings_ideal_for_usb_interface|cette liste]].</note>
+
+===== Utilisation =====
+
+Bienvenue dans la [[:MAO]] sous Linux !
+
+Par défaut lorsqu'on ouvre une application qui utilise JACK, JACK connecte automatiquement sa sortie audio principale en direction de la sortie de la carte son, ce qui permet de l'entendre.\\
+Mais lorsqu'on a lancé plusieurs applications audio, on peut connecter leurs flux audio et [[:MIDI]] dans n'importe quel sens : machin enregistre truc, ressort dans bidule etc. On dit alors qu'on //route// le signal ou qu'on créé un //patch//. Une [[#interface graphique]] s'avère alors bien utile.\\
+Avec QjackCtl par ex. en cliquant sur le bouton //Connecter//, on affiche l'interface qui permet de tirer des câbles audio ou [[:MIDI]] entre les différents ports des applications ou des périphériques audio ou MIDI.
+
+JACK permet en plus de gérer [[:mao#jack_et_les_gestionnaires_de_session|des sessions]], ce qui simplifie la gestion et le chargement d'un environnement créé (un patch) et de tous ses logiciels (et leurs sessions respectives).
+
+===== Problèmes courants  =====
+
+==== le serveur JACK ne démarre pas ====
+
+=== Ressources (carte son) indisponibles ===
+Il est possible qu'un processus utilise déjà votre carte son. Cette commande permet de voir de quel processus il pourrait s'agir :
+<code>lsof +D /dev/snd</code>
+
+=== Temps réel indisponible ===
+Le temps réel n'est peut-être pas correctement configuré. Testez JACK sans priorité temps réel avec une commande de ce type :
+<code>jackd -d alsa -d hw:0 -r 44100</code>
+Si c'est bon, c'est que le temps réel n'est pas disponible. Vérifiez que vous appartenez bien au groupe //audi//o :
+<code>groups</code>
+
+=== Mauvaise carte son ===
+Il arrive couramment qu'on se trompe lors de la configuration de JACK, ou qu'on change la configuration matérielle par ex. en branchant un écran HDMI (ce qui créé une nouvelle sortie audio).\\
+Vérifiez le numéro de votre carte son avec :
+<code>aplay -l</code>
+
+==== Coupures du son et crépitements ====
+
+Le processeur sature probablement. Augmentez les valeurs échantillons et périodes, voir [[#optimisation]].
+
+===== Liens utiles =====
+
+  * http://linuxmao.org/Jack
+  * //en// http://jackaudio.org/
+  * //en// https://kx.studio/Documentation:Manual:jack_configuration
+  * //en// http://qjackctl.sourceforge.net/
+
+----
+
+//Contributeurs : [[:utilisateurs:krodelabestiole]], [[:utilisateurs:jmp]], [[:utilisateurs:omega02]], [[:utilisateurs:sonal]], [[:utilisateurs:aurelien88]].//

@@ -1,0 +1,314 @@
+
+{{tag>serveur courriel MDA dovecot BROUILLON}}
+
+
+====== Filtrage des courriels avec Dovecot ======
+Dovecot est une application d'agent de distribution des courriels MDA (voir [[:comment_fonctionne_le_courriel_sous_linux|Comment fonctionne le courriel sous Linux ?]]). Pour voir ce que peut faire un agent de distribution de courriels lire [[:comment_configurer_sa_distribution_de_courriels_locale_mda|Comment configurer sa distribution de courriels MDA sous Ubuntu ?]]
+
+Cette application vous permet de trier et classer vos courriels à l'arrivée dans une boite aux lettres utilisateur ou dans une boite postale du serveur MTA. Elle gère l'identification des courriels marqués comme SPAM ou comme Virus par votre MTA.
+
+===== Installation =====
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] de filtrages de l'agent de distribution des courriels Dovecot **[[apt>dovecot-sieve, dovecot-managesieved|dovecot-sieve dovecot-managesieved]]**.
+
+
+===== Configuration =====
+Pour configurer le MDA Dovecot…
+
+==== Configuration du serveur de messagerie MTA ====
+=== Postfix ===
+[[:comment_configurer_sa_distribution_de_courriels_systemes_mta|Comment configurer sa distribution de courriels systèmes MTA avec Postfix ?]]
+
+Si vous voulez filtrer par un marquage vos courriels SPAMs ou Virus au niveau du serveur MTA, il vous faudra [[:comment_configurer_sa_distribution_de_courriels_systemes_mta#filtrer_les_courriels_indesirables|mettre en place la partie de filtration des courriels sur le serveur de messagerie]].
+
+=== Exim4 ===
+[[https://medspx.fr/blog/Debian/dovecot_sieve/|Configuration du filtrage de Dovecot avec le langage sieve pour un serveur de messagerie MTA EXIM4]]
+
+==== Définir les emplacements des boîtes aux lettres des utilisateurs ====
+<code bash>sudo nano /etc/dovecot/conf.d/10-mail.conf</code>
+
+<file>
+…
+mail_location = maildir:~/.local/share/courriels
+…
+</file>
+
+=== Choix du format de boîtes aux lettres ===
+Par défaut, Dovecot utilise la disposition de répertoires Maildir++. Cela signifie que toutes les boîtes aux lettres sont stockées dans un seul répertoire et précédées d'un point. 
+
+Par exemple:
+<code bash>~/.local/share/courriels
+├── .dossier
+│   ├── cur
+│   ├── new
+│   └── tmp
+└── .dossier.sous_dossier
+    ├── cur
+    ├── new
+    └── tmp
+</code>
+Si vous souhaitez un format de boîtes aux lettres avec des répertoires hiérarchiques, tels que:
+<code bash>~/.local/share/courriels
+└── dossier
+    ├── cur
+    ├── new
+    ├── tmp
+    └── sous_dossier
+        ├── cur
+        ├── new
+        └── tmp
+</code>
+vous devrez activer la disposition fs:
+<file>mail_location = maildir:~/.local/share/courriels:LAYOUT=fs</file>
+==== Activer la technique de distribution des courriels ====
+Le MDA utilise deux façons de distribuer les courriels, par l'Agent de Distribution Locale (LDA) du MDA, ou avec le Protocole Local de Transport des Courriels (LMTP) du MTA qui est une variante locale au serveur de messagerie du SMTP.
+
+=== Activer le support LDA ===
+<code bash>sudo nano /etc/dovecot/15-lda.conf</code>
+
+<file>{
+…
+lda_mailbox_autocreate = yes
+lda_mailbox_autosubscribe = yes
+protocol lda {
+  mail_plugins = $mail_plugins #sieve
+}</file>
+
+=== Activer le support LMTP ===
+
+==== Sécuriser le transport du courriel ====
+<code bash>sudo nano /etc/dovecot/conf.d/10-auth.conf</code>
+
+<file>
+…
+disable_plaintext_auth = yes
+…
+auth_mechanisms = plain login
+…
+</file>
+
+<code bash>sudo nano /etc/dovecot/conf.d/10-ssl.conf</code>
+
+<file>
+…
+ssl = yes
+ssl_cert = </etc/ssl/certs/ssl-cert-snakeoil.pem
+ssl_key = </etc/ssl/private/ssl-cert-snakeoil.key
+…
+</file>
+
+==== Configuration du plugin sieve  ====
+<code bash>nano /etc/dovecot/conf.d/90-sieve.conf</code>
+
+<file>plugin {
+   sieve = file:~/.sieve;active=~/.dovecot.sieve
+   sieve_default = /var/lib/dovecot/sieve/default.sieve
+}</file>
+
+===== Créer des filtres =====
+==== Création de règles globales ====
+<code bash>sudo mkdir /var/lib/dovecot/sieve/
+sudo nano /var/lib/dovecot/sieve/default.sieve</code>
+
+L'exemple de règles suivant déplace automatiquement les courriels indésirables de la boîte de réception vers le dossier indésirable SPAMs. X-Spam-Flag est ajouté par spamassassin et amavis par le serveur MTA.
+<file>require "fileinto";
+if header :contains "X-Spam-Flag" "YES" {
+  fileinto "SPAMs";
+}</file>
+
+<code bash>sudo sievec /var/lib/dovecot/sieve/default.sieve</code>
+==== Création de règles utilisateur ====
+<code bash>nano ~/.dovecot.sieve</code>
+
+=== Filtration par entête ===
+Utiliser if(si)/elsif(sinon si)/else(sinon) pour stocker vos messages dans différents répertoire/sous répertoires :
+<file>require ["fileinto", "envelope"];
+if address :is "to" "utilisateur@mon_domaine_de_courriels.fr" {
+  fileinto "CourrielsUtilisateur";
+} elsif envelope :is "from" "utilisateur@mon_domaine_de_courriels.fr" {
+  fileinto "CourrielsUtilisateur.Envoyés";
+} elsif anyof (header :contains "X-listname" "root@mon_domaine_de_courriels.fr",
+               header :contains "List-Id" "Linux User root") {
+  fileinto "AdminSystème";
+} else {
+  # Le reste va dans INBOX
+  # par défaut c'est garder un copie "implicit keep", nous gardons cette copie ici
+  keep;
+}</file>
+
+**anyof** c'est un «ou» logique, avec **allof** vous pouvez faire un «et» logique.
+
+Transférer les courriels avec "commande" ou "achat" dans leur objet à une autre adresse :
+<file>if header :contains "subject" ["commande", "achat"] {
+  redirect "serviccommandes@mon_domaine_de_courriels.fr";
+}</file>
+
+Pré-filtrage de mes courriel utilisateurs locaux :
+<file>require ["fileinto"];
+#Si je suis en destinataire ou en copie d'un mail c'est qu'il m'est destiné directement
+if header :contains ["to","cc"] "utilisateur@mon_domaine_de_courriels.fr"
+{
+fileinto "INBOX";
+stop;
+#Sinon, si l'email vient de @mon_domaine_de_courriels.fr ? je le veux dans un répertoire mon_domaine_de_courriels
+} elsif  header :matches "From" "*@mon_domaine_de_courriels.fr>"
+{
+fileinto "INBOX/mon_domaine_de_courriels";
+#Sinon laisse moi faire le tri ailleurs
+} else
+{
+fileinto "INBOX/A trier";
+}</file>
+
+=== Marquer ou mettre en évidence votre courriel ===
+Certains clients de messagerie MUA utilisent ces indicateurs:
+<file>require "imap4flags";
+require "regex";
+if anyof (exists "X-Cron-Env",
+          header :regex    ["subject"] [".* security run output",
+                                        ".* monthly run output",
+                                        ".* daily run output",
+                                        ".* weekly run output"]) {
+  addflag "$label1"; # ie 'Important'/red label within Thunderbird
+
+# Other flags:
+# addflag "$label1";  # Important: #ff0000 => red
+# addflag "$label2";  # Work:      #ff9900 => orange
+# addflag "$label3";  # personal:  #009900 => green
+# addflag "$label4";  # todo:      #3333ff => blue
+# addflag "$label5";  # later:     #993399 => violet
+#
+}</file>
+
+Copie locale de vos courriels :
+<file>require ["envelope", "imap4flags"];
+if envelope "from" "utilisateur@mon_domaine_de_courriels.fr"
+{
+   setflag "\\seen";
+}</file>
+
+=== Règles anti-spam/antivirus ===
+La plupart des antivirus et anti-spam ajoutent un en-tête spécial aux messages électroniques. Afin que les utilisateurs puissent appliquer le filtrage en conséquence, selon la configuration de l'interpréteur Sieve, le filtrage peut être effectué soit en évaluant ces en-têtes directement, soit en utilisant les extensions spamtest et virustest.
+
+== Filtrage direct à l'aide de l'en-tête de message ==
+L'évaluation directe des en-têtes est toujours possible tant que les en-têtes sont effectivement ajoutés aux messages par le logiciel de détection du MTA. Par exemple, pour classer les courriels marqués par SpamAssassin dans un dossier appelé "SPAMs" :
+<file>require "fileinto";
+if header :contains "X-Spam-Flag" "YES" {
+  fileinto "SPAMs";
+}</file>
+
+L'exemple suivant rejette les courriels marqués par SpamAssassin avec un niveau de détection supérieur ou égal à 10 :
+<file>if header :contains "X-Spam-Level" "**********" {
+  discard;
+  stop;
+}</file>
+
+Certains analyseurs de spam ne produisent qu'un score numérique en en-tête. Le test devient alors plus complexe :
+<file>require ["comparator-i;ascii-numeric","relational"];
+if allof (
+   not header :matches "x-spam-score" "-*",
+   header :value "ge" :comparator "i;ascii-numeric" "x-spam-score" "10" )
+{
+  discard;
+  stop;
+}</file>
+
+<note warning>Soyez très prudent lorsque vous utilisez les expressions rationnelle de **comparator-i; ascii-numeric** avec les scores de spams des en-têtes. Ce comparateur ne peut être utilisé que pour faire correspondre des entiers non signés. Les chaînes qui ne sont pas de même signe ne seront donc pas toujours comparées correctement en valeur absolue ! C'est pourquoi l'exemple ci-dessus vérifie d'abord explicitement le signe moins.</note>
+
+== Filtrage à l'aide des extensions spamtest et virustest ==
+Lorsque les extensions spamtest et virustest sont configurées sur le serveur MTA, les utilisateurs (les client MUA) peuvent avoir un moyen beaucoup plus simple de filtrer respectivement les messages de spam et de virus. Pour filtrer le spam, l'extension spamtest peut par exemple être utilisée comme suit:
+<file>require "spamtestplus";
+require "fileinto";
+require "relational";
+require "comparator-i;ascii-numeric";
+
+/* Si spamtest échoue pour quelque raison que se soit, exemple de l'absence d'entête de spam,
+ * le fichier est déposé dans un dossier spécial.
+ */
+if spamtest :value "eq" :comparator "i;ascii-numeric" "0" {
+  fileinto "Nonclassé";
+
+/* Si le score de spamtest (entre 1 et 10) est plus grand ou égal à 3,
+ * le fichier est déposé dans le dossier de spams :
+ */
+} elsif spamtest :value "ge" :comparator "i;ascii-numeric" "3" {
+  fileinto "SPAMs";
+
+/* Pour une évaluation plus fine des scores, la balise «:percent» peut être utilisée.
+ * La règle suivante supprime tous les messages avec un pourcentage supérieur à 85%
+ * par rapport au maximum.
+ */
+} elsif spamtest :value "gt" :comparator "i;ascii-numeric" :percent "85" {
+  discard;
+}
+
+/* Les autres messages sont classés dans INBOX */</file>
+
+L'extension virustest peut être utilisée de la même manière:
+<file>require "virustest";
+require "fileinto";
+require "relational";
+require "comparator-i;ascii-numeric";
+
+/* Non scanné ? */
+if virustest :value "eq" :comparator "i;ascii-numeric" "0" {
+  fileinto "Unscanned";
+
+/* Infecté avec une probabilité élevée (entre 1 et 5) */
+} if virustest :value "eq" :comparator "i;ascii-numeric" "4" {
+  /* Le mettre en quarantaine dans un dossier spécial (encore un peu dangereux) */
+  fileinto "Quarantaine";
+
+/* Infecté */
+} elsif virustest :value "eq" :comparator "i;ascii-numeric" "5" {
+  /* Suppression */
+  discard;
+}</file>
+
+== Réponse automatique d’absence ==
+La fonctionnalité de réponse automatique est implémentée à l'aide de l'extension **vacation**. Le script suivant envoie des réponses d'absence du bureau lorsque le message n'est pas du spam :
+<file>require ["fileinto", "vacation"];
+# Déplacer le spam vers le dossier SPAMs
+if header :contains "X-Spam-Flag" "YES" {
+  fileinto "SPAMs";
+  # Arrêter ici pour que ne pas répondre aux spams
+  stop;
+}
+vacation
+  # Répondre au plus une fois par jour à un même expéditeur
+  :days 1
+  :subject "Réponse d'absence du bureau"
+  # Liste des adresses de destinataires supplémentaires qui sont incluses dans la réponse automatique.
+  # Si le destinataire d'un courriel n'est pas le destinataire dans le courriel et qu'il ne figure pas dans cette liste,
+  # aucune réponse de vacances n'est envoyée.
+  :addresses ["prénom.nom@mon_domaine_de_courriels.fr", "mon.responsable@mon_domaine_de_courriels.fr"]
+"Je suis absent du bureau, veuillez contacter Linus Torval.
+Bien cordialement
+Tux Opensource";</file>
+
+Il est également possible d'inclure le sujet d'origine en utilisant l'extension **variables** :
+<file>require ["variables", "vacation"];
+# Stocker l'ancien objet afin qu'il puisse être utilisé dans le message d'absence
+if header :matches "Subject" "*" {
+        set "subjwas" ": ${1}";
+}
+vacation
+  :days 1
+  :subject "Out of office reply${subjwas}"
+  :addresses ["prénom.nom@mon_domaine_de_courriels.fr", "mon.responsable@mon_domaine_de_courriels.fr"]
+"Je suis absent du bureau, veuillez contacter Linus Torval.
+Bien cordialement
+Tux Opensource";</file>
+
+== Archiver des messages par date ==
+Vous pouvez archiver des messages dans une arborescence de dossiers comme suit:
+<file>require ["variables","date","fileinto","mailbox"];
+
+# Extraire les informations de date
+if currentdate :matches "year" "*" { set "year" "${1}"; }
+if currentdate :matches "month" "*" { set "month" "${1}"; }
+
+# Archivez les éléments de la liste de diffusion Dovecot par année et par mois.
+# Créez le dossier s'il n'existe pas.
+if header :is "list-id" "dovecot.dovecot.org" {
+  fileinto :create "INBOX.Lists.${year}.${month}.dovecot";
+}</file>

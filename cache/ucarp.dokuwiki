@@ -1,0 +1,234 @@
+
+{{tag>Xenial serveur haute_disponibilité réseau}}
+
+----
+
+====== Ucarp : failover avec partage d'IP virtuelles ======
+
+Ucarp est un outil de « haute disponibilité » permettant l'usage d'adresses IP virtuelles communes à plusieurs ordinateurs offrant un même service redondant sur un réseau.
+
+Chaque élément du « cluster » (à partir de 2 serveurs) émet ainsi sur le réseau des signes de vie de façon à ce que les autres éléments ayant la même adresse IP virtuelle, prennent le relais lorsque l'élément défaillant (ou en maintenance) ne donne plus ces signes de vie.
+Ucarp est en système de « failover » automatique sécurisé, simple et efficace.
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt>ucarp]]**.
+
+===== Configuration =====
+Créer les répertoires utiles à ucarp :
+ 
+<code>
+sudo mkdir -p /etc/ucarp/interface
+</code>
+
+==== Paramètres généraux ====
+
+[[:tutoriel:comment_editer_un_fichier|Créer le fichier]] **/etc/default/ucarp** contenant les paramètres généraux à ucarp et y insérer les lignes :
+
+<file ucarp>
+# Location of the ucarp executable
+UCARP_EXEC=/usr/sbin/ucarp
+IFCONFIG=/sbin/ifconfig
+
+#
+# ucarp options
+# -z run shudown script on exit
+# -P force perferred master
+#OPTIONS="-z -B"
+OPTIONS="-z"
+</file>
+
+==== Paramètres d'adressage virtuel ====
+
+Pour chaque adresse virtuelle nous allons créer une interface réseau virtuelle.
+
+[[:tutoriel:comment_modifier_un_fichier|Créer le fichier]] **/etc/ucarp/interface/ucarp0** et y insérer :
+<file /etc/ucarp/interface/ucarp0>
+#
+# Location of the ucarp pid file
+UCARP_PIDFILE=/var/run/ucarp0.pid
+
+#
+# ucarp base, lower number will be perfered master
+# set to same to have master stay alive as long as possible
+UCARP_BASE=1
+
+#
+# Interface for Ipaddress
+INTERFACE=eth0:carp0
+
+#
+# Instance id
+# any number from 1 to 255
+# Master and Backup need to be the same
+INSTANCE_ID=42
+
+#
+# Password so servers can trust who they are talking to
+PASSWORD=<password>
+
+#
+# The Application Address that will failover
+VIRTUAL_ADDRESS=192.168.0.32
+VIRTUAL_BROADCAST=192.168.0.255
+VIRTUAL_NETMASK=255.255.255.0
+
+#
+# The Maintanence Address of the local machine
+SOURCE_ADDRESS=192.168.0.1
+</file>
+
+==== Fichier de service ====
+
+De façon à pouvoir activer les adresses virtuelles simplement, nous allons [[:tutoriel:comment_modifier_un_fichier|créer un fichier]] de service /**etc/init.d/ucarp** et y insérer :
+
+<file bash etc/init.d/ucarp>
+#!/bin/sh
+#/etc/init.d/ucarp: start ucarp daemon.
+
+### BEGIN INIT INFO
+# Provides:          ucarp
+# Short-Description: Start software ucarp daemon
+# Required-Start:    $local_fs $remote_fs $syslog
+# Required-Stop:     $local_fs $remote_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+### END INIT INFO
+
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
+
+# For configuration of the init script use the file
+# /etc/default/ucarp, do not edit this init script.
+
+# Set run_ucarp to 1 to start ucarp or 0 to disable it.
+run_ucarp=1
+
+R_INTERFACE=/etc/ucarp/interface
+
+start() {
+  if [ $run_ucarp = 1 ]
+    then
+
+        echo -n "Starting $NAME daemon: "
+        for fichier in $( find $R_INTERFACE -type f -name '*' | sort )
+        do
+                [ -e $fichier ] && . $fichier
+
+                $IFCONFIG $INTERFACE $VIRTUAL_ADDRESS netmask $VIRTUAL_NETMASK \
+broadcast $VIRTUAL_BROADCAST
+
+                UCARP_OPTS="$OPTIONS -b $UCARP_BASE -i $INTERFACE \ 
+-v $INSTANCE_ID -p $PASSWORD -a $VIRTUAL_ADDRESS -s $SOURCE_ADDRESS"
+
+                start-stop-daemon --start --background --make-pidfile \
+--pidfile ${UCARP_PIDFILE} --quiet --exec ${UCARP_EXEC} -- ${UCARP_OPTS}
+                echo ucarp.
+
+        done
+    fi
+
+}
+
+stop() {
+    if [ $run_ucarp = 1 ]
+    then
+        echo -n "Stopping $NAME daemon: "
+
+        for fichier in $( find $R_INTERFACE -type f -name '*' | sort )
+        do
+                [ -e $fichier ] && . $fichier
+
+                $IFCONFIG $INTERFACE down
+
+                if start-stop-daemon --stop --quiet --pidfile ${UCARP_PIDFILE}
+                then
+
+                        echo ucarp.
+                else
+                        echo
+                fi
+
+        done
+    fi
+
+
+}
+
+
+
+[ -e /etc/default/ucarp ] && . /etc/default/ucarp
+
+test -x ${UCARP_EXEC} || exit 0
+
+NAME=ucarp
+
+case "$1" in
+  start)
+        start "$2"
+    ;;
+
+  stop)
+        stop "$2"
+    ;;
+
+  restart)
+        stop "$2"
+        start "$2"
+    ;;
+
+  force-reload)
+        stop "$2"
+        start "$2"
+    ;;
+
+  *)
+    echo "Usage: /etc/init.d/ucarp {start|stop|restart|force-reload}"
+    exit 1
+
+esac
+
+exit 0
+         
+</file>
+
+Il faut alors rendre le script exécutable :
+
+<code>
+sudo chmod 744 /etc/init.d/ucarp
+</code>
+
+et lancer le service :
+
+<code>
+sudo /etc/init.d/ucarp start
+</code>
+
+En lançant ''ifconfig'' dans un terminal, on obtient alors :
+
+<code>
+eth0      Link encap:Ethernet  HWaddr 00:15:C5:5D:89:77
+          inet addr:192.168.0.1  Bcast:192.168.0.255  Mask:255.255.255.0
+          UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+          RX packets:385003 errors:671 dropped:0 overruns:0 frame:671
+          TX packets:99652 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:100
+          RX bytes:48549065 (46.2 MiB)  TX bytes:40492320 (38.6 MiB)
+          Base address:0xecc0 Memory:fe9e0000-fea00000
+
+eth0:carp0 Link encap:Ethernet  HWaddr 00:15:C5:5D:89:77
+          inet addr:192.168.0.32  Bcast:192.168.0.255  Mask:255.255.255.0
+          UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+          Base address:0xecc0 Memory:fe9e0000-fea00000
+</code>
+
+===== Liens =====
+
+  * [[http://www.ucarp.org/|Site officiel]]
+  * [[wpfr>Common address redundancy protocol]] sur Wikipedia
+
+----
+
+// Contributeur : [[utilisateurs:Tokiess]] //

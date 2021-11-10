@@ -1,0 +1,182 @@
+
+====== Installer ubuntu via un terminal grâce à debootstrap et à chroot ======
+{{tag>BROUILLON}} 
+===== Introduction =====
+
+Debootstrap est un outil performant qui sert à installer les composants essentiels du système linux. Il est notamment utilisé dans les netinstall de debian.
+Chroot est un programme permettant de changer la racine du système, c'est à dire utiliser un deuxième système linux en même temps que le premier avec un seul kernel.
+
+===== But =====
+
+Ce tutoriel a plusieurs utilisations possibles :
+   * Installer un ubuntu complet à partir de n'importe quel Linux sans avoir besoin de media externe.
+   * Comprendre comment Linux est installé.
+   * Créer un environnement de test sur une machine -> passer l’installation du kernel
+
+===== Installation des programmes requis =====
+
+(cette partie doit être adaptée à votre distribution Linux)
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>debootstrap]]**
+
+<note tip>Si vous voulez installer une version d'ubuntu ultérieure à celle pouvant être installée avec votre version de debootstrap, il est alors nécessaire d'installer la dernière version de debootstrap, :!: instable :!: disponible ici [[http://pkgs.org/search/?keyword=debootstrap]] </note>
+
+===== Formatage et montage des disques =====
+
+Pour un disque dur vide, créez une partition de ± 10Go par exemple puis la swap, ici 1Go (2 fois plus que la RAM).
+
+<code>sudo fdisk /dev/sda
+Command (m for help): p
+.
+.
+.
+Command (m for help): n
+Command action
+  e   extended
+  p   primary partition (1-4)
+p
+Partition number (1-4): 1
+First cylinder (1-3876, default 1): (Appuyez sur Entrée)
+Using default value 1
+Last cylinder or +size or +sizeM or +sizeK (1-3876, default 3876): +10000
+</code>
+ensuite tapez "a" puis "1" pour la rendre bootable
+
+Ensuite créez la partition pour le swap :
+<code>Command (m for help): n
+Command action
+  e   extended
+  p   primary partition (1-4)
+p
+Partition number (1-4): 2
+First cylinder (1-3876, default 1): (Appuyez sur Entrée)
+Using default value 1
+Last cylinder or +size or +sizeM or +sizeK (1-3876, default 3876): +1024M</code>
+
+Enfin, tapez "w" pour terminer le partitionnement.
+<note important>Attention, toutes les données du disque vont être supprimées.</note>
+
+Formatez la première partition en ext3 :
+<code> mke2fs -j /dev/sda1 </code>
+Formatez la deuxième partition en swap :
+<code> mkswap /dev/sda2 </code>
+Activez le swap :
+<code> swapon /dev/sda2 </code>
+
+Montez le sda1 sur le dossier install (à créer) qui servira de point de montage :
+<code>mkdir /media/install
+mount /dev/sda1 /media/install</code>
+
+===== utilisation de debootstrap =====
+
+L'installation est ici faite pour ubuntu precise 12.04 32bit.
+
+<code>sudo debootstrap --include ubuntu-minimal --arch i386 precise /media/install http://archive.ubuntu.com/ubuntu</code>
+
+===== Montages en vue d'un chroot =====
+
+Montages spéciaux pour accéder aux médias et autres périphériques.
+<code>sudo mount --bind /dev /media/install/dev
+sudo mount --bind /dev/pts /media/install/dev/pts
+sudo mount --bind /sys /media/install/sys
+sudo mount -t proc /proc /media/install/proc</code>
+
+===== Chroot =====
+
+<code>sudo chroot /media/install /bin/bash</code>
+
+===== Dans le chroot =====
+
+==== montage dans le chroot ====
+
+<code>mount -a</code>
+===== Paramétrage de apt =====
+[[:tutoriel:comment_modifier_sources_maj#modifier_le_fichier_des_sources|Modifiez les sources]] et ajoutez les dépôts universe et multiverse.
+<note important>Attention, il faut modifier les sources du chroot et non celles de la machine hôte.</note>
+
+<code>apt-get update</code>
+
+==== Installation des locales ====
+Configuration du clavier.
+<code>apt-get install console-data
+dpkg-reconfigure console-data
+dpkg-reconfigure keyboard-configuration</code>
+Installation des locales françaises et reconfiguration de celles-ci.
+<code>/usr/share/locales/install-language-pack fr_FR</code>
+<code>dpkg-reconfigure locales</code>
+Configuration du lieu.
+<code>dpkg-reconfigure tzdata</code>
+Configuration de l'heure.
+<code>hwclock --systohc --utc</code>
+Il faut mettre l'heure en non utc :
+<code>apt-get install nano</code>
+<code>nano /etc/default/rcS</code>
+Et mettre UTC=no
+
+On sort du chroot :
+<code>exit</code>
+
+===== Paramétrage de hostname et fstab =====
+
+==== Copie des fichier nécessaires ====
+Copie des fichiers de configuration.
+<code>sudo cp /etc/hosts /etc/hostname /etc/resolv.conf  /media/install/etc/hostname
+sudo cp /etc/network/interfaces /media/install/etc/network
+sudo cp /etc/fstab /media/install/etc</code>
+
+
+<code>sudo chroot  /media/install/ /bin/bash</code>
+
+Il faut trouver les UID de chaque partition afin de les mettre dans le fstab (le fstab se chargeant avant que les noms des disques et partitions (sda1, etc.) ne soient attribués, il faut lui donner le nom unique de la partition) :
+<code>blkid</code>
+<code>nano /etc/fstab</code>
+voici un exemple ( à ne pas reprendre tel quel mais à adapter selon votre configuration) :
+<code>proc                                      /proc           proc        defaults          0 0
+UUID=34bf3784-2c97-48e3-92ce-025e3cd6344c /               ext4        errors=remount-ro 0 1
+UUID=57a6f7ec-8de6-4f47-a244-f171c6a41ab3 /home           ext4        defaults          0 2
+UUID=cfe0a0d6-3280-4104-878d-efede6cce024 none            swap        sw                0 0
+/dev/cdrom                                 /cdrom   udf,iso9660 user,noauto       0 0
+/dev/fd0                                  /media/floppy0  auto        rw,user,noauto    0 0
+</code>
+
+Ensuite, créez les points de montage :
+<code>mkdir /cdrom /media/floppy0</code>
+
+===== Installer le kernel et grub =====
+
+Tout d’abord, nous installons le kernel.
+<note important>Ici, le kernel installé est de type pae, pour les plus vielles machines installez un kernel non pae</note>
+<code>apt-get install linux-image-generic-pae</code>
+
+Ensuite, installation de grub : (grub s'est probablement déjà installé avec le kernel)
+<code>sudo apt-get install grub-pc
+update-grub</code>
+<code>exit</code>
+
+Installation des backports :
+<code>sudo cp /etc/kernel-img.conf /media/install/etc/kernel-img.conf
+sudo chroot  /media/install/ /bin/bash
+apt-get install linux-backports-modules-cw-3.3-precise-generic-pae</code>
+
+
+===== mot de passe =====
+
+Afin que tout le monde n'ait pas accès aux droits root, il faut mettre un mot de passe.
+<code>passwd</code>
+
+
+Voilà, ubuntu est installé.
+
+Regardez aussi
+[[ :tasksel |tasksel]]
+
+
+Sources externes :
+
+[[http://www.isalo.org/wiki.debian-fr/index.php?title=Installation_squeeze_chroot_debootstrap]]
+
+[[http://www.gentoo.org/doc/fr/handbook/handbook-x86.xml]]
+----
+//Contributeur principal : [[:utilisateurs:amj]]
+
+- Mes remerciements à Shanx, S.O.D. et Arya

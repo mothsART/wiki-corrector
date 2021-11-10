@@ -1,0 +1,285 @@
+
+{{tag>Xenial tutoriel fuse}}
+----
+
+====== Comment creer un serveur plex media server avec un stockage infini (amazon) ======
+
+Ce tutoriel décrit les étapes nécessaires pour créer un server distant (ou local) Plex, accompagné d'un stockage Amazon cloud storage illimité (jusqu’à 100to en réalité) tout en chiffrant l'intégralité des fichiers.
+
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * un serveur/vps disposant de FUSE (j'utilise hetnzer online et ovh kimsufi), attention a OpenVZ pour les vps, vérifié bien la disponibilité de fuse. 
+  * un accès SSH
+  * un compte [[https://www.amazon.com/clouddrive/home|amazon cloud storage]]
+
+
+===== La Préparation =====
+
+Tout d'abord, il vous faudra installer Plex, rendez vous sur la [[https://www.plex.tv/downloads//|page de téléchargement]], copié le lien pour Ubuntu et wget. Dans mon exemple, c'est la version 1.3.3 de plex.
+==== Plex ====
+
+<code>cd ~
+wget https://downloads.plex.tv/plex-media-server/1.3.3.3148-b38628e/plexmediaserver_1.3.3.3148-b38628e_amd64.deb
+sudo dpkg -i plexmediaserver_1.*</code>
+
+<note tip>Pour finaliser la configuration de plex sur un server distant, il vous faudra pour y connecter par un [[https://doc.ubuntu-fr.org/ssh|tunnel ssh]] sur le port 32400 , sinon il ne vous sera pas possible de finaliser l'installation de plex, une fois le tunnel réalisé rendez vous sur http://localhost:32400</note>
+
+Pour plus de simplicité, c'est l'utilisateur plex qui sera utilisé, ça simplifie la gestion des droits.
+
+<code> sudo su
+passwd plex
+adduser plex sudo</code>
+
+Additionnellement, vous pouvez désactiver l'accès SSH de Plex.
+<code> nano /etc/ssh/sshd_config </code> 
+
+et en ajoutant a la fin :
+
+<code>DenyUsers plex</code> 
+
+et on redémarre ssh :
+
+<code>service ssh restart</code>
+
+==== Les dossiers ====
+
+Une fois reconnecté avec l'utilisateur plex (su plex), on va créer les dossiers nécessaires, une documentation détaille est disponible [[http://makeshift.ninja/unlimited-plex-media-server-using-amazons-unlimited-storage-backend-pt1.html|ici]].
+
+<code>su plex
+sudo mkdir /home/plex/
+sudo chown plex /home/plex/
+mkdir /home/plex/.local-sorted/
+mkdir /home/plex/local-sorted/
+mkdir /home/plex/.acd-sorted/
+mkdir /home/plex/acd-sorted/
+mkdir /home/plex/sorted/
+mkdir /home/plex/logs/
+</code>
+
+==== Les paquets ====
+
+ensuite on install l'ensemble des paquets necessaires :
+
+<code>
+sudo apt-get install encfs unionfs-fuse python-fuse python3-setuptools python3-appdirs python3-dateutil python3-requests python3-sqlalchemy git
+sudo easy_install3 -U pip
+</code>
+
+==== Acd_cli ====
+
+Une fois tout ceci terminé, on réalise l'installation d'[[https://github.com/yadayada/acd_cli|ACD_CLI]] qui est une interface en ligne de commande qui permet de monter des disques cloud comme des dossiers locaux.
+
+<code>sudo pip3 install git+https://github.com/yadayada/acd_cli.git</code>
+
+On vérifie ensuite qui tout fonctionne bien :
+
+<code>acd_cli sync</code>
+
+Cette etape va vous demander d'avoir un fichier oauth_data qui permet a acd_cli de s'identifier avec amazon.
+
+La premiere etape s'arrète au moment ou il faut ce connecter sur https://tensile-runway-92512.appspot.com/, faite le avec votre navigateur local, téléchargez le oauth_data, ouvrez le avec un lecteur local. Copiez les données et connectez vous sur un second terminal ssh et créé avec nano :
+
+<code>nano /var/lib/plexmediaserver/.cache/acd_cli/oauth_data</code>
+
+collez les données du fichier précédemment téléchargé, enregistrez et retourné a votre précédent ssh. Continuez de suivre les instructions d'acd_cli.
+
+Une fois terminé, on peut s'attaquer au vif du sujet : le montage des dossiers, le cryptage et la synchronisation.
+
+
+
+===== Le vif du sujet =====
+
+**Le principe est simple :** 
+
+  * **/local-sorted**, qui est le fichier local non crypté ou vous déposerez vos médias.
+  * sa version crypté avec encfs **/.local-sorted** qui est le dossier qui sera upload sur amazon
+  * **/.acd-sorted** qui est le point de montage du dossier cloud, qui est monté crypté.
+  * **/acd-sorted** qui est le dossier distant décrypté.
+  * **/sorted**, le dossier qui via unionfs, permet de "fusionner" local-sorted et acd-sorted, ce sera le dossier utilisé par Plex.
+
+Nous allons maintenant générer la clé de cryptage avec encfs, il est *impératif* qu'une fois ces étapes terminées, que vous conserviez une __sauvegarde__ de la clé de cryptage. 
+
+Pour monter encfs, on lance simplement
+
+<code>encfs /home/plex/.local-sorted /home/plex/local-sorted</code>
+
+Encfs va vous demander les réglages de cryptages, ceux par défauts sont correctes et une mot de passe, qu'il faudra lui aussi conserver précieusement.
+
+Une fois terminé, tout fichier placé dans */local-sorted*, apparaîtra crypté dans */.local-sorted*.
+
+Nous allons ensuite déplacer la clé de cryptage :
+<code>fusermount -u /home/plex/local-sorted
+mv /home/plex/.local-sorted/.encfs6.xml /home/plex/encfs.xml</code>
+
+Dorénavant, pour monter un système de fichier encfs, il sera nécessaire de stipuler  la présence d'un fichier de configuration. 
+
+<code>ENCFS6_CONFIG='/home/plex/encfs.xml' encfs /home/plex/.local-sorted /home/plex/local-sorted</code>
+
+**Testons si ça fonctionne :**
+<code>ls /home/plex/.local-sorted/ # Normalement vide 
+touch /home/plex/local-sorted/test
+ls /home/plex/.local-sorted/ # A fichier avec un nom sans aucun sens devrait apparaître. </code>
+
+
+==== Le montage d'Amazon Cloud Drive ====
+
+<code>acd_cli mount /home/plex/.acd-sorted/</code>
+
+**/home/plex/.acd-sorted/** affiche désormais les fichiers du dossier **/** d'amazon cloud drive de manière crypté.
+
+On monte désormais avec EncFS :
+<code>ENCFS6_CONFIG='/home/plex/encfs.xml' encfs /home/plex/.acd-sorted /home/plex/acd-sorted</code>
+
+Les fichiers sur amazon cloud storage apparaissent de manière decrypté dans le dossier **/acd-sorted**
+
+=== Upload ===
+
+Pour Upload, il y a deux manière, la manière la plus simple étant d'utilisé acd_cli upload suivit d'un acd_cli sync ou rclone et un crypte python pour remonter automatiquement le point de montage.
+
+== acd_cli upload ==
+
+<code>acd_cli upload /home/plex/.local-sorted/* /
+acd_cli sync</code>
+
+ cela fonctionne mais pour le moment je trouve acd_cli upload inconsistant (avec pas mal d'erreurs) et acd_cli instable ( crash du point de montage fréquent)
+ 
+== Rclone ==
+C'est la solution que j'utilise. le principe est le suivant :
+
+un script bash que j'execute dans un [[https://doc.ubuntu-fr.org/screen|screen]] avec la commande suivant :
+
+<note tip>l'option **move** supprime le fichier source, a remplacer par *copy* pour le conserver</note>
+<code>rclone move -v /home/plex/.local-sorted acd:/</code>
+
+le script :
+<code>nano /home/plex/.loopreclone.sh</code>
+
+on y colle le code suivant :
+
+<code>#!/bin/bash
+for i in {1..10}
+do
+        rclone move -v /home/plex/.local-sorted acd:/  
+        mail -s "Upload $i $(date) " //votre email// <<< 'Update !'
+done</code>
+
+ensuite on rend le scripte exécutable : 
+<code> chdmod +x /home/plex/.looprclone.sh</code>
+
+On l’exécute ensuite dans un screen, l'upload va ce réaliser 10 fois en envoyant un email a chaque fin de boucle (pour avoir une idée de la progression), c'est très pratique pour un upload tres volumineux dans un dossier qui ce renouvelle régulièrement quand on télécharge ses médias perso.
+
+Pour rafraîchir la liste des fichiers il faut executer :
+
+<code>acd_cli sync</code> 
+
+mais cela a tendant a faire crasher le point de montage, une solution plus stable et automatique est disponible dans la dernière partie du tuto.
+
+==== UnionFS-FUSE ====
+
+on execute simplement :
+
+<code>unionfs-fuse -o cow /home/plex/local-sorted=RW:/home/plex/acd-sorted=RO /home/plex/sorted/</code>
+
+Cela fusionne les deux dossiers non crypté en 1 seul dossier **/sorted**. qu'on utilisera pour plex.
+Cela a pour avantage de permettre a plex d'ajouter un fichier rapidement lorsqu'il est ajouté sur le server dans **/local-sorted** et lorsque celui si est upload sur amazon, décrypté et remonté localement dans */acd-sorted, de ne pas y voir de différence puisqu'il sera monté de manière identique dans **/sorted**. 
+ 
+
+===== Conclusion =====
+
+Voila, vous avez l'essentiel pour réaliser votre propre Plex infini. C'est évidemment a utiliser avec des médias dont vous avez légalement acquis la propriété ou vos films perso.
+
+Je vous invite a terminer le tuto par la lecture des problèmes connus, il y en a quelque un, notamment celui causé par acd_cli sync, qui fait planté le point de montage et qui devient inaccessible. 
+
+===== Problèmes connus et leurs solutions=====
+
+==== Crash du montage apres une syncro ====
+
+Le principale défaut est comme expliqué plus haut, acd_cli sync, qui a tendance a faire planté le point de montage, ce qui empêche de simplement placer un acd_cli dans un crontab.
+
+On va donc utiliser deux scripts.
+le premier, très simple, va executer un acd_cli sync suivit immédiatement par un script python qui va verifié si le montage a planté et le remonté le cas échéant.
+
+<code>nano /home/plex/sync.sh</code>
+
+on y colle :
+<code> #!/bin/bash
+/usr/local/bin/acd_cli -d sync
+python3 /home/plex/.automount.py</code>
+
+et on le rend executable par un **chmod +x**.
+
+on crée ensuite le .automount.py avec le code suivant, j'ai modifié le script mais la source est [[https://gist.github.com/a5m0/5090c42f16c39c8a34876bfcc7b3703d|ici]]:
+
+<code>import os
+import subprocess
+import logging
+logging.basicConfig(filename='acdmount.log', level=logging.INFO, format='%(asctime)s %(levelname)s %(message)$
+logging.info('ACD mount checker started')
+DEVNULL = open(os.devnull, 'wb')
+#pb = Pushbullet('pushbullet-api-key-here')
+#logging.info("running ACD sync")
+#subprocess.call(["/usr/local/bin/acd_cli", "sync"], stdin=None, stdout=DEVNULL)
+exists = os.path.exists("/home/plex/.acd-sorted/")
+if exists is not True:
+    logging.warning("ACD mount is down")
+   # push = pb.push_note("ACD mount down", "attempting restart")
+   # logging.info("attempting umount")
+   # subprocess.call(["/usr/local/bin/acd_cli", "umount"], stdin=None, stdout=DEVNULL)
+    logging.info("attempting umount fuser")
+    subprocess.call(["/bin/fusermount", "-uz", "/home/plex/.acd-sorted"], stdin=None, stdout=DEVNULL)
+  # logging.info("running ACD sync")
+  # subprocess.call(["acd_cli", "sync"], stdin=None, stdout=DEVNULL)
+    logging.info("attempting ACD mount")
+    subprocess.call(["/usr/local/bin/acd_cli", "mount", "/home/plex/.acd-sorted/"], stdin=None, stdout=DEVNUL$
+#     print ("ACDmount  done")
+  #  if os.path.exists("/home/plex/.acd-sorted/"):
+   #     push = pb.push_note("ACD mount back up", "restart successful")
+    #    logging.info("ACD mount restart succeeded")
+ #else:
+  # print 'all good'</code> 
+  
+On va ensuite exécuter ce scripte tout les 6 minutes via [[https://doc.ubuntu-fr.org/cron|cron]], un délais entre chaque sync est au minimum de 5 minutes.
+  
+ <note>*/6 * * * * sh /home/plex/sync.sh >> /home/plex/logs/cron.log 2>&1</note> 
+  
+  
+==== Remontage apres un reboot ====
+
+on va créer un script qui permet de remonter tout ceci via cron apres un reboot.
+
+On crée d'abord un fichier .encfspass qui ne contiendra que le mot de pass de encfs.
+  
+<code>nano /home/plex/.encfspass</code>
+
+ensuite un script **.mount.sh** contenant le code suivant qu'on rendre exécutable via **chmod +x** 
+<code> !/bin/sh
+/bin/fusermount -uz /home/plex/acd-sorted
+/bin/fusermount -uz /home/plex/.acd-sorted
+/bin/fusermount -uz /home/plex/local-sorted
+/bin/fusermount -uz /home/plex/.local-sorted
+/bin/fusermount -uz /home/plex/sorted
+acd_cli sync
+acd_cli mount -ro /home/plex/.acd-sorted
+ENCFS6_CONFIG='/home/plex/encfs.xml' encfs --extpass="cat /home/plex/.encfspass" /home/plex/.acd-sorted /home/plex/acd-sorted
+ENCFS6_CONFIG='/home/plex/encfs.xml' encfs --extpass="cat /home/plex/.encfspass" /home/plex/.local-sorted /home/plex/local-sorted
+unionfs-fuse -o cow /home/plex/local-sorted=RW:/home/plex/acd-sorted=RO /home/plex/sorted/
+exit </code>
+
+et on ajoute a cron :
+
+<code>@reboot /home/plex/.mount.sh > /home/plex/logs/mount.log 2>&1</code>
+
+
+  
+===== Voir aussi =====
+==== les sources : ====
+[[https://amc.ovh/|Automated Media centre]]
+[[http://http://makeshift.ninja/|makeshitf.ninja]]
+[[https://github.com/yadayada/acd_cli|https://github.com/yadayada/acd_cli]]
+ 
+
+----
+//Contributeurs principaux : [[:utilisateurs:Ethanfel]].//

@@ -1,0 +1,436 @@
+
+{{tag>audio matériel compilation kernel tutoriel}}
+
+----
+
+======Compiler les pilotes ALSA pas à pas======
+
+Le but de ce Wiki est de compiler les pilotes [[wpfr>ALSA]] pour votre carte son de manière la plus simple possible, pour par exemple, pouvoir profiter des dernières mises à jour sans devoir attendre la prochaine version de Ubuntu =)
+
+Je me suis inspiré d'[[http://www.alsa-project.org/alsa-doc/doc-php/template.php?company=Creative+Labs&card=Sound+Blaster+Live+7.1.&chip=SB0410%2C+P17&module=ca0106|un tutoriel sur le forum]]. J'ai (bien sûr) traduit et rajouté des sudo là où ça pouvait bugger. Inspirez vous des articles pour vos cartes son si vous avez un problème.
+
+**Un point important, si vous compilez vous même ces pilotes puis que vous changez de version d'Ubuntu (passage de Edgy Eft à Feisty Fawn par exemple), vous pouvez perdre le son, c'est normal ! Il vous faudra donc recompiler les pilotes.**
+
+<note important>Attention : cette méthode ne marche pas avec le chipset ICH8 de Intel. Le mieux est encore de garder sa version d'ALSA, qui est stable sous Gutsy pour ce chipset.</note>
+
+
+
+
+
+
+
+
+
+
+
+
+=====Pré-requis =====
+
+**Tout lire jusqu'à la fin avant de commencer quoi que ce soit, c'est important.**
+
+  * Connaître son modèle de carte son:
+<code>lspci | grep [Aa]udio</code>
+  * Regarder sur [[http://www.alsa-project.org/]] les mises à jour dans le menu de droite,Latest News, pour voir si votre carte son est concernée par une mise à jour. Pour cela, cliquez sur la version du programme. Par exemple pour la dernière version en bêta, 1.0.14rc4, cliquez sur [[http://www.alsa-project.org/changes/v1-0-14rc3--v1-0-14rc4.txt|ALSA 1.0.14rc4 release]] (c'est un fichier txt) et faites la recherche de votre carte son ou du pilote.
+  * Il peut être aussi judicieux d'aller faire un tour dans la section Bug reporting/feature requests dans le menu au milieu en haut, il faut créer un compte (Signup for a new account), mais après vous pourrez voir l'évolution des pilotes. Cliquez sur View issues, et en bas de la page se trouve un Search pour filtrer les cartes son.
+  * Si vous voulez vérifier le développement des pilotes vous pouvez visiter le Official Alsa Wiki for Developers : AlsaWiki à cette adresse dans la section Driver Development :
+[[https://bugtrack.alsa-project.org/wiki/wikka.php?wakka=AlsaWiki]]
+Si vos pilotes portent la mention TO DO (en français : à faire), patientez, ça va arriver assez vite (mais bon, il faut un peu de temps quand même, je me suis un peu emporté sur le "assez vite" :-)).
+
+**Je vous rappelle que si votre carte son fonctionne bien, il n'est pas obligatoire de mettre à jour (Le mieux est l'ennemi du bien :!:).**
+
+
+{{:applications:stop_hand.png }}
+>**Il est recommandé d'installer les pilotes stables (Stable release), les versions bêta peuvent donner des choses étranges, donc à vos risques et périls.**
+
+Se rendre sur  : [[http://www.alsa-project.org/]]
+
+<note important>Le site semble avoir changé pour un wiki ?</note>
+
+Cliquez sur __//SoundCards//__ dans le menu au milieu en haut et choisissez le __//manufacturer//__ de votre carte son dans le menu déroulant puis cliquer sur __//go//__.
+Trouvez votre carte et cliquez sur le lien entre parenthèses après __//Details//__ dans la colonne __//Driver & Docs//__
+(c'est le __**nom de ce lien**__ qu'il faudra mettre à la place de :
+sudo ./configure --with-cards=__**nom du lien**__ --with-sequencer=yes )
+
+La page sur laquelle vous arrivez contient la commande du ./configure --with-cards=__**nom du lien**__ --with-sequencer=yes pour votre pilote dans la section **quick install**. Reprenez y le nom du pilote sans prendre toute la ligne qui peut planter si vous n'êtes pas en mode root et s'il manque des librairies.
+
+D'ailleurs le __**nom du lien EST le nom du pilote**__.
+
+Puis suivez ce qui est écrit... enfin presque :-O
+
+
+
+
+
+
+====Récupération des paquets requis====
+
+[[:tutoriel:comment_installer_un_paquet|Installez]] les paquets : [[apt://libncurses5|libncurses5]] [[apt://libncurses5-dev|libncurses5-dev]] [[apt://gettext|gettext]] [[apt://patch|patch]] [[apt://xmlto|xmlto]]
+
+
+<note important>Aucun ne fonctionne ? FIXME</note>
+
+<code>sudo apt-get install libncurses5 libncurses5-dev gettext patch xmlto</code>
+====Récupération de alsa-driver, alsa-lib et alsa-utils====
+
+Allez sur [[http://www.alsa-project.org/main/index.php/Download|la page de téléchargement du site ALSA]] et choisissez un miroir de téléchargement.
+
+Prenez :
+
+  * **alsa-driver-*** : dans le répertoire __driver__
+  * **alsa-lib-*** : dans le répertoire __lib__
+  * **alsa-utils-*** : dans le répertoire __utils__
+
+//L'astérisque est à remplacer par le numéro de version choisi. Les 3 fichiers doivent avoir le même numéro de version.//
+
+(On suppose que les fichiers ont été téléchargés sur votre bureau)
+
+Ensuite créez le répertoire /usr/src/alsa/
+  sudo mkdir /usr/src/alsa
+et placez-y alsa-driver, alsa-lib et alsa-utils
+  sudo mv ~/Bureau/alsa-* /usr/src/alsa/
+
+
+=====Installation=====
+
+
+
+====Installation des alsa-driver ====
+
+__Extraction de l'archive :__
+  cd /usr/src/alsa/
+  sudo tar jxvf alsa-driver-*
+
+__Installation :__
+  cd alsa-driver-*
+  sudo ./configure --with-cards=[votre pilote] --with-sequencer=yes --with-card-options=all
+  sudo make
+  sudo make install
+**Remarque 1:** remplacer [votre pilote] par le pilote donné sur la page du site ALSA consacrée à votre carte son ou par **all** pour compiler tous les pilotes.
+Vous pouvez vous aider de 
+  cat /proc/asound/cards
+et de
+  ./configure --help
+Pour trouver le bon pilote de votre carte.\\
+  
+**Remarque 2:** si vous employez plusieurs cartes son vous pouvez employer la commande sudo ./configure --with-cards=(votre pilote 1),(votre pilote 2) --with-sequencer=yes
+vous pouvez mettre autant de pilotes que de cartes désirées ...
+
+====Installation des alsa-lib ====
+
+Ensuite, on installe les alsa-lib :
+
+__Extraction :__
+  cd ..
+  sudo tar jxvf alsa-lib-*
+
+__Installation :__
+  cd alsa-lib-*
+  sudo ./configure
+  sudo make
+  sudo make install
+
+
+====Installation des alsa-utils ====
+
+Et enfin les alsa-utils :
+
+__Extraction :__
+  cd ..
+  sudo tar jxvf alsa-utils-*
+  
+__Installation :__
+  cd alsa-utils-*
+  sudo ln -s libpanelw.so.5 /usr/lib/libpanelw.so
+  sudo ln -s libformw.so.5 /usr/lib/libformw.so
+  sudo ln -s libmenuw.so.5 /usr/lib/libmenuw.so
+  sudo ln -s libncursesw.so.5 /lib/libncursesw.so
+  sudo ./configure
+  sudo make
+  sudo make install
+
+
+
+
+====Création .asoundrc====
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] ~/.asoundrc pour installer le plugin par défaut :
+
+Et mettez-y
+<file>
+pcm.!default {
+type hw
+card 0
+}
+
+ctl.!default {
+type hw           
+card 0
+}
+</file>
+
+Puis redémarrez le PC.
+
+
+
+
+
+====Configuration alsamixer====
+
+**__Puis on configure le alsamixer__**
+
+Soit par la console :
+(Les flèches servent à changer le volume et la touche tabulation à passer de lecture à capture.)
+
+  alsamixer
+
+Soit par la version graphique de alsamixer qui se trouver en haut à droite du bureau, l'icône du
+haut parleur, clique droit, préférences, choisissez votre carte son, puis fermez et double cliquez
+sur l'icône du haut parleur.
+Ensuite  menu Edtion -> Préférences, cochez les options qui vous intéressent et __**montez le son**__
+dans l'onglet capture
+
+(__**!!! Par défaut, tous les volumes sont à 0 !!!**__)
+
+Si vous avez un micro, activez le dans l'onglet capture, colonne microphone et veillez à ce que l'icône
+en bas du volume soit activée.
+Attention tout de même à ne pas cocher la sortie analogique sous peine de ne plus avoir de son (bien sûr si vous n'utilisez pas la sortie analogique !).
+
+
+__Remarque de fin :__ Pour ceux qui installent le 5.1 par exemple, ils ne seront pas modifiés sur une mise à jour de ALSA.
+
+Pour ceux qui veulent du 5.1, ça se passe ici : 
+
+[[http://forum.ubuntu-fr.org/viewtopic.php?id=97221]]
+
+**Au passage, si vous avez un fichier enregistré en 2.1, c'est NORMAL que vous entendiez le son en 2.1 et non en 5.1, même si le 5.1 est activé. Pour entendre  en 5.1, on prend un fichier enregistré en 5.1.**
+
+
+
+
+
+
+
+=====Les programmes fournis par ALSA=====
+
+Vous vous êtes sûrement rendu compte qu'on pouvait télécharger d'autres programmes que alsa-driver, alsa-lib et alsa-utils (Mais si, ces programmes étranges à droite dès qu'on tombe sur le site principal de [[http://www.alsa-project.org/|ALSA]], dans le menu de droite, intitulé **Latest Software Releases**). 
+
+Mais quels sont-ils et à quoi servent-ils ?
+
+Je rappelle qu'il est préférable d'utiliser les versions stables de ces fichiers (**Stable release**).
+
+Certains se trouvent dans Synaptic, mais vous y trouverez que les versions stables. 
+
+Pour pouvez retrouver ces informations dans les fichiers .tar.bz2 (soit dans les répertoires Doc, soit dans les fichiers readme (en français : lisez moi).
+
+
+
+====Pilote====
+drivers Alsa recompilés, via un deb [[http://people.canonical.com/~diwic/temp/alsa-hda-realtek-ignore-sku-dkms_1.0.23.diwic_all.deb]]
+
+Soit [[ftp://ftp.alsa-project.org/pub/driver/|alsa-driver]]
+
+Fichiers de base **inévitables** : ce sont les pilotes !!!
+
+
+
+====Library====
+
+Soit [[ftp://ftp.alsa-project.org/pub/lib/|alsa-lib]]
+
+Autres fichiers de base, tout aussi **inévitables**, vous n'y couperez pas ! :-D
+
+
+
+
+
+
+
+====Utilities====
+
+Soit [[ftp://ftp.alsa-project.org/pub/utils/|alsa-utils]]
+
+Ce paquet contient les utilitaires pour ALSA. Il peut être compilé avec les pilotes ALSA et les librairies C ALSA. **Indispensable** pour contrôler le son !
+
+Vous y trouverez :
+
+   *alsaconf	        - Le script de configuration des pilotes ALSA
+
+   *alsactl		- L'utilitaire de configuration des cartes son
+
+   *aplay/arecord	- L'utilitaire pour jouer et enregistrer les fichiers .wav,.voc,.au files
+
+   *amixer		- Le contrôleur de son en ligne de commandes par la console
+
+   *alsamixer	        - Le contrôleur de son écrit avec les librairies ncurses
+
+   *amidi		- L'utilitaire pour envoyer et recevoir les sysex dumps ou d'autres données MIDI
+
+   *iecset		- L'utilitaire pour voir le status de IEC958
+
+
+
+
+
+====Lib-plugins====
+
+Soit [[ftp://ftp.alsa-project.org/pub/plugins/|alsa-plugins]]
+
+Ceci vous donne accès à :
+
+   * A52 : Plugin de sortie A52, pour convertir le format linéaire S16 vers le format A52 et envoie le signal vers la sortie SPDIF. Il nécessite libavcodec pour encoder l'audio.
+
+   * Lavcrate : Plugin pour convertir le taux d'échantillonnage, il utilise libavcodec. 
+
+   * Jack : Plugin JACK <--> ALSA PCM. Il convertit L'API ALSA par dessus l'API [[:jackd|JACK]]. Ce qui permet de faire fonctionner les application native ALSA avec jackd en lecture et enregistrement.
+
+   * Maemo : Ce plugin convertit l'API ALSA en protocole PCM. Tout comme [[:jackd|JACK]], il rend ALSA compatible avec le DSP PCM.
+
+   * Pcm-oss : Ce plugin rend compatible l'API ALSA avec l'API OSS. Ce qui permet de faire fonctionner les application native ALSA avec OSS en lecture.
+
+   * Pulse : Ce plugin permet les programmes utilisant ALSA d'accéder au démon PulseAudio en lecture et écriture.  Il contient un plugin pour PCM et un plugin de contrôleur de son 
+
+   * Samplerate : Utilisé pour convertir le taux d'échantillonnage avec Libsamplerate
+
+   * Speexrate : Utilisé pour convertir le taux d'échantillonnage avec Speex Resampler
+
+   * Upmix : Plugin qui permet de mixer un son de quatre voies en son de 6 voies
+
+   * Vdownmix : Plugin qui permet de mixer un son de 4-6 voies vers un son de 2 voies en stéréo
+
+
+
+
+====Tools====
+
+Soit [[ftp://ftp.alsa-project.org/pub/tools/|alsa-tools]]
+
+Cette section semble réservée aux anciennes cartes sons, et toujours mises à jour.
+
+Ici vous trouverez :
+
+   * Ac3dec : Un décodeur gratuit de flux AC-3
+
+   * As10k1 : C'est l'assembleur pour les cartes à base de emu10k1 DSP présents dans les cartes son creative SB live, PCI 512, et emu APS
+
+   * Echomixer : Emixer est l'équivalent Linux de Echoaudio, pour gérer les cartes son Echoaudio.
+
+   * Envy24control : Outil de contrôle pour les cartes son à base de Envy24 (ice1712)
+
+   * Hdspmloader : Loader pour le firmeware pour les cartes sont à base de RME Hammerfall DSP
+
+   * Hdspmixer : HDSPMixer est l'équivalent Linux des applications Totalmix de RME, pour gérer les cartes son RME Hammerfall DSP
+
+   * Ld10k1 : Difficile d'utilisation, c'est le chargeur de patchs EMU10K1 (EMU10K2) pour ALSA. Nécessite au moins la version 1.0.7rc1 des alsa-lib **ET** des pilotes compilés dans le kernel)
+
+   * Mixartloader : Firmeware pour les cartes son à base de Digigram miXart
+
+   * Pcxhrloader : Firmeware pour les cartes son à base de Digigram pcxhr
+
+   * Qlo10k1 : Toujours en développement, plusieurs types d'interfaces graphiques pour ld10k1. Nécessite QT pour être compilé.
+
+   * Rmedigicontrol : Outil de contrôle pour les cartes son Digi32 et RME Digi96
+
+   * Sb16_csp : Nécessite les alsa-driver. Programme de contrôle pour les SB16
+
+   * Seq : Ceci est sbiload, un vieux chargeur d'instruments OPL2/3 FM. Nécessite le module snd-synth-opl3
+
+   * Sscape_tl : Un outil MIDI ALSA sscape ctl
+
+   * Us428control : Outil de contrôle pour les Tascam 428
+
+   * Usx2yloader : Firmeware pour la carte son USB Tascam USX2Y 
+
+   * Vxloader : Outil de contrôle pour les cartes son Digigram VX
+
+
+
+
+====Firmware====
+
+Soit [[ftp://ftp.alsa-project.org/pub/firmware/|alsa-firmware]]
+
+Le fichier de firmwares vous sont fournis... (en correspondance avec les pilotes fournis dans alsa-tools).
+
+Donc pas grand chose à dire à part que si vous installez ces fichiers, vous aurez besoins des alsa-tools.
+
+
+
+
+====PyALSA====
+
+Soit [[ftp://ftp.alsa-project.org/pub/pyalsa/|pyalsa]]
+
+PyALSA (Py pour Python, donc programmé en Python) est un pack d'interfaces graphiques tout nouveau pour les différents modules de ALSA. Encore en bêta, la première version finale n'est pas loin.
+
+Etrangement (ou normalement vu qu'il est toujours en bêta ?), très peu d'informations dessus.
+
+
+
+
+====OSS Compat. Library====
+
+Soit [[ftp://ftp.alsa-project.org/pub/oss-lib/|alsa-oss]]
+
+Ce sont les bons vieux alsa-oss ! (Open Sound System)
+Ils se trouvent dans synaptic. Ils servent à pouvoir lancer un programme qui utilise alsa avec un programme utilisant oss, et avoir du son dans les deux à la fois. 
+
+Si en théorie ça fonctionne, en pratique ce n'est pas toujours le cas, mais c'est le dernier recours pour ce problème de cohabitation alsa-oss.
+
+Voué à disparaître avec oss ! (dans longtemps quand même)
+
+=====Astuces=====
+
+====Bug programmes oss====
+
+Sur certains programmes on ne pourra tout de même pas entendre plusieurs sons quand ils sont lancés.
+Mais il existe une alternative, mais qui ne fonctionnera pas pour tous les programme dû à la vétusté du
+procédé.
+Il suffit d'installer le paquet synaptic alsa-oss.
+Ensuite, il suffit de lancer en mode console (ou de faire un petit lien sur le bureau : clique droit sur le bureau, créer un lanceur... puis mettre un nom et la commande qui vous intéresse) :
+
+
+<code>aoss nom-du-programme</code>
+
+J'ai essayé la méthode avec Firefox, ça fonctionne, mais avec d'autres programmes  ce n'est pas dit. A vous d'essayer !
+
+
+
+
+
+====J'ai des erreurs à la compilation====
+
+Si jamais vous avez une erreur sur le **./configure**, vérifiez d'avoir installé les librairies curses. Ensuite regardez les lignes comportant **no**, vous avez sûrement oublié quelque chose, et ça sera écrit dedans.
+
+Si l'erreur se fait sur le **make** sans avoir d'erreur sur le ./configure, c'est plus problématique. Veuillez laisser un message sur le [[https://bugtrack.alsa-project.org/alsa-bug/my_view_page.php|ALSA bugtracking system]], ça permettra à tout le monde de profiter et vous aurez une réponse rapide des gens les plus compétents pour les problèmes sur les pilotes ALSA.
+
+
+{{icons:structure-small.png  }}
+>Une chose importante, si vous avez un problème sur une compilation, ça ne sert à rien de forcer, si le ./configure plante, le make et make install planteront forcément. Si le make plante, le make install plantera aussi.
+
+
+
+
+=====Liens=====
+
+
+====Liens officiels====
+
+  * [[http://sourceforge.net/projects/alsa|Le SourceForge.net ALSA]] (en) : Encore un site pour vous aider.
+  * [[http://www.alsa-project.org/|Le site ALSA]] (en) : Le site général.
+  * [[https://bugtrack.alsa-project.org/alsa-bug/my_view_page.php|Le ALSA bugtracking system]] (en) : Pour demander de l'aide.
+  * [[https://bugtrack.alsa-project.org/wiki/wikka.php?wakka=AlsaWiki|Le wiki ALSA]] (en) : contient beaucoup d'informations détaillées sur l'état d'avancement des pilotes.
+
+NE MARCHE PAS
+====Autres liens====
+
+   *[[http://www.linuxmao.org/tikiwiki/tiki-index.php?page=ALSA|MAO for Linux : un peu plus d'explications sur alsa]]
+
+====Exemples de compilation====
+
+Vous êtes libres de rajouter des exemples à mettre après le ./configure pour vos cartes son, si elles sont exotiques ou mal documentées.
+
+[[http://forum.ubuntu-fr.org/viewtopic.php?id=100285|Exemple pour la sound blaster live 24! (pilotes ca0106)]]
+
+----
+
+//Contributeurs : [[:utilisateurs:Acp]].//

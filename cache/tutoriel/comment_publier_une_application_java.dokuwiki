@@ -1,0 +1,206 @@
+
+{{tag>tutoriel java publier application ppa launchpad}}
+
+====== Comment publier une application java ======
+
+===== Introduction =====
+Ce tutoriel décrit une méthode pour publier une application java et la rendre installable via un ppa.
+
+A noter que cette méthode peut également être utilisée pour publier une application réalisée dans un autre langage et dont l'installation ne requiert pas une re-compilation des sources.
+
+===== Pré-requis =====
+
+===== Compte launchpad et ppa =====
+
+Il est indispensable de créer un ppa sur launchpad.net. Cette [[http://developer.ubuntu.com/publish/apps/other-forms-of-submitting-apps/ppa/|page]] vous y aidera.
+Pour ce faire il faut : 
+  * Se créer un compte sur launchpad.net
+  * Se créer une clef gpg (à l'aide de SeaHorse ou Kgpg)
+  * Créer le ppa et le configurer.
+
+Pour la suite nous considérons que le launchpad créé est "monlaunchpad" et le ppa "monppa".
+L'email associé est moi@email.com.
+
+===== Préparation en local =====
+  * Créer un répertoire local ou seront construits les builds. Par exemple /home/user/ppa. Appelons le $PPA_HOME.
+  * Dans $PPA_HOME, créer un sous-répertoire avec le nom de l'application (monappli)
+  * Puis dans ce dernier répertoire un sous-répertoire avec la version de l'application. A noter que le nom de ce sous-répertoire est formaté : nomappli-version. Ici par exemple monappli-0.1.0.
+A l'arrivée on a :
+
+   /home/user/ppa
+             |__ monappli
+             |     |___monappli-0.1.0
+             |     |___monappli-0.2.0
+             |__ monapplibis
+
+
+Pour la suite nous allons essayer de packager monappli.
+
+===== dh_make : initialisation des fichiers debian =====
+
+Dans le répertoire $PPA_HOME/monappli/monappli-0.1.0 : 
+<code>
+dh_make --single --native --copyright apache --email moi@email.com
+</code>
+A noter que le paramètre "copyright" indique la licence sous laquelle vous souhaitez publier votre oeuvre (ici apache). Pour plus de détails : [[http://developer.ubuntu.com/publish/apps/choosing-a-license/|ici]]
+Il est également important que l'email soit le même que celui avec lequel vous avez la clef GPG.
+Ceci va créer un sous-répertoire debian contenant différents fichiers. Les fichiers avec les extensions .ex et .EX sont sans intérêts. Donc sous $PPA_HOME/monappli/monappli-0.1.0 : 
+<code>
+rm debian/*.ex debian/*.EX
+</code>
+
+Voyons maintenant les fichiers importants sous $PPA_HOME/monappli/monappli-0.1.0/debian.
+==== Fichier changelog ====
+Ce fichier contient les informations décrivant les changements opérés depuis la dernière version. Vous devez avoir cela : 
+<code>
+monappli (0.1.0) unstable; urgency=low
+
+  * Initial Release.
+
+ -- Moi <moi@email.com>  Sat, 04 Oct 2014 19:07:31 +0200
+</code>
+A modifier pour obtenir quelque chose de plus pertinent : 
+  * Remplacer "unstable" par une version d'ubuntu ("trusty" par exemple pour la 14.04).
+  * Compléter les éléments de modification.
+  * Changer éventuellement la date en conservant le formalisme.
+Finalement : 
+<code>
+monappli (0.1.0) trusty; urgency=low
+
+  * Initial Release.
+  * Ma première publication
+
+ -- Moi <moi@email.com>  Sun, 05 Oct 2014 21:00:00 +0200
+</code>
+
+==== Fichier control ====
+Ce fichier est un descriptif de l'application et ressemble à cela : 
+<code>
+Source: monappli
+Section: unknown
+Priority: optional
+Maintainer: Moi <moi@email.com>
+Build-Depends: debhelper (>= 8.0.0)
+Standards-Version: 3.9.4
+Homepage: <insert the upstream URL, if relevant>
+#Vcs-Git: git://git.debian.org/collab-maint/test.git
+#Vcs-Browser: http://git.debian.org/?p=collab-maint/test.git;a=summary
+
+Package: test
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: <insert up to 60 chars description>
+ <insert long description, indented with spaces>
+</code>
+
+Il convient de changer la section. Typiquement on peut mettre "utils". Plus de détails [[https://www.debian.org/doc/debian-policy/ch-archive.html#s-subsections|ici]].
+Le plus important est la zone "depends" qui décrit les dépendances d'autres paquets. Pour une application java, manifestement on doit dépendre du paquet java. 
+Au final on a quelque chose comme ça :
+
+<code>
+Source: monappli
+Section: utils
+Priority: optional
+Maintainer: Moi <moi@email.com>
+Build-Depends: debhelper (>= 8.0.0)
+Standards-Version: 3.9.4
+Homepage: <insert the upstream URL, if relevant>
+#Vcs-Git: git://git.debian.org/collab-maint/test.git
+#Vcs-Browser: http://git.debian.org/?p=collab-maint/test.git;a=summary
+
+Package: test
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, openjdk-7-jre (>=7)
+Description: Simple tool.
+ Simple tool to do whatever you want.
+</code>
+
+==== Fichier install ====
+Ce fichier décrit la destination des différents fichiers composant le paquet lors de l'installation par apt-get install. S'il n'a pas été créé par dh_make il faut le créer.
+A l'installation le shell lanceur devra se trouver dans /usr/bin, les autres élements nécessaires à l'exécution dans /usr/lib/monappli.
+Typiquement pour une application java on va trouver un jar (monappli-0.1.0.jar) contenant le bytecode, un shell (monappli) pour lancer le programme, éventuellement des ressources comme des images (monappli.png).
+
+Egalement à l'installation on voudra créer un raccourci (monappli.desktop) dans le menu et y associer une icône (monappli_icon.png).
+<code>
+monappli /usr/bin
+monappli-0.1.0.jar /usr/lib/monappli
+monappli.png /usr/lib/monappli
+monappli.desktop /usr/share/applications
+monappli_icon.png /usr/share/pixmaps
+</code>
+
+Ci-dessous un exemple de fichier monappli.desktop 
+<code>
+Version=0.1.0
+Name=monappli
+Comment=Simple tool
+Exec=monappli
+Icon=monappli_icon
+Terminal=false
+Type=Application
+Categories=Utility
+Keywords=Utility
+StartupNotify=true
+</code>
+
+==== Autres éléments ====
+Il reste à copier dans le répertoire $PPA_HOME/monappli/monappli-0.1.0 tous les fichiers nécessaires au fonctionnement de l'application (jar, shell, ressources, icône, .desktop, ...).
+Vous pouvez également prévoir un répertoire src pour le source.
+
+L'ensemble est désormais prêt à être packagé.
+
+
+===== debuild : construction du package =====
+Sous $PPA_HOME/monappli/monappli-0.1.0 : 
+<code>
+debuild -S
+</code>
+L'exécution de cette commande crée un ensemble de fichier sous $PPA_HOME/monappli : 
+  * monappli_0.1.0.dsc : descriptif technique du paquet 
+  * monappli_0.1.0_source.build : journal d'exécution du build
+  * monappli_0.1.0_source.changes : autre descriptif technique du paquet
+  * monappli_0.1.0.tar.gz : le package proprement dit
+
+A noter que lors de l'exécution le programme vous demandera la passphrase que vous avez utilisé pour créer la clef GPG.
+
+===== dput : upload sur launchpad =====
+Il ne reste plus qu'à uploader le package sur launchpad.net. Sous $PPA_HOME/monappli/monappli-0.1.0: 
+<code>
+dput ppa:monlaunchpad/monppa ../monappli_0.1.0_source.changes
+</code>
+A la suite de cette commande, les fichiers (.tar.gz, .dsc, .changes) sont chargés sur launchpad.net. Un mail vous est envoyé sur moi@email.com pour vous indiquer que la paquet a été accepté dans launchpad.net. En vous connectant sur https://launchpad.net/~monlaunchpad/+archive/ubuntu/monppa vous devez voir votre package. 
+
+Par contre il n'est pas forcément directement opérationnel car des process en background sur launchpad vont construire des paquets .deb directement opérationnels (1 en amd64, 1 en i386) ce qui peut prendre un peu de temps (de quelques minutes à 1h).
+
+Cliquer sur le lien "view package details".
+
+Une liste cliquable des paquets apparait. En cliquant sur le lien "monappli-0.1.1", vous voyez apparaitre le détail du package  : au minimum un fichier .dsc et un .tar.gz. Si launchpad a déjà effectué son travail vous voyez également un fichier amd64.deb et un i386.deb, sinon il faut attendre. 
+
+===== Installation du package par le gestionnaire de logiciel =====
+Pour pouvoir installer l'application monappli il faut ajouter le ppa à votre liste : 
+<code>
+sudo add-apt-repository ppa:monlaunchpad/monppa 
+sudo apt-get update
+</code>
+
+Il reste à installer l'application via le gestionnaire de logiciel ou via la ligne de commande : 
+<code>
+sudo apt-get install monappli
+</code>
+
+===== Mise à jour des versions =====
+Si vous faites évoluer votre application, pour publier la version suivante, il suffit de copier le sous-répertoire de la dernière version, d'en actualiser le contenu (fichiers changelog, control, install, ...) et de reprendre les commandes depuis l'étape "debuild : construction du package".
+Par exemple sous $PPA_HOME/monappli : 
+<code>
+cp -r monappli_0.1.0 monappli_0.2.0
+</code>
+
+===== Voir aussi =====
+
+  * **(en)** [[http://developer.ubuntu.com/publish/apps/other-forms-of-submitting-apps/ppa/|sur le site des développeurs ubuntu]]
+  * **(en)** [[https://www.ebower.com/docs/ubuntu-ppa/|Tutoriel en anglais dont cette page est largement inspirée]]
+
+----
+
+//Contributeurs principaux : [[:utilisateurs:ladeche|ladeche]]//
+

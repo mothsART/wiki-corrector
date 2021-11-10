@@ -1,0 +1,300 @@
+
+{{tag>reseau}}
+====== Bonding : Agrégation de plusieurs Interfaces réseaux en une Interface logique ======
+
+Bonding est un pilote qui permet d'agréger plusieurs cartes réseaux de sorte à augmenter la bande passante et avoir une «haute disponibilité».
+
+Si une interface Bond est montée avec 2 cartes réseaux à 100 Mbits/s, selon le mode utilisé le débit obtenu pourra être de 200 Mbits/s .
+La machine restera accessible si l'une des interfaces ne répond plus.
+
+
+**wikipedia** : [[wpfr>Agrégation de liens]]
+
+
+[[http://www.cyberciti.biz/howto/question/static/linux-ethernet-bonding-driver-howto.php]]
+
+===== Descriptif =====
+
+
+
+==== Prérequis ====
+
+3 Normes peuvent être utilisées au niveau du switch pour mettre en place une interface bond :
+  * configuration en mode "port trunking"
+  * norme 802.1Q permet Vlan trunking
+  * norme 802.3ad permet l'agrégation de lien
+
+Le serveur doit avoir :
+  * des cartes réseaux compatibles : ethtools et/ou miitools
+  * le module bonding installé.
+
+Le module bonding.ko est installé par défaut :
+
+  ls /lib/modules/`uname -r`/kernel/drivers/net/bonding/bonding.ko
+
+
+
+==== Les modes ====
+
+Comme cela à été précisé, en fonction du mode sélectionné l'agrégat fonctionnera de façon différente.
+
+=== Mode 0 : Round Robin , équilibrage de charge ===
+
+La transmission des paquets se fait de façon séquentielle sur chacune des cartes actives dans l'agrégat. Ce mode augmente la bande passante et gère la tolérance de panne.
+
+=== Mode 1 : Active - passive ===
+
+Ce mode ne gère que la tolérance de panne. Si une des interfaces est désactivée, une autre lien du bond prend le relais.
+
+=== Mode 2 : Balance xor ===
+
+Une interface est affectée à l'envoi vers une même adresse MAC. Ainsi les transferts sont parallélisés et le choix de l'interface suit la règle :
+(Adresse MAC de la source XOR Adresse MAC de la destination) modulo nombre d'interfaces.
+
+=== Mode 3 : Broadcast ===
+
+Tout le trafic est envoyé par toutes les interfaces
+
+
+=== mode 4 : 802.3ad ===
+
+Ce mode s'appuie sur la norme IEEE 802.3ad Dynamic link aggregation.
+Toutes les interfaces du groupe sont agrégées de façon dynamique, ce qui augmente la bande passante et gère la tolérance de panne.
+
+Cela implique que le switch gère le 802.ad et les interfaces soient compatibles mii-tool et/ou ethtool.   
+
+=== mode 5 : balance-tlb ===
+
+Adaptive transmit load balancing : seule la bande passante en sortie est load balancée selon la charge calculée en fonction de la vitesse, ceci pour chaque interface.
+Le flux entrant est affecté à l'interface courante. Si celle-ci devient inactive, une autre prend alors l'adresse MAC et devient l'interface courante.
+
+=== mode 6 : balance-alb ===
+
+Adaptive load balancing : ce mode inclut en plus du tlb un load balancing sur le flux entrant et seulement pour un trafic IPV4.
+L'équilibrage est réalisé au niveau ARP. Le module intercepte les réponses pour y réécrire l'adresse MAC de l'une des interfaces du bond tout en tenant compte des spécificités du protocole ARP.
+La répartition entre les différentes interfaces, se fait de façon séquentielle ( round robin ).
+
+==== autres paramètres ====
+
+=== arp_interval ===
+
+Définit le délais en millisecondes entre chaque requête monitor ARP compatible avec le mode 0 ou 2 . Si la valeur est à 0 alors ARP monitoring est désactivé.
+
+0 est la valeur par défaut 
+
+=== arp_ip_target ===
+
+Définit les adresses IP si l'option arp_interval > 0 .
+Il peut être affecté un maximum de 16 adresses à l'agrégat dont le caractère de séparation est la virgule
+no adresse ip est la valeur par défaut 
+
+=== downdelay ===
+
+Définit le temps en millisecondes pour qu'une interface soit détectée down
+
+0 est la valeur par défaut 
+
+=== lacp_rate ===
+
+Définit  le type d'intervalle entre chaque packet LACPDU pour le mode 802.3ad
+soit :
+slow ou 0 une requête toutes les 30 seconds
+
+fast ou 1 une requête toutes les seconds
+
+slow est la valeur par défaut 
+
+=== max_bonds ===
+
+Définit le nombre maximum d'agrégat pour cette instance
+
+1 est la valeur par défaut 
+
+=== miimon ===
+
+Définit la fréquence des MII link monitoring en millisecondes. Il est conseillé de positionner cette valeur à 100.
+
+0 est la valeur par défaut 
+
+=== primary ===
+
+Option utilisable pour les modes actif-passif. Favorise une interface dans un agrégat. Si celle-ci venait à redevenir active, elle prend la main sur les autres.
+
+=== updelay ===
+
+Définit le temps en millisecondes pour qu'une interface soit détectée comme active.
+
+0 est la valeur par défaut 
+
+=== use_carrier ===
+
+Définit si on utilise le monitoring de MII ou ETHTOOL ou non
+
+1 est la valeur par défaut 
+
+=== xmi_hash_policy ===
+
+Définit la règle à utiliser pour déterminer l'interface pour les modes balance-xor et 802.3ad.
+Cette option peut prendre 2 valeur :
+
+layer2 : utilise XOR de l'adresse MAC dont la formule est : (source MAC XOR destination MAC ) modulo le nombre d'interfaces 
+
+layer3+4 : cette valeur n'est pas compatible avec toutes les implémentation 802.3ad. De plus elle fonctionne avec des protocoles de haut niveau ( TCP ou UDP )
+
+layer2 est la valeur par défaut 
+
+
+
+
+
+
+
+
+
+
+
+
+
+==== Installation ====
+
+Installation du package ifenslave pour le kernel 2.6 qui permet de gérer le bonding
+[[:tutoriel:comment_installer_un_paquet|installez le paquet ifenslave-2.6]]
+
+
+  sudo apt-get install ifenslave-2.6 
+
+Ajout d'un alias pour que le module bond soit activé avec les bonnes options
+
+  sudo vim /etc/modprobe.d/aliase-bond.conf
+
+ajouter
+
+  alias bond0 bonding
+  options bonding mode=1 miimon=100 downdelay=200 updelay=200
+
+Création de l'interface bond0 
+
+  sudo vim /etc/network/interfaces
+
+Insérer
+
+  auto bond0
+  iface bond0 inet static
+        address 192.168.0.2
+        netmask 255.255.255.0
+        network 192.168.0.0
+        gateway 192.168.0.1
+        broadcast 192.168.0.255
+        up /sbin/ifenslave bond0 eth0 eth1
+        down /sbin/ifenslave -d bond0 eth0 eth1
+
+address : l'adresse IP de votre machine\\ 
+ netmask : le masque de votre réseau\\ 
+ gateway : l'adresse IP de votre routeur/box internet\\ 
+
+Activation de l'interface bond0
+
+  sudo ifup bond0
+
+ou
+
+  /etc/init.d/networking restart
+
+**Autre méthode, avec prise en charge du dhcp**
+
+Si vous avez essayé la méthode précédente avec une adresse dynamique, vous pouvez obtenir ceci :
+
+  DHCPDISCOVER on bond0 to 255.255.255.255 port 67 interval 7
+  DHCPDISCOVER on bond0 to 255.255.255.255 port 67 interval 16
+  DHCPDISCOVER on bond0 to 255.255.255.255 port 67 interval 13
+  DHCPDISCOVER on bond0 to 255.255.255.255 port 67 interval 8
+  DHCPDISCOVER on bond0 to 255.255.255.255 port 67 interval 17
+  No DHCPOFFERS received.
+  No working leases in persistent database - sleeping.
+
+D’après ce [[https://bugs.launchpad.net/ubuntu/+source/ifupdown/+bug/63988|rapport de bug]], une méthode 'temporaire' à été trouvé.
+
+D’après ce [[http://wiki.bolay.net/doku.php?id=operating_systems:linux:debian:bonding_on_debian|wiki]] :
+
+  auto bond0
+  iface bond0 inet dhcp
+        pre-up modprobe bonding
+        pre-up ifconfig bond0 up
+        pre-up /sbin/ifenslave bond0 eth0 eth1
+        down /sbin/ifenslave -d bond0 eth0 eth1
+ 
+Exemple Ethernet + Wifi -> DHCP
+
+  auto eth0
+  iface eth0 inet manual
+        bond-master bond0
+        bond-primary eth0 wlan0
+  
+  auto wlan0
+  iface wlan0 inet manual
+        bond-master bond0
+        bond-mode 1
+        bond-miimon 100
+        bond-give-a-chance 10
+        wpa-bridge bond0
+        wpa-key-mgmt WPA-PSK
+        wpa-proto WPA
+        wpa-group CCMP
+        wpa-ssid my-ssid
+        wpa-psk "my-secret-password"
+  
+  auto bond0
+  iface bond0 inet dhcp
+        bond-slaves none
+        bond-mode 1
+        bond-miimon 100
+
+Exemple 2 X Ethernet -> DHCP
+
+  auto eth0
+  iface eth0 inet manual
+        bond-master bond0
+        bond-primary eth0 eth1
+  
+  auto eth1
+  iface eth1 inet manual
+        bond-master bond0
+        bond-primary eth0 eth1
+  
+  auto bond0
+  iface bond0 inet dhcp
+        bond-slaves none
+        bond-mode 1
+        bond-miimon 100
+        
+        
+
+===== Installation depuis ubuntu 20.04 et + =====
+<note warning>J'ai ajouté cette partie concernant l'agrégation car tout est différent depuis ubuntu 20.04, j'invite quelqu'un a améliorer l’explication, mais cette piste est la bonne</note>
+
+<note warning>Attention : suivant le type de switch que vous avez, il se peut que l'aggregation, bien que configurée et indiquée comme opérationnelle côté OS, ne fonctionne pas comme il faut côté Switch, et vous empêche donc de communiquer avec le reste de votre réseau.
+
+Dans ce cas, il faut créer le fichier /etc/systemd/network/98-bond-mac.link avec le contenu ci-dessous :
+
+  [Match]
+  Type=bond
+  
+  [Link]
+  MACAddressPolicy=none
+</note>
+==== Installation graphique ====
+
+Lancer dans un terminal
+   nm-connection-editor
+puis ajouter un connexion «LIEN» sur les carte réseaux existences.
+La désactivation des lien actuel est nécessaire.
+
+
+==== Installation terminal ====
+
+Lancer dans un terminal
+   nmtui
+puis ajouter un connexion «LIEN» sur les carte réseaux existences.
+La désactivation des lien actuel est nécessaire.
+
+

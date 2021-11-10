@@ -1,0 +1,118 @@
+
+{{tag> Xenial virtualisation}}
+----
+
+{{ :lxd:containers.png?100|}}
+====== LXD ======
+
+
+**LXD** est un logiciel libre développé par Canonical pour simplifier la manipulation de conteneurs de logiciels à la manière d'un hyperviseur de VM. C'est une surcouche logicielle de [[:LXC|LXC]]. Il fait partie du projet global  [[https://linuxcontainers.org/fr/|LinuX Containers]] de gestion de containers.
+
+Il a l'avantage d'être beaucoup plus léger qu'une machine virtuelle classique, car il ne virtualise pas un OS complet mais partage de nombreuses ressources avec l'OS hôte. On parle d'environnements virtuels (voir la page [[virtualisation|virtualisation]] pour plus d'information). Il s'appuie sur des fonctions comme les espaces de noms et les groupes de contrôle du noyau pour isoler le container du reste de la machine.
+
+<note important>En conséquence, LXD ne peut pas accueillir des systèmes autres que Linux (il n'est, donc, pas capable d'accueillir un container Windows) et ces systèmes ont été spécialement préparés pour fonctionner dans un container. Il n'est donc pas non plus possible d'utiliser des ISO de n'importe quelle distribution Linux.</note>
+
+LXD permet donc de faire tourner plusieurs serveurs sur une même machine et de les isoler les uns des autres et de la machine hôte pour une plus grande sécurité.\\
+Pour un particulier, il peux être intéressant d'utiliser un container pour démarrer un serveur ouvert sur l'internet. Ainsi, si il est mal configuré et qu'un hacker arrivait à s'introduire sur votre serveur, il serait bloqué à l’intérieur du container et n'aurait pas accès à vos fichiers persos, qui eux restent sur l’hôte.
+
+===== Pré-requis =====
+Avoir installé [[:xenial|Ubuntu 16.04]] ou une version ultérieure
+
+===== Installation =====
+
+
+Pour l'installer, il suffit d'[[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>lxd]]**.
+
+===== Configuration =====
+
+La configuration de LXD se realise en entrant la commande suivante dans une console :
+<code>sudo lxd init </code>
+
+Il faut alors répondre aux questions du configurateur. Si vous n’êtes pas un pro du sujet et/ou un as des réseaux, vous pouvez simplement valider toutes les réponses par défaut proposées. 
+  * Les images de vos containers seront alors stockée sur votre disque (option ''dir'' à la question ''Name of the storage backend to use (dir or zfs) [default=zfs]:'')
+  * LXD sera accessible uniquement en local (option ''no'' à la question ''Would you like LXD to be available over the network (yes/no) [default=no]?'')
+  * Une connexion réseau par pont (bridged network) sera configurée sur votre ordinateur. En validant les options proposées dans les boites de dialogue de cette étape, vous allez créer un sous-réseau privé virtuel sur votre machine. Les différents containers pourront communiquer entre eux sur ce réseau. Ils pourront accéder à l’extérieur grâce au mécanisme NAT (Network Address Translation) mais ne seront pas accessibles depuis l’extérieur. Pour faire simple, vos containers sont sur un réseau interne à votre ordinateur exactement comme vos ordinateurs sont sur votre réseau local derrière votre box Internet / Firewall.
+
+Si besoin, vous pourrez reconfigurer votre sous-réseau privée virtuel en entrant la commande :
+<code>sudo dpkg-reconfigure -p medium lxd</code>
+
+Enfin, afin de ne pas à avoir à passer en mode super-utilisateur à chaque commande, il faut ajouter son ''user'' au groupe ''lxd''
+<code>sudo adduser nom_utilisateur lxd</code>
+
+===== Création et manipulation des containers =====
+==== Création ====
+Maintenant que votre hyperviseur est correctement configuré, nous pouvons créer un premier container ''Debian'' nommé  ''MonContainer'' en entrant la commande :
+<code>lxc launch images:debian/stretch MonContainer</code>
+
+LXD va aller chercher sur le serveur d'image ''images:'' l'image correspondant à la distribution Debian dans sa version Stretch.
+Il existe 3 serveurs d'images:
+  * ''ubuntu:'' (contenant les images des versions stables d'Ubuntu)
+  * ''ubuntu-daily:'' (Contenant les dernières versions d'Ubuntu)
+  * ''images:'' (Contenant les images de diverses distributions Linux)
+
+Pour obtenir la liste des images disponibles sur un serveur d'images, par exemple pour le serveur ''ubuntu-daily:'' tapez la commande
+<code>lxc image list ubuntu-daily:</code>
+
+==== Manipulation ====
+Pour obtenir la liste des containers présents sur votre machine, tapez :
+<code>lxc list</code>
+
+Pour arrêter l’exécution de votre container ''MonContainer''
+<code>lxc stop MonContainer</code>
+
+Et reprendre son exécution
+<code>lxc start MonContainer</code>
+
+Et enfin pour le supprimer définitivement 
+<code>lxc delete MonContainer</code>
+
+==== Exportation / Importation ====
+Comme les machines virtuelles, les containers sont portables. Lorsque vous avez configuré un container, vous pouvez l'exporter pour le réimporter sur une autre machine hôte.\\
+Pour l'exportation, la commande est
+<code>lxc publish MonContainer --alias=MyContainer --force
+lxc image export MyContainer</code>
+
+Vous vous retrouvez alors avec un fichier de ce genre 0bf450c17cb7034077c83487e0.tar.gz. Vous pouvez le passer sur votre autre système hôte et l'importer dans votre serveur d'images local avec la commande suivante :
+<code>lxc image import 0bf450c17cb7034077c83487e0.tar.gz</code>
+Tapez ensuite 
+<code>lxc image list</code>
+pour connaitre les infos sur votre image importée et les utiliser pour créer un nouveau container
+===== Travailler dans vos containers =====
+
+Pour exécuter une commande dans votre container ''MonContainer'', tapez par exemple :
+<code>lxc exec MonContainer -- apt get update</code>
+
+Si vous souhaitez exécuter plusieurs taches, il est alors préférable de "rentrer" dans le container comme suit :
+<code>lxc exec MonContainer -- /bin/bash</code>
+
+Vous pouvez aussi y entrer en temps que utilisateur ''ubuntu''
+<code>lxc exec MonContainer -- sudo --login --user ubuntu</code>
+Les images Ubuntu ont un user ''ubuntu'' preconfiguré avec les droits de sudo sans password.\\
+
+Vous pouvez faire ce que vous voulez dans votre container sans risque d’endommager ou corrompre votre système hôte. Ce qui se passe dans le container reste dans le container.\\
+
+Il est toutefois possible de partager des fichiers et/ou des répertoires entre l'hôte et le container. Par exemple, pour copier le fichier ''truc.zip'' dans votre container :
+<code>lxc file push truc.zip MonContainer/tmp/</code>
+
+Vous pouvez aussi recuperer ce fichier ''truc.zip'' sur votre système hôte:
+<code>lxc file pull MonContainer/etc/truc.zip .</code>
+
+Enfin, pour monter un repertoire de partage entre votre système hôte et votre container:
+<code>lxc config device add MonContainer MonContainerDevice disk source=/tmp/ path=/host/tmp </code>
+
+Ceci monte le dossier /tmp/ de l'hôte vers le dossier /host/tmp du container.
+ 
+===== Aller plus loin =====
+(FIXME lien mort ) Pour configurer votre container, et votre hôte, afin de le rendre visible sur Internet, je vous invite à lire ce [[https://www.supinfo.com/articles/single/5924-configurer-utiliser-lxd|tuto]](FR). Indispensable si vous installez un serveur web, ftp ou autre dans votre container.\\
+Pour faire fonctionner des applications graphiques, accéder à la carte son, etc, je vous invite à suivre ce [[https://blog.simos.info/how-to-run-graphics-accelerated-gui-apps-in-lxd-containers-on-your-ubuntu-desktop/|tuto]] (EN). Notez, qu'il faudra mettre à jour LXD pour utiliser la version 2.7 minimum. Cette méthode peut être intéressante pour installer des logiciels qui installent des packages i386 comme wine ou google-earth sans compromettre les dépendances des packages de votre système hôte.
+
+===== Ressources =====
+[[https://linuxcontainers.org/fr/lxd/getting-started-cli/]] \\
+[[https://www.supinfo.com/articles/single/5924-configurer-utiliser-lxd]] \\
+[[https://bioinfo-fr.net/la-magie-de-lxd]] \\
+[[https://stgraber.org/2016/03/11/lxd-2-0-introduction-to-lxd-112/]]
+
+----
+
+//Contributeurs principaux : [[utilisateurs:zarmu|zarmu]].//
+ 

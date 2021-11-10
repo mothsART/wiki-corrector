@@ -1,0 +1,272 @@
+
+{{tag>Xenial serveur BROUILLON}}
+----
+====== Installer et configurer Virtualmin ======
+
+Virtualmin est un module pour [[:webmin]] permettant de gérer divers sites et hébergements internet ([[wpfr>Control_panel_(Web_hosting)]])
+
+
+> FIXME : page non vérifiée, à retravailler si quelqu'un veut s'y mettre
+> [[http://www.virtualmin.com/|site officiel (en)]]
+> [[http://www.webmin.com/|Webmin (en)]]
+
+
+
+Après avoir essayé toutes les interfaces de gestion de sites possibles, gratuites ou non, je me suis rendu compte que Virtualmin était la plus appropriée.
+En effet, n’ayant qu’une petite dizaine de sites à héberger, la simplicité d’utilisation de ce panel m’a fait opter pour cette solution.
+
+Les plus :
+
+  * Prise en main rapide et intuitive.
+  * Intégration parfaite à Webmin, donc inutile de s’encombrer d’un autre panel.
+  * Automatisations des taches lors de la création de vos domaines.
+
+Les moins :
+
+  * Il n’y a pas beaucoup de sites francophones traitant du sujet.
+
+A l’heure ou je rédige ce tutorial, les versions stables les plus abouties sont respectivement la 1.320 pour Webmin et la 3.341 pour Virtualmin.
+
+Dans la mesure du temps dont je dispose, je tacherai de tenir ce tutorial à jour, en fonction des évolutions produits. Les releases se bousculant, cela ne sera pas simple.
+
+En fonction des paquets installés sur votre machine, Webmin vous proposera soit d’installer et de configurer les modules, soit simplement de les configurer.
+
+Il est également à noter que ces paquets différeront suivant la version que vous utilisez pour vos sources. Testing, stable etc.
+
+Une fois Virtualmin installé, via le panneau Configuration de Webmin/Modules Webmin, vous accédez à la page d’installation du module.
+Pour information, celle-ci se trouve dans la rubrique Serveur de Webmin ; Serveurs Virtuels Virtualmin.
+
+Lancez le script d'installation de Virtualmin. 
+
+Vous aurez la possibilité de procéder à l'installation automatique des divers modules disponibles, en suivant les liens qui vous seront proposés, tout au long de l'exécution du script.
+
+===== Installation Automatisée =====
+
+==== Télécharger le script d'installation ====
+
+L'installation automatisée se fait sur une installation 'fraiche' d'ubuntu server.
+
+Une fois ubuntu installé, connectez vous en ssh (si server distant) ou ouvrez un [[:terminal]] : <code>wget http://software.virtualmin.com/gpl/scripts/install.sh
+sudo chmod 755 install.sh
+sudo ./install.sh</code>
+  
+
+==== Connectez-vous à Virtualmin ====
+
+Une fois l'installation terminée, vous aurez accès à Virtualmin / Webmin via : https://localhost:10000/ (pour un serveur maison) mais pour un serveur hébergé referez vous a votre fichier /etc/hosts (par exemple pour un serveur kimsufi chez ovh l'adresse sera de type https://ksXXXXX.kimsufi.com:10000).
+
+===== Installation Manuelle =====
+
+==== Bind8/9 ====
+
+Lisez [[:bind9|cette page]] pour en savoir davantage sur Bind.
+
+Procédez à l’installation en suivant les liens qui vous sont proposés.
+
+Exemple pour Bind :
+
+<file>
+Le serveur DNS BIND version 8 ou 9 ne semble pas etre installé sur votre systeme, 
+ou n'a pas été correctement configuré dans le module Webmin Serveur DNS BIND. 
+Si votre système n'utilise pas BIND, 
+il doit être désactivé dans la page de configuration du module Virtualmin.
+</file>
+
+
+<file>The BIND package can be automatically installed by Webmin. 
+Click here to have it downloaded and installed using APT.
+</file>
+
+Une fois Bind installé, cliquez sur  **Configuration du module**, cherchez le champ **Chemin d'accès complet au fichier named.conf** et ajoutez **.local** à la fin de la ligne **/etc/bind/named.conf** (n’oubliez pas le point avant local). Donc : **/etc/bind/named.conf.local**. Validez.
+
+Nous allons à présent apporter un minimum de sécurité à Bind.
+
+Pour cela, depuis le panel d’administration du module, cliquez sur **Edit Config File**.
+
+Après :
+<code>//include "/etc/bind/zones.rfc1918";</code>
+ajoutez la ligne
+<code>include "/etc/bind/named.conf.options";</code>
+Sauvegardez, puis cliquez à nouveau sur **Edit Config File**.
+
+Vous pouvez vous rendre compte que le fichier **/etc/bind/named.conf.local** à disparu et a été remplacé par le fichier **/etc/bind/named.conf.options**. Rassurez-vous, ce n’est que momentané. Le fichier **/etc/bind/named.conf.local** sera de nouveau disponible, lorsque vous aurez créé votre premier site.
+
+Cherchez la ligne 
+<file>auth-nxdomain no;    # conform to RFC1035</file>
+ajoutez avant
+<file>
+version "Version non disponible!";
+recursion no;
+</file>
+Sauvegardez et cliquez sur **Appliquer les changements**.
+
+Cela étant fait, revenez à la page d’installation de Virtualmin et relancez le script.
+
+<code>Le serveur DNS BIND est installé.</code>
+
+
+==== Serveur de courrier ====
+
+
+C’est la seule partie du script qui ne soit pas totalement automatisée, en effet, plusieurs produits étant disponibles, à vous de faire votre choix. Je choisis l'option  Postfix.
+
+Une fois celui-ci installé, nous avons deux petits réglages à faire.
+Cliquez sur **Domaines virtuels** et copiez/collez : //hash:/etc/postfix/virtual// dans le champ **Tables de correspondances de domaines**. N’oubliez pas de cocher le bouton radio idoine, puis validez.
+
+Cliquez sur  **Livraison du courrier** et cherchez le champ **Répertoire de file d'attente (spool)**, remplacez **var** par **home**. Donc : **/home/mail**
+
+Le répertoire mail n’existant pas, il vous faudra le créer.
+
+Relancez le script d’installation.
+
+<code>Le serveur de courrier Postfix est installé et configuré.</code>
+
+
+==== Apache ====
+
+
+Deux modules apache doivent être présents dans le dossier **/etc/apache2/mods-enabled**. Il s’agit des modules  **mod_actions** et  **mod_suexec**. 
+
+Si tel n’est pas le cas, vous trouverez ceux-ci dans le dossier **/etc/apache2/mods-available**. Ils se nomment **actions.load** et **suexec.load**.
+
+Pour les installer:
+<code>a2enmod actions</code>
+<code>a2enmod suexec</code>
+
+Une fois ces deux fichiers présents dans le répertoir **mods-enabled**, cliquez sur **Serveurs**, **Serveur Web Apache**. Sélectionnez l’icône **Reconfiguration des modules connus**, assurez que nos deux modules sont bien là et activés/cochés. Cliquez sur **Configurer**, puis sur le lien **Appliquer les changements**.
+
+Procédez à l’installation en suivant les liens qui vous sont proposés.
+<code>Apache est installé.</code>
+
+
+==== Webalizer ====
+
+
+Procédez à l’installation en suivant les liens qui vous sont proposés.
+
+Cliquez sur le lien  **Configuration du module**, et modifiez le champ **Chemin du fichier de configuration Webmin**, celui-ci  n’est pas correcte et doit se présenter sous la forme **/etc/webalizer/webalizer.conf**. 
+
+Sauvegardez et relancez le script d’installation.
+
+<code>Webalizer est installé.</code>
+
+
+==== MySQL ====
+
+Procédez à l’installation en suivant les liens qui vous sont proposés.
+
+<code>MySQL est installé et en cours d'exécution.</code>
+Si vous procédez à une installation de mysql via virtualmin, n'oubliez pas de sécuriser l'utilisateur root via un mot de passe.
+
+==== Installation suite ====
+Certains modules sont activés automatiquement.
+<code>
+Logrotate est installé.
+
+Utilisation de l'interface réseau eth0 pour les IP virtuelles.
+
+Default IP address for virtual servers is XX.XX.XX.XX.
+</code>
+<code>Le shell /bin/false pour les utilisateurs FTP n'est pas inclus dans /etc/shells, ce qui peut empêcher l'accès FTP.</code>
+Pour ne plus avoir ce message, il vous suffit d'éditer le fichier **/etc/shells** et d'ajouter **/bin/false** à la fin de votre liste.
+
+Sauvegardez et relancez le script d’installation.
+
+
+==== Quotas ====
+Je n'ai pas les compétences requises pour la rédaction de cette partie. Si vous souhaitez m'aider à rédiger le paragraphe relatif à l'installation et la gestion des quotas, votre aide sera la bienvenue.
+<code>Les quotas ne sont pas activés sur le système de fichiers / qui contient les répertoires utilisateurs sous /
+home et les fichiers de courrier sous /home. 
+L'édition de quotas a été désactivée.</code>
+
+
+
+
+
+=== Pour activer les quotas système: ===
+
+<code>sudo apt-get install quota</code>
+
+<code>sudo nano /etc/fstab</code>
+
+Le fichier fstab doit se présenter comme ceci modifier suivant votre configuration (il faut juste rajouter usrquota et grpquota au bon endroit):\\
+<code># /etc/fstab: static file system information.
+#
+# <file system> <mount point>   <type>  <options>       <dump>  <pass>
+proc            /proc           proc    defaults        0       0
+/dev/sda1       /               ext3    defaults,errors=remount-ro,usrquota,grpquota 0       1
+/dev/sda5       none            swap    sw              0       0
+/dev/hdc        /media/cdrom0   udf,iso9660 user,noauto     0       0
+/dev/fd0        /media/floppy0  auto    rw,user,noauto  0       0</code>
+
+Et enfin activer les quotas:
+<code>sudo touch /quota.user /quota.group
+sudo chmod 600 /quota.*
+sudo mount -o remount /
+sudo quotacheck -avugm
+sudo quotaon -avug</code>
+
+Pour l'utilisation et la gestion des quotas référez-vous à google avec comme mots-clé quotas+ubuntu
+
+==== C’est bon ====
+
+Normalement et si tout s’est bien passé, vous devriez avoir le message suivant :
+<code>All commands needed to create and restore backups are installed.
+.. votre système est prêt à utiliser Virtualmin.</code>
+
+
+
+
+
+==== Ajouter ProFTPd ====
+
+Il existe plusieurs projets de serveurs FTP. Pour faire simple, nous allons continuer notre installation en utilisant celui proposé par virtualmin, à savoir **Proftpd**.
+
+A l’inverse des autres modules utilisés par notre panel, Il nous fait  l’activer avant de l’installer.
+
+Vous voilà à présent face à votre fenêtre Serveurs Virtuels Virtualmin. Cliquez sur le lien **Configuration du module**.
+
+Cherchez le champ **Installation et configuration de ProFTPd ?** et cochez le bouton radio à **oui**, puis sauvegardez.
+
+Procédez à l’installation du module comme précédemment fait. Il est à noter que suivant la distribution choisie, l’installation automatique se passera plus ou moins bien. Dans ce cas, une seule solution, **apt-get install proftpd**.
+
+En fonction de votre distribution, il peut y avoir, ici aussi, un problème de chemin d’accès au fichier de configuration du module. 
+
+Cliquez sur **Configuration du module** et cherchez le champ **Path to ProFTPD config file**, remplacez **/etc/proftpd.conf** par **/etc/proftpd/proftpd.conf**, puis sauvegardez.
+
+Vérifiez que le module est bien configuré pour une utilisation **Standalone**. Pour cela, cliquez sur l’icône **Networking Options**, puis sélectionnez **Stande-alone daemon** dans la liste déroutante **Server type**.
+
+Pendant que nous y sommes, nous allons sécuriser notre serveur ftp. 
+
+Merci à lalouch pour sa remarque.
+
+En l’état actuel des choses, les utilisateurs habilités à se connecter à votre serveur, via un client ftp typs FileZilla, peuvent remonter dans l’arborescence de celui-ci. Nous allons donc limiter leur champ d’action à leur seul compte ftp. 
+
+Cliquez sur **Edit Config Files**, après la ligne :
+<code>DeferWelcome		      off</code>
+ajoutez les lignes :
+<code>
+DefaultRoot                     ~
+IdentLookups                    off
+ServerIdent on                  "FTP Server ready."
+</code>
+Pour que notre nouvelle configuration soit effective, via PuTTY, exécutez la commande :
+<code>/etc/init.d/proftpd force-reload</code>
+Relancez le script d’installation virtualmin.
+
+<code> Une erreur a été trouvée dans le template de configuration de ProFTPd : Le groupe Unix ftp de la directive Groupe n'existe pas</code>
+Le groupe **ftp** n’existant pas, il faut le créer. Depuis webmin, cliquez sur **Système**, puis sur **Utilisateurs et groupes**. Descendez à Groupes locaux, puis cliquez sur **Créer un nouveau groupe**. Dans le champ **Nom de groupe**, saisissez ftp, puis validez.
+
+Assure-vous que Proftpd a démarré normalement.
+
+Relancez l’installation de Virtualmin.
+
+
+
+===== Liens =====
+
+  * [[http://www.virtualmin.com|Site du projet]] (en)
+
+----
+
+//Contributeurs : r.fluttaz. by otcha

@@ -1,0 +1,124 @@
+
+{{tag>tutoriel sauvegarde serveur sgbd mysql }}
+
+----
+ 
+====== Sauvegarder automatiquement ses bases de données MySQL ======
+
+Ce mini tutoriel vous présente une méthode simple pour mettre en place une sauvegarde automatique des bases de données de votre serveur [[:MySQL]]. Ce script doit être installé sur le serveur MySQL.
+
+<note tip>Bien que le contenu de cette page reste valide, il est à noter que cette opération peut être réalisée directement avec un script fourni par votre distribution (depuis la version 9.10 inclue) : [[:automysqlbackup]]. Cette méthode est généralement à préférer, car plus propre.</note>
+
+Pour ce faire, nous allons utiliser 2 scripts bash et les tâches cron.
+
+Nous allons utiliser le cas suivant :
+  * Nous voulons sauvegarder nos 3 bases de données **mon_site**, **mon_forum**, et **mon_blog** automatiquement chaque nuit (nous le faisons la nuit car c'est le moment où un site a le moins de visites et donc le plus de ressources inutilisées disponibles).
+  * Nous nous connectons au serveur de base de données avec le login **root** et le mot de passe **monpass**.
+
+Attention : en aucun cas vous devez sauvegarder la base de données "à l'état brute", depuis le répertoire /var/mysq/*. En effet, ce n'est pas très portable et d'autre part, si le serveur n'est pas arrêté, vous risquez d'avoir des données non cohérentes. A la place, en utilisant mysqldump, vous avez une extraction ASCII de vos données (que vous pouvez compresser), et surtout, un mécanisme de verrou sur les bases à chaque extraction (option -opt de mysqldump par défaut). Vous n'avez en principe pas besoin d'arrêter le serveur.
+
+Pour sauvegarder les fichiers de votre site accessibles en ftp uniquement, voir avec [[:lftp#sauvegarde_sur_votre_ordinateur_de_votre_site_internet|lftp]]
+
+
+===== Création du script =====
+
+Nous allons créer le script dans le répertoire **/root/scripts/**(( ou /user/local/bin … https://askubuntu.com/questions/998452/where-should-i-put-my-bash-scripts)). Seul root y aura accès en lecture (et écriture).
+
+Si le sous répertoire script n'existe pas déjà, le créer :
+<code> sudo mkdir /root/scripts
+</code>
+
+Le script s'appellera backup_bdd.sh et contient :
+
+<code bash>#!/bin/bash
+# Script de sauvegarde des bases de données mysql/mariadb
+# Les valeurs à paramétrer sont en fin de script dans la fonction main()
+
+get_databases_to_backup() {
+    mysql_command=$(command -v mysql)
+    databases_list=$($mysql_command --defaults-file=/etc/mysql/debian.cnf -Bse 'show databases')
+
+    for exclude in $databases_exclude_list
+    do
+       databases_list=${databases_list//$exclude/}
+    done
+}
+dump_databases () {
+    ext=".sql.gz"
+    mysqldump_command=$(command -v mysqldump)
+    compress_command=$(command -v gzip)
+    current_date=$(date +%F_%Hh%M)
+    cd "${backup_folder}" || exit
+    for database in $databases_list
+    do
+        $mysqldump_command --defaults-file=/etc/mysql/debian.cnf "$database" | $compress_command  > "${database}"_"${current_date}"${ext}
+        echo "Backing up database: ${database}…"
+    done
+
+    echo "$(date +%c): Backup complete!"
+}
+delete_old_backups() {
+    find_command=$(command -v find)
+    cd "${backup_folder}" || exit
+    $find_command ./ -mtime +"${delete_backups_older_than_days}" -type f -exec rm -v {}  \;
+}
+
+main() {
+    # toujours exclure information_schema performance_schema de la sauvegarde sinon le script générera des erreurs 
+    databases_exclude_list="mysql phpmyadmin information_schema performance_schema"
+    
+    # choix du dossier de destination des sauvegardes à ajuster à vos besoins
+    backup_folder="/srv/mysql_backups"
+    if [ ! -d "$backup_folder" ] ; then
+        mkdir -p "$backup_folder"
+    fi
+
+    get_databases_to_backup
+    dump_databases
+
+    # nombre de jours pendant lesquels il faut conserver les sauvegardes, -1 si illimité
+    delete_backups_older_than_days=1
+    if [ $delete_backups_older_than_days != "-1" ] ; then
+        delete_old_backups
+    fi
+}
+
+main
+
+</code>
+
+
+===== Modification des permissions =====
+Nous allons faire en sorte que seul root puisse lire, exécuter, et modifier ce scripts :
+  cd /root/scripts && sudo chmod 700 backup_bdd.sh
+
+
+
+===== Programmation de l'exécution des scripts avec Cron =====
+
+FIXME Consulter la page [[:cron]] où il est préconisé d'utiliser <code bash>crontab -e</code> pour modifier les CRON, les infos ci-dessous, si elles ne sont pas obsolètes, ne semble plus recommandées!
+
+
+Dans le répertoire **/etc**, vous pouvez voir qu'il existe des répertoires cron.daily, cron.hourly, etc
+
+dans le fichier **/etc/crontab**, est notée la fréquence de lancement des tâches cron. Vous pouvez voir que le contenu du répertoire **cron.daily** est exécuté par défaut tous les jours à 6h25. vous pouvez modifier l'horaire si vous le souhaitez. Par exemple en y mettant l'heure où votre site est le moins fréquenté (en général vers 3h du matin). Pour plus d'informations sur la programmation des tâches cron consultez la page sur [[:cron]].
+
+Donc comme nous l'avons dit, les scripts contenus dans le répertoire cron.daily seront exécutés à l'heure définie dans crontab. Nous allons donc y placer un lien vers notre script  :
+  cd /etc/cron.daily
+  sudo ln -s /root/scripts/backup_bdd.sh 01-backup_bdd
+
+
+<note important>
+Surtout ne faites pas de lien symbolique avec un point "." dans le nom du lien, celui-ci ne serait pas exécuté et cron ne log pas cette non exécution.
+</note>
+
+C'est fini :)
+
+===== Conclusion =====
+Chaque nuit, à l'heure définie pour cron.daily, votre serveur sauvegardera automatiquement vos bases de données et supprimera les sauvegardes trop anciennes.
+
+Si vous avez un problème sur une base de données, vous pourrez donc extraire l'archive correspondant à l'état de votre base de données à une date précise, vider la base de ses tables et ré-importer le fichier sql dans la base. Ce qui veut dire qu'en cas de soucis vous pouvez remettre vos bases de données en état en moins de 15 secondes ;)
+
+----
+
+ //Contributeurs : [[:utilisateurs:_Enchained]], [[:utilisateurs:_bruno]]//

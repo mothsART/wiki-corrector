@@ -1,0 +1,73 @@
+
+{{tag>système installation}}
+----
+
+====== Le partitionnement GPT ======
+
+Cette page regroupe toutes les informations concernant le partitionnement [[wpfr>GPT|GPT]] sous Ubuntu.
+
+===== Avantages du GPT =====
+
+Par rapport au partitionnement classique (MsDos), le GPT a 4 avantages :
+  * il prend en charge des **tailles** de partitions > **2.2 To**
+  * Capacité de 128 partitions par défaut. (On peut en avoir plus, ou moins)
+  * Table de partition en 2 exemplaires: une au début du disque une à la fin. (plus robuste)
+  * Toutes les partitions sont de type primaires: Pas de notion de partition étendue et logiques. Et donc pas de problème d'interdépendance entre les partitions logiques ou vis à vis du container (la partition étendue)... Ce qui lève certaines contraintes de modifications du partitionnement et est plus robuste.
+
+===== Identifier si un disque est partitionné en GPT =====
+
+Il suffit d'ouvrir un terminal (Ctrl+Alt+T), et saisir la commande suivante:
+  sudo parted -l
+  
+Pour chaque disque, vous verrez soit "Table de partitions : **msdos**" (partitionnement classique) ou "Table de partitions : **gpt**" (partitionnement GPT).
+
+Voir aussi [[http://forum.ubuntu-fr.org/viewtopic.php?id=735491|cette discussion]].
+
+===== Installer Ubuntu sur un disque GPT =====
+
+Pour installer Ubuntu sur un disque dur partitionné en GPT:
+  * si vous utilisez l'installateur automatique, il n'y a rien de spécial à faire.
+  * si vous utilisez le [[:tutoriel/partitionner_manuellement_avec_installateur_ubuntu|partitionnement manuel]], il vous faudra créer:
+    *  soit une [[:uefi|partition UEFI]] (si votre BIOS est en [[:uefi|mode UEFI]])
+    *  soit une partition BIOS-Boot (si votre BIOS est en mode classique).
+    * soit une partition UEFI **et** une partition Bios-boot si vous pensez alterner entre les deux modes.
+
+==== Créer une partition UEFI ====
+
+Voir [[:uefi#creer_une_partition_efi|ce paragraphe]].
+<note warning>Si votre disque GPT ne possède pas de partition UEFI et que vous bootez en UEFI pour installer ubuntu, à l'issue de l'installation vous devrez modifier le bios pour booter en legacy car une installation legacy aura été faite.</note>
+
+==== Créer une partition BIOS-Boot ====
+<note help>Cette action est nécessaire pour qu'un système en mode BIOS classique puisse booter sur un disque partitionné en GPT en utilisant GRUB. Cette partition ne contient aucun système de fichier, GRUB écrira directement dessus à son installation.
+</note>
+
+Une partition BIOS-Boot peut être créée via une version récente de [[:gParted]], et doit posséder les caractéristiques suivantes:
+    * // Point de montage : // <aucun>
+    * // Taille : // 1 Mo
+    * // Type : // aucun (non formaté)
+    * // Drapeau : // bios_grub
+    * // Autre : // doit être située en début((= n'importe quel emplacement entièrement inclus dans les 2 premiers To du disque)) d'un disque partitionné en [[GPT].
+
+<note warning>
+A partir de la version 16.04.3 une installation standard se fait même sans cette partition [[https://forum.ubuntu-fr.org/viewtopic.php?pid=21794718#p21794718|bios-boot]]  voir aussi [[https://forum.ubuntu-fr.org/viewtopic.php?pid=21793981#p21793981|cela]]. 
+
+Mais en cas de déplacement de la partition contenant les fichiers de boot, il sera nécessaire  de réparer la structure de boot.
+Cela peut-être être considéré comme un BUG ([[https://bugs.launchpad.net/ubuntu/+source/ubiquity/+bug/1652332|#1652332]]) ... ou pas ([[https://bugs.launchpad.net/ubuntu/+source/ubiquity/+bug/1652332/comments/10|commentaire 10]]) </note> 
+
+Une partition BIOS-Boot peut être créée en début de disque dans l'espace neutralisé en utilisant les lignes de commandes.
+  * Vérification que l'espace est bien disponible.
+<code bash> sudo    parted  /dev/sdX unit s print free  #### remplacer X par la bonne lettre</code>
+  * Création d'une partition dans cet espace inutilisable.
+<code bash> sudo  sgdisk --new=0:34:2047 /dev/sdX   #### remplacer X par la bonne lettre</code>
+  * Récupération du numéro de partition qui a été alloué à cet espace en ré-exécutant la première commande. 
+  * Mise du drapeau adéquat à ce numéro de partition.
+<code bash> sudo   parted  /dev/sdX set N bios_grub on #### remplacer X par la bonne lettre et N par le bon n° de partition</code>
+
+
+===== Voir aussi =====
+
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=986671|Discussion "Installer Ubuntu en mode EFI ou en mode Bios"]] sur le forum ubuntu-fr
+
+
+----
+//Contributeurs principaux : [[:utilisateurs:YannUbuntu]].//

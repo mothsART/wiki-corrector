@@ -1,0 +1,833 @@
+
+{{tag>serveur tutoriel BROUILLON}}
+
+----
+====== Installer un serveur de façon rapide ======
+
+Le but de ce document est d'installer un serveur de façon rapide. La plupart des étapes ne sont pas développées. Si vous souhaitez plus d'informations, il est possible de se référer aux pages correspondantes dans la documentation de wiki et dans les pages officielles (en) [[https://ubuntu.com/server/docs]].
+
+Il est fascinant de découvrir la puissance de certains logiciels fournis par la distribution Ubuntu. L'installation d'un serveur n'a jamais été aussi simple, rapide et puissante, la configuration par défaut est la plupart du temps suffisante.
+
+Ce document devrait vous permettre de découvrir la puissance de la distribution **Ubuntu** dans la configuration d'un serveur. Il est destiné à éveiller votre curiosité dans ce domaine. Si vous avez le moindre problème dans la configuration d'un logiciel, n'hésitez pas à vous référer à la page correspondante sur ce wiki.
+
+
+
+===== Pré-requis =====
+
+  * Bases de l'utilisation de Linux (ligne de commande)
+  * Connaître les bases de l'administration d'un réseau
+  * Avoir déjà utilisé et configuré les logiciels installés
+  * Avoir déjà configuré un serveur
+  * Préparez matériellement votre serveur : je vous conseille de le mettre dans sa configuration normale (c'est-à-dire avec les deux cartes réseaux) car la détection automatique de l'installateur vous sera très utile.
+
+
+
+===== Préparation de l'installation =====
+
+  - Téléchargez la version serveur de Ubuntu correspondant à votre architecture
+  - Gravez-la
+  - Démarrez l'installation
+  - puis let's go !
+==== Sauvegarde d'un ancien serveur ====
+
+Voici les fichiers et répertoires de configuration à sauvegarder :
+
+  - /etc/dhcpd.conf
+  - /etc/bind/named.conf
+  - /var/cache/bind/
+  - /etc/firehol/firehol.conf
+  - /etc/apache2/sites-available/
+
+N'oubliez pas de jeter un coup d'oeil dans votre ''/home''.
+
+===== Installation =====
+
+  - Suivez les instructions, les points importants sont détaillés ci-après.
+
+=== Cartes réseaux ===
+
+Connectez l'une de ces cartes à votre modem ADSL Choisissez l'une des cartes (eth0 ou eth1 la plupart du temps), si la configuration automatique avec DHCP échoue, revenez en arrière et choisissez l'autre carte.
+
+=== Partitionnement ===
+
+Choisissez le partitionnement manuel. En effet, il vaut mieux utiliser plusieurs partitions pour sécuriser votre système : la plus utilisée (''/home'') ne doit pas compromettre la plus importante (''/boot'').
+
+== Swap ==
+
+  * Taille : deux fois la taille de votre RAM si elle est strictement inférieure à 1 Go
+  * Type : primaire
+  * Emplacement : début
+  * Utiliser comme : espace d'échange (swap)
+
+== ''/boot'' ==
+
+  * Taille : <del>100 MB</del> FIXME Ne semble plus approprié avec les nouvelles versions, il y a souvent des mises à jour de noyau et cela va devenir vite insuffisant. **300 à 500 Mo sont recommandés pour être tranquille**. [[http://serverfault.com/a/334665/336843|Source : serverfault.com]]
+  * Type : primaire
+  * Utiliser comme : ext2 (nous utilisons ce système de fichier car de cette façon nous sommes certains que cette partition sera lisible avec la plupart des noyaux)
+  * Point de montage : ''/boot''
+  * marquer la partition comme bootable (Indicateur d'amorçage = présent)
+
+== ''/'' (root) ==
+
+
+  * 8 Go minimum
+  * Type : primaire 
+  * Point de montage : ''/''
+
+== ''/home'' ==
+
+  * Type : primaire
+  * Point de montage : ''/home''
+
+=== Mot de passe ===
+
+<note warning>Choisissez un mot de passe très simple lors de l'installation (trois fois la même lettre par exemple), et changez-le  **dès le redémarrage**. En effet, il se peut que vous vous soyez trompé dans le choix du clavier...kiloolik passe sur presque tous les types de clavier.</note>
+
+=== Fin de l'installation === 
+
+N'installez aucun autre logiciel, nous le ferons ensuite. Redémarrez le serveur.
+
+
+
+
+
+===== Configuration =====
+
+Après le redémarrage, ''ifconfig'' montre que vous n'avez qu'une seule interface configurée.
+
+<note warning>Si vous avez choisi lors de l'installation un mot de passe trop simple, changez-le maintenant !</note>
+
+=== Fichier ''/etc/apt/sources.list'' ===
+
+Rajoutez un ''#'' devant la ligne commençant par ''deb cdrom''. Cela vous permettra d'installer directement à partir d'Internet.
+
+=== Fichier ''/etc/network/interfaces'' ===
+
+Rajoutez ceci pour créer l'adresse sur le réseau. Il est possible que ce soit la carte eth1. Attention, ces valeurs peuvent changer suivant votre configuration réseau.
+
+<code>
+auto eth0
+iface eth0 inet static
+	name LAN
+	address 192.168.0.2
+	netmask 255.255.255.0
+	broadcast 192.168.0.255
+	network 192.168.0.0
+        gateway 192.168.0.1
+</code>
+
+
+__NOTE__ : la gateway  est l'adresse de votre box ou de votre routeur elle est indispensable si vous voulez faire les mises à jour
+=== Mise à jour des listes et des paquets installés ===
+
+<code>
+sudo apt-get update
+sudo apt-get upgrade
+</code>
+
+=== Éditeur de texte ===
+
+<code>
+sudo apt-get install w3m vimhelp-fr vim
+</code>
+
+=== Configuration de l'éditeur de texte VI ===
+
+Activez la coloration syntaxique dans ''vim'' en éditant le fichier ''/etc/vim/vimrc'' et jetez un coup d'oeil aux autres options qui peuvent vous intéresser.
+
+
+
+
+==== Serveur Dhcpd3 ====
+
+<code>sudo apt-get install dhcp3-server</code>
+
+voir doc http://doc.ubuntu-fr.org/dhcp3-server (le lien ne fonctionne plus)
+
+==== Serveur ssh ====
+
+Le temps est venu d'installer le serveur ssh, en effet la taille des fichiers de configuration est plus importante à partir de maintenant, et une installation à partir d'un autre ordinateur est plus efficace. Un petit redémarrage semble utile ici (de plus, cela permet de régler en amont certains problèmes qui peuvent apparaître).
+
+<code>sudo apt-get install openssh-server</code>
+
+=== Fichier /etc/ssh/sshd_config ===
+NB 18/06/2010 : Le fichier de paramètrage actif est ssh**d**_config et non ssh_config
+
+Les lignes suivantes ne sont pas dans l'ordre. Modifiez les lignes correspondantes du fichier.
+Si on ne veut pas utiliser le port 22, il faut en choisir un qui soit libre.
+Pour cela, respecter le document http://www.iana.org/assignments/port-numbers qui précise qu'il est autorisé d'utiliser librement les ports dont les numéros vont de 49152 à 65535, vérifier aussi votre fichier /etc/services.
+La liste des ports habituellement utilisés est sur http://fr.wikipedia.org/wiki/Liste_des_ports_logiciels
+Prendre, par exemple, le port 50022.
+
+Nota: J'avais accédé à SSH par le port 22 mais ayant changé le port comme indiqué ci-dessus ça ne marchait plus.
+J'ai cherché coté firewall, etc ... alors que la cause du problème était la suivante:
+ fichiers /root/.ssh/known_hosts ou ~/.ssh/known_hosts périmés.
+Solution : les renommer ou carrément les détruire !
+
+<code>
+# Nous n'utiliserons pas le port 22
+Port XXXXX
+
+# Temps réduit pour se logger
+LoginGraceTime 30
+
+# Le root n'est pas autorisé à se logger
+PermitRootLogin no
+
+X11Forwarding no
+
+# La première partie de la ligne limite l'accès externe à un seul utilisateur
+# La seconde partie accorde l'accès à tous les autres utilisateurs en local
+AllowUsers VOTRE_UTILISATEUR@*  *@192.168.0.*
+</code>
+
+=== Test de la configuration ===
+
+<code>/etc/init.d/ssh restart</code>
+
+<note warning>N'oubliez pas que désormais le port n'est plus 22 !</note>
+
+<note important>Préferez la commande suivante pour pour redémarrer le service ssh:
+<code>service ssh restart</code></note>
+
+<code>ssh votre_adresse_ip -p XXXX</code>
+
+Rajoutez ceci dans /etc/bash.bashrc :
+
+<code>
+alias ssh_VOTRE_NOM_DHOTE='ssh 192.168.0.1 -p XXXX'
+</code>
+
+
+Une solution plus "propre" est de bien configurer son fichier de configuration personnel ssh : ~/.ssh/config 
+
+Saisissez ceci :
+<code>
+host NomCourt
+   Hostname domaine.reel.com
+   Port XXXX
+</code>
+L'accès ssh au domaine domaine.reel.com port XXXX se fait comme suit:
+<code>
+ssh NomCourt
+</code>
+
+==== Serveur DNS (bind) ====
+
+<code>sudo apt-get install bind9</code>
+
+=== Fichier ''/etc/bind/named.conf.options'' ===
+
+Si vous souhaitez faire de votre serveur un forwarder DNS pour tout votre réseau (vous trouverez les adresses IP des serveurs DNS de votre FAI dans le fichier ''/etc/resolv.conf'') :
+
+<code>
+        forwarders {
+                XXX.XXX.XXX.XXX;
+		XXX.XXX.XXX.XXX;
+        };
+</code>
+
+=== Fichier ''/etc/bind/named.conf.local'' ===
+
+Rajoutez les options correspondant à votre zone :
+
+<code>
+zone "d3in.org" {
+	type master;
+	file "d3in.org.zone";
+	allow-transfer {
+		// twisted4life
+		202.157.182.142;
+		// gandi
+		217.70.177.40;
+	};
+};
+</code>
+
+=== Fichier ''/var/cache/bind/d3in.org.zone'' ===
+
+<file>
+; Fichier de zone "type" pour le domaine "d3in.org"
+; Formation Debian GNU/Linux par Alexis de Lattre
+; http://www.via.ecp.fr/~alexis/formation-linux/
+
+; Utiliser la commande
+; "named-checkzone d3in.org /var/cache/bind/d3in.org.zone"
+; pour vérifier la validité du fichier de zone.
+
+; Utiliser la commande "named-checkconf" pour vérifier la validité du fichier
+; de configuration /etc/bind/named.conf
+
+; ATTENTION : ne pas oublier de mettre à jour le "serial" à chaque
+; modification des enregistrements de ce fichier.
+
+; ATTENTION : dans les fichiers de zone, les noms DNS complets doivent se
+; terminer par des points (par exemple "master.d3in.org.")
+
+$TTL 3D
+
+@    IN SOA     www.d3in.org.   root.ns.d3in.org. (
+                2007060101 ; serial (aaaammddrr)
+                8H
+                2H
+                4W
+                1D )
+
+d3in.org. IN TXT "v=spf1 a mx include:free.fr ~all"
+www.d3in.org. IN TXT "v=spf1 a -all"
+d3in.org.       IN      NS      www.d3in.org.
+d3in.org.       IN      NS      ns6.gandi.net.
+d3in.org.       IN      MX 1    www.d3in.org.
+d3in.org.       IN      MX 10   mail.rollernet.us.
+d3in.org.       IN      MX 10   mail2.rollernet.us.
+
+@       IN      A       82.235.70.120
+www     IN      A       82.235.70.120
+
+imap	CNAME	d3in.org.
+smtp	CNAME	d3in.org.
+
+ca		CNAME	d3in.org.
+</file>
+
+<note warning>
+  * N'oubliez pas de changer le serial **après chaque modification** (c'est un numéro qui permet aux autres serveurs de savoir si vous avez changé les définitions de noms - 2007060101 dans notre exemple. Reportez-vous à la documentation de Bind pour de plus amples informations.) !
+  * Les noms de domaines doivent terminer par un point !
+</note>
+
+=== Test ===
+
+<code>/etc/init.d/bind9 restart</code>
+
+Utilisez la commande ''named-checkzone d3in.org /var/cache/bind/d3in.org.zone'' pour vérifier la validité du fichier de zone.
+
+Utilisez la commande ''named-checkconf'' pour vérifier la validité du fichier de configuration ''/etc/bind/named.conf''.
+
+
+
+==== Firewall (firehol) ====
+
+<code>sudo apt-get install firehol</code>
+
+Si jamais à ce stade vous avez besoin d'Internet : 
+
+<code>echo 1 >  /proc/sys/net/ipv4/ip_forward && iptables -A POSTROUTING -t nat -o eth1 -j MASQUERADE</code>
+
+=== ''/etc/default/firehol'' ===
+
+Remplacez ''START_FIREHOL=NO'' par ''START_FIREHOL=YES''
+
+=== ''/etc/firehol/firehol.conf'' ===
+
+<code>
+version 5
+
+# Mettez ici le port utilisé pour SSHD
+server_ssh1_ports="tcp/XXXXX"
+client_ssh1_ports="default"
+
+interface eth0 home
+        policy accept
+
+interface eth1 internet
+        protection strong
+	# Serveurs auxquels on peut acceder depuis Internet
+        server "imap imaps smtp http ftp ssh1 dns" accept
+	# Sorties autorisees a partir du serveur
+        client "squid http https ftp smtp smtps ssh dns ping rsync ntp" accept
+
+router home2internet inface eth0 outface eth1
+        route "ftp jabber telnet rtsp time cups ping pop3 pop3s dhcp dns http https rsync rtp icmp imap imaps nntp ntp smtp smtps ssh squid sip" accept
+	masquerade
+</code>
+
+=== Test ===
+
+<code>/etc/init.d/firehol restart</code>
+
+Trouvez un ''zonecheck'' sur Internet et vérifiez que votre serveur DNS est accessible de l'extérieur. Téléchargez vos mails, envoyez un mail, naviguez sur Internet pour vérifier que tout fonctionne.
+
+Allez sur l'un de ces sites pour vérifier que votre réseau est bien sécurisé : http://www.auditmypc.com/firewall-test.asp 
+
+==== Proxy (tinyproxy) ====
+
+<code>sudo apt-get install tinyproxy</code>
+
+=== ''/etc/tinyproxy/tinyproxy.conf '' ===
+
+Au début du fichier :
+
+<code>
+#
+# Port to listen on.
+#
+Port 3128
+
+#
+# If you have multiple interfaces this allows you to bind to only one. If
+# this is commented out, tinyproxy will bind to all interfaces present.
+#
+#Listen 192.168.0.1
+</code>
+
+=== Test du proxy http ===
+
+<code>/etc/init.d/tinyproxy restart</code>
+
+Modifier les options de votre navigateur pour utiliser comme proxy ''192.168.0.1'', avec comme port : ''3128''.
+
+==== Filtrage (dansguardian) ====
+
+<code>sudo apt-get install dansguardian</code>
+
+=== ''/etc/dansguardian/dansguardian.conf'' ===
+
+Supprimez la ligne commençant par ''UNCONFIGURED''.
+
+Changez les lignes suivantes : 
+
+<code>
+virusscan = off
+
+language = 'french'
+
+filterip = 
+
+proxyport = 3128
+</code>
+
+=== ''/etc/dansguardian/dansguardianf1.conf'' ===
+
+<code>naughtynesslimit = XXX</code>
+
+=== Autres fichiers ===
+
+  * ''/etc/dansguardian/bannedextensionlist''
+  * '' /etc/dansguardian/exceptionsitelist''
+
+=== Installation des blacklists ===
+
+<code>
+cd /etc/dansguardian/
+wget ftp://ftp.univ-tlse1.fr/pub/reseau/cache/squidguard_contrib/blacklists.tar.gz
+tar xzf blacklists.tar.gz
+cd blacklists
+</code>
+
+Nous supprimons tous les liens :
+<code>find ./ -type l -exec rm -i "{}" ';'</code>
+
+=== ''bannedsitelist'' ===
+
+<code>.Include</etc/dansguardian/blacklists/blog/domains>
+.Include</etc/dansguardian/blacklists/tricheur/domains>
+.Include</etc/dansguardian/blacklists/adult/domains>
+.Include</etc/dansguardian/blacklists/redirector/domains>
+.Include</etc/dansguardian/blacklists/games/domains>
+.Include</etc/dansguardian/blacklists/shopping/domains>
+.Include</etc/dansguardian/blacklists/radio/domains>
+.Include</etc/dansguardian/blacklists/warez/domains>
+.Include</etc/dansguardian/blacklists/agressif/domains>
+.Include</etc/dansguardian/blacklists/marketingware/domains>
+.Include</etc/dansguardian/blacklists/phishing/domains>
+.Include</etc/dansguardian/blacklists/financial/domains>
+.Include</etc/dansguardian/blacklists/sexual_education/domains>
+.Include</etc/dansguardian/blacklists/strict_redirector/domains>
+.Include</etc/dansguardian/blacklists/dating/domains>
+.Include</etc/dansguardian/blacklists/drogue/domains>
+.Include</etc/dansguardian/blacklists/forums/domains>
+.Include</etc/dansguardian/blacklists/verisign/domains>
+.Include</etc/dansguardian/blacklists/hacking/domains>
+.Include</etc/dansguardian/blacklists/filehosting/domains>
+.Include</etc/dansguardian/blacklists/astrology/domains>
+.Include</etc/dansguardian/blacklists/strong_redirector/domains>
+.Include</etc/dansguardian/blacklists/mobile-phone/domains>
+.Include</etc/dansguardian/blacklists/publicite/domains>
+.Include</etc/dansguardian/blacklists/reaffected/domains>
+.Include</etc/dansguardian/blacklists/webmail/domains>
+.Include</etc/dansguardian/blacklists/gambling/domains>
+.Include</etc/dansguardian/blacklists/dangerous_material/domains>
+.Include</etc/dansguardian/blacklists/mixed_adult/domains>
+.Include</etc/dansguardian/blacklists/cleaning/domains>
+.Include</etc/dansguardian/blacklists/audio-video/domains>
+</code>
+
+=== ''bannedurllist'' ===
+
+<code>
+.Include</etc/dansguardian/blacklists/blog/urls>
+.Include</etc/dansguardian/blacklists/tricheur/urls>
+.Include</etc/dansguardian/blacklists/adult/urls>
+.Include</etc/dansguardian/blacklists/drugs/urls>
+.Include</etc/dansguardian/blacklists/redirector/urls>
+.Include</etc/dansguardian/blacklists/games/urls>
+.Include</etc/dansguardian/blacklists/shopping/urls>
+.Include</etc/dansguardian/blacklists/radio/urls>
+.Include</etc/dansguardian/blacklists/warez/urls>
+.Include</etc/dansguardian/blacklists/agressif/urls>
+.Include</etc/dansguardian/blacklists/marketingware/urls>
+.Include</etc/dansguardian/blacklists/phishing/urls>
+.Include</etc/dansguardian/blacklists/sexual_education/urls>
+.Include</etc/dansguardian/blacklists/strict_redirector/urls>
+.Include</etc/dansguardian/blacklists/dating/urls>
+.Include</etc/dansguardian/blacklists/drogue/urls>
+.Include</etc/dansguardian/blacklists/forums/urls>
+.Include</etc/dansguardian/blacklists/hacking/urls>
+.Include</etc/dansguardian/blacklists/filehosting/urls>
+.Include</etc/dansguardian/blacklists/astrology/urls>
+.Include</etc/dansguardian/blacklists/strong_redirector/urls>
+.Include</etc/dansguardian/blacklists/mobile-phone/urls>
+.Include</etc/dansguardian/blacklists/publicite/urls>
+.Include</etc/dansguardian/blacklists/reaffected/urls>
+.Include</etc/dansguardian/blacklists/webmail/urls>
+.Include</etc/dansguardian/blacklists/gambling/urls>
+.Include</etc/dansguardian/blacklists/dangerous_material/urls>
+.Include</etc/dansguardian/blacklists/mixed_adult/urls>
+.Include</etc/dansguardian/blacklists/cleaning/urls>
+.Include</etc/dansguardian/blacklists/audio-video/urls>
+</code>
+
+=== Test ===
+
+<code>/etc/init.d/dansguardian restart</code>
+
+Allez prendre un café ;-)
+
+=== Proxy transparent ===
+
+Pour l'instant, dansguardian n'est pas utilisé parce que les connections sont directes (sauf si vous précisez le contraire dans la configuration de votre navigateur en utilisant ''192.168.0.1'' comme proxy, avec comme port ''8080''). D'autre part, il est possible de passer directement par Squid, de cette manière on outrepasse la protection (en modifiant la configuration du navigateur pour utiliser le port ''3128'', utilisé par Squid).
+
+Rajoutez les lignes suivantes dans votre ''/etc/firehol/firehol.conf'' :
+
+<code>
+iptables -t filter -I OUTPUT -d 127.0.0.1 -p tcp --dport 3128 -m owner ! --uid-owner dansguardian -j DROP
+transparent_squid 8080 "nobody root"
+</code>
+
+
+
+
+
+
+==== Serveur Web (Apache) - Mysql (dernière version) - Php - Mod_python ====
+
+<code>sudo apt-get install apache2 libapache2-mod-php5  phpmyadmin libapache2-mod-python mysql-server apache2-utils</code>
+
+=== ''/etc/apache2/sites-available/default'' ===
+
+Modifiez la première ligne :
+
+<code>
+NameVirtualHost *:80
+</code>
+
+Et les lignes suivantes :
+<code>
+<VirtualHost _default_:80>
+        ServerName d3in.org
+        ServerAdmin webmaster@d3in.org
+</code>
+
+=== Test ===
+
+N'oubliez pas de créer votre mot de passe pour le root mysql (différent du root système) :
+
+<code>sudo mysqladmin -u root password "votre_mot_de_passe_root_mysql"</code>
+
+<code>/etc/init.d/apache2 restart</code>
+
+Rendez-vous sur votre serveur. Vous devriez voir une liste de fichier. Cliquez sur phpmyadmin. Si php a été correctement installé, vous ne verrez aucune erreur.
+
+=== Installation de Django ===
+
+Django est un framework python : http://www.djangoproject.com/ et [[http://www.django-fr.org/]]
+
+<code>
+sudo apt-get install python-pysqlite2  python-mysqldb subversion
+cd
+mkdir src  && cd src
+svn co http://code.djangoproject.com/svn/django/trunk/
+cd trunk
+sudo python setup.py install
+</code>
+
+== ''/etc/apache2/sites-available/VOTRE_NOM_DE_DOMAINE'' ==
+
+Consultez la documentation de Django pour plus d'information.
+
+<code>
+<VirtualHost *:80>
+        ServerName NOM_DE_DOMAINE
+        ServerAlias AUTRE_NOM
+
+        SetHandler mod_python
+        PythonInterpreter VOTRE_INTERPRETER
+        PythonHandler django.core.handlers.modpython
+        PythonPath "['/var/django'] + sys.path"
+        SetEnv DJANGO_SETTINGS_MODULE ca.settings
+        PythonDebug Off
+
+        Alias /media /var/django/ca/media
+        <Location "/media/">
+                SetHandler None
+        </Location>
+
+        ErrorLog /var/log/apache2/error.log
+        LogLevel warn
+        CustomLog /var/log/apache2/access.log combined
+</VirtualHost>
+</code>
+
+N'oubliez pas de tester votre installation !
+
+==== Serveur d'impression (Cups) ====
+
+<note warning>N'oubliez pas d'allumer votre imprimante et de la brancher au serveur...</note>
+
+<code>sudo apt-get install hpijs-ppds linuxprinting.org-ppds hpijs cups</code>
+
+=== '' /etc/cups/cupsd.conf'' ==
+
+Modifiez les lignes suivantes :
+
+<code>
+# Only listen for connections from the local machine.
+# Listen localhost:631
+Port 631
+
+# Show shared printers on the local network.
+Browsing On
+
+# Restrict access to the admin pages...
+<Location /admin>
+  Order allow,deny
+  Allow localhost
+  Allow @LOCAL
+</Location>
+</code>
+
+__Note__ : Et aussi pour "location /" si on veut avoir une belle page de cups :)
+
+=== Test ===
+
+<code>/etc/init.d/cupsys restart</code>
+
+Puis rendez vous à l'adresse suivante : http://192.168.0.1:631/
+
+==== Serveur Mail ====
+
+La partie la plus compliquée...
+
+<code>sudo apt-get install postfix courier-imap-ssl courier-imap spamassassin procmail  mailutils</code>
+
+Lorsque la question vous sera posée, choisissez l'option "NE RIEN CONFIGURER".
+
+=== Serveur Smtp (postfix) ===
+
+== ''/etc/postfix/main.cf'' ==
+
+Créez un fichier ''/etc/mailname'' contenant le nom du réseau (exemple : d3in.org).
+
+<code>
+# See /usr/share/postfix/main.cf.dist for a commented, mor complete version
+
+# Debian specific:  Specifying a file name will cause the first
+# line of that file to be used as the name.  The Debian default
+# is /etc/mailname.
+myorigin = /etc/mailname
+
+smtpd_banner = $myhostname ESMTP $mail_name
+biff = no
+
+# appending .domain is the MUA's job.
+append_dot_mydomain = no
+
+# Uncomment the next line to generate "delayed mail" warnings
+#delay_warning_time = 4h
+mydestination = www.d3in.org, d3in.org, localhost
+# Si vous avez un fournisseur d'accès :
+# relayhost = smtp.votrefai.tld
+relayhost = 
+mynetworks = www.d3in.org, d3in.org, 127.0.0.0/8
+myhostname = www.d3in.org
+mydomain = d3in.org
+
+masquerade_domains = d3in.org
+
+# Tres important
+#home_mailbox = Maildir/
+#maibox_command = maildrop
+mailbox_command = procmail -a "$EXTENSION"
+
+unkown_local_recipient_reject_code = 550
+alias_maps = hash:/etc/aliases
+
+mailbox_size_limit = 0
+recipient_delimiter = +
+
+inet_interfaces = all
+inet_protocols = ipv4
+
+smtpd_sasl_local_domain = 
+smtpd_sasl_auth_enable = yes
+smtpd_sasl_security_options = noanonymous
+broken_sasl_auth_clients = yes
+
+smtpd_recipient_restrictions = permit_sasl_authenticated,permit_mynetworks,reject_unauth_destination
+smtpd_tls_auth_only = no
+smtp_use_tls = yes
+smtpd_use_tls = yes
+smtp_tls_note_starttls_offer = yes
+smtpd_tls_key_file = /etc/postfix/ssl/smtpd.key
+smtpd_tls_cert_file = /etc/postfix/ssl/smtpd.crt
+smtpd_tls_CAfile = /etc/postfix/ssl/cacert.pem
+smtpd_tls_loglevel = 1
+smtpd_tls_received_header = yes
+smtpd_tls_session_cache_timeout = 3600s
+tls_random_source = dev:/dev/urandom
+</code>
+
+=== MDA (Procmail) ===
+
+Créez le fichier ''/etc/skel/.procmailrc'' avec ce contenu :
+
+<code>
+MAILDIR=$HOME/Maildir
+DEFAULT=$MAILDIR/
+
+:0:
+$DEFAULT
+</code>
+
+Il faut ensuite créer l'architecture du dossier ''Maildir'' : 
+
+<code>
+cd /etc/skel
+maildirmake.courier Maildir &&  maildirmake.courier Maildir/.Sent &&  maildirmake.courier Maildir/.Trash && maildirmake.courier Maildir/.Drafts &&  maildirmake.courier Maildir/.Lists
+chmod a+xr -R Maildir
+</code>
+
+Le dossier ''/etc/skel'' est un dossier qui sera la base des ''/home'' des utilisateurs que vous créerez. Par conséquent, si vous créez d'autres comptes, le contenu de ce dossier sera copié dans le ''home''. Cependant, étant donné que votre FIXME existe déjà, il est nécessaire de le copier dans votre ''home''.
+
+<code>
+cp /etc/skel/.procmailrc ~/
+cp -R /etc/skel/Maildir ~/
+</code>
+
+== ''/etc/aliases'' ==
+
+Rajoutez si vous le souhaitez des alias. N'oubliez pas de faire la commande suivante : 
+
+<code>postalias /etc/aliases</code>
+
+=== Test de la configuration Mail ===
+
+<code>
+/etc/init.d/postfix restart
+/etc/init.d/courier-imap restart
+</code>
+
+Envoyez-vous un mail :
+
+<code>
+ca@www:/etc/skel$ mail ca
+Cc: 
+Subject: Test
+Ceci est un test a partir de la console.
+ 
+ 
+.
+</code>
+
+Connectez-vous au serveur Imap en utilisant votre lecteur de mail préféré. Normalement cela devrait fonctionner.
+
+Envoyez un mail vers cette adresse à partir d'une adresse externe ou d'un autre webmail pour vérifier que tout fonctionne.
+
+
+==== Sauvegarde (backup-manager) ====
+
+<code>
+sudo apt-get install backup-manager
+</code>
+
+Ce programme est très utile, puissant et intuitif. Répondez "ok" et laissez les valeurs par défaut, nous nous attaquerons directement au fichier de configuration.
+
+=== "/etc/backup-manager.conf" ===
+
+Voici les lignes à modifier :
+
+<code>
+# Si vous souhaitez sauvegarder votre base mysql :
+export BM_ARCHIVE_METHOD="tarball mysql"
+
+# Il vaut mieux enregistrer sur un autre disque dur.
+export BM_REPOSITORY_ROOT="/var/archives"
+
+# Pour que cela prenne moins de place
+export BM_TARBALL_FILETYPE="tar.bz2"
+
+# Liste des fichiers à sauvegarder
+export BM_TARBALL_DIRECTORIES="/etc /home /var/cache/bind/ "
+
+# Fichiers à exclure
+# On exclut les listes noires de danguardian parce qu'elles prennent 
+# beaucoup de place et qu'elle ne sont pas très utiles
+export BM_TARBALL_BLACKLIST="/var/archives /etc/dansguardian/blacklists"
+
+# Mot de passe du root mysql
+export BM_MYSQL_ADMINPASS=""
+
+# Ensuite allez à la section "BM_UPLOAD_SSH" si vous 
+# souhaitez utiliser la méthode d'upload par ssh
+
+# Renseignez notamment l'endroit où se trouve votre clé :
+export BM_UPLOAD_SSH_KEY="/home/ca/.ssh/id_dsa"
+</code>
+
+
+
+==== Finalisation de l'installation =====
+
+=== Installer des clés SSH ===
+
+Il peut être utile, notamment si vous utilisez Backup-Manager via SSH, ou si vous souhaitez vous connecter sans taper de mot de passe, d'utiliser les clés. Pour ce faire, générez une clé :
+
+<code>ssh-keygen -t dsa</code>
+
+Vous pouvez entrer un mot de passe pour protéger la clé. Celui-ci vous sera demandé à chaque utilisation du fichier.
+
+Puis faites :
+
+<code>ssh-copy-id -i ~/.ssh/id_dsa.pub login@nom_DNS_du_serveur</code>
+
+Ensuite il suffira de taper cette commande dans tout nouveau shell :
+<code>
+ca $ ssh-agent screen
+ca $ # Appuyer sur "espace"
+ca $ ssh-add
+ca $ # entrez si nécessaire le(s) mot(s) de passe de votre (vos) clés
+</code>
+
+Vous pouvez vous connecter sans taper de mot de passe, tout en utilisant une connexion sécurisée !
+
+=== Recevoir des rapports ===
+
+<code>sudo apt-get install fwanalog logwatch</code>
+
+Vous n'avez rien d'autre à faire, vous recevrez automatiquement des rapports concernant vos logs.
+
+=== Vérifier la sécurité de votre système ===
+
+<code>sudo apt-get install chkrootkit</code>
+
+Attention aux « faux positifs ».
+
+<code>sudo apt-get install tiger</code>
+
+<note warning>N'oubliez pas de redémarrer pour vérifier que tout fonctionne !</note>
+
+<code>sudo apt-get install unzip build-essential</code>
+
+----
+
+//Contributeurs : [[:utilisateurs:Charles-Axel Dein]].//

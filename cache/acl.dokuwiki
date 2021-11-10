@@ -1,0 +1,131 @@
+
+{{tag>système droits}}
+
+----
+
+====== Les Access Control List : Gestion avancée des droits sous linux ======
+
+Par défaut, la gestion des [[:droits]] sous Linux est relativement basique (bien que souvent suffisante).
+En effet, il n'est possible de permettre ou d'interdire la lecture, l'écriture et l'exécution de fichiers que pour trois catégories d'utilisateurs : le propriétaire du fichier, le groupe auquel appartient le propriétaire et le reste du monde. Cette gestion des droits permet de configurer les accès aux fichiers dans la plupart des situations simples mais peut s'avérer limitée, par exemple, dans un contexte où plusieurs utilisateurs doivent accéder à une ressource partagée alors qu'ils n'ont pas de groupe commun.
+
+Les ACL permettent de pallier ce manque grâce à une gestion avancée des droits.
+Ainsi, il devient possible d'autoriser un utilisateur tiers à effectuer des opérations sur un fichier (dossier) sans autoriser tout un groupe ou tout le reste du monde. Voir les exemples pour plus d'informations.
+===== Activation =====
+
+Les ACL ne sont nativement pas activées sur Ubuntu mais le noyau les prend en charge. Le paquet [[apt://acl]] doit normalement être déjà installé.
+
+La commande <code>grep ACL /boot/config-$(uname -r)</code> permet de vérifier si le noyau prend en charge les ACL. Elle doit retourner 'y' pour le type système de fichier qui nous intéresse.
+
+Il faut maintenant [[:mount_fstab|préciser lors du montage de la partition]] que l'on veut utiliser les ACL. Si la partition concernée par le partage est de type ext4, la suite est inutile (voir la note à la fin de cette section).
+
+Soit en montant la partition avec l'option acl
+<code>mount -t ext3 -o defaults,acl /dev/sdaX/ /mount/folder/</code>
+
+soit en inscrivant l'option dans le fichier [[mount_fstab|fstab]]
+<code>UUID=xxxxxxxxx /               ext3    [autres options],acl 0       1</code>
+puis en remontant la partition (si l'on ne veut pas redémarrer)
+<code>mount -a -o remount /dev/sdax</code>
+\\ 
+(note) : si la partition concernée par le partage est de type ext4 le support des acl est actif par défaut: l'option de montage "acl" a été remplacée par "noacl", qui devient donc celle à utiliser si on veut... désactiver le support des acl.
+===== Utilisation =====
+
+==== En ligne de commande ====
+l'attribution des droits se fait grâce à la commande **setfacl**, la lecture des droits avec **getfacl**
+
+Ainsi les deux commandes suivantes sont équivalentes :
+<code>chmod u=rw fichier</code>
+<code>setfacl -m u::rw fichier</code>
+
+Un fichier dont les ACL auront été spécifiés verra s'ajouter un **+** à la fin de la liste des droits avec la commande :
+<code>ls -l fichier</code>
+
+**getfacl** permet d'afficher l'ensemble des permissions définies :
+<code>$ getfacl fichier
+# file: fichier
+# owner: utilisateur
+# group: utilisateur
+user::rwx
+user:utilisateur1:rw-
+user:utilisateur2:r--
+group::r--
+mask::rwx
+other::---
+</code>
+ici on peut voir que le propriétaire du fichier (utilisateur) a les droits rwx, utilisateur1 rw- et utilisateur2 r--, les autres utilisateurs n'ont aucun droit
+
+**getfacl --omit-header ...** supprime de l'affichage les 3 premières lignes, le nom du fichier, le propriétaire et le groupe.
+<code>$ mkdir dir
+$ ls -ld dir
+drwxr-xr-x 2 root root 4096 Mar 12 13:54 dir
+$ getfacl --omit-header dir
+user::rwx
+group::r-x
+other::r-x</code>
+Sans acl, la commande getfacl donne les mêmes informations que ls -ld
+
+**setfacl -d ...** spécifie des acl par défaut, qui ne peuvent s'appliquer qu'aux dossiers.
+<code>$ setfacl -m user:fdsadmin:rwx dir
+$ setfacl -d -m group:nasgrp:r-x dir
+$ getfacl --omit-header dir
+user::rwx
+user:fdsadmin:rwx
+group::r-x
+mask::rwx
+other::r-x
+default:user::rwx
+default:group::r-x
+default:group:nasgrp:r-x
+default:mask::r-x
+default:other::r-x</code>
+
+**getfacl --access --default ...** L'affichage précédent peut se décomposer en droits d'accès fichier, et en droits par défaut :
+<code>$ getfacl --omit-header --access dir
+user::rwx
+user:fdsadmin:rwx
+group::r-x
+mask::rwx
+other::r-x
+
+$ getfacl --omit-header --default dir
+user::rwx
+group::r-x
+group:nasgrp:r-x
+mask::r-x
+other::r-x</code>
+
+Les ** permissions effectives ** sont affichées individuellement pour les utilisateurs ou les groupes qui subissent un droit de hiérarchie supérieure différent :
+<code>$ chmod g-w dir
+$ ls -ld dir
+drwxr-xr-x+ 2 root root 4096 Mar 12 13:54 dir
+$ getfacl --omit-header dir
+user::rwx
+user:fdsadmin:rwx               #effective:r-x
+group::r-x
+mask::r-x
+other::r-x
+default:user::rwx
+default:group::r-x
+default:group:nasgrp:r-x
+default:mask::r-x
+default:other::r-x</code> Ici l'utilisateur fdsadmin qui avait pourtant les droits rwx s'est vu amputer du droit w supprimé au groupe.
+
+==== Exemples ====
+=== autoriser à "utilisateur" la lecture et l'écriture sur "fichier" ===
+<code>setfacl -m user:utilisateur:rw fichier</code>
+<code>setfacl -m u:utilisateur:rw fichier</code>
+La même commande est disponible pour les groupes. Il suffit de remplacer **u**/**user** par **g** ou **group**
+=== modifier les permissions de plusieurs utilisateurs/groupes sur "fichier" en même temps ===
+<code>setfacl -m user:utilisateur:rwx,user:utilisateur2:r,group:groupe:rw fichier</code>
+=== définir l'accès en lecture par défaut pour "utilisateur" pour les nouveaux fichiers créés dans "dossier" ===
+<code>setfacl -m d:u:utilisateur:r dossier</code>
+=== supprimer les ACL pour un utilisateur sur une arborescence ===
+<code>setfacl -R -x user::nom_user repertoire_base_arborescence</code>
+=== supprimer les ACL sur un fichier/dossier ===
+<code>setfacl -b fichier</code>
+
+==== En graphique ====
+Une fois compris les concepts des ACL, il est possible de gérer les changements de droits en graphique grâce au paquet [[apt://eiciel]].
+
+----
+
+//Contributeur : nesthib//

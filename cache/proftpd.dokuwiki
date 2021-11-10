@@ -1,0 +1,338 @@
+
+{{tag>Xenial serveur réseau ftp BROUILLON}}
+
+---- 
+
+====== Serveur FTP : PROFTPD ======
+
+Proftpd est sûrement l'un des meilleurs serveurs FTP disponibles. Il vous offrira énormément de possibilités mais n'est pas facile à maîtriser pour un débutant,
+
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>proftpd-basic]]**.
+
+A la question « Lancer ProFTPd à partir d'inetd ou indépendamment ? », à moins de savoir ce que vous faites, répondez **indépendamment** (en fait si c'est pour un "petit serveur FTP léger" préférez [[wpfr>inetd]], pour un "gros serveur FTP puissant" choisissez indépendant).
+
+Et voilà, vous avez un serveur ftp, enfin presque !
+
+===== Configuration =====
+
+[[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] de configuration de proftpd : **/etc/proftpd/proftpd.conf**
+
+Voilà les paramètres intéressants à changer pour une utilisation de base (si vous voulez plus de détail référez-vous à la documentation) :
+<file>ServerName : le nom de votre serveur ftp</file>
+
+Quotas on : enlevez le # devant la ligne pour la décommenter si vous voulez utiliser les quotas
+
+Trouvez et décommentez les lignes suivantes (en retirant les # au début de chaque ligne) pour autoriser un accès anonyme "standard" :
+<file># A basic anonymous configuration, no upload directories.
+
+ <Anonymous ~ftp>
+   User                         ftp
+   Group                        nogroup
+   # We want clients to be able to login with "anonymous" as well as "ftp"
+   UserAlias                    anonymous ftp
+   # Cosmetic changes, all files belongs to ftp user
+   DirFakeUser  on ftp
+   DirFakeGroup on ftp
+ 
+   RequireValidShell            off
+ 
+   # Limit the maximum number of anonymous logins
+   MaxClients                   10
+ 
+   # We want 'welcome.msg' displayed at login, and '.message' displayed
+   # in each newly chdired directory.
+   DisplayLogin                 welcome.msg
+   DisplayFirstChdir            .message
+ 
+   # Limit WRITE everywhere in the anonymous chroot
+   <Directory *>
+     <Limit WRITE>
+       DenyAll
+     </Limit>
+   </Directory>
+ </Anonymous>
+</file>
+Faites bien attention à décommenter le dernier paragraphe (intitulé "Limit WRITE everywhere in the anonymous chroot"), sinon l'utilisateur anonyme aura un accès en écriture dans le répertoire /home/ftp.
+Par contre, ne décommentez pas la suite (intitulée "Uncomment this if you're brave": "Décommentez ceci si vous en avez le courage").
+
+Vous pouvez autoriser de se logger en root sur le ftp en ajoutant la ligne suivante (le root login est interdit par défaut) : <file>RootLogin on</file> puis en enlevant l'utilisateur ''root'' du fichier **/etc/ftpusers**.
+
+Une fois la configuration modifiée, relancez le serveur avec la commande suivante :
+  sudo service proftpd restart
+
+==== Configuration avec inetd ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>inetd]]**.
+
+Puis [[:tutoriel:comment_modifier_un_fichier|ajoutez]] dans **/etc/inetd.conf** :
+<file - /etc/inetd.conf>ftp stream tcp nowait root /usr/sbin/tcpd /usr/sbin/proftpd</file>
+
+Si vous n'avez pas installé proftpd avec l'option inetd, vous pouvez changer ce paramètre dans le fichier de configuration de proftpd : <file - /etc/proftpd/proftpd.conf>ServerType inetd</file>
+
+==== Configuration pour le mode passif ====
+
+Concernant le transfert de fichiers en FTP il existe deux méthodes : passif ou actif
+
+Le mode le plus simple est le transfert en mode actif, où le port utilisé est le port 20 (le port 21 ne sert qu'à initier la connexion et envoyer des commandes)
+
+La deuxième méthode consiste à utiliser le mode passif : une plage de ports est utilisée, ces ports étant attribués selon la configuration du serveur et le nombre d'utilisateurs.
+Par défaut, la plupart des clients FTP transfèrent les fichiers en mode passif et il est donc utile de s'occuper de cette partie de la configuration.
+
+Pour configurer la plage de ports utilisée on rajoute au fichier dans la partie générale :
+
+<code>
+PassivePorts 5000 5100
+</code>
+Où 5000 représente le premier port utilisé et 5100 le dernier. Il est déconseillé d'utiliser des numéros de ports trop bas (inférieurs à 1024) généralement réservés (HTTP, SSH etc...)
+
+Chaque utilisateur occupe environ 5 ports à chaque transferts, à vous de voir combien de ports vous devrez ouvrir.
+
+Si cette configuration suffit pour un réseau local (après ouverture des ports dans votre pare-feu), il sera plus problématique d'utiliser le FTP à distance (sur internet) si vous utilisez un routeur et le NAT (partage de connexion).
+Pour ce faire, il vous faudra tout d'abord rediriger les ports 20 et 21 (si on conserve la configuration de base à ce niveau) puis les ports utilisés pour le FTP passif (ici 5000 à 5100). Consultez la documentation de votre routeur pour cela.
+
+Le reste de la configuration s'effectue au niveau du serveur: en effet pour effectuer un transfert en mode passif, le serveur doit spécifier l'adresse ip publique du serveur. Il faut donc lui indiquer dans le fichier de configuration (si vous avez une connexion avec IP dynamique cela risque de poser problème et je vous déconseille de faire du FTP en passif dans ce cas-là)
+
+<file>
+#
+# /etc/proftpd.conf -- Masquerade avec Virtual Host Local .
+# 
+ServerType			standalone
+
+MultilineRFC2228		on
+
+# To prevent DoS attacks, set the maximum number of child processes
+# to 30.  If you need to allow more than 30 concurrent connections
+# at once, simply increase this value.  Note that this ONLY works
+# in standalone mode, in inetd mode you should use an inetd server
+# that allows you to limit maximum number of processes per service
+# (such as xinetd)
+MaxInstances			30
+
+# Some logging formats
+LogFormat         default "%h %l %u %t \"%r\" %s %b"
+LogFormat			auth    "%v [%P] %h %t \"%r\" %s"
+LogFormat			write   "%h %l %u %t \"%r\" %s %b"
+
+# Global settings
+<Global>
+
+DeferWelcome			off
+
+#DefaultServer			on
+#ShowSymlinks			on
+ListOptions                	"-l"
+DenyFilter			\*.*/
+# Utilisation de NIS ou LDAP:
+#PersistentPasswd		off
+# Utilisation de TLS:
+#TLSEngine 			on
+# Utilisation des Quotas:
+#Quotas				on
+# Utilisation des Ratio:
+#Ratios				on
+
+DisplayConnect 			before.msg
+DisplayLogin                    welcome.msg
+DisplayFirstChdir               .message
+
+MaxLoginAttempts	2
+RequireValidShell	no
+MaxClients		50
+
+# Umask 022 interdit l'écriture et la creation de fichier et de répertoire.
+Umask				022  022
+TimeoutLogin         		120
+TimeoutNoTransfer		900
+TimeoutStalled			3600
+TimeoutIdle			600
+# Delay engine reduces impact of the so-called Timing Attack described in
+# http://security.lss.hr/index.php?page=details&ID=LSS-2004-10-02
+# It is on by default. 
+#DelayEngine 			off
+
+# utilisateur et groupe du serveur.
+User				ftp
+Group				nogroup
+# Chroot PROFTPD
+DefaultRoot ~
+
+# Logging options
+TransferLog			/var/spool/syslog/proftpd/xferlog.legacy
+
+
+# Turn off Ident lookups
+	#
+	IdentLookups         off
+	#
+	# Logging
+	#
+	# file/dir access
+	#
+	ExtendedLog		/var/spool/syslog/proftpd/globaccess.log WRITE,READ write
+	#
+	#
+	# Record all logins
+	#
+	ExtendedLog		/var/spool/syslog/proftpd/globauth.log AUTH auth
+	#
+	# Paranoia logging level....
+	#
+   ##ExtendedLog    /var/spool/syslog/proftpd/paranoid.log ALL default
+
+#
+# Deny writing to the base server...
+#
+<Limit WRITE>
+	DenyAll
+</Limit>
+
+# --------------------------------------------
+	# Got a Frontpage customer who keeps breaking things????
+	#  - stick 'em in group fpage
+	# --------------------------------------------
+	<Directory ~/public_html>
+	#
+	# Block them from doing anything other than reading...
+	#
+		<Limit STOR RNFR DELE>
+			DenyGroup fpage
+		</Limit>	
+	</Directory>
+	#
+	# ditto for ftp_root if it's there...
+	#
+	<Directory ~/ftp_root>
+		<Limit STOR RNFR DELE>
+			DenyALL
+		</Limit>	
+	</Directory>
+	#
+	# Limit by IP...
+	#
+	#<Directory /web/zsl>
+	#	<Limit ALL>
+	#		Order Allow,Deny
+	#		Allow 195.200.31.220
+	#		Allow 212.32.17.0/26
+	#		Deny ALL
+	#	</Limit>
+	#</Directory>	
+
+
+ <Anonymous ~ftp>
+   User				ftp
+   Group			nogroup
+#   # Alias pour la connection de l utilisateur anonyme
+   UserAlias			anonymous ftp
+#   # n'utiliser que des alias authentifiés
+   AuthAliasOnly on
+#   # Cosmetic changes, all files belongs to ftp user
+   DirFakeUser	on ftp
+   DirFakeGroup on ftp
+# Hide all files owned by user 'root'
+   HideUser			root
+# 
+   RequireValidShell		off
+# 
+  # Message et nombre maximum de connections
+  MaxClients			50 "Désolé, le maximum de %m utilisateurs est atteint -- réessayez plus tard"
+
+#   # Limit WRITE everywhere in the anonymous chroot
+   <Directory *>
+     <Limit RMD DELE MKD STOR WRITE>
+        DenyAll
+     </Limit>
+     <Limit CWD READ>
+        AllowAll
+     </Limit>
+	
+   </Directory>
+</Anonymous>
+
+</Global>
+
+
+
+# Connexion anonyme et des utilisateur à partir du net de du réseau local
+# --------------------------------------------
+<VirtualHost 192.168.2.2>
+	ServerAdmin		aide_gnu_linux@yahoo.fr
+	ServerName		"ftp.cereli.org"
+	# Port mode PASSV 
+        PassivePorts 5000 5100
+        # Addresse de Masquage !!! A REMPLACER PAR LA VOTRE !!!
+        MasqueradeAddress  XXX.XXX.XXX.XXX
+	Port			21
+	
+</VirtualHost>
+
+# Hôte Virtuel Pour le réseau local
+# !!! A remplacer par l'adresse</file>
+
+==== Redémarrer Proftpd ====
+
+- Pour le mode "indépendant":
+Une fois les deux paramètres modifiés, on demande au serveur de prendre en compte la nouvelle configuration en le relançant:
+
+  sudo service proftpd restart
+
+- Pour le mode "inetd":
+il suffit de se (re)connecter.
+
+
+===== Utiliser votre serveur ftp =====
+
+Les utilisateurs de la machine ont un accès ftp en lecture/écriture à leur dossier personnel avec leur login et leur mot de passe habituel.
+
+De plus, tout le monde a un accès anonyme avec le login "anonymous" ou "ftp" et n'importe quel mot de passe. Le dossier auquel ils ont accès est /home/ftp : tous les fichiers et dossiers que vous y mettrez pourront être consultés par tous.
+
+Vous pouvez à tout moment voir qui est connecté à votre serveur avec la commande
+  ftpwho
+et voir les statistiques avec :
+  ftpstats
+
+===== Interface graphique =====
+
+Vous pouvez malgré tout utiliser une interface graphique pour gérer proftpd.
+
+Elle se nomme [[:gproftpd]].
+
+Remarque : attention Gadmin est buggé, à ne pas utiliser pour la 12.04 LTS
+
+===== Bugs fréquents =====
+
+==== Activation de ProFTPd ====
+
+Il est possible que l'on n'arrive pas à activer proftpd, diverses erreurs s'affichent donc dans le terminal.
+
+Pour corriger ce problème il suffit de créer le dossier var de proftpd via cette commande:
+
+  sudo mkdir /var/run/proftpd/
+
+Tout devrait fonctionner maintenant.
+
+==== Module memcache ====
+FIXME Il faut commenter le chargement du module memcache dans "/etc/proftpd/modules.conf". Pour cela, procédez comme suit :
+<file>
+$ sudo nano /etc/proftpd/modules.conf
+</file>
+
+Et commentez la ligne :
+<file>
+LoadModule mod_tls_memcache.c
+</file>
+
+Ajouter un # en début de ligne.
+
+Redémarrer le service "proftpd" :
+<file>
+$ sudo /etc/init.d/proftpd restart
+</file>
+
+Aucun message d'avertissement ne devrait plus apparaître.
+
+----
+
+//Contributeurs: [[utilisateurs:eks]], [[utilisateurs:skateinmars]], [[utilisateurs:benje]], [[utilisateurs:Boris Le Hachoir]],//

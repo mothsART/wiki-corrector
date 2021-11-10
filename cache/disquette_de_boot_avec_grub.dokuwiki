@@ -1,0 +1,151 @@
+
+{{tag>disquette grub grub-pc}}
+----
+
+====== Créer une disquette de boot avec GRUB ======
+
+===== Introduction =====
+
+GRUB (GRand Unified Bootloader) est le gestionnaire de boot installé par défaut dans les versions récentes d'Ubuntu Linux. C'est un projet GNU qui permet de choisir au démarrage de l'ordinateur entre un grand nombre de systèmes d'exploitation. Ce document explique comment faire une disquette de boot pour régénérer GRUB après avoir installé un autre système d'exploitation, ou vous présenter un interpréteur de commande de sorte que vous puissiez modifier la configuration directement.
+
+===== Avec GRUB 2 =====
+
+GRUB 2 est disponible à partir d'Ubuntu [[:karmic|Karmic Koala]]
+
+==== 1.  Créer une image de type "Disquette" ====
+
+  grub-mkrescue --overlay=/boot/grub --image-type=floppy grub_two.dsk
+<note important>
+Ne marche plus depuis Lucid Lynx, préférer la synthaxe suivante :</note>
+
+  sudo grub-mkrescue --output=rescue.dsk /boot/grub
+
+
+__Attention__: en cas de message d'erreur indiquant que **xorriso** n'est pas la bonne version, il s'agit en réalité d'installer xorriso
+
+==== 2. Copier l'image sur disquette ====
+
+  sudo dd if=rescue.dsk of=/dev/fd0 bs=512 count=2880
+
+
+===== Avec GRUB Legacy =====
+
+==== 1.  Obtenir les privilèges "root" ====
+
+
+    sudo -s
+
+
+Au prompt, tapez votre mot de passe.
+
+
+==== 2.  Création du système de fichiers ext2 (formatage) ====
+
+
+    mke2fs /dev/fd0
+
+
+==== 3.  Montage de la disquette et copie des fichiers nécessaires à GRUB pour booter ====
+
+Si votre lecteur de disquettes est déjà configuré, montez-le directement :
+    mount /media/floppy
+En cas d'erreur, vous pouvez aussi essayer avec /media/floppy0. Si cela fonctionne, n'oubliez pas de changer /media/floppy/ en /media/floppy0/ pour tout le reste de ce wiki.
+
+Création des dossiers sur la disquette :
+    mkdir -p /media/floppy/boot/grub
+
+Ensuite dans le dossier de Grub de votre installation :
+    cd /boot/grub
+
+On copie les fichiers nécessaires à Grub (stage1 et stage2) :
+    cp stage1 stage2 /media/floppy/boot/grub
+
+
+Si vous voulez démarrer le système d'exploitation déjà 
+installé sur la machine, copiez également sur la disquette : ///boot/grub/menu.lst//
+
+    cp /boot/grub/menu.lst /media/floppy/boot/grub/
+et ///boot/grub/device.map//
+    cp /boot/grub/device.map /media/floppy/boot/grub/
+
+dans le répertoire correspondant de la disquette. Retirer les lignes savedefault dans le fichier /media/floppy/boot/grub/menu.lst.
+==== 4.  Démontage de la disquette ====
+
+Démontez la disquette :
+    umount /media/floppy
+
+et démarrez GRUB en mode interactif en tapant grub. Au prompt de GRUB (grub> ), vous devrez taper ces commandes :
+
+    device (fd0) /dev/fd0
+    root (fd0)
+    setup (fd0)
+    quit
+
+kikibelux : device et qui sont inconnus dans le dernier grub, mais c'est efficace !
+
+==== 5.  Fin ====
+
+À ce stade, vous possédez une disquette amorçable. Si vous ajoutez les dossiers supplémentaires mentionnés ci-dessus, vous devriez obtenir un écran standard de GRUB au boot de la machine.
+
+
+===== Création d'une disquette boot avec Windows =====
+
+Pour créer une disquette boot pour faire "renaître" grub à partir de notre cher Windows, il  faut télécharger les fichiers de la disquette à [[http://linux.jpvweb.com/documents/floppygrubdos.img|cette adresse]].
+Une fois téléchargés, vous gravez (en cliquant sur write floppy) les fichiers sur la disquette. Si tout se passe bien la disquette est bootable et vous pouvez redémarrer (sinon réessayez, ça vient peut-être de la disquette...).
+Vous avez redémarré, vous bootez sur la disquette bien sûr et là vous ne savez pas quoi faire... Il vous vient l'idée d'entrer cette ligne de commande :
+
+
+   configfile (hd0,0)/boot/grub/menu.lst 
+
+Attention il est possible selon vos partitons que ce soit hd0,1...
+Si tout va bien, grub se lance et vous propose les différents boot habituels.
+Essayez de booter normalement (personnellement ça n'a pas marché car le fichier savedefault manque). Maintenant que vous vous êtes assuré que cela ne fonctionnait pas, vous relancez votre PC, rebootez sur la disquette et rentrez à nouveau la précédente ligne de commande. Cette fois bootez en recovery mode. Une fois votre Ubuntu lancé il vous vient encore une merveilleuse idée, tapez :
+
+
+   sudo -s (normalement inutile)
+
+   /sbin/grub-install /dev/hda (normalement très utile)
+
+Relancez votre PC et bootez normalement. Le tour est joué et vous vous dites que vous devenez vraiment très fort.:?:
+===== Sauvegarde du MBR =====
+
+Si vous êtes paranoïaque et que vous voulez une copie du MBR du disque sur disquette (exemple, boot.mbr), procédez comme suit (le MBR se trouvant sur hda)(seulement en recovery mode !):
+
+
+    dd if=/dev/hda of=/media/floppy/boot.mbr bs=512 count=1
+
+Pour le restaurer, vous inversez juste les paramètres de la commande :
+
+    dd if=/media/floppy/boot.mbr of=/dev/hda bs=512 count=1
+
+Attention !
+
+    512 = 446 + 64 + 2 , càd le primary boot loader + la table des partitions + magic number 
+
+voir http://fr.wikipedia.org/wiki/Master_boot_record
+
+Dès lors, pour sauvegarder le primary boot loader SANS la table : 
+
+    dd if=/dev/hda of=/media/floppy/pbl.b bs=446 count=1
+    dd if=/media/floppy/pbl.b of=/dev/hda bs=446 count=1
+
+
+-et- pour sauvegarde la table des partitions:
+
+    sfdisk -d /dev/sda >sda.part.b
+
+    sfdisk /dev/sda <sda.part.b
+
+( cfr man sfdisk ...
+
+       -d     Dump  the  partitions of a device in a format useful as input to sfdisk. For example :
+
+                  % sfdisk -d /dev/hda > hda.out
+                  % sfdisk /dev/hda < hda.out
+
+              will correct the bad last extended partition that the OS/2 fdisk creates.
+)
+
+===== Voir aussi =====
+
+  * [[http://linux.jpvweb.com/mesrecetteslinux/doku.php?id=disquette_et_cd_grub_bootables | Créer une disquette ou un CD GRUB bootable]]

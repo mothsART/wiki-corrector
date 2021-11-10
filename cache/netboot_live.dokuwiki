@@ -1,0 +1,375 @@
+
+{{tag>installation réseau serveur}}
+
+----
+
+====== Live NetBoot  ======
+<note>Cette documentation vient d'être mise à jour et ne s'adresse qu'aux versions Live à partir de Lucid Lynx (10.04)</note>
+Ce document consiste à démarrer Ubuntu de la même façon qu'avec le LiveCD à partir du réseau (sans CD, disquette ou clé USB).
+
+Il est également possible d'utiliser cette méthode conjointement avec le tutoriel pour [[:personnaliser_livecd|personnaliser son LiveCD]], ce qui peut servir à faire des installations automatiques, à préinstaller des paramètres personnalisés ainsi qu'à préinstaller des paquets qui ne sont pas inclus sur un disque d'Ubuntu normal.
+<note>Elle permet aussi de réaliser l'installation en mode graphique d'Ubuntu sur le PC client, mais pour ce faire, on lui préférera l'installateur mode texte standard</note>
+<note warning>Je viens de suivre ce document avec la version ubuntu 14.04.3 LTS.
+ Le boot met bien en route lorsque le micro récepteur a son bios positionné en LEGACY mais pas en EFI. Probablement un mauvais fichier de démarrage sélectionné ! J'ai fais démarré l'installation et suis allé jusqu'à l'affichage des partitions disponibles pour installer.
+Comme le démarrage est LEGACY mais non EFI,  j'ai stoppé à ce niveau..</note>
+<note tip>
+Si le support EFI est nécessaire, privilégier [[:ipxe]]
+</note> 
+===== Explication du concept =====
+
+La majorité des ordinateurs ont une fonction de démarrage réseau qui peut être activée grâce à l'appui d'une touche spéciale au démarrage alors que le logo du constructeur de l'ordinateur s'affiche sur l'écran. Il est généralement possible de connaître cette touche spéciale en regardant dans les coins de l'écran à la recherche du mot //PXE//, //network//, //boot devices//, ou autre… Les touches les plus courantes sont **Échap (Asus portables, anciens HP), F1, F2, F9 (HP récents), F8 (Asus fixes), F12 (Lenovo, Gigabyte et Dell, Acer et  Packard Bell après activation de l'option dans le BIOS)** ou **Suppr**.
+
+Certains ordinateurs permettent le démarrage réseau avec une seule touche, d'autres vous amènent sur une liste où vous avez plusieurs choix tel que le démarrage réseau, d'autres n'ont pas cette fonction activée et nécessitent que vous modifiez des paramètres dans le BIOS (un écran de configuration blanc sur bleu ou blanc sur noir dans lequel vous pouvez facilement faire de mauvaises gaffes) et pour terminer, certains ordinateurs (généralement ceux qui n'avaient pas de carte réseau lors de leur achat) ne peuvent tout simplement pas démarrer en réseau. Comme il y a trop de variété, ce tutoriel ne s'y penchera pas davantage.
+
+Dès que vous avez passé cette étape, votre ordinateur se connecte au réseau et initie une demande d'adresse IP au serveur DHCP. Cependant, votre ordinateur s'attend à recevoir quelques informations supplémentaires qu'un serveur DHCP normal tel que votre modem-routeur ne donne pas : l'**adresse IP du serveur PXE** et le **fichier de démarrage PXE**. C'est la partie la plus facheuse, car aucun routeur normal n'a cette option.
+
+Ensuite, une fois que le serveur DHCP a donné toutes les informations nécessaires à votre ordinateur, votre ordinateur se connecte au serveur TFTP de l'ordinateur serveur et télécharge le fichier de démarrage (**pxelinux.0**) qui sera configuré pour vous offrir le choix de démarrer le noyau de Linux Ubuntu avec des paramètres spéciaux, toujours sur le serveur TFTP.
+
+La seule autre chose à mentionner, c'est qu'il faudra aussi installer un serveur NFS partageant tout le contenu du CD d'Ubuntu. Pourquoi donc ? Parce qu'un serveur TFTP est trop limité pour faire plus que simplement démarrer Linux sur l'ordinateur client. Une fois démarré, Linux a besoin d'un partage NFS pour accéder au reste de ses fichiers.
+
+Êtes-vous perdus ? C'était à vous de ne pas vous engager dans un tutoriel aussi passionnant. ;-)
+
+
+===== Mise en œuvre =====
+Avant tout, installons tous les paquets qui seront nécessaires d'un seul coup !
+
+  * [[apt>syslinux]] (contient les fichiers nécessaires pour le démarrage réseau)         
+           Cette application  est déjà pré-installée en version 14.04.3.
+  * <del>[[apt>dhcp3-server]]</del> [[apt>isc-dhcp-server]] (serveur DHCP en fait isc-dhcp-server)
+          En version 14.04.3, il est préférable d'installer l'application DHCP-HELPER qui est dans la logithèque.
+  * [[apt>tftpd-hpa]] <del>[[apt>atftpd]]</del> (serveur TFTP)
+          En version 14.04.3, cette application est dans la logithèque mais elle ne fonctionne plus. Il faut utiliser  l'application **atftpd**
+  * [[apt>nfs-kernel-server]] (serveur NFS)
+           En version 14.04.3, cette application est dans la logithèque.
+
+  sudo apt-get install isc-dhcp-server tftpd-hpa syslinux nfs-kernel-server
+
+Ensuite, passons à la configuration de chaque serveur.
+
+==== Serveur DHCP ====
+
+Un des ordinateurs de votre réseau local va jouer le rôle de serveur DHCP, il faut pour cela le configurer afin qu'il n'entre pas en conflit avec votre routeur internet (Box).
+Dans un premier temps, limitez la plage d'adresses allouées par votre Box pour que, par exemple, elle ne dépasse pas l'adresse maximum de 192.168.x.200.
+Votre serveur DHCP pourra maintenant distribuer des adresses au dessus de cette plage pour lancer le processus PXE.
+
+Le fichier de configuration du serveur "dhcpd-hpa" se trouve dans /etc/dhcp et son contenu devra être adapté à votre réseau.
+<code>sudo xdg-open /etc/dhcp/dhcpd.conf</code>
+Typiquement, il contient ça:
+<code>
+# ne pas faire de mise à jour des dns
+ddns-update-style none;
+
+### PXE ###
+## Permet uniquement le boot réseau pour TFTP 
+allow bootp;
+allow booting;
+
+##### RÉSEAUX #####
+## déclaration sous réseau 192.168.1.*
+subnet 192.168.1.0 netmask 255.255.255.0 {
+  # Si vous voulez spécifier un domaine différent de celui par défaut :
+  option domain-name "mondomaine.local";
+
+  ## Adresse de diffusion 
+  option broadcast-address 192.168.1.255;
+
+  ## routeur par défaut
+  option routers <IP_DE_MA_BOX_INTERNET>;
+  option domain-name-servers <IP_DE_MA_BOX_INTERNET>;
+
+  # on limite à 10 adresses entre 220 et 229
+  range 192.168.1.220 192.168.1.229;
+
+  # À placer à la racine du serveur TFTP.
+  filename "pxelinux.0";
+
+  # définit le serveur qui servira le fichier « pxelinux.0 »
+  next-server <IP_DU_SERVEUR_TFTP>;
+
+  # évalue si l'adresse est déjà attribuée
+  ping-check = 1;
+}
+</code>
+
+À la suite de cette modification, redémarrez le service:
+
+<code>sudo service isc-dhcp-server restart</code>
+
+en 14.04.3  Lancé automatiquement avec le bon code par défaut (dhcp-helper -b eth0)
+
+
+==== Serveur TFTP ====
+
+Le serveur TFTP est une forme de serveur FTP très basique. Dans ce tutoriel, il sert à rendre disponible le menu de démarrage et le noyau Linux qui lui-même n'aura plus besoin de TFTP une fois démarré sur l'ordinateur client. TFTP joue un rôle critique mais très temporaire.
+
+=== Avec tftpd-hpa ===
+
+Pour le configurer, il suffit de modifier le fichier /etc/default/tftpd-hpa.
+<code>sudo xdg-open /etc/default/tftpd-hpa</code>
+Et de compléter son contenu avec:
+<code>
+# /etc/default/tftpd-hpa
+TFTP_USERNAME="tftp"
+TFTP_DIRECTORY="/var/lib/tftpboot"
+TFTP_ADDRESS="<IP_DU_SERVEUR_TFTP>:69"
+TFTP_OPTIONS="--secure"
+
+#Defaults for tftpd-hpa
+RUN_DAEMON="yes"
+</code>
+
+À la suite de cette modification, redémarrez le service:
+<code>sudo service tftpd-hpa restart</code>
+
+=== Avec atftpd ===
+
+Le dossier vers lequel atftpd pointe est "/srv/tftp" par défaut. Il faut le changer et pointer vers "/var/lib/tftpboot".
+
+Par défaut, atftpd est démarré par le service inetd lors d'une demande de connexion tftp. Il est possible de le vérifier dans le fichier <code>/etc/default/atftpd</code> avec la présence de la ligne <code>USE_INETD=true</code>
+
+Si tel est le cas, il faut modifier les options passées par inetd lors de l'appel à atftpd.
+Dans les autres cas, il faudra modifier le fichier de configuration de atftpd.
+
+== Modifications de la configuration de inetd ==
+
+Editer le fichier de configuration inetd:
+<code>sudo xdg-open /etc/inetd.conf</code>
+
+Localisez la ligne:
+<code>tftp            dgram   udp4    wait    nobody /usr/sbin/tcpd /usr/sbin/in.tftpd --tftpd-timeout 300 --retry-timeout 5 --mcast-port 1758 --mcast-addr 239.239.239.0-255 --mcast-ttl 1 --maxthread 100 --verbose=5 /srv/tftp</code>
+et remplacez <code>/srv/tftp</code> par <code>/var/lib/tftpboot</code>
+
+Redémarrez le service inetd:
+<code>sudo service inetutils-inetd restart</code>
+
+== Modifications de la configuration de atftpd ==
+
+Editer le fichier de configuration inetd:
+<code>sudo xdg-open /etc/default/atftpd</code>
+
+Remplacez <code>/srv/tftp</code> par <code>/var/lib/tftpboot</code> dans la ligne des options.
+
+Redémarrez le service atftpd:
+<code>
+sudo service atftpd restart
+</code>
+
+=== Pare-feu ===
+
+Si vous utilisez un pare-feu comme 'ufw', ouvrez le port 69 pour votre réseau local
+
+<code>sudo ufw allow to any port 69 from 192.168.1.0/24</code>
+
+==== Serveur NFS ====
+
+Le serveur NFS est un serveur de partage de fichiers sans protection qui permettra à ubuntu d'accéder à ses propres fichiers systèmes sur le serveur une fois démarré sur la machine client grâce au serveur TFTP. Les instructions suivantes permettent de partager le dossier /var/lib/tftpboot/ubuntu en lecture seule (pas de droit d'écriture). Ce dossier contiendra le reste des fichiers nécessaires à ubuntu.
+
+Éditer la configuration des partages NFS qui se trouvent dans le fichier /etc/exports :
+
+<code>
+sudo xdg-open /etc/exports
+</code>
+
+Ajouter la ligne suivante (remplacer 192.168.1.0 par la plage d'adresse IP de votre réseau (généralement 192.168.0.0, 192.168.1.0 ou 192.168.2.0)) :
+
+<code>
+/var/lib/tftpboot/ubuntu 192.168.1.0/255.255.255.0(async,no_root_squash,no_subtree_check,ro)
+</code>
+
+Copier cette commande dans le terminal pour redémarrer le serveur nfs :
+
+<code>
+sudo mkdir /var/lib/tftpboot/ubuntu
+sudo service nfs-kernel-server restart</code>
+ 
+<note tip>Si vous utilisez un pare-feu comme 'ufw', ouvrez le port 2049 pour votre réseau local
+
+sudo ufw allow to any port 2049 from 192.168.1.0/24
+</note>
+==== Mise en place des fichiers de démarrage ====
+
+<note tip>
+
+Copier simplement l'intégralité du repertoire Netboot de Ubuntu dans /var/lib/tftpboot - voir http://archive.ubuntu.com/ubuntu/dists/xenial-updates/main/installer-amd64/current/images/netboot/ par exemple pour Ubuntu 16.04  (Netboot et disponible pour la plus part des version de Ubuntu ) 
+
+**Vous pouvez effectuer une recherche google "netboot ubuntu VERSION" pour trouver les fichiers d'autres versions**
+
+</note>
+
+
+Lorsque l'ordinateur client se fait assigner son adresse IP par le serveur DHCP, le serveur DHCP lui précise de télécharger le fichier “pxelinux.0” depuis le serveur TFTP de l'ordinateur serveur. Ce fichier a été installé précédemment par le paquet syslinux sur votre serveur TFTP, il ne reste qu'à le copier dans le dossier partagé par le serveur TFTP ainsi qu'un autre fichier chargé d'afficher un menu de démarrage :
+
+<code>
+sudo cp /usr/lib/syslinux/pxelinux.0 /var/lib/tftpboot/pxelinux.0
+sudo cp /usr/lib/syslinux/menu.c32 /var/lib/tftpboot/menu.c32
+</code>
+
+
+Nous allons ensuite créer les dossiers :
+
+  * **pxelinux.cfg** (contiendra le menu de démarrage)
+  * **ubuntu** (contient les fichiers d'ubuntu)
+
+<code>
+sudo mkdir /var/lib/tftpboot/pxelinux.cfg
+sudo mkdir /var/lib/tftpboot/ubuntu
+</code>
+
+Dans le dossier **ubuntu**, on copie la totalité du contenu du CD Live d'ubuntu :
+
+  sudo cp -av /media/cdrom/* /media/cdrom/.disk /var/lib/tftpboot/ubuntu/
+  
+<note important>Correctif pour le peuplement du boot PXE pour un LiveCD en 16.04
+
+Le fichier **pxelinux.0** à copier est sous /usr/lib/PXELINUX du paquetage pxelinux.
+Il faut également récupérer 2 autres fichiers à partir de l'image du DVD d'installation et à placer à la racine du serveur TFTP
+
+<code>
+sudo cp /usr/lib/PXELINUX/pxelinux.0 /var/lib/tftpboot/pxelinux.0
+sudo cp /var/lib/tftpboot/ubuntu/isolinux/ldlinux.c32 /var/lib/tftpboot/
+sudo cp /var/lib/tftpboot/ubuntu/isolinux/libutil.c32 /var/lib/tftpboot/
+</code> 
+
+Le fichier **menu.c32** que j'ai utilisé est celui du paquetage syslinux.
+<code>
+sudo cp /usr/lib/syslinux/modules/bios/menu.c32 /var/lib/tftpboot/
+</code>
+</note>
+
+<note help>  Cependant, si on dispose d'un fichier ISO qui a été téléchargé, on peut faire directement les commandes ci-dessous en mettant le bon nom de fichier
+ <code>
+sudo mkdir /tmp/ISO
+sudo mount -o loop  /media/$USER/G*/Installation*/*UBUNTU*/*14-04/ubuntu-14.04.3-desktop-amd64.iso  /tmp/ISO
+sudo cp -av    /tmp/ISO/*  /tmp/ISO/.disk /var/lib/tftpboot/ubuntu
+sudo fuser -k /tmp/ISO 
+sudo umount -df /tmp/ISO
+sudo rm -R /tmp/ISO</code></note>
+
+
+Dans le dossier **pxelinux.cfg**, on crée un fichier texte nommé default :
+  sudo touch        /var/lib/tftpboot/pxelinux.cfg/default
+  sudo xdg-open /var/lib/tftpboot/pxelinux.cfg/default
+
+Et on y enregistre le texte suivant (//en remplacant 192.168.1.100 par l'adresse IP de votre serveur NFS//). Notez que ce fichier représente un menu de démarrage, vous pouvez à tout moment y rajouter d'autres choix supplémentaires afin de démarrer d'autres versions d'ubuntu et/ou d'autres systèmes capables de démarrer en réseau.
+
+<code>
+DEFAULT menu.c32
+MENU MARGIN 0
+MENU ROWS -9
+MENU TABMSG
+MENU TABMSGROW -3
+MENU CMDLINEROW -3
+MENU HELPMSGROW -4
+MENU HELPMSGENDROW -1
+MENU COLOR SCREEN 30;47
+MENU COLOR BORDER 30;47
+MENU COLOR TITLE 30;47
+MENU COLOR SCROLLBAR 30;47
+MENU COLOR SEL 37;40
+MENU COLOR UNSEL 30;47
+MENU COLOR CMDMARK 30;47
+MENU COLOR CMDLINE 30;47
+MENU COLOR TABMSG 37;40
+MENU COLOR DISABLED 37;40
+MENU COLOR HELP 37;40
+MENU TITLE Ubuntu Live
+
+LABEL 1 Ubuntu Live
+KERNEL ubuntu/casper/vmlinuz
+APPEND boot=casper rootfstype=nfs netboot=nfs nfsroot=192.168.1.100:/var/lib/tftpboot/ubuntu debian-installer/language=fr console-setup/layoutcode=fr console-setup/variantcode=oss quiet splash initrd=ubuntu/casper/initrd.lz ip=dhcp --
+
+LABEL 2 Ubuntu Live (lancement avec messages)
+KERNEL ubuntu/casper/vmlinuz
+APPEND boot=casper rootfstype=nfs netboot=nfs nfsroot=192.168.1.100:/var/lib/tftpboot/ubuntu debian-installer/language=fr console-setup/layoutcode=fr console-setup/variantcode=oss initrd=ubuntu/casper/initrd.lz ip=dhcp --
+</code>
+
+<note>A partir des LiveCD 12-04.3, le nom du noyau est maintenant **vmlinuz.efi** et non vmlinuz, donc, ajouter cette extension dans les deux lignes commençant par KERNEL
+</note>
+
+Il ne reste plus qu'à s'assurer que les droits sur les fichiers sont corrects en lancant les commandes suivantes dans un terminal :
+
+  sudo chown -R root:root /var/lib/tftpboot
+  sudo chmod -R 755 /var/lib/tftpboot
+
+Eh voilà c'est tout, il ne reste qu'à démarrer votre ordinateur client et utiliser les combinaisons de touches magiques au démarrage afin de le faire démarrer en réseau PXE, choisir l'option 1 et voir le résultat. 
+
+Si tout ne marche pas immédiatement (ça arrive dans les meilleures familles), révisez la marche à suivre et réfléchissez, aucun besoin de diplôme ni brevet pour exploiter la logique. Expérimentation, détermination et patience sont la clé du succès.
+
+Bon démarrage en réseau!!
+
+<note tip>Si vous ajoutez des options à ce menu, préférez commencer les lignes par un chiffre. Le système de menu ne se base que sur le 1er mot de chaque "LABEL" pour faire la différence entre les lanceurs. </note>
+===== Problèmes identifiés =====
+**Images iso 12.04 - Version AMD64** :\\
+A partir de la version 12-04.3 d'ubuntu, le kernel se nomme vmlinuz.efi et non plus vmlinuz.\\
+De plus la version 12-04.3 est bugguée, elle ne reconnaît pas le montage nfs nécessaire au boot et affiche "mount: Protocol not supported".\\
+A partir de la version 12.-04.5, tout fonctionne bien que le kernel se nomme toujours vmlinuz.efi (je n'ai pas essayé avec la 12.04.4)
+
+**Images iso 12.04- Version I386** :\\
+Les versions 12-04.3, 12-04.4 et 12-04-5 sont bugguées, elle ne reconnaissent pas le montage nfs nécessaire au boot et affichent "mount: Protocol not supported"
+
+**NFS over TCP not available ou Connection Timeout** :\\
+Ce type de message n'apparaît pas directement à l'écran, mais le PC client tourne en rond avec le logo Ubuntu affiché.
+Pour mettre en évidence et s'assurer de ce problème, il suffit de choisir l'option 2 et tous les messages seront affichés.
+Vous devez avoir ce message au moment du montage NFS et cela est dû à votre fire-wall (ufw).
+Le souci est que le port de contrôle du processus de montage est attribué par "portmap" et n'est jamais le même.
+
+Pour pallier à ça et forcer le port de "nfs-kernel-server", il faut modifier son fichier de configuration.
+<code>sudo xdg-open /etc/default/nfs-kernel-server</code>
+À la ligne contenant :
+<code>RPCMOUNTDOPTS="--manage-gids"</code>
+on rajoute un numéro de port:
+<code>RPCMOUNTDOPTS="--manage-gids -p 32767"</code>
+Ensuite il suffit d'indiquer à votre pare-feu de laisser ce port ouvert:
+<code>sudo ufw allow to any port 32767 from 192.168.1.0/24</code>
+(D'après : http://wiki.debian.org/SecuringNFS )
+
+**NFS RPC: Port mapper failure **\\
+Le client ne parvient pas à négocier un port avec portmapper
+Vérifiez le port utilisé par portmapper sur le serveur :
+
+<code>rpcinfo -p | grep portmapper</code>
+
+et autorisez-le :
+
+<code>sudo ufw allow to any port 111 from 192.168.1.0/24</code>
+
+**Attribution d'adresse IP :**\\
+Si le PC client est habituellement présent sur votre réseau avec une IP Fixe, votre routeur risque de ne pas prendre le relais du serveur PXE et ne pas lui attribuer d'IP. Le processus se bloque...\\
+Redémarrez le client et lorsque vous arrivez au menu, positionnez la barre de sélection sur le Live et appuyez sur <TAB>. Il vous suffit alors de fixer en dur l'IP de votre client en modifiant le paramètres "ip" qui se trouve dans la ligne "APPEND" avant le '%%--%%' final :
+<code>ip=dhcp</code>
+À remplacer par : 
+<code>ip=<client-ip>:<pxe-server-ip>:<gateway>:<subnet mask>:<client-hostname>:<interface>:<configuration-method></code>
+Cela peut donner par exemple:
+<code>ip=192.168.1.99:192.168.1.10:192.168.1.1:255.255.255.0:clientlive:eth0:none</code>
+Le noyau ne cherchera pas a obtenir d'IP via DHCP, il se basera sur ces paramètres.
+
+**Pas de réseau après démarrage ou installation** : \\
+<note help>IL peut arriver que par inadvertance, un client soit aussi lancé sur l'ordinateur serveur. Dans ce cas la vraie connexion internet est aussi à remettre en état. Cela va permettre d'éviter le message "Adresse introuvable".</note>
+Si Ubuntu est lancé ou installé sur l'ordinateur client à l'aide de cette méthode, network-manager ne fonctionnera pas après le démarrage. Pour permettre network-manager à gérer le réseau, il faudra commenter une ligne du fichier /etc/network/interfaces:
+<code>sudo xdg-open  /etc/network/interfaces</code>
+Rajoutez un '#' en début de cette ligne, comme ceci:
+<file>#iface eth0 inet manual</file>
+Sauvez le fichier et relancez Network-Manager
+<code>sudo service network-manager restart</code>
+La connexion réseau va s'établir.
+
+**eth0 seulement** : \\
+Selon le [[https://wiki.ubuntu.com/LiveCDNetboot| wiki officiel d'ubuntu]], cette méthode ne fonctionne pour l'instant que si le périphérique réseau sur lequel l'ordinateur démarre se nomme "eth0" (la majorité des cas).
+
+**Please provide a name for this Disk, such as 'Debian 5.0.3 Disk 1'** : \\
+Si vous avez ce message, c'est que vous n'avez pas copié le répertoire .disk du cd dans le répertoire /var/lib/tftpboot/ubuntu
+
+===== Disquette d'amorçage EtherBoot =====
+
+Pour les ordinateurs qui ne sont pas compatibles avec le démarrage réseau PXE, un projet nommé EtherBoot existe.
+
+[[http://etherboot.sourceforge.net/doc/html/documentation.html | Documentation « Etherboot »]]
+
+===== Voir aussi =====
+
+  * [[netboot]]
+  * [[https://wiki.ubuntu.com/LiveCDNetboot]]
+
+----
+
+// Contributeurs : [[https://wiki.ubuntu.com/Saïvann|Saïvann]].//

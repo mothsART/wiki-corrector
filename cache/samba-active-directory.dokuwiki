@@ -1,0 +1,403 @@
+
+{{:icons:icon-server.png}} {{tag>samba administration windows réseau}}
+====== Samba - Active Directory Domain Controller (AD DC) ======
+
+Le projet Samba est surtout connu pour le partage de fichiers selon le protocole SMB développé par Microsoft. La version 4 de ce logiciel apporte la fonctionnalité supplémentaire d'un contrôleur de domaine Active Directory (Active Directory Domain Controller - AD DC). Cette fonctionnalité inclue en natif les services [[:dns|DNS]], [[http://guide.ubuntu-fr.org/server/openldap-server.html|LDAP]], [[wpfr>Kerberos_%28protocole%29|Kerberos]], [[wpfr>Remote_procedure_call|RPC]] et [[wpfr>Server_Message_Block|SMB 3.0]] ainsi que la distribution et la gestion des [[wpfr>Strat%C3%A9gies_de_groupe|GPO]].
+
+<note importante>Une connaissance préalable de AD DC de Microsoft et des fonctionnalités et protocoles tels que DNS, LDAP, Kerberos, RPC, GPO, SMB, ... est un atout pour la bonne compréhension et mise en œuvre de Samba AD DC. Cette documentation s'adresse donc principalement aux administrateurs système.</note>
+
+Samba AD DC permet de créer un DC compatible avec les produits Microsoft Windows Server allant de 2000 à 2012. Cependant, toutes les fonctionnalités avancées ne sont pas encore implémentées. Selon les cas, probablement au sein des PME, Samba AD DC pourrait parfaitement remplacer ces produits.
+
+===== Versions =====
+
+La liste des versions de Samba ainsi que leur support est disponible sur [[https://wiki.samba.org/index.php/Samba_Release_Planning#Samba_Release_Planning_and_Supported_Release_Lifetime|Release Planning and Lifetime]]. De plus, [[http://www.samba.org/samba/history/|l'historique des versions stables]] est également disponible.
+
+Samba en version 4 est devenu la version de base du paquet **samba** à partir de [[:trusty|Trusty 14.04 LTS]].
+
+La version de Samba peut légèrement évoluer avec les mises à jour de sécurité. A la sortie de [[:bionic|Bionic 18.04 LTS]], la version est 4.7.6. La documentation qui suit est basée sur cette dernière version. Néanmoins, elle essaye de montrer quelques différences qui peuvent exister entre cette version et les précédentes.
+
+===== Installation de Samba=====
+==== Paramètres généraux ====
+Avant toute installation, il est nécessaire de définir son environnement. Ainsi, il sera possible de configurer correctement son serveur. Le reste de cette documentation se basera sur les paramètres suivants ((Conformément aux [[https://tools.ietf.org/html/rfc2606|RFC 2606]] (Reserved Top Level DNS Names) et [[https://tools.ietf.org/html/rfc5737|RFC 5737]] (IPv4 Address Blocks Reserved for Documentation) )):
+
+|Nom de domaine |example.com | \\ RFC 2606
+|Royaume (realm) |EXAMPLE.COM |
+|Nom de NetBIOS |example |
+|Nom du serveur |ubndc01 |
+|Adresse IP du serveur |192.0.2.11 |
+|Rôle du serveur |DC (contrôleur de domaine) |
+
+==== Pré-requis ====
+Afin de bénéficier de l'ensemble des fonctionnalités de Samba, il est nécessaire d'activer les [[:acl|ACL]] et les attributs étendus (user_xattr) sur les partitions concernées par Samba. Pour ce faire, il faut ajouter dans le fichier /etc/fstab les options //acl// et //user_xattr// aux partitions en question. L'ajout de l'option //barrier=1// protège les transactions tdb contre la corruption des fichiers (notamment sam.ldb) lors d'une coupure d'électricité ou tout autre crash système. Celle-ci est fortement recommandée sur un DC.
+
+Exemple d'une partition dans le ficher /etc/fstab
+<file - /etc/fstab>UUID=8059560e-4a78-445b-a363-b3c197b4c7ea      /      ext4      defaults,acl,user_xattr,barrier=1     0     1</file>
+
+Après avoir modifié le fichier /etc/fstab, il faut redémarrer la machine ou remonter la partition pour que la modification soit effective. Par exemple :
+<code>sudo mount -o remount /</code>
+
+Le noyau d'Ubuntu provenant des dépôts a bien les options(([[/kernel#configuration_du_noyau_utilise|cf. configuration du noyau utilisé]])) XATTR, SECURITY et POSIX_ACL pour les systèmes de fichier ext3 et ext4. Toute autre situation nécessitera de vérifier que ces options aient bien été activées lors de la compilation du noyau pour le système de fichier choisi.
+
+Afin de vérifier le bon fonctionnement des ACL et des attributs étendus, il faut se reporter aux sections [[#Test des ACL|Test des ACL]] et [[#Test des attributs étendus|Test des attributs étendus]].
+
+Active Directory nécessite une synchronisation de temps précise entre les postes clients et le(s) DC(s). Il est vivement recommandé de mettre en œuvre le protocole [[:ntp|NTP]] ou tout autre solution de synchronisation du temps ([[https://wiki.samba.org/index.php/Time_Synchronisation|Time Synchronisation]]).
+
+A titre d'exemple, voici un fichier de configuration simplifiée de //ntp// qui conviendra sur le DC
+<file - /etc/ntp.conf>
+driftfile      /var/lib/ntp/ntp.drift
+logfile        /var/log/ntp
+
+# Specify one or more NTP servers.
+server 0.ubuntu.pool.ntp.org
+server 1.ubuntu.pool.ntp.org
+server 2.ubuntu.pool.ntp.org
+server 3.ubuntu.pool.ntp.org
+
+# By default, exchange time with everybody, but don't allow configuration.
+restrict default kod notrap nomodify nopeer mssntp
+
+# Local users may interrogate the ntp server more closely.
+restrict 127.0.0.1
+</file>
+
+**MANQUE LA CONFIGURATION DE LA CARTE RESEAU**
+==== Installation à partir des dépôts ====
+Il faut [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>samba]]**
+==== Installation à partir des sources ====
+Cette solution s'adresse aux personnes qui connaissent déjà bien le sujet et qui savent ce qu'apporte une version plus récente que celle disponible dans les dépôts. N'hésitez pas à consulter la page [[https://wiki.samba.org/index.php/Build_Samba|Build Samba]]
+
+===== Création d'un premier DC dans une nouvelle forêt =====
+Ceci constitue l'étape unique qui va créer le premier domaine dans la forêt. Cette étape est indispensable si vous n'avez pas d'autres DC (Samba ou Microsoft).
+
+==== Initialisation de Samba ====
+Préalablement à l’initialisation de Samba, il faut supprimer ou renommer le fichier smb.conf
+<code>sudo mv --backup=t /etc/samba/smb.conf /etc/samba/smb.conf.old</code>
+
+L'initialisation va créer plusieurs fichiers type base de données stockés dans /var/lib/samba/private/ ainsi que le fichier /etc/samba/smb.conf. Pour connaître, l'ensemble des options relatives à l'initialisation, il est recommandé d'exécuter
+<code>samba-tool domain provision --help </code>
+Parmi celles-ci, il est recommandé d'utiliser au moins les deux options suivantes
+  * L'option //--use-rfc2307// active les attributs Posix et crée les informations NIS dans l'AD. Ceci permet d'administrer les UIDs/GIDs et autres paramètres UNIX (visibles sous l'onglet "Unix attributes" de l'[[http://technet.microsoft.com/en-us/library/cc754217.aspx|ADUC]]). Il est plus simple de l'activer durant l'initialisation plutôt que par la suite. De plus, même si vous n'en avez pas (encore) besoin, ceci n'impacte pas les performances de votre installation.
+  * L'option //--interactive// rend le processus d'initialisation interactif. L'utilisateur devra répondre à quelques questions pour paramétrer la création du domaine. Sans cette option, le processus d'initialisation se base sur les valeurs existantes dans le fichier /etc/samba/smb.conf et sur les valeurs par défaut.
+
+<code> sudo samba-tool domain provision --use-rfc2307 --interactive</code>
+
+Si les valeurs satisfont, il ne faut alors que les valider par ENTER
+<code>Realm [EXAMPLE.COM]:
+Domain [EXAMPLE]:
+Server Role (dc, member, standalone) [dc]:
+DNS backend (SAMBA_INTERNAL, BIND9_FLATFILE, BIND9_DLZ, NONE) [SAMBA_INTERNAL]:
+DNS forwarder IP address (write 'none' to disable forwarding) [192.0.2.1]:
+Administrator password:
+Retype password:</code>
+
+  * Par défaut, l'initialisation propose le serveur DNS interne de Samba (SAMBA_INTERNAL) comme serveur DNS. Il est possible d'utiliser Bind comme serveur DNS d'arrière-plan (backend). Si vous choisissez [[http://bind-dlz.sourceforge.net/|BIND9_DLZ]] lors de l'initialisation, référez-vous au wiki [[https://wiki.samba.org/index.php/BIND9_DLZ_DNS_Back_End|BIND9 DLZ DNS Back End]]. A tout moment, il est possible de changer de serveur DNS d'arrière-plan (([[https://wiki.samba.org/index.php/Changing_the_DNS_Back_End_of_a_Samba_AD_DC|Changing the DNS Back End of a Samba AD DC]])). Pour plus d'information sur la configuration du serveur DNS et trouver celle qui répond à vos besoins, consultez la page [[https://wiki.samba.org/index.php/The_Samba_AD_DNS_Back_Ends|Samba AD DNS Back Ends]]
+  * Le mot de passe du compte Administrator du domaine doit respecter les règles de complexité, à savoir : au moins une majuscule, un chiffre et 8 caractères de long (par exemple : P@ssw0rd).
+  * Dans le cas d'une ré-initialisation, en plus des mesures déjà décrites ci-dessus, il sera nécessaire de préalablement supprimer les fichiers de base de données privés de Samba
+<code>rm -rf /var/lib/samba/private/*</code>
+
+<note tip>Il est possible de changer le mot de passe du compte administrator avec les droits superutilisateur (root) avec la commande
+<code>sudo samba-tool user setpassword administrator</code></note>
+
+===== Ajout d'un DC additionnel dans une forêt existante =====
+==== Paramètres spécifiques ====
+Pour cette documentation, les paramètres suivants seront utilisés ((Conformément aux [[https://tools.ietf.org/html/rfc2606|RFC 2606]] (Reserved Top Level DNS Names) et [[https://tools.ietf.org/html/rfc5737|RFC 5737]] (IPv4 Address Blocks Reserved for Documentation) )):
+
+|Nom du serveur |ubndc02 |
+|Adresse IP du serveur |192.0.2.12|
+|Rôle du serveur |DC (contrôleur de domaine) |
+
+==== Initialisation de Samba ====
+Préalablement à l'initialisation de Samba, il faut supprimer ou renommer le fichier smb.conf
+<code>sudo mv --backup=t /etc/samba/smb.conf /etc/samba/smb.conf.old</code>
+
+L'initialisation va créer plusieurs fichiers type base de données stockés dans /var/lib/samba/private/ ainsi que le fichier /etc/samba/smb.conf
+
+<code>sudo samba-tool domain join example.com DC -U administrator --realm=EXAMPLE.COM</code>
+
+<note important>Après cette commande, **il faut vérifier** si certains enregistrements dans le DNS sont bien présents ! L'absence de ceux-ci empêchera le fonctionnement du contrôleur de domaine additionnel (cfr [[https://wiki.samba.org/index.php/Check_and_fix_DNS_entries_on_DC_joins|Check and fix DNS entries on DC joins]] et [[https://bugzilla.samba.org/show_bug.cgi?id=10928|Bug 10928]] résolu avec Samba 4.7).
+
+Vérification de la résolution du nom 'ubndc02.example.com'
+<code>host -t A ubndc02.example.com.
+ubndc02.example.com has address 192.0.2.21</code>
+
+En cas d'erreur, il faut ajouter ou corriger l'enregistrement DNS
+<code>samba-tool dns add ubndc01 example.com ubndc02 A 192.0.2.21 -U administrator</code>
+
+Vérification de la résolution de l'alias du nom sur base du GUID de l'objet. Cette première commande va permettre de trouver le GUID de l'objet. Au besoin, il faut [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>ldb-tools]]**.
+<code>sudo ldbsearch -H /var/lib/samba/private/sam.ldb '(invocationId=*)' --cross-ncs objectguid
+# record 1
+dn: CN=NTDS Settings,CN=UBNDC02,CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=example,DC=com
+objectGUID: df4bdd8c-abc7-4779-b01e-4dd4553ca3e9
+
+# record 2
+dn: CN=NTDS Settings,CN=UBNDC01,CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=example,DC=com
+objectGUID: 4a6bd92a-6612-4b15-aa8c-9ec371e8994f
+
+# returned 2 records
+# 2 entries
+# 0 referrals
+</code>
+Vérification de la résolution de l'alias du nom 'df4bdd8c-abc7-4779-b01e-4dd4553ca3e9._msdcs.example.com'
+<code>host -t CNAME df4bdd8c-abc7-4779-b01e-4dd4553ca3e9._msdcs.example.com.
+df4bdd8c-abc7-4779-b01e-4dd4553ca3e9._msdcs.example.com is an alias for ubndc02.example.com.</code>
+
+En cas d'erreur, il faut ajouter ou corriger l'enregistrement DNS
+<code>samba-tool dns add ubndc01 _msdcs.example.com df4bdd8c-abc7-4779-b01e-4dd4553ca3e9 CNAME ubndc02.example.com -U administrator</code>
+**Il est possible qu'il manque encore d'autres enregistrements DNS.** L'administrateur devra les ajouter manuellement.
+</note>
+===== Démarrer Samba AD DC =====
+Avant de démarrer Samba AD DC, il est important de vérifier la bonne configuration du DNS.
+Le fichier /etc/resolv.conf devrait contenir 
+<file - /etc/resolv.conf>search example.com
+nameserver 127.0.0.1</file>
+
+En fonction de la configuration réseau utilisée, ces paramètres peuvent être statiques ou gérer par un autre sous-système (se référer à [[tutoriel:comment_configurer_son_reseau_local|Comment configurer son réseau local ?]], [[dns#configuration_d_un_dns_alternatif|Configuration d'un DNS alternatif]] et [[utilisateurs:ool:netplan|netplan]])
+
+Le service Samba se gère de préférence via [[:systemd|systemd]] et la commande //systemctl// mais peut également se gérer via [[:upstart|Upstart]] et la commande //service//. Avant de démarrer Samba AD DC, il faut d'abord arrêter les services //smbd// et //nmbd// (//samba.service//). 
+<code>sudo systemctl stop samba.service
+sudo systemctl start samba-ad-dc.service</code>
+
+Pour connaître l'ensemble des services démarrés par samba :
+<code>sudo samba-tool processes
+ Service:                PID 
+-----------------------------
+dnsupdate                959
+nbt_server               933
+rpc_server               932
+cldap_server             942
+winbind_server           949
+kdc_server               943
+samba                      0
+dreplsrv                 948
+kccsrv                   956
+ldap_server              938</code>
+On y voit, dans l'ordre, les services suivants DNS, NetBIOS, RPC, Connection-less LDAP (CLDAP), WinBind, KDC (Kerberos Distribution Center), DSDB Replication (Directory Service DataBase Replication), KCC (Knowledge Consistency Checker), LDAP. Tous ces services sont configurés soit dans /etc/samba/smb.conf, soit dans les fichiers /var/lib/samba/private/*.
+
+===== Tests de Samba AD DC =====
+Samba AD DC est composé de beaucoup de services différents qui interagissent. Les tests qui suivent se focaliseront sur l'un ou l'autre point.
+
+==== Test des ACL ====
+Pour tester les ACL, il faut [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>acl]]**.
+
+Le paquet //acl// va, entre autre, installer les commandes //setfacl// et //getfacl// afin de définir et lire les ACL sur un fichier.
+
+Pour vérifier le fonctionnement des ACL, on peut exécuter les commandes ci-dessous sur un fichier d'une partition qui a les ACL activé.
+<code>touch test.txt
+setfacl -m g:adm:rwx test.txt
+getfacl test.txt</code>
+Le résultat de cette dernière commande doit retourner quelque chose semblable à :
+<code># file: test.txt
+# owner: user1
+# group: user1
+user::rw-
+group::rw-
+group:adm:rwx
+mask::rw-
+other::r--</code>
+Si aucune erreur n'est retournée, les ACL sont bien activées et utilisables.
+==== Test des attributs étendus ====
+Pour tester les attributs étendus, il faut installer le paquet **[[apt>attr]]**. Ce paquet devrait déjà être installé car il s'agit d'une dépendance de //samba//.
+<code>sudo apt-get install attr</code>
+Le paquet //attr// va, entre autre, installer les commandes //setfattr// et //getfattr// afin de définir et lire les attributs étendu d'un fichier.
+
+Pour vérifier le fonctionnement des attributs étendus, on peut exécuter les commandes ci-dessous sur un fichier d'une partition qui a les attributs étentus activé 
+
+Pour ajouter des attributs étendus :
+<code>touch test.txt
+setfattr -n user.userName -v userValue test.txt
+sudo setfattr -n security.secName -v secValue test.txt</code>
+Pour voir les attributs étendus d'un fichier :
+<code>getfattr -d test.txt</code>
+<code># file: test.txt
+user.userName="userValue"</code>
+<code>getfattr -n security.secName -d test.txt</code>
+<code># file: test.txt
+security.secName="secValue"</code>
+Si aucune erreur n'est retournée, les attributs étendus sont bien activés et utilisables.
+==== Test du DNS ====
+Pour tester le DNS, il faut [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>dnsutils]]**. Ce paquet devrait déjà être installé car il s'agit d'une dépendance de //ubuntu-standard//.
+
+Le paquet //dnsutils// va, entre autre, installer les commandes //dig//, //nslookup// et //nsupdate// afin d'interroger et mettre à jour le serveur DNS. Ce paquet n'installe pas un serveur DNS.
+
+Une configuration fonctionnelle du [[:dns|DNS]] est essentielle pour assurer le bon fonctionnement de Samba et de l'AD. Sans les bons paramètres, Kerberos ne fonctionnera pas, entraînant le non-fonctionnement des services de base ! Afin d'éviter de perdre son temps à cause d'un problème DNS, il faut attraper le réflexe de systématiquement vérifier le bon fonctionnement du DNS. La connaissance des requêtes adéquates pour identifier chaque problème est également nécessaire. Pour plus d'information, consulter [[https://wiki.samba.org/index.php/DNS_Administration|DNS Administration ]] et [[https://wiki.samba.org/index.php/Samba_AD_management_from_windows | administrer Samba AD depuis windows ]].
+
+Pour que le serveur DNS interne puisse fonctionner, le port 53 udp/tcp ne doit pas être utilisé par d'autres programmes (tel qu'un autre serveur DNS, Dnsmasq, etc...). Dans le cas contraire, des erreurs seront visible dans le fichier ... FIXME
+<file - ...>...
+Failed to bind to 0.0.0.0:53 TCP - NT_STATUS_ADDRESS_ALREADY_ASSOCIATED
+...</file>
+Pour vérifier quel programme écoute sur le port 53
+<code>sudo netstat -tunpel | grep ":53" </code>
+
+Voici quelques requêtes de base permettant de tester les records du DNS
+  * Vérification du fonctionnement du service DNS par une résolution simple.
+<code>dig ubndc01.example.com
+...
+ubndc01.example.com.     900     IN      A       192.0.2.11
+...
+;; SERVER: 127.0.0.1#53(127.0.0.1)
+...</code>
+On voit sur la dernière ligne mise en évidence ici, quel serveur a répondu à la requête. Si ce n'est pas le bon serveur, il faut vérifier le fichier /etc/resolv.conf.
+
+  * Résolution d'une requête spécifique pour le service Kerberos
+<code>dig -t SRV _kerberos._tcp.example.com
+...
+_kerberos._tcp.example.com. 900  IN      SRV     0 100 88 ubndc01.example.com.
+...</code>
+
+  * Résolution d'une requête spécifique pour le service LDAP
+<code>dig -t SRV _ldap._tcp.example.com
+...
+_ldap._tcp.example.com.  900     IN      SRV     0 100 389 ubndc01.example.com.
+...</code>
+
+  * Résolution d'une adresse externe au domaine
+<code>dig doc.ubuntu-fr.org
+...
+doc.ubuntu-fr.org.      1276    IN      A       86.65.39.28
+...</code>
+En cas d'absence de réponse, il faut vérifier qu'il y ait une ligne //dns forwarder// pointant vers l'IP d'un serveur DNS externe au domaine dans le fichier /etc/samba/smb.conf
+<file conf /etc/samba/smb.conf>
+...
+        dns forwarder = 192.0.2.1
+...</file>
+Si tel est le cas, il faut vérifier qu'il s'agisse de la bonne IP et que la requête aboutisse correctement sur cet autre serveur DNS. Par exemple avec :
+<code>dig doc.ubuntu-fr.org @192.0.2.1</code>
+
+==== Test de Kerberos ====
+Pour tester le Kerberos, il faut [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>krb5-user]]**
+
+Le paquet //krb5-user// va, entre autre, installer les commandes //kinit// et //klist// qui permettent d'interroger et tester un serveur kerberos. Ce paquet n'installe pas un serveur kerberos.
+
+Lors de l'initialisation, le fichier de configuration du serveur Kerberos(([[http://irp.nain-t.net/doku.php/320kerberos:start|Documentation sur Kerberos et son fonctionnement]])) de Samba est automatiquement crée et se trouve sur /var/lib/samba/private/krb5.conf. Son contenu par défaut est :
+<file - /var/lib/samba/private/krb5.conf>[libdefaults]
+        default_realm = EXAMPLE.COM
+        dns_lookup_realm = false
+        dns_lookup_kdc = true
+</file>
+
+Les commandes fournies par le paquet //krb5-user// (//kinit//, //klist//, ...) utilise le fichier de configuration /etc/krb5.conf qui a été crée lors de l'installation du paquet //krb5-config//. Dans ce fichier, seule 1 partie est utile :
+<file - /etc/krb5.conf>[libdefaults]
+        default_realm = EXAMPLE.COM
+...
+</file>
+<note important>Le nom du "royaume" (realm) s'écrit toujours **lettres majuscules**</note>
+
+Voici quelques commandes permettant de tester le serveur Kerberos :
+  * Demande d'un ticket-granting ticket (TGT) pour un utilisateur avec //kinit//
+<code>kinit administrator@EXAMPLE.COM
+password for administrator@EXAMPLE.COM:
+Warning: Your password will expire in x days on ... </code>
+La même commande en omettant le @ nom du royaume doit donner le même résultat. Dans ce cas, //kinit// prend la valeur du //default_realm// inscrite dans le fichier de configuration /etc/krb5.conf
+
+  * Pour voir le TGT reçu, il faut utiliser la commande //klist//
+<code>klist
+Ticket cache: FILE:/tmp/krb5cc_1000
+Default principal: administrator@EXAMPLE.COM
+
+Valid starting     Expires            Service principal
+03/03/14 20:17:43  04/03/14 06:17:43  krbtgt/EXAMPLE.COM@EXAMPLE.COM
+        renew until 04/03/14 20:17:35
+</code>
+
+==== Test de SMB ====
+Pour tester les SMB, il faut [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>smbclient]]**
+
+Si //samba// a été installé à partir des sources, il faut veiller à avoir une //smbclient// en version 4 également.
+
+  * Lister les partages définis localement sur le DC :
+<code>smbclient -L localhost -U%
+Domain=[EXAMPLE] OS=[Unix] Server=[Samba 4.1.3-Ubuntu]
+
+        Sharename       Type      Comment
+        ---------       ----      -------
+        netlogon        Disk      
+        sysvol          Disk      
+        IPC$            IPC       IPC Service (Samba 4.1.3-Ubuntu)
+Domain=[EXAMPLE] OS=[Unix] Server=[Samba 4.1.3-Ubuntu]
+
+        Server               Comment
+        ---------            -------
+
+        Workgroup            Master
+        ---------            -------
+        WORKGROUP</code>
+Un AD DC possède toujours les partages netlogon et sysvol. Ils sont nécessaires au fonctionnement d'AD. Ces partages doivent se retrouver dans le fichier de configuration de samba /etc/samba/smb.conf.
+
+  * Vérifier l'authentification d'un utilisateur avec la même commande mais en utilisant l'utilisateur administrator.
+<code>smbclient -L localhost -UAdministrator
+Enter administrator's password:
+...</code>
+Le résultat doit être identique au précédent si on introduit le bon mot de passe pour le compte administrator.
+===== Gestion de Samba AD DC =====
+==== Vérification de la synchronisation en plusieurs DC ====
+La commande //samba-tool// permet de voir l'état de réplication.
+<code>samba-tool drs showrepl</code>
+Au besoin, il faut utiliser l'option //-U administrator// pour obtenir le résultat.
+==== Gestion des rôles FSMO ====
+Les rôles FSMO ((Flexible Single-Master Operations)) sont, selon Microsoft (([[https://technet.microsoft.com/en-us/library/cc961939.aspx|Microsoft FSMO roles]])), au nombre de 5 :
+  * Schema Master: 1 par forêt
+  * Domain Naming Master: 1 par forêt
+  * Relative Identifier Master ((RID Master)) : 1 par domaine
+  * Primary Domain Controller Emulator ((PDC Emulator)) : 1 par domaine
+  * Infrastructure Master: 1 par domaine
+Le projet Samba a ajouté à ceux-ci 2 rôles supplémentaires (([[https://wiki.samba.org/index.php/Flexible_Single-Master_Operations_(FSMO)_Roles|Samba FSMO roles]]))
+  * Forest DNS Zones Master: 1 par forêt
+  * Domain DNS Zones Master: 1 par domaine
+=== Voir les propriétaires des rôles FSMO ===
+La commande //samba-tool// permet de voir les propriétaires de chaque rôle FSMO. L'exécution doit se faire sur un contrôleur de domaine.
+<code>sudo samba-tool fsmo show
+SchemaMasterRole owner: CN=NTDS Settings,CN=UBNDC01,CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=example,DC=com 
+InfrastructureMasterRole owner: CN=NTDS Settings,CN=UBNDC01,CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=example,DC=com
+RidAllocationMasterRole owner: CN=NTDS Settings,CN=UBNDC01,CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=example,DC=com
+PdcEmulationMasterRole owner: CN=NTDS Settings,CN=UBNDC01,CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=example,DC=com
+DomainNamingMasterRole owner: CN=NTDS Settings,CN=UBNDC01,CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=example,DC=com
+DomainDnsZonesMasterRole owner: CN=NTDS Settings,CN=UBNDC01,CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=example,DC=com
+ForestDnsZonesMasterRole owner: CN=NTDS Settings,CN=UBNDC01,CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=example,DC=com
+</code>
+Dans l'exemple ci-dessus, on voit que le contrôleur de domaine //ubndc01// possède tous les rôles.
+=== Transfert des rôles FSMO ===
+La commande //samba-tool// permet de transférer les rôles FSMO d'un contrôleur de domaine à l'autre(([[https://wiki.samba.org/index.php/Transferring_and_Seizing_FSMO_Roles|Transferring and Seizing FSMO roles]])). L'exécution doit se faire sur le contrôleur de domaine qui reprend le(s) rôle(s).
+<code>sudo samba-tool fsmo transfer --role=all -U administrator
+FSMO transfer of 'rid' role successful
+FSMO transfer of 'pdc' role successful
+FSMO transfer of 'naming' role successful
+FSMO transfer of 'infrastructure' role successful
+FSMO transfer of 'schema' role successful
+ERROR: ...
+</code>
+Il est possible de transférer tous les rôles en même temps avec l'argument //all// (comme dans l'exemple ci-dessus) ou de transférer un rôle à la fois. Il est possible de recevoir des messages d'erreurs lors de l'exécution. Il faut réessayer et patienter. Après un certains temps (5 à 10 minutes, le temps d'une réplication), ça devrait être en ordre et visible avec la commande //samba-tool fsmo show//.
+
+=== Retrait d'un contrôleur de domaine ===
+Après avoir transférer les rôles que possédait un contrôleur de domaine (s'il en possédait), l'administrateur peut le retirer du domaine avec la commande //samba-tool//. L'exécution doit se faire sur le contrôleur de domaine que l'on retire du domaine avec un compte local (pas du domaine).
+<code>sudo samba-tool domain demote -U administrator
+Password for [EXAMPLE\administrator]:
+Deactivating inbound replication
+Asking partner server ubndc02.example.com to synchronize from us
+Changing userControl and container
+Demote successful</code>
+
+
+===== Mise à jour depuis un domaine Samba de type NT4 vers un AD=====
+Si vous prévoyez la migration depuis un domain Samba NT4 existant vers un domaine Samba AD, reportez-vous à la page [[http://wiki.samba.org/index.php/Samba4/samba-tool/domain/classicupgrade/HOWTO|Classic Upgrade HowTo]]
+
+===== Informations optionnelles et complémentaires =====
+Le wiki Samba (en anglais) met à disposition de nombreuses documentations complémentaires \\
+  * Pour l'administration de votre DC : 
+    * [[https://wiki.samba.org/index.php/Backup_and_Recovery|Sauvegarde et restauration]]
+    * [[https://wiki.samba.org/index.php/Setup_and_configure_file_shares|Configuration des partages de fichiers]]
+
+  * Pour les tâches "quotidiennes" :
+    * [[https://wiki.samba.org/index.php/Configuring_a_windows_client_for_AD| Configurer un client windows]]
+    * [[https://wiki.samba.org/index.php/Samba_AD_management_from_windows| Gérer Samba AD depuis windows]]
+
+  * [[https://wiki.samba.org/index.php/Authenticating_other_services_against_AD| Authentifier d'autres services avec l'AD]] notamment Apache, SSH,...
+
+Des réflexions sur [[https://fr.wikipedia.org/wiki/SELinux| SELinux]] et les permissions de contrôle d'accès pouvant prévenir des connexions utilisant l'AD, sont disponibles sur la page [[https://wiki.samba.org/index.php/Samba_AD_DC_access_control_settings | Paramétrages contrôle d'accès Samba AD DC]].
+
+Reportez-vous la [[https://wiki.samba.org/index.php/Samba | documentations utilisateur du wiki samba]] pour plus d'informations et tutoriels.
+
+===== Références =====
+  * [[http://wiki.samba.org/index.php/Samba|Wiki Samba]]
+  * Articles dans Linux Pratique n°79 de sept/oct 2013 (pages 68 à 73) et n°80 de nov/déc (pages 70 à 76)
+
+//Contributeurs principaux : [[utilisateurs:bcag2|bcag2]], [[:utilisateurs:Qedinux|Qedinux]]//

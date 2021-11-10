@@ -1,0 +1,260 @@
+
+{{tag>Xenial antivirus sécurité}}
+----
+
+{{ applications:clam.png?96}}
+====== ClamAV ======
+
+**ClamAV** (Clam Antivirus) est un [[:antivirus]] GPL pour UNIX. La principale qualité de cet antivirus est qu'il permet de balayer les courriels reçus et envoyés avec un logiciel de messagerie classique. Le paquet que nous allons installer inclut un démon multi-tâches flexible et configurable, un antivirus en ligne de commande et un utilitaire pour une mise à jour automatique des définitions de virus via Internet. Le programme est basé sur une bibliothèque distribuée avec le paquet ClamAV, que vous pouvez utiliser pour créer votre propre logiciel. Le plus important est que la base de données des virus soit mise à jour.
+
+Cette page explique comment installer le paquet « clamav » et comment utiliser l'antivirus. Le numéro de version de ClamAV dépend de votre version d'Ubuntu.
+
+
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>clamav]]**
+
+
+===== Utilisation =====
+
+^ Action ^ Commande ^
+| Mise à jour des définitions antivirus | <code>freshclam</code> |
+| Balayer les fichiers du dossier personnel | <code>clamscan</code> |
+| Balayer tous les fichiers du dossier personnel (avec -r "Scan subdirectories recursively")| <code>clamscan -r /home/utilisateur</code> |
+| Balayer le disque dur entier | <code>clamscan -r /</code> |
+| Balayer une partition Windows (Fat 32), montée en "/mnt/D". Signal sonore et affichage si virus trouvé et écriture dans virus.log |<code>clamscan --bell -r -i --log=/home/utilisateur/virus.log /mnt/D/</code>|
+
+
+==== Mise à jour automatique des définitions====
+Pour que ça se mette à jour automatiquement, on crée une nouvelle tâche quotidienne, [[:tutoriel:comment_modifier_un_fichier|modifiez le fichier]] **/etc/cron.daily/clamav** avec les [[sudo|droits d'administration]].
+Ajoutez-y les lignes suivantes :
+<file bash>#!/bin/sh
+/usr/bin/freshclam >> /var/log/resul_freshclam.txt
+</file>
+
+Ou si un autre processus bloque freshclam et l'écriture dans le fichier  /var/log/resul_freshclam.txt :
+<file bash>
+#!/bin/sh
+# https://ubuntuforums.org/showthread.php?t=1032147
+/etc/init.d/clamav-freshclam stop
+/usr/bin/freshclam -v >> /var/log/resul_freshclam.txt
+/etc/init.d/clamav-freshclam start
+</file>
+
+Ensuite, à nouveau dans le terminal, on y met les droits d'exécution :
+<code bash>sudo chmod 755 /etc/cron.daily/clamav</code>
+
+Enfin, on vérifie :
+<code bash>sudo /etc/cron.daily/clamav
+cd /var/log
+cat resul_freshclam.txt
+ClamAV update process started at Mon Dec 24 15:00:32 2012
+main.cvd is up to date (version: 54, sigs: 1044387, f-level: 60, builder: sven)
+daily.cld is up to date (version: 16059, sigs: 407726, f-level: 63, builder: neo)
+bytecode.cld is up to date (version: 209, sigs: 40, f-level: 63, builder: neo)</code>
+
+Voir le [[http://forum.ubuntu-fr.org/viewtopic.php?pid=11975411#p11975411|forum]]
+
+==== Mises à jour manuelle des signatures ====
+=== Exécution de la mise  jour des signatures ===
+
+Normalement, vous pouvez exécuter les mises à jour en exécutant ces trois commandes (qui vous permettent dans l'ordre d'arrêter le service, de lancer la mise à jour et de relancer le service):
+  systemctl stop clamav-freshclam
+  sudo freshclam
+  systemctl start clamav-freshclam
+  
+=== Augmentation du délai de récupération des mises à jours ===
+Par défaut, ce délai ("timeout") est souvent trop réduit. L'exécution de la commande de la commande **freshclam** (cf. paragraphe ci-dessus) donne donc souvent lieu à des erreurs similaires à celle-ci :
+<code>Wed Nov  4 07:28:07 2020 -> ClamAV update process started at Wed Nov  4 07:28:07 2020
+Wed Nov  4 07:28:07 2020 -> daily.cvd database is up to date (version: 25977, sigs: 4338215, f-level: 63, builder: raynman)
+Wed Nov  4 07:28:07 2020 -> main database available for download (remote version: 59)
+Wed Nov  4 07:28:37 2020 -> ^Download failed (28) Wed Nov  4 07:28:37 2020 -> ^ Message: Timeout was reached
+Wed Nov  4 07:28:37 2020 -> ^getcvd: Can't download main.cvd from https://database.clamav.net/main.cvd
+Wed Nov  4 07:28:37 2020 -> Trying again in 5 secs...
+Wed Nov  4 07:28:42 2020 -> main database available for download (remote version: 59)
+Wed Nov  4 07:29:12 2020 -> ^Download failed (28) Wed Nov  4 07:29:12 2020 -> ^ Message: Timeout was reached
+Wed Nov  4 07:29:12 2020 -> ^getcvd: Can't download main.cvd from https://database.clamav.net/main.cvd
+Wed Nov  4 07:29:12 2020 -> Trying again in 5 secs...</code>
+
+La solution est donc d'augmenter ce délai(([[https://dhenandi.com/solved-clamav-download-failed-message-timeout-was-reached/|[Solved] ClamAV Download Failed, Message: Timeout was reached]])) en modifiant le fichier de configuration de freshclam(([[Documentation - Configuration - freshclam.conf|http://www.clamav.net/documents/configuration#freshclamconf]])).
+
+  * Pour cela, il faut arrêter le service, si ce n'était pas déjà fait:
+<code>systemctl stop clamav-freshclam</code>
+  * [[:tutoriel:comment_modifier_un_fichier|Modifier]] le fichier de configuration de freshclam **/etc/clamav/freshclam.conf** en remplaçant :
+<code>ReceiveTimeout 30</code>
+par  
+<code># ReceiveTimeout 30 -> Timeout
+ReceiveTimeout 300</code>
+  * On peut alors relancer la mise à jour manuelle des définitions avec <code>sudo freshclam</code> et vérifier qu'elle se déroule normalement. On devrait obtenir un message similaire à celui-ci:
+<code>Wed Nov  4 07:55:17 2020 -> ClamAV update process started at Wed Nov  4 07:55:17 2020
+Wed Nov  4 07:55:17 2020 -> daily.cvd database is up to date (version: 25977, sigs: 4338215, f-level: 63, builder: raynman)
+Wed Nov  4 07:55:17 2020 -> main.cvd database is up to date (version: 59, sigs: 4564902, f-level: 60, builder: sigmgr)
+Wed Nov  4 07:55:17 2020 -> bytecode.cvd database is up to date (version: 331, sigs: 94, f-level: 63, builder: anvilleg)</code>
+  * On peut alors relancer le service
+<code>systemctl start clamav-freshclam</code> 
+
+=== Nettoyage de la bibliothèque des mises à jours ===
+
+Lors de la 1ère installation le dossier qui contient celle-i **/var/lib/clamav** fait 225Mo mais rapidement plusieurs Go, d'où l'intérêt du nettoyage.
+
+__Avec le terminai et le gestionnaire de fichier nemo cela donne__ :
+
+  - Dans le terminal tapez pour ouvrir le dossier dans le gestionnaire de fichier en root <code>sudo nemo /var/lib/clamav/</code>
+  - **NB** Faites une copie des fichiers qui vont être supprimés où vous le souhaitez
+  - Sélectionnez tous les fichiers
+  - Sélectionnez avec un clic droit de souris //supprimer// ou //mettre à la corbeille//
+  - Retournez dans le terminal et appuyez sur **//Ctrl + c//** pour refermez nemo en root puis tapez <code>sudo reboot</code> pour redémarrer votre PC
+
+En rédémarrant, clamav va reconstruire la bibliothèque virale comme la première fois et votre pc sera allégé de plusieurs Go si vous le n'avez jamais fait.
+
+Si votre ligne internet est lente, attendez 5 minutes pour aller vérifier la bonne réalisation de tout cela en allant consulter **en mode root** dans /var/log/clamav/ le fichier appelé //freshclam.log//.
+
+
+PS : autodidacte Linux-Debian de longue date je suis; merci aux avertis Linux-Debian d'apporter les compléments qui vous semblent indispensables.
+===== Paramètres =====
+
+^ Paramètre ^ Signification ^
+| %%--help%% (-h) | Affiche les différents paramètres (anglais) |
+| %%--version %%(-V)| Affiche le numéro de version |
+| %%--verbose%% (-v) | Rend le programme plutôt bavard |
+| %%--debug %%| Affiche les informations de débugage (libclamav) |
+| %%--quiet %%| Affiche seulement les messages d'erreur |
+| %%--stdout %%| Sortie vers stdout au lieu de stderr |
+| %%--no-summary%% | Désactive l'affichage du rapport à la fin du balayage |
+| %%--infected %%(-i) | Affiche uniquement les fichiers infectés |
+| %%--bell%% | Émet un son lors de la détection d'un virus |
+|  |  |
+| %%--tempdir=REPERTOIRE %%| Crée les fichiers temporaires dans REPERTOIRE |
+| %%--leave-temps%% | Ne supprime pas les fichiers temporaires |
+| %%--database=FICHER/REPERTOIRE (-d FICHIER/REPERTOIRE)%% | Charge la base de données des virus à partir de FICHIER ou charge tous les fichiers *.cvd et *.db[2] à partir de REPERTOIRE |
+| %%--log=FICHIER (-l FICHIER)%% | Enregistre le fichier log (rapport) dans FICHIER |
+| %%--remove%% | Supprime les fichiers infectés : **ATTENTION !** |
+| %%--move=RÉPERTOIRE%% | Déplace les fichiers infectés dans RÉPERTOIRE |
+| %%--exclude=REGEX%% | Ne balaye pas les fichiers correspondant à l'expression régulière REGEX |
+| %%--exclude-dir=REGEX%% | Ne balaye pas les répertoires correspondant à l'expression régulière REGEX |
+| %%--include=REGEX%% | Balaye uniquement les fichiers correspondant à l'expression régulière REGEX |
+| %%--include-dir=REGEX%% | Balaye uniquement les dossiers correspondant à l'expression régulière REGEX |
+|  |  |
+| %%--no-mail%% | Désactive l'analyse courriel |
+| %%--no-pe%% | Désactive l'analyse PE |
+| %%--no-ole2%% | Désactive l'analyse OLE2 |
+| %%--no-html%% | Désactive l'analyse HTML |
+| %%--no-archive%% | Désactive l'analyse des archives |
+| %%--detect-broken%% | Essaie de détecter les exécutables corrompus |
+| %%--block-encrypted%% | Bloque les archives cryptées |
+| %%--block-max%% | Bloque les archives excédant la taille limite |
+| %%--mail-follow-urls %%| Télécharge et analyse les URLs (adresses internet) |
+| %%--max-space=#n %%| Extraire uniquement les #n premiers kilo-octets des fichiers archivés |
+| %%--max-files=#n %%| Extraire uniquement les #n premiers fichiers des archives |
+| %%--max-ratio=#n %%| Taux de compression maximum pour les archives |
+| %%--unzip[=LOGICIEL_DE_DECOMPRESSION] %%| Active le support pour les archives *.zip |
+| %%--unrar[=LOGICIEL_DE_DECOMPRESSION]%% | Active le support pour les archives *.rar |
+| %%--arj[=LOGICIEL_DE_DECOMPRESSION] %%| Active le support pour les archives *.arj |
+| %%--unzoo[=LOGICIEL_DE_DECOMPRESSION]%% | Active le support pour les archives *.zoo |
+| %%--lha[=LOGICIEL_DE_DECOMPRESSION] %%| Active le support pour les archives *.lha |
+| %%--jar[=LOGICIEL_DE_DECOMPRESSION]%% | Active le support pour les archives *.jar |
+| %%--tar[=LOGICIEL_DE_DECOMPRESSION]%% | Active le support pour les archives *.tar |
+| %%--deb[=LOGICIEL_DE_DECOMPRESSION]%% | Active le support pour les archives *.deb |
+| %%--tgz[=LOGICIEL_DE_DECOMPRESSION] %%| Active le support pour les archives *.tar.gz et *.tgz |
+
+
+
+===== Un balayage temps réel ====
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>clamav-daemon,inotify-tools|clamav-daemon et inotify-tools ]]** et pour un PC de bureau **[[apt>libnotify-bin]]**.
+
+Voici le script ''clamav-tr.sh'' pour ajouter une fonction temps réel à clamav. Il permet de balayer en temps réel le répertoire "/home" (par défaut), si un virus est trouvé il sera déplacé en quarantaine (dans /tmp par défaut). Un [[fichier_cache|fichier caché]] (.clamav-tr.log) sera disponible dans le dossier de l'utilisateur du script. On utilise ''clamdscan'' (clamav-daemon) car il est beaucoup plus rapide que clamscan. 
+
+
+<file bash>
+#!/bin/bash
+# Script "ClamAV Temps Réel", par HacKurx
+# http://hackurx.wordpress.com
+# Licence: GPL v3
+# Dépendance: clamav-daemon inotify-tools
+# Recommandé pour PC de bureau: libnotify-bin
+
+DOSSIER=$HOME
+QUARANTAINE=/tmp
+LOG=$HOME/.clamavd-tr.log
+
+while :
+do
+
+inotifywait -q -r -e  create,modify,move,delete,open,close,access  "$DOSSIER" --format '%w%f|%e' | sed --unbuffered 's/|.*//g' |
+
+while read FICHIER; do 
+	clamdscan -m -v --fdpass "$FICHIER" --move=$QUARANTAINE
+        if [ "$?" == "1" ]; then
+		echo "`date` - Malware trouvé dans le fichier '$FICHIER'. Le fichier a été déplacé dans $QUARANTAINE." >> $LOG 
+		echo -e "\033[31mMalware trouvé!!!\033[00m" "Le fichier '$FICHIER' a été déplacé en quarantaine."
+		if [ -f /usr/bin/notify-send ]; then
+			notify-send -u critical "ClamAV Temps Réel" "Malware trouvé!!! Le fichier '$FICHIER' a été déplacé en quarantaine."
+		fi
+        fi
+done
+done
+</file>
+
+<note important>Fait important, clamdscan fait toujours une analyse récursive. Pour notre application ce n'est pas forcément pertinent. Cela pourrait dépendre de votre application. Personnellement je trouverais plus logique de ne vérifier que les fichiers de la racine du répertoire où il y a eu un événement remonté par inotifywait plutôt que de scanner le répertoire en question et récursivement tout les sous répertoires. Cela pourrait entraîner l'utilisation de ressources CPU importantes.
+Si comme moi vous ne désirez faire une analyse non récursive du répertoire remonté par inotifywait, il vous faudra modifier le paramètre suivant du fichier /etc/clamav/clamd.conf : 
+<code>MaxDirectoryRecursion 1 </code>
+
+</note>
+===== Utilisation d'une interface graphique =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>clamtk]]**.\\
+Lancez l'application comme indiqué [[:tutoriel:comment_lancer_application|ici]] ou via le [[:terminal]] (toutes [[:versions]] ou [[:variantes]] d'Ubuntu) avec la [[:commande_shell|commande]] suivante : <code>clamtk</code>
+
+{{http://img15.hostingpics.net/pics/627621ClamTk03.png|}}
+
+Seule la commande ''Recursive Scan'' examine tous les fichiers d'un dossier, sous-dossiers inclus. 
+Dans **Paramètres → Paramètres**  cochez "Analyser les dossiers récursivement".
+
+Pour que les signatures de virus soient prises en compte, redémarrez l'ordinateur. 
+
+Il existe aussi des interfaces graphiques pour **Kde** [[https://bitbucket.org/dave_theunsub/clamtk-kde/downloads/clamtk-kde_0.16-1_all.deb|clamtk-kde]]  **Xfce** et **Cinammon** à cette même [[https://code.google.com/p/clamtk/|adresse]].
+==== Intégration dans Nautilus ====
+===Via un paquet===
+II existe un paquet à [[:tutoriel:comment_installer_un_paquet|installer]], **[[apt>clamtk-gnome]]** qui permet d'accéder à clamav grâce à clic droit sur un dossier. Après avoir installé le paquet, faites un clic droit sur un dossier et choisissez **Rechercher des menaces** FIXME sous ubuntu 20.04 ?
+
+===Via des scripts nautilus===
+Il est possible d'utiliser un [[:nautilus_scripts|script Nautilus]], l'intérêt de cette méthode est qu'elle permet d'analyser un ou plusieurs fichiers, ou le contenu d'un dossier, à partir d'un clic droit dessus. Suivez la procédure de création des [[:nautilus_scripts|script Nautilus]] et utilisez le script ''Analyser avec Virus Scanner'' :
+
+<file bashAnalyser avec Virus Scanner.sh>
+#!/bin/bash
+titre="Antivirus ClamAV"
+clamscan -rv --bell --log=.tempscan.tmp --max-filesize=4095M --max-scansize=4095M "$@" | zenity --progress \
+  --pulsate --auto-close --width=200\
+  --title="$titre" --text="Analyse des fichiers..."
+zenity --text-info --width=600 --height=400 --title="$titre" --filename=.tempscan.tmp
+rm .tempscan.tmp
+</file>
+
+Un autre script permet de balayer directement à partir de l'option "Scripts". Ce script à l'avantage de pouvoir balayer plusieurs fichiers et dossiers en même temps.
+Voici le script: <file bash>
+  #!/bin/sh
+  /usr/bin/clamscan --stdout -r $@ | zenity --text-info --title="Réultats du scan de $@ avec ClamAV"</file>
+Le fichier du script est disponible par ce [[http://sdrv.ms/YKzybg|lien]]
+Vous devez copier ce fichier dans votre dossier script.
+**Attention: Il est déjà exécutable!**
+
+Il est possible de le faire sur chaque type de fichier, mais l'inconvénient de cette méthode est qu'il faut réaliser l'opération suivante pour chaque type de fichier.
+Son avantage est qu'elle permet d'analyser des fichiers dans d'autres contextes que Nautilus, par exemple des pièces jointes de courriels avec Evolution.
+
+Clic-droit sur le fichier, puis **Ouvrir avec une autre application** et sélectionnez **Virus Scanner**.
+Il est maintenant possible "d'ouvrir" tous les fichiers de ce type avec clamtk.
+
+
+
+===== Voir aussi =====
+
+  * **(en)** [[http://www.clamav.net/|Site officiel]]
+  * **(en)** [[http://klamav.sourceforge.net/klamavwiki/index.php/Main_Page|Documentation de KlamAV]]
+  * **(en)** [[http://clamtk.sourceforge.net/|Site de ClamTk]]
+  * **(en)** [[https://code.google.com/p/clamtk/|ClamTk - Graphical interface for Clam Antivirus]]
+  * Participer à l'amélioration de ClamAV en [[http://cgi.clamav.net/sendvirus.cgi|soumettant un virus.]]
+
+----
+//Contributeurs : [[utilisateurs:hackurx|HacKurx]], [[utilisateurs:kmeleon|Kmeleon]], [[utilisateurs:wullfk|Wullfk]], [[utilisateurs:boutentrain|Boutentrain]].//
+
+//Basé sur [[https://help.ubuntu.com/community/ClamAV]].//

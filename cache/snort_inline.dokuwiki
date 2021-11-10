@@ -1,0 +1,252 @@
+
+{{tag>sécurité pare-feu ips}}
+----
+
+====== Snort Inline :  Système de prévention d'intrusion  ======
+{{http://snort-inline.sourceforge.net/images/snort_inline_med.gif  }}
+L'IPS Snort Inline est une version modifiée du fameux IDS [[Snort]] ([[http://fr.wikipedia.org/wiki/Syst%C3%A8me_de_d%C3%A9tection_d%27intrusion|Système de détection d'intrusion]]) pour en faire un IPS ([[http://fr.wikipedia.org/wiki/Syst%C3%A8me_de_pr%C3%A9vention_d%27intrusion|Système de prévention d'intrusion]] ), une solution capable de bloquer les intrusions/attaques réseau.
+
+Il reçoit les paquets envoyés par le **firewall [[iptables|Netfilter]]** avec l'aide de la librairie libipq, les compare avec des règles de signature [[Snort]] et les marque en "drop" s'ils correspondent à une règle, puis finalement les renvoie vers Netfilter où les paquets Snort_Inline marqués **sont rejetés**. 
+
+Site officiel : http://snort-inline.sourceforge.net/
+
+Voir pour accompagner snort inline IPS reseau :
+  * [[Ossec]] un IPS applicatif,
+
+{{ http://openmaniak.com/inline/inline_netfilter.gif }}
+
+===== Installation =====
+
+[[http://www.openmaniak.com/fr/inline.php|Voir le tutoriel]].
+
+==== 0) Paquets requis : ====
+
+Ubuntu 9.10 karmic koala : <code>sudo apt-get install apache2 mysql-server php5 php5-mysql build-essential libpcre3-dev iptables-dev libnet1-dev libmysqlclient16-dev  checkinstall libnet1 libpcap-dev
+</code>
+
+<code>sudo apt-get install libpcap0.8-dev libpcre3-dev libdumbnet-dev libprelude-dev libnetfilter-queue-dev
+</code>
+
+<code>sudo apt-get install apache2 mysql-server php5 php5-mysql build-essential libpcre3-dev iptables-dev libnet0-dev libmysqlclient12-dev  libmysqlclient12-dev checkinstall libnet</code>
+
+
+Soyez attentif à ne pas installer libnet 1.1.x (package libnet1-dev). Sinon, comme indiqué sur le [[http://snort-inline.sourceforge.net/FAQ.html#libnet|site web de Snort_Inline]], la compilation de Snort_Inline contre cette version de libnet ne fonctionnera pas.
+ 
+<note help>
+Installation alternative de libnet (voir si toujours d'actualité)</note>
+<code>
+echo "Téléchargez et décompressez libdnet:"
+
+wget http://prdownloads.sourceforge.net/libdnet/libdnet-1.11.tar.gz?download
+tar -xvf libdnet-1.11.tar.gz
+echo "Accédez au dossier libdnet et installez la librairie:"
+
+cd libdnet-1.11
+./configure
+make
+checkinstall
+</code>
+
+==== 1) Téléchargement ====
+
+Vous pouvez prendre le code du projet [[http://sourceforge.net/projects/snort-inline/|snort inline]], ou celui de [[http://www.snort.org/downloads|snort]] (> 2.8.5) qui a repris les sources de snort inline. L'installation reste la même.
+
+Source du projet snort inline : 
+
+<code>
+echo "Téléchargez Snort_Inline et décompressez le. "
+version=2.6.1.5
+
+wget http://prdownloads.sourceforge.net/snort-inline/snort_inline-$version.tar.gz?download
+tar -xvf snort_inline-$version.tar.gz
+
+echo "stocker le fichier de configuration"
+sudo mkdir /etc/snort_inline
+
+echo "stocker les règles Snort"
+sudo mkdir /etc/snort_inline/rules
+
+echo "Copiez les fichiers de configurations"
+sudo cp snort_inline-$version/etc/* /etc/snort_inline/
+
+</code>
+
+Ouvrir fichier /etc/snort_inline/snort_inline.conf, recherchez la ligne "var RULE_PATH" et changez la comme ci-dessous :<code>var RULE_PATH /etc/snort_inline/rules</code>
+
+<code>
+echo "classification.config: définit des URLs pour les références trouvées dans les règles"
+sudo cp snort_inline-$version/etc/classification.config /etc/snort_inline/rules/
+
+echo "reference.config: inclus de l'information pour la priorité des règles."
+sudo cp snort_inline-$version/etc/reference.config /etc/snort_inline/rules/
+
+echo "dossier de journalisation"
+sudo mkdir /var/log/snort_inline
+</code>
+
+==== 2) Paramétrer Mysql ====
+Ajoutez un mot de passe MySQL pour l'utilisateur root: 
+<code>
+echo "si vous n'avez pas installer de mot de pass pendant l'installation de mysql"
+echo "mysqladmin -u root password new_root_password"
+
+echo "accès a mysql en root"
+mysql -u root -p
+
+echo "Créez la base de données"
+create database snort;
+
+echo "créer un utilisateur pour snort"
+grant all on snort.* to snortuser@localhost identified by 'snortpassword'; 
+
+echo "Rechargez les priviléges mysql"
+flush privileges;
+exit;
+
+echo "créer les tables dans la base de données snort"
+mysql -u root -p snort < snort_inline-$version/schemas/create_mysql
+
+</code>
+
+Ouvrez le fichier snort_inline.conf: <code>sudo gedit /etc/snort_inline/snort_inline.conf</code>
+
+Après la ligne avec "output alert_fast: snort_inline-fast", ajoutez:<code>
+output database: log, mysql, user=snortuser password=snortpassword dbname=snort host=localhost 
+</code>
+
+==== 3) Compilation de snort ====
+
+Pour snort (>2.8.5 ) :
+<code> 
+echo " ajouter les options de configuration que vous voulez exemple , support mysql, prelude ..."
+./configure --enable-inline
+make
+make install
+
+</code>
+
+Pour snort inline :
+<code>
+echo "Vérifier les dépendances et préparer l'outil à être compilé pour MySQL."
+cd snort_inline-$version
+echo "./configure --with-mysql
+
+echo "compilation"
+make
+
+checkinstall
+</code>
+
+Pour la version 2.6.1.5 , nécessite [[http://www.wzdftpd.net/trac/attachment/wiki/Misc/PreludeSnort/dumbnet.diff?format=raw|un patch]] ([[http://sharebee.com/ff8268d8|miroir]]) :<code>
+cd snort_inline-2.6.1.5
+
+patch -p1 < ../dumbnet.diff
+./autojunk.sh
+
+./configure --with-mysql
+
+echo "compilation"
+make
+
+checkinstall
+</code>
+((./configure  --enable-nfnetlink --with-dumbnet --enable-inline-init-failopen
+))
+
+====4) Ajout de règles ====
+
+Il est nécessaire d'installer les règles de signature Snort et de les maintenir à jour. Il existe plusieurs site maintenant des liste de signature.
+
+<code>
+echo "Installer oinkmaster"
+apt-get install oinkmaster
+</code>
+
+=== Site officiel de snort ===
+
+  * [[http://www.snort.org/|Site officiel de snort]] : Pour télécharger les règles Snort, nous avons besoin de créer un compte gratuit sur le  site web de Snort. Une fois connecté avec votre compte Snort, vous pouvez obtenir un code en bas de page.
+
+Ouvrir le fichier /etc/oinkmaster.conf :<code>sudo gedit /etc/oinkmaster.conf</code>
+
+Modifiez le paramètre "url" : <code>url = http://www.snort.org/pub-bin/oinkmaster.cgi/code/snortrules-snapshot-2.4.tar.gz</code>
+
+Ajoutez la ligne suivante: <code>modifysid * "^alert" | "drop" </code>
+
+Création du dossier de sauvegarde.<code>mkdir /etc/snort_inline/backup</code>
+
+<code>
+
+echo "Ajouter un utilisateur appelé oinkmaster"
+useradd oinkmaster
+
+echo "Définir les permissions"
+chown -R oinkmaster /etc/snort_inline/backup
+chown -R oinkmaster /etc/snort_inline/rules
+chown -R oinkmaster /var/run/oinkmaster
+chmod 644 /etc/snort_inline/snort_inline.conf
+
+</code>
+
+Teste du script oinkmaster :<code>su oinkmaster
+oinkmaster#oinkmaster -o /etc/snort_inline/rules -b /etc/snort_inline/backup 2>&1
+</code>
+
+Mise à jour automatique (chaque jour à 00:30) :<code>crontab -e -u oinkmaster</code>
+<code>
+30 00 * * * oinkmaster -o /etc/snort_inline/rules -b /etc/snort_inline/backup 2>&1 >> /dev/null 2>&1
+</code>
+=== Bleeding snort ===
+Ouvrir le fichier /etc/oinkmaster.conf et ajouter :<code>url = http://www.bleedingsnort.com/bleeding.rules.tar.gz</code>
+
+Editer le fichier /etc/snort_inline/snort_inline.conf et ajouter :<code>
+include $RULE_PATH/bleeding.rules
+include $RULE_PATH/bleeding-attack_response.rules
+include $RULE_PATH/bleeding-dos.rules
+include $RULE_PATH/bleeding-drop.rules
+include $RULE_PATH/bleeding-dshield.rules
+include $RULE_PATH/bleeding-exploit.rules
+include $RULE_PATH/bleeding-game.rules
+include $RULE_PATH/bleeding-inappropriate.rules
+include $RULE_PATH/bleeding-malware.rules
+include $RULE_PATH/bleeding-p2p.rules
+include $RULE_PATH/bleeding-scan.rules
+include $RULE_PATH/bleeding-web.rules
+</code>
+
+
+Teste du script oinkmaster :<code>su oinkmaster
+oinkmaster#oinkmaster -o /etc/snort_inline/rules -b /etc/snort_inline/backup 2>&1
+</code>
+
+
+=== Autres sites ===
+
+  * (en) [[http://www.emergingthreats.net/index.php/rules-mainmenu-38.html|Emerging Threats]] : Communauté maintenant des jeux de règles (rulesets) pour Snort
+  * (en) [[http://www.bleedingsnort.com/|Bleedingsnort]]
+
+===== Outils de monitoring =====
+==== Prelude ====
+
+[[Prelude]], voir [[https://www.wzdftpd.net/redmine/projects/wzdftpd/wiki/MiscPreludeSnort|le tutoriel]].
+
+Il n'y a qu'à configurer diffèrément : <code>./configure  --enable-nfnetlink  --prefix=/opt/snort-inline --enable-prelude   --enable-inline-init-failopen --with-dumbnet
+make
+</code> 
+
+
+=====Liens =====
+
+  * [[https://www.snort.org/assets/120/snort_manual.pdf|Documentation officiel]] (pdf) (anglais)
+
+Gazette Linux n°118 — Septembre 2005 (traduction en français) :
+  * [[http://ftp.traduc.org/doc-vf/gazette-linux/html/2005/117/lg117-G.html|Snort Inline — Première partie]]
+  * [[http://ftp.traduc.org/doc-vf/gazette-linux/html/2005/118/lg118-F.html|Snort Inline — Deuxième partie]]
+
+  * [[http://tldp.org/LDP/LGNET/118/savage.html|(en)Snort Inline Part II]]
+
+  * [[http://www.unixgarden.com/index.php/news/gnulinux-magazine-hs-n%C2%B041-avrilmai-2009-chez-votre-marchand-de-journaux|GNU/Linux Magazine HS N°41 – AVRIL/MAI 2009]]
+
+  * [[http://andika-lives-here.blogspot.com/2009/12/build-snort-inline-in-ubuntu-910.html|Build snort inline in Ubuntu 9.10]] 
+  * [[http://www.linux-pour-lesnuls.com/snortinline.php|Installation de Snort Inline,]]
+----
+**Contributeurs principaux :** //[[:utilisateurs:psychederic|Psychederic]]//

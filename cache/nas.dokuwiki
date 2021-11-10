@@ -1,0 +1,85 @@
+
+{{tag>matériel réseau}}
+----
+
+====== NAS (Network Attached Storage) : Unité de stockage en réseau ======
+
+Un stockage en réseau NAS, ou un NAS (de l'anglais Network Attached Storage), est un serveur de fichiers autonome, relié à un réseau dont la principale fonction est le stockage de données en un volume centralisé pour des clients réseau hétérogènes. (source: [[http://fr.wikipedia.org/wiki/Stockage_en_r%C3%A9seau_NAS|wikipedia]] )
+
+Si vous désirez que le système de fichier soit directement géré par la machine client et le disque vu comme un disque physiquement attaché à la machine cliente, vous pouvez vous tourner vers le partage de disque/volume/disque-virtuel via ISCSI, on appelle cela un [[iscsi|SAN]].
+===== FTP, SMB,... quel protocole choisir =====
+==== Lecture et écriture de documents ====
+La méthode la plus fiable pour envoyer et récupérer des fichiers (surtout si vous en avez beaucoup à transférer d'un coup), et  si votre NAS le permet, est d'utiliser le protocole FTP, avec un vrai client comme  [[:FileZilla]].
+N'utilisez pas directement //l'explorateur de fichier// pour vos sauvegardes ou le transfert de fichiers importants. Par exemple en cas de perte du signal wifi, il n'est pas possible d'avoir une trace des fichiers transférés ou échoués. L'utilisation de FileZilla, permet de pallier ce problème et de reprendre automatiquement le transfert où il en était.
+==== Lecture audio & vidéo ====
+
+La lecture de fichiers audio et vidéo fonctionne normalement très bien depuis votre navigateur de fichier. Préférez SMB dans ce genre de cas.\\
+Pour savoir comment monter un partage SMB /CIFS / Samba, allez sur la page [[Samba]].
+
+=====Mode de consommation auto (gestion intelligente de l'énergie) =====
+Pour avoir son NAS en mode "consommation auto" et pas "ON". Cela permet de n'avoir son NAS actif uniquement lorsqu'un ordinateur est présent sur le réseau et donc d'économiser de l'énergie.
+====Prérequis ====
+**connaitre l'IP et l'adresse MAC de son NAS.** 
+Premièrement mettre l'alimentation de votre NAS sur ON. Puis une fois que vous pouvez y accéder, rentrer ceci dans un [[:terminal]] :
+<code>arp</code>
+Regarder l'adresse IP qui correspond à votre NAS et récupérez l'adresse MAC (par exemple: 00:0D:9D:9B:BA:00)
+====Mise en route ====
+Il faut le réveiller avec un magic paquet en utilisant le [[:wakeonlan|WOL|Wake on lan]]. 
+Envoyer [[:cron|régulièrement]] un paquet ICMP avec un ping devrait suffire pour le maintenir éveillé lorsque votre ordinateur est allumé.
+mais sinon vous pouvez faire ce qui suit :
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] [[apt>wakeonlan]]\\
+Mettez ensuite le NAS en mode consommation AUTO et pour le réveiller il suffit de rentrer cette [[:commande_shell|commande]] dans un [[:terminal]] :
+(remplacez xx:xx:xx:xx:xx:xx par l'adresse MAC de votre NAS)
+<code>wakeonlan xx:xx:xx:xx:xx:xx</code>
+
+Il ne vous reste plus qu'à faire un script qui envoie la ligne ci-dessus toutes les minutes lorsque votre ordinateur est connecté. Le script présent ci-dessous fonctionne parfaitement.
+==== Script Wake on lan ====
+Voici un petit script complet, il va afficher une icône dans la barre de notification et vous permettra de désactiver le NAS en cliquant sur l'icône.
+=== Marche à suivre ===
+[[:tutoriel:comment_modifier_un_fichier|Créez un nouveau fichier]] par exemple **./nas.sh**
+insérez le code suivant et modifiez l'adresse MAC et l'adresse de l'image.
+<file bash nas.sh>#! /bin/sh
+# Insérez l'IP de votre NAS ou laissez l'adresse de broadcast (recommandé).
+IP="255.255.255.255"
+ 
+# Insérez ici l'adresse MAC de votre NAS
+MAC="XX:XX:XX:XX:XX:XX"
+ 
+PID=$$
+(
+zenity --notification --window-icon="/home/une/image/pour/icone/du/script.png" --text="Clic to quit"
+kill -9 $PID
+exit
+)&amp;
+ 
+while [ 1 ]
+do
+wakeonlan -i $IP $MAC
+sleep 20
+done
+</file>
+
+N'oubliez pas de remplacer la ligne /home/une/image/pour/icone/du/script.png par une image de votre choix (sinon vous aurez un joli point d'interrogation bleu dans la barre d'état).
+
+Rendez ce fichier exécutable, puis exécutez le script pour allumer votre NAS (cela prend environ 1 minute).
+=====Serveur d'impression=====
+De nombreux %%NAS%% peuvent être utilisés comme serveur d'impression. Le serveur d'impression permet à tous les ordinateurs connectés au réseau (en Ethernet ou en WiFi) d'utiliser l'imprimante sans laisser un ordinateur allumé tout le temps !
+<note important>Cette méthode est conseillée pour les imprimantes en mode %%USB%% uniquement. Pour les imprimantes pouvant utiliser une connexion réseau ([[:Wifi]] ou filaire) privilégiez ce dernier mode de connexion. Se rapporter à la documentation du constructeur.\\
+Le scanner de l'imprimante multifonction branché en %%USB%% n'est pas utilisable en mode réseau. Il ne sera donc plus disponible depuis les ordinateurs dans ce mode.
+<note tip>Une solution consiste alors à utiliser un commutateur %%USB%% (appelé aussi switch USB) pour relier l'imprimante multi-fonction à votre %%NAS%% __et__ à l'ordinateur le plus proche qui lui, gérera la numérisation en mode local.</note></note>
+  - Vérifier sur la documentation du constructeur si cette possibilité existe.
+  - Accéder à l'administration de votre %%NAS%% pour activer la fonction "serveur d'impression" et le protocole [[:samba|CIFS/SAMBA]].
+  - Connecter votre imprimante sur le port %%USB%% de votre %%NAS%% prévu à cet effet et l'installer selon la documentation du constructeur.
+Pour pouvoir utiliser cette imprimante partagée, à l'aide du [[:system-config-printer?&#ajout_d_une_imprimante_partagee|gestionnaire d'imprimante]], installer cette imprimante ainsi partagée sur les ordinateurs du réseau en suivant les indications [[:system-config-printer?&#ajout_d_une_imprimante_partagee|de cette page]].
+
+===== Accéder à votre NAS depuis toutes les applications =====
+Si vous créez des signets pointant vers le NAS, ceux-ci ont toutes les chances de ne pas apparaître dans les applications. Pour remédier à cela, il faut que votre NAS soit monté **avant** le démarrage d'Ubuntu.
+Un tutoriel ici vous expliquera comment [[:tutoriel/acceder_a_votre_nas_depuis_toutes_les_applications|accéder a votre NAS depuis toutes les applications]] 
+
+===== Problème de pare-feu =====
+Vous pouvez rencontrer des difficultés pour accéder à votre NAS si le pare-feu est activé (par exemple NAS introuvable alors qu'il est bien identifié au niveau du routeur ou de la "box").
+Dans ce cas, pour résoudre le problème, après avoir affecté une ip fixe au NAS sur votre réseau (routeur),  utiliser ufw (ligne de commande) ou gufw (interface grapghique), pour autoriser les connections sortantes et entrantes vers et à destination de cette adresse ip (ufw allow out to XXX.XXX.X.XX  ufw allow out from XXX.XXX.X.XX  ufw allow in to XXX.XXX.X.XX  ufw allow in to XXX.XXX.X.XX )
+
+----
+// Contributeurs: principaux [[:utilisateurs:fidjiflorian]]. Contributeurs [[:Cafecho]]//

@@ -1,0 +1,586 @@
+
+{{tag>wifi réseau sécurité portail_captif BROUILLON}}
+----
+
+====== CoovaChilli ======
+
+**CoovaChilli**,  [[wpfr>Fork_(développement_logiciel)|fork]] du projet abandonné [[:chillispot|ChilliSpot]], est un **[[:portail captif]]**. 
+
+Il permet de rediriger tous les clients HTTP d'un réseau vers une page web qui peut demander une authentification et/ou un paiement ou tout simplement demander d'accepter les conditions d'utilisation avant d'accéder à Internet. Cette technique est souvent employée pour les accès Wi-Fi et peut être utilisée aussi pour l'accès à des réseaux filaires (ex. hôtels, campus etc.).
+
+Cette page visera à décrire :
+  * L'installation puis la configuration d'un serveur Freeradius et d' un serveur Freeradius-mysql (en version 2 uniquement ),
+  * L'installation puis la configuration d'un serveur [[http://coova.org/CoovaChilli/Binaries|Coova-chilli-1.2.6]], complété d'un par-feu,
+  * L'installation puis l'intégration d'une certification [[:tutoriel:securiser_apache2_avec_ssl|SSL]] à  CoovaChilli,
+  * La personnalisation de la page d’accès.
+
+<note tip>Les serveurs Freeradius et CoovaChilli fonctionnent cependant la documentation étant toujours en cours de développement,  faites attention car plusieurs informations sont erronées, notamment le chapitre sur CoovaChilli. Alors ne vous lancez pas directement si vous n'avez pas d'expérience sur le sujet.
+</note>
+
+
+===== Pré-requis =====
+ 
+FIXME
+
+  * Tout pc avec 2 interfaces réseaux.
+  * Un [[:lamp|serveur LAMP]].
+  * Un [[:dns|DNS]].
+
+<note important>Le portail captif Coovachilli ne fonctionne qu'avec les édition d'Ubuntu 32 bits (X86 - i386) </note>
+===== Fonctionnement =====
+Ceci est le schéma de fonctionnement par défaut :
+
+<code>
+                    ________________                               _____________
+                    |    Serveur   |                               |           |
+                    |    Hotspot   |                               | Pc-Client |
+                    |______________|                               | (Abonné)  |
+  Internet          | Radius-Mysql |              )))Wifi((( ======>           | 
+     ^              |      ^       |                  ^            |___________| 
+     |              |      |       |                  |            
+     V              |      V       |                  V             
+    DHCP ====Eth0===> CoovaChilli  =Eth1===========>DHCP ou périphérique personnel.          
+
+</code>
+
+  * Le périphérique **Eth0** a par exemple l'adresse IP **192.168.0.1**
+  * Le périphérique **Eth1** a par exemple l'adresse IP **192.168.1.1**
+
+===== Initialisation du reseau=====
+
+==== Configuration du SSH ====
+
+En supposant que votre machine soit connectée à votre routeur **ADSL** (serveur **DHCP**), vous devrez trouver votre adresse IP en saisissant dans un [[:terminal]] la [[:commande_shell|commande]] suivante :
+<code>ip addr</code>
+FIXME Du mal à comprendre le rapport avec la configuration SSH.
+
+==== Configuration du réseau : ====
+
+  - [[:tutoriel:comment_modifier_un_fichier|Ouvrez avec les droits d'administration]] le fichier **/etc/network/interfaces** pour y ajouter ou modifiez les lignes suivantes :<file>
+
+# L'interface réseau de loopback
+auto lo
+iface lo inet loopback
+
+# L'interface réseau principale en provenance du routeur
+auto eth0
+iface eth0 inet dhcp
+
+# L'interface réseau secondaire destinée aux clients
+auto eth1</file>
+
+FIXME Si dans le fichier **/etc/network/interfaces** il y a d'autres nom d'interfaces tel que **ens160 et ens192** à la place de **eth0 eth1** conservez les sinon vous obtiendrez une erreur en tapant //service networking restart// pour relancer les interface réseaux.
+
+On indique ici que : 
+    * l'interface //eth0// sera reliée au modem adsl/serveur en mode dhcp.
+    * l'interface //eth1// sera celle qui servira de passerelle avec les clients abonnés.
+  - [[:tutoriel:comment_modifier_un_fichier|Ouvrez avec les droits d'administration]] le fichier **/etc/sysctl.conf** pour activer ((décommenter en retirant le dièse #)) le paramètre //net.ip4.ip_forward//((ligne 28)). Vous devriez obtenir ceci : <file>
+# Uncomment the next line to enable packet forwarding for IPv4
+net.ipv4.ip_forward=1</file> 
+  - Relancez ensuite les interfaces réseaux :<code>sudo service networking restart</code>
+=====Installation et configuration du serveur Radius =====
+
+====  Téléchargement de Freeradius depuis les dépôts officiels ====
+
+ [[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>freeradius,freeradius-mysql|freeradius freeradius-mysql]]**
+
+Ou en ligne de commande : 
+<code> sudo apt-get install freeradius freeradius-mysql -y</code>
+====  Installation de la base de donnée MySQL ====
+  - Création de la base de données pour stocker les noms d'utilisateurs et mots de passe :<code>
+mysql -u root -p
+#Entrer le mot de passe de Mysql.
+mysql> CREATE DATABASE radius;
+mysql> quit  
+</code>
+  - Importation de la base de données avec les tables créées par les fabricants de Freeradius : <code>
+mysql -u root -p radius < /etc/freeradius/sql/mysql/schema.sql
+mysql -u root -p radius < /etc/freeradius/sql/mysql/nas.sql
+mysql -u root -p
+#Entrer le mot de passe de Mysql.
+mysql> GRANT ALL PRIVILEGES ON radius.* TO 'radius'@'localhost' IDENTIFIED BY 'le mot de passe de my sql';
+mysql> FLUSH PRIVILEGES;
+mysql> quit</code>**Si vous avez des doutes FIXME (Lesquels?) faites le en [[:sudo|Superutilisateur]]**
+  - Exportez votre base de données pour vérifier : <code>mysqldump -u root -p radius > /home/'votre_nom_d'utilisateur'/backup.sql</code>
+  - [[:tutoriel:comment_modifier_un_fichier|Modifiez avec les droits d'administration]] le paramètre suivant dans le fichier **/etc/freeradius/clients.conf** : <file>
+client localhost {
+    ipaddr = 127.0.0.1
+    [# explication commentée
+     #sur plusieurs lignes
+     #...]
+    secret = votre_secret_radius 
+     #par defaut : testing123 
+}
+</file> Utilisez la fonction recherche Ctrl+W sur nano par exemple pour trouver les lignes dans le fichier
+
+===Réglage du fichier de configuration===
+
+La configuration de Freeradius par défaut autorise les noms d'utilisateurs et mots de passe à partir d'un **fichier** se trouvant dans **/etc/freeradius/users**.\\
+Afin de tester cette configuration avant de déplacer le lien d' autorisation provenant de la fonction **fichier** à la fonction **mysql**, il sera pris pour exemple le nom d'utilisateur « John Doe » auquel le mot de passe « hello » lui sera associé.
+
+Éditez le fichier **/etc/freeradius/users** pour décommenter les lignes suivantes :
+<file>
+# This is an entry for a user with a space in their name.
+# Note the double quotes surrounding the name.
+#
+"John Doe"      Cleartext-Password := "hello"
+                Reply-Message = "Hello, %{User-Name}"
+
+</file>puis redémarrez votre système.
+<code>sudo shutdown -r now</code>
+
+===Vérifier les fichiers de configuration FreeRadius===
+  - Dans un [[:terminal]] saisissez la [[:commande_shell|commande]] suivante:<code>
+sudo /etc/init.d/freeradius stop
+sudo freeradius -XXX
+</code>Si tout va bien la dernière ligne devrait afficher :<code>
+Mon Jun 20 18:33:54 2011 : Debug: Ready to process requests. 
+</code>Appuyer sur les touches « Ctrl+C » de votre clavier pour quitter.
+  - Redémarrez le serveur Freeradius : <code>sudo /etc/init.d/freeradius start</code>
+  - Testez les autorisations du mot de passe précédemment configuré dans **/etc/freeradius/users** :<code>
+sudo radtest "John Doe" hello 127.0.0.1 0 votre_secret_radius
+</code>Si tout va bien, vous devriez obtenir une réponse comme ceci :<code>
+Sending Access-Request of id 136 to 127.0.0.1 port 1812
+        User-Name = "John Doe"
+        User-Password = "hello"
+        NAS-IP-Address = 255.255.255.255
+        NAS-Port = 0
+rad_recv: Access-Accept packet from host 127.0.0.1:1812, id=136, length=37
+        Reply-Message = "Hello, John Doe"
+</code>
+
+====Déplacement des autorisations pour intégrer MySql ====
+
+Si les tests ci-dessus on réussi, vous pouvez désormais déplacer l'autorisation de la fonction **Fichier** à la fonction **MySql**. Pour cela il faudra éditez le fichier **/etc/freeradius/sites-available/default** et remplacer l’autorisation en commentant/décommentant((ajouter/ôter un dièse #)) comme ceci :
+| Fichiers | == |  files |  remplacer par   |  # files  |  
+| MySql | == |  # sql  |  remplacer par  |  sql  | 
+
+<file>
+[...]
+#       unix
+
+        #
+        #  Read the 'users' file
+#       files
+
+        #
+        #  Look in an SQL database.  The schema of the database
+        #  is meant to mirror the "users" file.
+        #
+        #  See "Authorization Queries" in sql.conf
+        sql
+
+        #
+        #  If you are using /etc/smbpasswd, and are also doing
+        #  mschap authentication, the un-comment this line, and
+        #  configure the 'smbpasswd' module.
+#       smbpasswd
+[...]
+</file>
+
+<note important>Vous ne pouvez utiliser qu'une seule méthode d'autorisation à un moment, pas les deux. Par conséquent,la fonction **Fichier** a besoin d'être commentée.
+Par ailleurs Freeradius tentera toujours d'autoriser ** /etc/freeradius/users** avec la fonction** Fichier**, au lieu de la fonction **MySql**.</note>
+
+===Journalisation de MySQL :===
+
+Si vous voulez utiliser des logiciels comme **ezRADIUS** ou **Admin Dialup** vous avez besoin d'activer la journalisation de MySQL.\\
+  - Éditez le fichier **/etc/freeradius/sql.conf** pour modifier comme ceci :<file>
+sql {
+        driver = "rlm_sql_mysql"  
+        server = "localhost"(ou x.x.x.x l'ip de votre serveur mysql)
+        login = "Votre login mysql"
+        password = "le mot de passe de my sql"
+        radius_db = "radius"
+        [...]
+        
+}
+</file>
+  - Décommentez la fonction **readclients** pour permettre la lecture du client radius dans la base de donnée (table 'nas') : <file>readclients = yes ###Changer le manuellement </file>
+  - Éditez le fichier **/etc/freeradius/sites-available/default** pour modifier comme ceci :<file>
+$INCLUDE ${confdir}/sql.conf
+authorize {
+	preprocess
+
+	chap
+	suffix
+	eap {
+		ok = return
+	}
+#	files    ### Changer le manuellement
+	sql	 ### Changer le manuellement
+	pap
+}
+authenticate {
+	
+	Auth-Type PAP {
+		pap
+	}
+
+	Auth-Type CHAP {
+		chap
+	}
+
+	Auth-Type eap {
+		eap {
+			handled = 1  
+		}
+	}
+#	files   ###Changer le manuellement
+}
+accounting {
+	detail
+	radutmp
+
+	sql      ###Changer le manuellement
+}
+session {
+	sql      ### Changer le manuellement
+}
+post-auth {	
+	sql
+}
+#pre-proxy {
+#	files  ###Changer le manuellement
+#}
+post-proxy {
+	eap
+}
+</file>
+  - Editez le fichier **/etc/freeradius/radiusd.conf** pour décommenter (~ ligne 683) : <file>
+$INCLUDE sql.conf   ### Changer le manuellement
+</file> 
+
+====Ajouter un  utilisateur dans la base de donnée MySql:====
+
+Exemple :
+<code>
+echo "INSERT INTO radcheck (UserName, Attribute, Value) VALUES ('mysqltest', 'Password', 'testsecret');" | mysql -u root -p radius
+#Entrer le mot de passe de Mysql.
+</code>
+Coovachilli utilise "chillispot" comme nom d'utilisateur et "chillispot" comme mot de passe pour se connecter au radius par défaut. Ajoutez également cet utilisateur dans la table //radcheck//.
+
+Il faut le définir dans le fichier **/etc/chilli/config** FIXME Il n'existe pas de répertoire /chilli dans /etc sur Ubuntu 16.04.2 LTS
+<code>
+HS_ADMUSR=chillispot
+HS_ADMPWD=chillispot
+</code>
+Puis les insérer comme ceci :
+<code>
+echo "INSERT INTO radcheck (UserName, Attribute, Value) VALUES ('chillispot', 'Password', 'chillispot');" | mysql -u root -p radius
+#Entrer le mot de passe de Mysql.
+</code>
+
+Ou d'une manière plus détaillé comme ceci :
+
+== Table usergroup ==
+^  id  ^  UserName  ^  GroupName  ^
+|  1  |  utilisateur  |  groupe  |
+|  2  |  prof1  |  professeurs  |
+|  3  |  élève1  |  élèves  |
+
+== Table radcheck  ==
+^  id  ^  UserName  ^  Attribute  ^  Op  ^  Value  ^
+|  1  |  utilisateur  |  Password  |  ==  |  passuser  |
+|  2  |  prof1  |  Password  |  ==  |  passprof  |
+|  3  |  élève1  |  Password  |  ==  |  passeleve  |
+
+=== Test de la configuration de Freeradius et de Mysql ===
+
+Redémarrez le serveur radius: 
+<code>
+sudo /etc/init.d/freeradius restart
+</code>
+
+Vérifiez que Freeradius lit bien la base de données :
+<code>
+sudo radtest mysqltest testsecret 127.0.0.1 0 votre_secret_radius
+sudo radtest chillispot chillispot 127.0.0.1 0 votre_secret_radius
+</code>
+
+Si tout ce passe bien vous devriez avoir le message suivant,
+<code>
+Sending Access-Request of id 169 to 127.0.0.1 port 1812
+	User-Name = "chillispot"
+	User-Password = "chillispot"
+	NAS-IP-Address = 127.0.1.1
+	NAS-Port = 0
+rad_recv: Access-Accept packet from host 127.0.0.1 port 1812, id=169, length=20
+
+</code>
+
+**Vous pouvez passer a l'[[#Installation_et_configuration_de_Coovachilli|installation de Coovachilli]].**
+
+===== Installation et configuration de Coovachilli =====
+==== Installation de CoovaChilli à partir des fichiers Sources ====
+<note>Pensez à vérifier les mises à jour et utilisez la dernière version. Version 1.4 au 15 déc 2016</note>
+Dans un [[:terminal]] saisissez les [[:commande_shell|commandes]] suivantes:
+Installation des prérequis : 
+<code>
+sudo apt-get install -y g++ automake autoconf libtool libltdl-dev gengetopt make cmake libssl-dev git
+</code>
+Clone du git
+<code>
+cd /tmp
+git clone https://github.com/coova/coova-chilli/
+cd coova-chilli/
+</code>
+Changement de branche pour acceder à la v 1.4
+<code>
+git checkout -b 1.4
+git branch
+</code>
+Premier script 
+<code>
+./bootstrap
+</code>
+Deuxième script : configuration pour la compilation avec options (à rentrer ligne par ligne)
+<code>
+./configure  --prefix=/usr --mandir=\$${prefix}/share/man \
+--infodir=\$${prefix}/share/info \
+--sysconfdir=/etc --localstatedir=/var --enable-largelimits \
+--enable-binstatusfile --enable-statusfile --enable-chilliproxy \
+--enable-chilliradsec --enable-chilliredir --with-openssl --with-curl \
+--with-poll --enable-dhcpopt --enable-sessgarden --enable-dnslog \
+--enable-ipwhitelist --enable-redirdnsreq --enable-miniconfig \
+--enable-libjson --enable-layer3 --enable-proxyvsa --enable-miniportal \
+--enable-chilliscript --enable-eapol --enable-uamdomainfile \
+--enable-modules --enable-multiroute
+</code>
+Installation 
+<code>
+make && make install
+</code>
+
+<note important>Les paquets préfabriqués de Coova-Chilli sont compilés pour i386.\\
+Pour un PC 64bits et pour éviter les soucis d'identification (MD5, SHA, SSL,...), il faudra (pour le moment) compiler à partir des sources téléchargeables sur le site de Coova.org</note>
+
+==== Installation du packet haserl pour permettre au serveur chilli de rediriger les clients vers la page d'accueil ====
+<code>
+cd /usr/src
+wget http://downloads.sourceforge.net/project/haserl/haserl-devel/haserl-0.9.35.tar.gz
+tar zxvf haserl-0.9.35.tar.gz
+cd haserl-0.9.35
+</code>
+Compilation puis installation de Haserl
+<code>
+./configure && make && make install
+</code>
+==== Paramétrage du serveur hotspot ====
+
+Copie du fichier de configuration, et déplacement du dossier **hotspot** sur apache2.
+
+<code>
+sudo -s
+cp /etc/chilli/defaults /etc/chilli/config
+mkdir /var/www/hotspot
+cd /var/www/hotspot
+cp /etc/chilli/www/* /var/www/hotspot
+mkdir /var/www/hotspot/images
+cp /var/www/hotspot/coova.jpg /var/www/hotspot/images/
+mkdir /var/www/hotspot/uam
+cd /var/www/hotspot/uam</code>
+FIXME : adresse introuvable : 
+<code>wget http://ap.coova.org/uam/
+wget http://ap.coova.org/js/chilli.js
+exit
+</code>
+
+<note warning>Il n'y a plus les IP dans le scripte ChilliLibrary.js. Les modifications suivantes ne sont plus valides (les 3 commandes 'sed')\\
+Par contre vous devez re-adresser en local le scripte chilli.js\\
+sed -i 's/ap.coova.org\/js\/chilli.js/.\/chilli.js/g' /var/www/hotspot/uam/index.html</note>
+Vous donnerez ici l'adresse de l'interface local eth1 au dossier **hotspot**. Pour l'exemple il s'agira de 192.168.1.1 :
+<code>
+sed -i 's/ap.coova.org\/js\/chilli.js/192.168.1.1\/uam\/chilli.js/g' /var/www/hotspot/uam/index.html
+</code>
+
+Faites le pont entre l'interface //eth0// qui héberge le serveur chilli et l'interface du réseau //eth1// qui hébergera les client abonnés :
+<code>
+sed -i 's/192.168.182.1/192.168.1.1/g' /etc/chilli/www/ChilliLibrary.js
+sed -i 's/192.168.182.1/192.168.1.1/g' /var/www/hotspot/ChilliLibrary.js
+</code>
+<note>Vous pouvez donner à l'interface //eth0// la valeur 192.168.0.1/24, la valeur 192.168.182.1 étant celle par defaut FIXME du mal à comprendre le sens de la phrase et les adresses </note>
+
+===Configuration de CoovaChill===
+A la fin du fichier **/etc/chilli/up.sh** ajouter la ligne :
+<code>iptables -I POSTROUTING -t nat -o $HS_WANIF -j MASQUERADE</code>
+Elle va permettre de transférer ce qui arrive par le Wifi vers l’Ethernet
+
+Editer le fichier **/etc/default/chilli** et remplacer
+<code>START_CHILLI=0</code>
+par
+<code>START_CHILLI=1</code>
+Cela autorise le démarrage de CoovaChilli
+
+Editer le fichier **/etc/chilli/wwwsh** et donner l’emplacement exact de haserl à la ligne 9
+<code>haserl=/usr/local/bin/haserl</code>
+
+Editer le fichier **/etc/chilli/config** et modifier ces valeurs en fonction de votre réseau : 
+<code>
+HS_WANIF=eth0
+HS_LANIF=wlan0
+HS_NETWORK=192.168.10.0
+HS_UAMLISTEN=192.168.10.1
+HS_UAMALLOW=192.168.10.0/24
+HS_SSID=PiHomeServerAP
+...
+HS_RADSECRET=testing123 # Set to be your RADIUS shared secret
+</code>
+
+Le détail des paramètres configurés :
+  * HS_WANIF est l’interface reliée à Internet
+  * HS_LANIF est l’interface du Wifi/Hotspot
+  * HS_NETWORK le réseau du hotspot
+  * HS_UAMLISTEN la gateway du réseau du hotspot
+  * HS_UAMALLOW les IP du réseau du hotspot autorisées à se connecter
+  * HS_SSID le SSID (ne semble pas avoir d’effet)
+  * HS_RADSECRET la clée secrète du radius défini précédemment dans **/etc/freeradius/clients.conf**
+
+Redémarrez votre ordinateur.\\
+Testez si la configuration de réseau s'est bien passée en démarrant tout simplement le serveur Chilli :
+<code>
+sudo /etc/init.d/chilli start
+</code>
+
+====  Configuration du serveur chilli ====
+
+=== Instruction ===
+
+Vous venez de copier le fichier de configuration par **défaults** dans le fichier **config** . Pour charger ces paramètres et démarrer le serveur Chilli, exécutez la commande suivante :
+<code>sudo service chilli start</code>
+Cela va générer automatiquement des fichiers **main.conf**, **local.conf** et **hs.conf** dans le dossier **/etc/chili/**. Si vous apportez des modifications aux paramètres à une date ultérieure, ré-exécutez un "chilli start".
+
+<note>Le script d’initialisation **/etc/init.d/chilli** du serveur chilli régénère un fichier **main.conf**. Lorsque vous démarrez le serveur chilli en mode débogage, on obtient le démarrage de Coovachilli sans la régénération de ce **main.conf**. Ainsi, le mode débogage permet d'éditer **main.conf** pour ensuite redémarrer le service normalement.\\
+Si vous souhaitez redémarrer le serveur chilli en mode débogage il faudra donc taper ceci.
+<code>/etc/init.d/chilli start --debug --fg</code>
+ou avec les dernières versions simplement :
+<code>chilli -fd</code>
+</note>
+
+Par défaut, il sera supposé que :
+  * le périphérique //eth0// sera relié à votre connexion internet.
+  * le périphérique //eth1// sera quand a lui l'interface (passerelle) que vous voudrez connecter avec des clients abonnés. 
+<note>Si ce n'était pas le cas, il faudra pratiquer par exemple un changement de configuration avec la fonction **HS_WANIF**((**W**ireless)) pour la relier à votre périphérique internet et relier également la fonction **HS_LANIF**((**L**an)) directement à votre périphérique WiFi.</note>
+
+Ensuite avec les dispositifs adéquats vous pourrez configurer et redémarrer le serveur Chilli.
+
+=== Configuration ===
+<note>Dans les exemples si dessous. L'adresse de l'interface réseau //eth0// sera nommé 192.168.**0**.1 et les interfaces //eth1// ou //wlan0// seront  nommées 192.168.**1**.1 .</note>
+
+Configuration du fichier **/etc/chilli/config**:
+
+^Paramètres ^Explications ^
+| HS_WANIF=eth0 |  Nom du périphérique WAN relié vers internet. Laissez le commentaire si vous n'utilisez pas votre propre périphérique wifi.  |
+| HS_LANIF=eth1 |  Nom du périphérique relié au point d’accès client (eth1 ou wlan0)  |
+| HS_NETWORK=192.168.182.0 |  Définition du réseau d'accueil des clients, ici avec 192.168.182.0, on attribut aux clients des IP du type 192.168.182.x  |
+| HS_NETMASK=255.255.255.0 |  Masque du réseau hotspots  |
+| HS_UAMLISTEN=192.168.182.1 |  Adresse IP de la passerelle client (eth1 ou wlan0) - doit faire partie du réseau client  |
+| HS_DNS1=208.67.222.222 |  Le DNS de votre fournisseur d’accès. Laissez commenté pour utiliser la configuration par défaut. Les DNS utilisés seront alors ceux spécifiés dans votre fichier **/etc/resolv.conf**  |
+| HS_NASID=nas01 |  Décommentez sinon l’adresse 0.0.0.0 (NAS-IP-Address) apparaît dans les logs de freeradius  |
+| HS_RADIUS=localhost |  Ip ou nom de l’hôte local que vous avez configuré dans **/etc/freeradius/clients.conf** (127.0.0.1)  |
+| HS_RADIUS2=localhost |  Ip ou nom de l’hôte local que vous avez configuré dans **/etc/freeradius/clients.conf** (127.0.0.1)  |
+| HS_RADSECRET=testing123 |  Votre secret_radius que vous avez configuré dans **/etc/freeradius/clients.conf**  |
+| HS_UAMAAAURL=http://my-site/script.php |  [[http://www.cisco.com/en/US/tech/tk59/technologies_tech_note09186a008069bdc5.shtml|(en) Documentation Cisco sur AAAURL]]  |
+| HS_UAMDOMAINS=".paypal.com,.wikipedia.org" |  Permet de filtrer des noms de domaine ou DNS dans une "boite secrète". Attention ceci bloque l'accès aux autres URL  |
+| HS_SSID=<ssid> |  Nom du réseau du SSID si vous utilisez la WIFI  |
+| HS_UAMSERVER= |  Il faut remplacer **$HS_UAMLISTEN** par l'adresse du périphérique //eth0// (**$HS_NETWORK** ou 192.168.0.1)  |
+| HS_UAMFORMAT= |  Il faut remplacer l'ancienne syntaxe par __https: \$HS_UAMSERVER/uam/__   |
+| HS_UAMSERVICE= |  Il faut ajouter l'adresse du périphérique //eth1// https://peripherique_eth1/cgi-bin/hotspotlogin.cgi  |
+| HS_ADMUSR=chillispot |  Nom du superutilisateur du serveur chilli (permet la jonction avec MySql).  |
+| HS_ADMPWD=chillispot |  Mot de passe du superutilisateur du serveur chilli (permet la jonction avec MySql).  |
+| HS_LOC_NETWORK="My Network" |  Nom du réseau, ou SSID si vous utiliser la WIFI  |
+| HS_LOC_AC=408 |  HS_LOC_AC=87000  |
+| HS_LOC_CC=1 |  HS_LOC_CC=33 (suffix téléphonique +33)  |
+| HS_LOC_ISOCC=US |  HS_LOC_ISOCC=FR ( [[http://fr.wikipedia.org/wiki/ISO_3166-2|Voir doc wikipedia]] )  |
+
+==== Créer et configurer une page de connexion ====
+
+Vous avez besoin de créer une page de connexion qu' heureusement les créateurs de Coovachilli fournisse avec le paquet .deb à travers le script **hotspotlogin.cgi**\\
+Pour trouver ce fichier, saisissez dans un [[:terminal]] la [[:commande_shell|commande]] suivante:
+<code>
+sudo find / | grep 'hotspotlogin.cgi'
+</code>
+L'exemple donné ici sera **/usr/share/doc/coova-chilli/hotspotlogin.cgi.gz**\\
+
+Créez un nouveau répertoire dans la racine du serveur Apache2 et copiez-y le fichier **hotspotlogin.cgi**
+<code>
+sudo mkdir -p /var/www/hotspot/cgi-bin
+zcat -c /usr/share/doc/coova-chilli/hotspotlogin.cgi.gz | sudo tee /var/www/hotspot/cgi-bin/hotspotlogin.cgi
+</code>
+Rendez-le exécutable :
+<code>
+sudo chmod a+x /var/www/hotspot/cgi-bin/hotspotlogin.cgi
+</code>
+Editez le script **/var/www/hotspot/cgi-bin/hotspotlogin.cgi** afin de décommenter et de modifier le << secret UAM >> comme ceci :
+<code>
+$uamsecret = "votre_secret_UAM";
+$userpassword=1;
+</code>
+<note>Le langage de ce **.cgi** (Common Gateway Interface) étant du Perl((langage interprété par le navigateur, tout comme le Php, ou le Java Script)), si vous souhaitiez modifier le script, n'incluez pas de balise HTML classique. Editez-le comme ceci :
+<code>
+print <<ENDHTML;
+....Ici vous pourrez coder en Html.....
+
+ENDHTML 
+</code></note>
+
+===== Sécurité et certification d’authenticité =====
+
+==== Installation du par-feu :====
+
+Les créateurs de CoovaChilli ont des règles prédéfinies pour [[:iptables]], mais leur script a besoin d'un peu d'aide avant que ça fonctionne. L' iptables de CoovaChilli est configuré dans le script **/etc/chili/up.sh** qui déclenche l'interface TUN/TAP mise en place.
+Ce déclenchement se fait en fonction du contenu du script **/etc/chili/ipup.sh** qui n'existe pas par défaut. Créez le fichier **/etc/chili/ipup.sh** si besoin est.
+
+
+<note>Dans les réseaux informatiques, TUN et TAP sont  des périphériques virtuels dans le "Kernel réseau" (Noyaux réseau). Ce sont des dispositifs réseau qui sont entièrement à la charge du logiciel. Ils sont différents des périphériques réseaux ordinaires qui sont eux des adaptateurs réseaux matériel.</note>
+
+Pour "aider" Coova Chilli, ajoutez ces lignes à la fin du fichier  **/etc/chilli/ipup.sh** :
+<code>
+[ -e "/var/run/chilli.iptables" ] && sh /var/run/chilli.iptables 2>/dev/null
+iptables -I POSTROUTING -t nat -o $HS_WANIF -j MASQUERADE
+# Exemple HTTP :
+iptables -t nat -A logging -p tcp --dport 80 -j LOG --log-prefix "HTTP: " \
+--log-level info
+# Exemple HTTPS :
+iptables -t nat -A logging -p tcp --dport 443 -j LOG --log-prefix "HTTPS: " \
+--log-level info
+# Exemple MSN :
+iptables -t nat -A logging -p tcp --dport 1863 -j LOG --log-prefix "MSN: " \
+--log-level info
+</code>
+Pour le rendre exécutable :
+<code>
+chmod +x /etc/chilli/ipup.sh
+</code>
+
+Dans la configuration ci-dessus, vous avez relié le serveur DNS au périphériques locaux. C'est pourquoi, votre système doit posséder un serveur DNS que vous pouvez installer à partir de [[:tasksel|tasksel]].
+
+==== Installation de la certification SSL au server Apache 2 ====
+
+Suivre cette documentation : [[:tutoriel:securiser_apache2_avec_ssl]]
+===== Configuration =====
+
+FIXME
+ 
+===== Utilisation=====
+
+FIXME
+ 
+===== Désinstallation =====
+ 
+Pour désinstaller CoovaChilli saisissez dans un [[:terminal]] les [[:commande_shell|commandes]] suivantes :
+
+<code>
+sudo rm /var/lib/dpkg/info/coova-chilli.prerm
+sudo dpkg --remove --force-remove-reinstreq coova-chilli
+sudo dpkg --purge --force-remove-reinstreq coova-chilli
+</code>
+
+===== Voir aussi =====
+  * **(en)** [[http://www.coova.org/CoovaChilli|Site officiel]]
+  * **(en-us)** [[https://help.ubuntu.com/community/WifiDocs/CoovaChilli|Documentation Ubuntu Officiel ]] de Coova Chilli.
+  * **(en)** [[http://linux.xvx.cz/2010/03/debian-wi-fi-hotspot-using-coovachilli-freeradius-mysql-and-daloradius/|linux.xvx.cz Documentation de Coova Chilli]] sous la distribution linux debian.
+  * **(en-hindou)** [[http://manajung.blogspot.com/2010/09/ubuntu-wi-fi-hotspot-using-coovachilli.html|Le Blogspot de Manajung]] qui explique comment installer Coova Chilli.
+  
+
+----
+//Contributeurs principaux : [[utilisateurs:erwik666]], [[:utilisateurs:Herrleiche]], [[utilisateur:benjy4537]]//

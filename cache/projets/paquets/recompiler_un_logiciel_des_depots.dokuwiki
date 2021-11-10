@@ -1,0 +1,83 @@
+
+{{tag>tutoriel apt paquet}}
+
+----
+
+====== (Re)compiler un logiciel des dépôts ======
+
+Ce tutoriel vous expliquera comment reprendre les sources d'un paquet pour les modifier et recréer le paquet ainsi modifié.
+
+Ceci vous sera utile si vous souhaitez modifier un logiciel par exemple...
+
+===== Pour quoi faire ? =====
+
+  * Si vous voulez [[wp>http://fr.wikipedia.org/wiki/Patch_(informatique)|patcher]] un logiciel ou le modifier.
+  * Si vous voulez ajouter des supports optionnels qu'offre le logiciel et que la version disponible dans les dépôts n'a pas été compilée avec ces options.
+
+===== Résumé de la manipulation =====
+
+  - Télécharger les sources depuis les dépôts
+  - Installer les « headers » et les bibliothèques nécessaires pour compiler le logiciel
+  - Effectuer les modifications sur les sources
+  - Construire votre paquet modifié
+
+===== Pré-requis =====
+
+Pour cette manipulation, il est important que :
+  * Le logiciel soit présent dans les dépôts
+  * Les sources soient disponibles
+  * La licence du programme vous autorise à accéder au sources, les modifier etc. (logiciel open source, libre, ...)
+  * Vous ayez activé les dépôts des sources
+  * Avoir [[:tutoriel:comment_installer_un_paquet|installé les paquets]] nécessaires pour compiler, ainsi que les utilitaires APT dont nous allons nous servir :\\ **[[apt://build-essential,dpkg-dev,fakeroot|build-essential dpkg-dev fakeroot]]**
+
+===== Obtenir les sources et installer les dépendances =====
+
+<note>Dans cet exemple, nous allons modifier le paquet **vlc**.</note>
+
+Pour obtenir les sources, placez vous dans un terminal et entrez :
+  apt-get source vlc
+
+Les sources du logiciel vont être téléchargées dans le répertoire courant.
+
+Nous allons maintenant installer les dépendances de VLC.
+
+<note help>Vous remarquez que la plupart de ces dépendances finissent en « -dev ». En fait ce sont souvent les ''#includes'' que vous voyez dans les sources C. Ils se trouvent dans **/usr/include**.</note>
+
+  sudo apt-get build-dep vlc
+
+Les sources seront installées dans le répertoire a partir duquel vous avez lancé la commande ''apt-get source''.
+
+Normalement les sources sont extraites automatiquement par dpkg-source.
+Si ce n'est pas le cas, il faudra le faire à la main.
+
+Ensuite déplaçons nous dans le dossier des sources :
+<code>cd vlc*</code>
+
+==== Modification des sources ====
+
+Maintenant que vous avez les sources, vous pouvez les modifier, les patcher etc.
+
+Toute la compilation sera gérée par le script **debian/rules**. Dans ce script il y a surement une ligne qui lance les paramètres du ''./configure''.
+Vous pouvez aussi modifier cette ligne.
+
+<note help>Ce script est fait par le mainteneur du paquet, donc suivant la personne il peut être présenté de manière différente ou dans plusieurs fichier etc.</note>
+
+==== Compilation, création du paquet et installation ====
+
+Ce script procède de la manière suivante :
+  - Compilation : ce qui correspond souvent au ''./configure && make''. Généralement on peut le faire en tant que simple utilisateur.
+  - Installation : le fameux ''make install'', sauf que là, on veux créer un paquet et non installer réellement le paquet.\\ Nous allons donc faire croire qu'on est root (à cause de certain Makefiles, qui font eux aussi des tests) pour créer toute l'arborescence que va contenir le paquet. 
+<note help>Pour VLC, par exemple, avec un ''sudo make install'', on aurait copié VLC dans **/usr/bin/vlc** (qui nécessite  le sudo), mais là on veut juste créer **$PWD/debian/build/usr/bin/vlc** et on a le droit en tant qu'utilisateur...</note> Pour ce faire, nous utilisons donc **fakeroot**.
+
+Pour lancer la compilation et la création du paquet, une seule commande sera nécessaire :
+<code>fakeroot debian/rules binary</code>
+
+Patientez... Le temps nécessaire à la compilation dépend de la puissance de votre machine et de la taille des sources.
+
+Quand c'est fini (et qu'il n'y a pas eu d'erreurs), votre paquet modifié est crée dans le répertoire parent. Vous pouvez alors l'[[:tutoriel:comment_installer_un_paquet|installer]] !
+
+<code>sudo dpkg -i ../vlc*.deb</code>
+
+----
+
+//Contributeurs : [[utilisateurs:philpep-tlse]]//

@@ -1,0 +1,723 @@
+
+{{tag>Trusty SIG OpenStreetMap BROUILLON}}
+
+----
+ 
+====== Nominatim  ======
+
+Nominatim (du Latin, 'par le nom') est un outil permettant de chercher des données géographiques par leur nom et leur adresse et de générer des adresses potentielles à partir de coordonnées géographiques (reverse geocoding). L'outil peut être utilisé en ligne sur cette page : http://nominatim.openstreetmap.org. 
+
+Nominatim est aussi utilisé par l'outil Search de la page d'accueil d'OpenStreetMap et améliore la qualité de la recherche proposée sur les sites MapQuest Open Initiative, PickPoint et OpenCage Geocoder.
+
+La présente page décrit le processus d'installation de Nominatim sur un ordinateur personnel utilisé en qualité de serveur.
+<note tip>
+Nominatim permet de transformer une adresse en latitude et longitude et vice-versa.
+</note>
+
+==== Pourquoi installer Nominatim ====
+Pour un usage occasionnel, installer Nominatim sur son ordinateur n'a aucun intérêt. En revanche, pour des usages fréquents et répétés l'installation de Nominatim permet :
+  * de soulager les serveurs libres et gratuits d'OpenStreetMap 
+  * de ne pas être dépendant d'internet
+  * de disposer de ses propres bases de données
+
+===== Installer Nominatim =====
+
+==== Installer les dépendances ====
+<code>
+sudo apt-get install libgeos-dev libpq-dev libtool automake libproj-dev libboost-dev libboost-system-dev libboost-filesystem-dev libboost-thread-dev gcc proj-bin libgeos-c1 osmosis libgeos++-dev php5 php-pear php5-pgsql php5-json php-db postgresql postgis postgresql-contrib postgresql-9.3-postgis-2.1 postgresql-server-dev-9.3 libprotobuf-c0-dev protobuf-c-compiler
+</code>
+Il faut aussi installer les paquets suivants si vous ne les avez pas déjà installés :
+<code>
+sudo apt-get install build-essential libxml2-dev libbz2-dev git cmake pkg-config
+</code>
+
+=== Pour l'installation depuis les sources git ===
+<code>
+sudo apt-get install git autoconf-archive
+</code>
+
+==== Installer depuis les sources ====
+Installation à partir de la version stable 2.4.0 (à la date du 4 juin 2015).
+
+=== Téléchargement du fichier d'installation compressé ===
+<code>
+wget http://www.nominatim.org/release/Nominatim-2.4.0.tar.bz2
+</code>
+=== Décompactage du fichier d'installation ===
+<code>
+tar xvf Nominatim-2.4.0.tar.bz2
+</code>
+=== Compilation ===
+Se rendre dans le répertoire Nominatim créé après la décompression (appelé Nominatim dans l'exemple ci-dessous)
+<code>
+cd Nominatim
+./configure
+make
+sudo checkinstall
+</code>
+
+<note tip>
+Les alertes à propos de l'absence des librairies lua peuvent être ignorées, Nominatim n'utilise pas l'extension lua de osm2PGSql. 
+</note>
+
+=== Personnalisation de Nomitamim  ===
+La création d'un fichier <local.php> situé dans le répertoire settings permet de personnaliser Nominatim. Les paramètres possibles peuvent être consultés dans le fichier <settings/settings.php>.
+Pour davantage de détail voir **(en)** [[https://wiki.openstreetmap.org/wiki/Nominatim/Installation|doc]]
+
+<note tip>** Personnaliser les titres des pages web**
+
+Si vous souhaitez personnaliser les titres des pages internet telles qu'elles s'affichent dans votre navigateur, il suffit de modifier le texte figurant entre les balises <title> et </title> dans les fichiers <lib/template/search-html.php> <lib/template/details-html.php> et <lib/template/details-error-html.php>.
+
+ex :
+<code>
+<title>Perso - OpenStreetMap Nominatim : Recherche</title>
+</code>
+au lieu de :
+<code>
+<title>OpenStreetMap Nominatim: Search</title>
+</code>
+</note>
+
+=== Téléchargement de données optionnelles ===
+
+== Pondérations Wikipedia (Wikipedia rankings) ==
+Le fonctionnement de Nominatim peut être amélioré par le recours aux pondérations Wikipédia qui permettent de mesure l'importance des données osm. Nominatim peut fonctionner sans ces données mais la qualité du résultat s'en trouve dégradée.
+
+**Téléchargement des données**
+<code>
+ wget --output-document=data/wikipedia_article.sql.bin http://www.nominatim.org/data/wikipedia_article.sql.bin
+ wget --output-document=data/wikipedia_redirect.sql.bin http://www.nominatim.org/data/wikipedia_redirect.sql.bin
+</code>
+La taille cumulée de ces deux fichiers atteint 1,5 GO et ajoute 30 GO à la taille finale de Nominatim sur le disque. La durée d'installation de Nominatim s'en trouve accrue d'une heure environ.
+
+== Codes postaux britanniques ==
+Le cas échéant, utile pour les recherches concernant le territoire britannique.
+<code>
+wget --output-document=data/gb_postcode_data.sql.gz http://www.nominatim.org/data/gb_postcode_data.sql.gz
+</code>
+
+== Installation des données Tiger housenumber pour les États-Unis d'Amérique ==
+
+Aux États-Unis d'Amérique, l'instance Nominatim d'OSM utilise la base de données d'adresses TIGER pour compléter les données sur les numéros de rues qui restent encore incomplètes dans OpenStreetMap. L'ajout des données TIGER est possible après avoir installé la librairie GDAL pour Python.
+**Installation de la librairie GDAL pour Python**
+<code>
+sudo apt-get install python-gdal
+</code>
+**Téléchargement des données TIGER 2014**
+
+Les fichiers à télécharger sont les fichiers EDGES (3 234 fichiers compressés, 11GO au total)
+<code>
+ wget -r ftp://ftp2.census.gov/geo/tiger/TIGER2014/EDGES/
+</code> 
+**Conversion des données en requêtes SQL (sauvegardées dans data/tiger2011) :** 
+<code>
+./utils/imports.php --parse-tiger-2011 <répetoire des fichiers tiger edge>
+</code>
+<note attention>
+Si vous utilisez la dernière version de développement, utiliser --parse-tiger.
+</note>
+**Importation des données dans la base de données Nominatim de votre station de travail**
+<code>
+ ./utils/setup.php --import-tiger-data
+</code>
+<note attention>
+L'importation peut prendre beaucoup de temps, notamment si vous importez l'ensemble des données du pays. Une semaine entière sur un petit Asus 1015E doté d'un processeur Intel® Celeron® Dual-Core 847 à 1,1GHz et d'un disque ATA Seagate de 320 GO à 5400 tours.
+</note>
+
+=== Création des comptes postgres ===
+== Compte de l'importateur ==
+<code>
+sudo -u postgres createuser -s <votre nom d'utilisateur>
+</code>
+<note tip>
+Il est possible que le compte existe déjà, postgres vous le dira alors
+</note>
+
+== Compte de l'utilisateur ==
+Le nom d'utilisateur correspond au nom du compte qui doit être utilisé pour finaliser l'installation. Vous devez vous assurer (paramétrage généralement par défaut dans la plupart des distributions) que cet utilisateur peut se connecter à la base de donnée sans mot de passe.
+
+** Création de l’utilisateur du site web (PostgreSQL) **
+<code>
+sudo -u postgres createuser -SDR www-data
+</code>
+Utilisateur nécessaire pour l'installation. Si vous souhaitez utiliser le site web avec un autre utilisateur, reportez-vous à la documentation (section Set up the website).
+
+<note warning>
+En aucun cas l'importation ne doit être réalisée sous le compte root ou www-data
+</note>
+== Paramètres PostgreSQL ==
+Par défaut la base de données PostgreSQL s'installe dans le répertoire racine, au risque de ne plus laisser de place au système.
+Le répertoire de la base de donnée est le suivant sur mon Ubuntu 14.04 : </var/lib/postgresql/9.3/main> [9.3 pour la version actuelle].
+Le répertoire par défaut peut être modifié dans le fichier de configuration </etc/postgresql/9.3/main/postgresql.conf>.
+
+<note tip>
+Si aprés la modification du répertoire par défaut des données dans postgresql.conf le serveur PostgreSQL refuse de redémarrer, une solution facile à défaut d'être élégante consiste à déplacer le répertoire </var/lib/postgresql/9.3/main> avec tout son contenu, à vérifier le maintien des droits (propriétaire et groupe "postgres") et à instituer un lien symbolique à partir de </var/lib/postgresql/9.3/> vers l'emplacement réel du répertoire main.
+</note>
+Pour redémarrer le serveur PostgreSQL, deux commandes équivalentes
+<code>
+sudo pg_ctlcluster 9.3 main start
+</code>
+ou bien
+<code>
+sudo service postgres 9.3 main start
+</code>
+=== Permissions de lecture Nominatim ==
+
+L'ensemble des fichiers et répertoire doit être accessible en lecture pour le serveur PostgreSQL car certaines fonctions Nominatim Postgres sont intégrées au module C nominatim.so.
+
+Ainsi, pour le cas d'un téléchargement et d'une compilation dans le répertoire <src> du répertoire utilisateur, saisir :
+<code>
+chmod +x ~/src
+chmod +x ~/src/Nominatim
+chmod +x ~/src/Nominatim/module
+</code>
+
+<note warning>La gestion des droits est essentielle au bon fonctionnement de Nominatim. Des droits insuffisants conduiront à l'échec de la procédure de téléchargement des données.</note>
+
+=== Importation et indexation des données OSM ===
+
+L'importation préalable du fichier mondial ("Planet file") ou d'une extraction (par exemple du site Geofabrik) est nécessaire. Utiliser le format PBF.
+
+<note tip>
+La durée de téléchargement peut être longue, ouvrir une instance de terminal peut vous permettre de faire autre chose pendant ce temps.
+</note>
+Une fois le téléchargement terminé, saisir la commande suivante :
+<code>
+ ./utils/setup.php --osm-file <your planet file> --all --osm2pgsql-cache 18000 2>&1 | tee setup.log
+</code>
+Le paramètre --osm2pgsql-cache est optionnel mais fortement recommandé en cas d'importation de l'ensemble des données planétaires. Ce paramètre fixe la taille du cache des noeuds lors de l'importation osm2pgsql. 24 GO sont recommandés pour une importation des données mondiales mais vous pouvez choisir de fixer une valeur inférieure. À adapter à la taille de votre RAM pour éviter le swap.
+<note important>
+L'importation peut durer une heure environ pour un petit pays, jusqu'à dix jours pour l'ensemble des données mondiales. Le nombre des messages de log est important, il est recommandé de les examiner avec attention. Il est recommandé également de tester l'importation des données d'un petit pays (par exemple le Luxembourg) avant de lancer l’importation des données mondiales. Sur mon PC, le traitement de la seule région île-de-France a pris plusieurs heures.
+</note>
+
+<note help>**En cas de problème**
+
+Il se peut que vous rencontriez des problèmes liés au paramétrage de postgresql lors de l'importation des données, fichiers manquants, opérations impossibles, etc.
+La procédure ci-dessous a permis de solutionner le problème pour une installation particulière. À tenter sans garantie et en réfléchissant un peu. 
+NB : postgresql exige que la version soit précisée, dans l'exemple ci-dessous c'est la 9.3. À adapter selon votre configuration.
+  * Arrêt postgresql
+<code>
+sudo pg_ctlcluster 9.3 main stop
+</code>
+  * Suppression cluster
+<code>
+sudo -i -u postgres
+pg_dropcluster 9.3 main --stop
+exit
+</code>
+  * suppression complète des paquets
+<code>
+sudo apt-get purge postgresql-9.3 postgresql postgresql-9.3-postgis-scripts postgresql-client-9.3 postgresql-client-common postgresql-common postgresql-contrib postgresql-contrib-9.3 liblwgeom-2.1.4 libgdal-dev libpostgis-java libpostgresql-jdbc-java libpq-dev php5-pgsql postgis postgis-doc osmosis
+sudo apt-get autoremove
+</code>
+  * Suppression des répertoires
+/var/lib/postgresql
+/etc/postgresql
+/var/log/postgresql 
+/usr/share/postgresql
+et votre répertoire de données
+<code>
+sudo rm -R /var/lib/postgresql /etc/postgresql/ /var/log/postgresql /usr/share/postgresql
+sudo rm -R <votre répertoire>
+</code>
+  * Réinstallation complète de tous les paquets
+<code>
+sudo apt-get install postgresql-9.3 postgresql postgresql-9.3-postgis-scripts postgresql-client-9.3 postgresql-client-common postgresql-common postgresql-contrib postgresql-contrib-9.3 liblwgeom-2.1.4 libgdal-dev libpostgis-java libpostgresql-jdbc-java libpq-dev php5-pgsql postgis postgis-doc osmosis
+</code>
+  * Création d'un lien symbolique
+(selon le résultat de la commande <pg_config --libdir>)
+<code>
+sudo ln -s /usr/share/postgresql/9.3/contrib/postgis-2.1 /usr/lib
+</code>
+  * Création du cluster main
+<code>
+sudo pg_createcluster -d <votre répertoire> 9.3 main
+</code>
+  * Démarrage postgresql
+<code>
+sudo pg_ctlcluster 9.3 main start
+</code>
+  * Création utilisateur
+<code>
+sudo -u postgres createuser -s <votre nom d’utilisateur>
+</code>
+  * Création utilisateur www-data
+<code>
+sudo -u postgres createuser -SDR www-data
+</code>
+  * Retour dans nominatim
+<code>
+cd <votre répertoire d'installation>
+  * Traitement données
+<code>
+./utils/setup.php --osm-file <votre fichier.osm.pbf> --all --osm2pgsql-cache 18000 2>&1 | tee setup.lo
+</code>
+</note>
+
+<note>**Effacer la base de donnée**
+En cas de besoin, il est toujours possible d'effacer la base de données.
+  * On commence par vérifier le nom de la base (normalement c'est nominatim)
+<code>
+psql -l
+</code>
+  * Puis on efface (et on perd tout évidemment)
+<code>
+dropdb nominatim
+</code>
+</note>
+=== Ajout des phrases spéciales ===
+
+== Ajout des codes et des noms de pays à l'index de recherche ==
+Saisir les instructions suivantes dans le terminal :
+<code>
+./utils/specialphrases.php --countries > data/specialphrases_countries.sql
+psql -d nominatim -f data/specialphrases_countries.sql
+</code>
+
+== Marqueurs spécifiques ==
+Si vous souhaitez retrouver des marqueurs particuliers ("amenity") comme par exemple des cafés parisiens, vous de devez importer les phrases spéciales de ce wiki de la manière suivante :
+<code>
+./utils/specialphrases.php --wiki-import > data/specialphrases.sql
+psql -d nominatim -f data/specialphrases.sql
+</code>
+Ces opération doivent être répétées de temps en temps pour prendre en compte les mises à jours et compléments du wiki. Il est notamment nécessaire d'effectuer la mise à jour après chaque mise à jour de Nomnatim.
+== Langues ==
+Si vous n'avez pas besoin des phrases pour toutes les langues, éditez utils/specialphrases.php et supprimez en début de fichier les langues non utilisées.
+
+=== initialisation du site web ===
+
+Les instructions ci-dessous rendront Nominatim disponible à http://localhost/nominatim.
+
+== Création du répertoire ==
+Créer le répertoire du site et assurez vous que les droits en écriture sont ouverts pour l’utilisateur d'installation et en lecture par Apache.
+<code>
+sudo mkdir -m 755 <répertoire racine apache>/nominatim
+sudo chown <votre nom d'utilisateur> <répertoire racine apache>/nominatim
+</code>
+<note tip>
+Le répertoire racine par défaut d'apache est /var/www/html depuis Ubuntu 14.04, auparavant il s'agissait de /var/www
+</note>
+<note warning>Veiller particulièrement à ce que l'utilisateur www-data possède les droits suffisants pour accéder au répertoire nominatim, sinon le serveur ne fonctionnera pas.</note>
+== Paramètres de CONST_Website_BaseURL ==
+Vérifier que settings/local.php est configuré avec les valeurs correctes pour CONST_Website_BaseURL : il faut créer un fichier local.php dans le répertoire Nominatim-2.4.0/settings contenant les valeurs suivantes :
+<code>
+@define('CONST_Website_BaseURL', '<répertoire racine serveur pour le navigateur>/nominatim');
+</code>
+par exemple :
+<code>
+@define('CONST_Website_BaseURL', 'http://localhost/nominatim/');
+</code>
+<note tip>
+Si malgré cette modification lors de l'affichage du site web dans votre navigateur, une erreur apparaît car le fichier <search.php> est introuvable vous pouvez tenter la méthode "sauvage" : dans le fichier <nominatim/settings/settings.php> commenter (ajouter un # devant) la ligne :
+<code>
+#@define('CONST_Website_BaseURL', 'http://'.php_uname('n').'/');
+</code>
+et la remplacer (donc insérer en dessous) par :
+<code>
+@define('CONST_Website_BaseURL', 'http://localhost/nominatim/');
+</code>
+Ce n'est pas orthodoxe mais ça peut fonctionner en cas de problème d'arborescence.
+</note>
+== Liens symboliques ==
+Rendre disponible le répertoire du site web avec les liens symboliques nécessaires :
+<code>
+ ./utils/setup.php --create-website <répertoire racine apache>/nominatim
+</code>
+
+== Configuration pour utilisation avec Apache ==
+Vérifier que le fichier de configuration Apache contient les valeurs suivantes pour les répertoires :
+<code>
+ <Directory "/var/www/html/nominatim/">
+    Options FollowSymLinks MultiViews
+    AddType text/html   .php     
+ </Directory>
+</code>
+En d'autres termes il faut insérer ces lignes dans le fichier de configuration </etc/apache2/apache2.conf> (adapter le nom du répertoire).
+
+</var/www/html/nominatim> doit être remplacé par le nom du répertoire défini lors de la mise en place du site web Nominatim (voir ci-dessus).
+
+Relancer Apache après modification de la configuration (sudo service apache2 start | restart)
+
+Vous pouvez désormais utiliser Nominatim
+	Saisir http://localhost/nominatim/search.php dans votre navigateur internet
+	saisir une adresse...ml/
+
+== Configuration pour utilisation avec Nginx ==
+
+Pas testé. Voir  **(en)** [[https://wiki.openstreetmap.org/wiki/Nominatim/Installation|doc]]
+
+===== Utilisation de Nominatim =====
+
+La recherche dans Nominatim fonctionne à partir d'objets nommés ou numérotés à partir des données Openstreetmap (OSM) ainsi que d'une liste d'objets "non nommés" comme des commerces, des hôtels, des bâtiments publics, etc.
+
+Le serveur Nominatim peut fonctionner de manière interactive dans le navigateur : saisir l'adresse localhost/nominatim/search.php affiche une carte du monde avec une zone à l'intérieur de laquelle il suffit de saisir une adresse physique pour la géocoder.
+
+Toutefois Nominatim peut faire nettement plus, c'est ce que nous allons voir ci-dessous.
+==== Géocodage ====
+Le géocodage est l'action consistant à transformer une adresse en coordonnées géographiques.
+
+=== Format des requêtes ===
+Il est conseillé de saisir les requêtes de gauche à droite, en commençant par le plus précis (1, quai de la fraternité, Marseille) puis, en cas de difficulté, de réssayer en ordre inverse, de droite à gauche.
+
+== Format de base ==
+
+Les requêtes sont passées dans le navigateur sous la forme suivante :
+<code>
+"http://nominatim.openstreetmap.org/search?<paramètres>"
+</code>
+ou 
+<code>
+ "http://nominatim.openstreetmap.org/search/<requête>?<paramètres>"
+</code>
+===Adresses===
+Rue de la République, Marseille
+et
+Marseille, Rue de la République
+sont deux formats valides
+==Numéros==
+La saisie des numéros améliore la précision de la recherche. Dans ce cas le format de gauche à droite est nécessaire :
+51, rue de la République, Marseille
+==Virgule==
+La présence de virgules entre les termes de la recherche n'est pas obligatoire mais améliore l’efficacité de la requête.
+
+===Mots clés spécifiques===
+L'usage des mots clés spécifiques est possible si les "phrases spéciales" (special phrases) ont été ajoutées à la base de donnée.
+
+== Paramètres ==
+** format=[html|xml|json|jsonv2] **
+
+Format de la sortie
+
+  * html
+Format html
+  * xml
+Format XML (format structuré)
+  * json
+Format json
+  * jsonv2
+Format jsonv2
+
+**json_callback=<chaîne>**
+
+Empaquette le résultat de la requête dans un appel de fonction json, c'est à dire une chaîne commençant par "json>"
+
+**accept-language=<langue du navigateur au format chaîne de caractère>**
+
+Force la langue de résultat indépendamment des valeur figurant dans l'en-tête (header) http. Accepte toutes les langues au format rfc2616 ou des codes de langue séparés par des virgules.
+
+===Écriture de la requête===
+q=<requête>
+<requête> est la chaîne de caractères recherchée. Les valeurs suivantes sont possibles :
+
+  *  street=<numéro> <nom de rue>
+  *  city=<ville>
+  *  county=<comté>
+  *  state=<état>
+  *  country=<pays>
+  *  postalcode=< code postal>
+
+===Requêtes structurées (experimental)===
+Les requêtes structurées sont plus rapides et nécessites moins de ressources serveur.
+NE PAS COMBINER AVEC LES PARAMETRES q=<query> PARAMETRES
+
+==countrycodes=< code pays>[,< code pays>][,< code pays>]...==
+Restreint la recherche à un pays (ou une liste de pays). Code au format ISO 3166-1alpha2 (fr pour France)
+
+==viewbox=<gauche>,<haut>,<droite>,<bas>  ou viewboxlbrt=<gauche>,<bas>,<droite>,<haut>==
+zone préferentielle de recherche des résultats
+
+==bounded=[0|1]==
+Restreint la recherche aux seuls objets contenus dans la zone de recherche.
+Cette restriction permet la recherche par aménité. Ainsi [pub] échouera alors que [pub] avec bounded=1 affichera une liste d'objets correspondant à l'item à l'intérieur de la zone de recherche.*
+
+==polygon=[0|1]==
+Obsolète
+
+==addressdetails=[0|1]==
+Séparation de l'adresse en différents éléments
+
+==email=<addresse électronique de contact>==
+Peu utile pour un serveur autohébergé. Concerne les usages en ligne en masse 
+
+==exclude_place_ids=<identifiant de lieu,[identifiant de lieu],[identifiant de lieu]>==
+Permet d'exclure de la liste des résultats certains objets à partir de leur identifiant OSM. Cette fonctionnalité est utile lorsqu'une première recherche n'a produt qu'un nombre lmité de résultats. Exclure ces objets permet d'obtenir davantage de réponses.
+
+==limit=<entier>==
+Limite le nombre des résultats au nombre précisé
+
+==dedupe=[0|1]==
+Non documenté
+
+== debug=[0|1]==
+Non documenté
+
+==polygon_geojson=1==
+Affiche la géométrie des résultats au format geojson.
+
+==polygon_kml=1==
+Affiche la géométrie des résultats au format kml.
+
+==polygon_svg=1==
+Affiche la géométrie des résultats au format svg.
+
+==polygon_text=1==
+Affiche la géométrie des résultats au format WKT.
+
+=== Exemples ===
+Pour faciliter le travail des utilisateurs, les liens sont donnés d'abord sur le serveur internet Nominatim d'Openstreetmap puis sur localhost pour les ubuntunautes qui ont poursuivi le travail d'installation du serveur à son terme.
+
+== 32 quai du port à Marseille ==
+
+[[http://nominatim.openstreetmap.org/search.php?q=32%2C+quai+du+port+Marseille&viewbox=5.37%2C43.3%2C5.38%2C43.29]]
+
+[[http://localhost/nominatim/search.php?q=32%2C+quai+du+port+Marseille&viewbox=5.37%2C43.3%2C5.38%2C43.29]]
+
+{{ :nominatim_32_q_du_port_marseille.png?600 |}}
+
+==12 Cours Mirabeau à Aix-en-Provence==
+
+[[http://nominatim.openstreetmap.org/search.php?q=12+cours+Mirabeau%2C+Aix+en+Provence&viewbox=5.43%2C43.54%2C5.47%2C43.52]]
+
+[[http://localhost/nominatim/search.php?q=12+cours+Mirabeau%2C+Aix+en+Provence&viewbox=5.43%2C43.54%2C5.47%2C43.52]]
+
+{{ :12_cours_mirabeau_aix.png?600 |}}
+
+== Détails : 20, La Canebière à Marseille ==
+À noter : les place_id sont différents !
+
+[[http://nominatim.openstreetmap.org/details.php?place_id=20684057]]
+
+[[http://localhost/nominatim/details.php?place_id=147400]]
+
+{{ :detail_20_la_canebiere.png ?600 |}}
+
+[[http://nominatim.openstreetmap.org/search.php?q=20+la+Canebi%C3%A8re+Marseille&format=json]]
+
+[[http://localhost/nominatim/search.php?q=20+la+Canebi%C3%A8re+Marseille&format=json]]
+
+{{ ::capture_du_2015-07-08_20_30_03.png?600 |}}
+
+Et une petite dernière pour la route :
+
+[[http://nominatim.openstreetmap.org/search.php?q=20+la+Canebi%C3%A8re+Marseille&format=xml]]
+
+[[http://localhost/nominatim/search.php?q=20+la+Canebi%C3%A8re+Marseille&format=xml]]
+
+{{ ::capture_du_2015-07-08_20_29_26.png?600 |}}
+====Géocodage inversé====
+
+Le géocodage inversé est l'action qui consiste à déduire une adresse à partir d'une position en latitude et longitude. Le paramètre optopnnel de zoom précise le niveau de détail requis.
+
+=== format=[xml|json] ===
+Format de la sortie
+
+==xml==
+Format XML (format structuré)
+==json==
+Format json
+
+===json_callback=<chaîne>===
+Empaquette le résultat de la requête dans un appel de fonction json, c'est à dire une chaîne commençant par "json>"
+
+===accept-language=<langue du navigateur au format chaîne de caractère>===
+Force la langue de résultat indépendamment des valeur figurant dans l'en-tête (header) http. Accepte toutes les langues au format rfc2616 ou des codes de langue séparés par des virgules.
+
+ ===osm_type=[N|W|R] osm_id=<valeur>===
+objet OSM (noeud/route/relation) à géocoder. Lorsque cela est possible, l'usage des identifiants d'objets OSM est préférable. 
+
+=== lat=<valeur>  lon=<valeur>===
+Coordonnées du point à géocoder.
+
+=== zoom=[0-18]===
+Niveau de zoom, 1 correspond à un pays, 18 à un immeuble.
+
+=== addressdetails=[0|1]===
+Séparation de l'adresse en différents éléments
+
+===email=<adresse électronique de contact>===
+Peu utile pour un serveur auto hébergé. Concerne les usages en ligne en masse.
+
+===Hierarchie===
+  * Niveau administratif  	entité XML
+  * 2 	<pays>
+  * 4 	<état> (en France, région ?)
+  * 5 	<district d'état> (en France, département ?)
+  * 6 	
+  * 7 	<comté> (en France, canton ?)
+  * 8 	<commune>
+  * 9 	<arrondissement>
+  * 10 	<quartier>
+
+=== Exemples ===
+
+== Latitude Nord 43,29537 Longitude Est 5,37444==
+[[http://localhost/nominatim/reverse?format=xml&lat=43.29537&lon=5.37444&zoom=18&addressdetails=1]]
+
+[[http://localhost/nominatim/reverse?format=xml&lat=43.29537&lon=5.37444&zoom=18&addressdetails=1]]
+
+Surprise ! C'est : 1, La Canebière, Marseille 1er Arrondissement, Marseille, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur, 13001, France
+
+==  Latitude Nord 44,90008 Longitude Est  6,4461==
+
+[[http://nominatim.openstreetmap.org/reverse?format=xml&lat=44.88989&lon=6.63344&zoom=18&addressdetails=1]]
+
+[[http://localhost/nominatim/reverse?format=xml&lat=44.88989&lon=6.63344&zoom=18&addressdetails=1]]
+
+Et la capture d'écran :
+
+{{ ::capture_du_2015-07-08_20_53_01.png?600 |}}
+
+Gare SNCF de Briançon.
+
+====Consultation d'adresses====
+Affiche les adresses d'un ou plusiseurs objets OSM : noeuds, routes, relations.
+
+=== Format ===
+<code> http://nominatim.openstreetmap.org/lookup?<query>
+</code>
+=== Paramètres ===
+== format=[xml|json] ==
+Format de la sortie
+
+**xml**
+Format XML (format structuré)
+**json**
+Format json
+
+==json_callback=<chaîne>==
+Empaquette le résultat de la requête dans un appel de fonction json, c'est à dire une chaîne commençant par "json>"
+
+==accept-language=<langue du navigateur au format chaîne de carctères>==
+Force la langue de résultat indépendamment des valeur figurant dans l'en-tête (header) http. Accepte toutes les langues au format rfc2616 ou des codes de langue séparés par des virgules.
+
+==osm_ids=[N|W|R]<valeur>,…,[N|W|R]<valeur>==
+liste de 1 à 50 objets dont l'adresse doit être retournée. 
+
+==addressdetails=[0|1]==
+Séparation de l'adresse en différents éléments
+
+==email=<addresse électronique de contact>==
+Peu utile pour un serveur autohébergé. Concerne les usages en ligne en masse.
+
+=== Exemples ===
+[[http://nominatim.openstreetmap.org/lookup?osm_ids=R76091,W186948207,N2113091575]]
+
+===== Mise à jours base de données Nominatim avec Osmosis =====
+
+Plusieurs méthodes existent, la documentation OpenStreetMap conseille Osmosis et renvoie à la lecture de <./utils/update.php --help> pour obtenir la liste des autres méthodes.
+
+==== Installation de la nouvelle version d'Osmosis ====
+
+=== Téléchargement du binaire ===
+La version d'Osmosis disponible dans les paquets de la plupart des distributions est trop ancienne pour repérer correctement les différences pour la mise à jour. Il est donc conseillé de télécharger le binaire de la dernière version stable sur le site [[https://wiki.openstreetmap.org/wiki/FR:Osmosis|Osmosis]] puis de le décompresser. Copier alors le binaire dans </usr/local/bin> :
+<code>
+wget http://bretth.dev.openstreetmap.org/osmosis-build/osmosis-latest.zip
+unzip osmosis-latest.zip bin/osmosis
+mv bin/osmosis /usr/local/bin/osmosis
+rmdir bin
+rm osmosis-latest.zip
+</code>
+
+=== Définition de la version à utiliser ===
+Indiquer alors à Nominatim d'utiliser cette version d'Osmosis en ajoutant cette cible au fichier settings/local.php:
+<code>
+@define('CONST_Osmosis_Binary', '/usr/local/bin/osmosis');
+</code>
+
+==== Configuration des mises à jour ====
+
+Par défaut, Nominatim est configuré pour réaliser des mises à jour des différences globales à la minute (?? global minutely diffs - mon anglais technique est insuffisant pour une traduction optimale). 
+
+===Modification des sources de mise à jour===
+
+Pour modifier les sources de mise à jour, le paramétrage est à faire dans le fichier <settings/local.php>. Par exemple, pour utiliser les mises à jours quotidiennes en Irlande à partir de Geofabrik, ajouter les lignes suivantes à <settings/local.php> :
+<code>
+@define('CONST_Replication_Url', 'http://download.geofabrik.de/europe/ireland-and-northern-ireland-updates');
+@define('CONST_Replication_MaxInterval', '40000');     // Process each update separately, osmosis cannot merge multiple updates
+@define('CONST_Replication_Update_Interval', '86400');  // How often upstream publishes diffs
+@define('CONST_Replication_Recheck_Interval', '900');   // How long to sleep if no update found yet
+</code>
+
+Et pour la France :
+<code>
+@define('CONST_Replication_Url', 'http://download.geofabrik.de/europe/france-updates');
+</code>
+===Remplacement du paramétrage antérieur===
+
+Il est nécessaire de préalablement effacer le fichier <configuration.txt> puis d’exécuter la commande setup.php :
+<code>
+rm configuration.txt
+./utils/setup.php --osmosis-init
+</code>
+
+=== Activation des mises à jour hiérarchiques ===
+
+Lorsqu'un lieu est modifié dans la base de données, l'ensemble des lieux qui contiennent cet endroit doit être également mis à jour. Ces mises à jour hiérarchiques sont désactivées pas défaut car elles ralentissent l'importation initiale. Il convient d'activer ces mises à jour avec la commande suivante :
+<code>
+ ./utils/setup.php --create-functions --enable-diff-updates
+</code>
+
+==== Mise à jour de Nominatim ====
+La commande ci-dessous permet de maintenir à jour en permanence la base de donnée :
+<code>
+ ./utils/update.php --import-osmosis-all --no-npi
+</code>
+Mise à jour des données si la base de données porte sur plusieurs pays : le script ci-dessous devrait faire le job (original [[https://github.com/twain47/Nominatim/issues/60|ici]])
+
+<code>
+#!/bin/bash
+
+### Country list
+COUNTRIES="europe/isle-of-man europe/kosovo"
+NOMINATIM="/var/Nominatim"
+
+### Foreach country check if configuration exists (if not create one) and then import the diff
+for COUNTRY in $COUNTRIES;
+do
+    DIR="$NOMINATIM/updates/$COUNTRY"
+    FILE="$DIR/configuration.txt"
+    if [ ! -f ${FILE} ];
+    then
+        /bin/mkdir -p ${DIR}
+        /usr/bin/osmosis --rrii workingDirectory=${DIR}/.
+        /bin/echo baseUrl=http://download.geofabrik.de/${COUNTRY}-updates > ${FILE}
+        /bin/echo maxInterval = 0 >> ${FILE}
+        cd ${DIR}
+        /usr/bin/wget http://download.geofabrik.de/${COUNTRY}-updates/state.txt
+    fi
+    FILENAME=${COUNTRY//[\/]/_}
+    /usr/bin/osmosis --rri workingDirectory=${DIR}/. --wxc ${FILENAME}.osc.gz
+done
+
+INDEX=0 # false
+
+### Foreach diff files do the import
+cd ${NOMINATIM}/updates
+for OSC in *.osc.gz;
+do
+    ${NOMINATIM}/utils/update.php --import-diff ${NOMINATIM}/updates/${OSC}
+    INDEX=1
+done
+
+### Re-index if needed
+if ((${INDEX}));
+then
+    ${NOMINATIM}/utils/update.php --index
+fi
+
+### Remove all diff files
+rm -f ${NOMINATIM}/updates/*.osc.gz
+</code>
+
+===== En cas de problème =====
+Se rendre sur [[https://wiki.openstreetmap.org/wiki/Nominatim/Installation/Troubleshooting]]
+
+===== Voir aussi =====
+
+  * **(en)** [[https://wiki.openstreetmap.org/wiki/Nominatim?setlang=fr|Présentation]] sur OpenStreetMap 
+  * **(en)** [[http://nominatim.org/release-docs/latest/admin/Installation/|Installation Nominatim]] sur OpenStreetMap
+  * [[osrm|OSRM]]
+----
+//Contributeurs principaux : [[zococo|Zococo]].//
+ 
+//Basé sur [[https://wiki.openstreetmap.org/wiki/Nominatim/Installation|Installation Nominatim]] par OpenStreetMap.//

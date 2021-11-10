@@ -1,0 +1,214 @@
+
+====== Configurer les Clients Lourds d'un réseau LTSP sur base Edubuntu 11.04  ======
+<note important>
+L'objectif de cette page est de donner les informations de configuration utilisées pour paramétrer un réseau [[ltsp|LTSP]] avec des clients lourds basé sur [[edubuntu|Edubuntu 11.04]] au sein d'une école primaire de Seine et Marne.
+
+**Il a pour but d'aider le personnel de l'école à réinstaller, maintenir ou améliorer la configuration existante.
+**
+
+[[:utilisateurs:doogui|J']]ai tout de même souhaité rendre ce document public car il pouvait contenir des informations utiles à d'autres utilisateurs.
+
+:!: **Merci donc de prendre tout cela en considération si vous souhaitez modifier cette page** 
+
+Bonne lecture ;-)
+</note>
+
+===== Pré-requis =====
+
+  * **Disposer d'un serveur LTSP Edubuntu** (installation classique via DVD Edubuntu 11.04). Pour plus d'information sur l'installation, voir le [[http://www.edubuntu.org/documentation/11.04/installation-guide|Guide d'installation de Edubuntu 11.04]], en anglais
+  * **Disposer des [[:sudo|droits d'administration]].**
+  * **Disposer d'une connexion à Internet configurée et activée sur le serveur LTSP**
+  * **Savoir utiliser de façon basique un [[terminal| terminal GNU/Linux]] pour les lignes de commande** 
+
+===== Création de l'image des Clients Lourds =====
+Pour que les postes clients puissent se connecter, il faut créer une image du système qui puisse être chargée depuis le réseau.
+Ici, nous allons créer une image pour des "clients lourds", c'est à dire des machines sur lesquelles nous allons exploiter au maximum le processeur, la mémoire et les ressources graphique.
+Le serveur n'étant pas très puissant, cela permettra de le décharger des opérations les plus lourdes.
+
+
+==== Liste des paquets à installer sur le serveur ====
+A FAIRE
+==== Dépôt des paquets ====
+A FAIRE
+==== Liste des paquets à installer sur le client lourd ====
+Cette liste pourra être allégée en fonction des besoins
+
+language-support-fr
+libreoffice-l10n-fr
+language-pack-fr
+language-pack-gnome-fr
+openoffice.org-l10n-fr
+firefox-locale-fr
+language-support-writing-fr
+vlc
+flashplugin-installer
+libreoffice-help-fr
+hyphen-fr
+mythes-fr
+gimp-help-fr
+kde-l10n-fr
+language-pack-kde-fr
+app-install-data-edubuntu
+edubuntu-artwork
+edubuntu-docs
+edubuntu-fonts
+edubuntu-menueditor
+edubuntu-menus
+edubuntu-wallpapers
+ubiquity-slideshow-edubuntu
+ubuntu-edu-preschool
+ubuntu-edu-primary
+ubuntu-edu-secondary
+ubuntu-edu-tertiary
+edubuntu-desktop
+ldm-edubuntu-theme
+plymouth-theme-edubuntu
+openclipart-openoffice.org
+wine
+kstars
+kgeography
+childsplay
+childsplay-alphabet-sounds-fr
+glpeces
+gtans
+kdeedu
+drgeo
+drgeo-doc
+verbiste
+anki
+python-wxgtk2.8
+python-reportlab
+python-imaging
+abuledu-*
+
+
+==== Script de mise a jour du client ====
+Le script suivant va permettre de mettre a jour les paquets des clients ou bien d'en installer d'autres dans le chroot client.
+Il peut prendre en argument des paquets qu'on souhaite installer
+
+  * Éditer le fichier [[:tutoriel:comment_modifier_un_fichier|/usr/local/bin/maj_clients.sh]] depuis le serveur et insérer le code suivant :
+
+<code>
+#!/bin/sh
+
+echo ""
+echo "########## SYNCHRONISATION DES SOURCES APT ENTRE SERVEUR ET CLIENT ##########"
+echo ""
+sudo cp /etc/apt/sources.list /opt/ltsp/i386/etc/apt/sources.list
+echo ""
+echo "########## CHROOT SYSTEME CLIENT ##########"
+echo ""
+CHROOT_DIR=/opt/ltsp/i386
+sudo chroot $CHROOT_DIR mount -t proc /proc /proc 
+echo ""
+echo "########## MISE A JOUR DES PAQUETS CLIENT ##########"
+echo ""
+sudo chroot $CHROOT_DIR apt-get update
+echo ""
+echo "########## INSTALLATION DES PAQUETS SUPPLEMENTAIRES EN ARGUMENT ##########"
+echo ""
+while [ "$1" != "" ]; do
+    sudo chroot $CHROOT_DIR env LTSP_HANDLE_DAEMONS=false apt-get -y --force-yes install $1
+    shift
+done
+echo ""
+echo "########## MISE A JOUR SYSTEME CLIENT ##########"
+echo ""
+sudo chroot $CHROOT_DIR env LTSP_HANDLE_DAEMONS=false apt-get upgrade
+echo ""
+echo "########## MISE A JOUR DISTRIBUTION CLIENT ##########"
+echo ""
+sudo chroot $CHROOT_DIR env LTSP_HANDLE_DAEMONS=false apt-get dist-upgrade
+echo ""
+echo "########## SUPPRESSION DES PAQUETS INUTILES CLIENT ##########"
+echo ""
+sudo chroot $CHROOT_DIR env LTSP_HANDLE_DAEMONS=false apt-get autoremove
+echo ""
+echo "########## MISE A JOUR DE L IMAGE CLIENT ##########"
+echo ""
+sudo umount /opt/ltsp/i386/proc
+sudo ltsp-update-kernels
+sudo ltsp-update-sshkeys
+sudo ltsp-update-image -a i386
+</code>
+
+  * Rendre le fichier exécutable. Depuis le serveur :
+<code> 
+sudo chmod +x /usr/local/bin/maj_clients.sh
+</code>
+
+  * Exécuter le script. Depuis le serveur :
+<code> 
+maj_client.sh [PAQUETS SUPPLEMENTAIRES]
+</code>
+
+==== Création de l'image client lourd ====
+
+Le script suivant va permettre de créer l'image des clients lourds.
+
+<note warning>Il faut au préalable installer le script maj_clients.sh comme décrit au paragraphe précédent</note>
+
+  * Éditer le fichier [[:tutoriel:comment_modifier_un_fichier|/usr/local/bin/build_client_i386.sh]] depuis le serveur et insérer le code suivant :
+
+<code>
+#!/bin/sh
+
+echo ""
+echo "### SUPPRESSION DE L IMAGE EXISTANTE ###"
+echo ""
+sudo rm -r /opt/ltsp/i386/
+echo ""
+echo "### CONSTRUCTION DU ROOT LTSP ###"
+echo ""
+sudo ltsp-build-client --arch i386 --chroot i386 --fat-client-desktop edubuntu-desktop --skipimage
+# si on veut conserver les packages atp, rajouter --copy-package-cache --keep-packages
+echo ""
+echo "### COPIE SOURCES ATP ###"
+echo ""
+sudo cp /etc/apt/sources.list /opt/ltsp/i386/etc/apt/sources.list
+echo ""
+echo "### INSTALLATION PAQUETS SUPPLEMENTAIRE ET MISE A JOUR IMAGE ###"
+echo ""
+sudo /usr/local/bin/maj_clients.sh language-support-fr libreoffice-l10n-fr language-pack-fr language-pack-gnome-fr openoffice.org-l10n-fr firefox-locale-fr language-support-writing-fr vlc flashplugin-installer libreoffice-help-fr hyphen-fr mythes-fr gimp-help-fr kde-l10n-fr language-pack-kde-fr app-install-data-edubuntu edubuntu-artwork edubuntu-docs edubuntu-fonts edubuntu-menueditor edubuntu-menus edubuntu-wallpapers ubiquity-slideshow-edubuntu ubuntu-edu-preschool ubuntu-edu-primary ubuntu-edu-secondary ubuntu-edu-tertiary edubuntu-desktop ldm-edubuntu-theme plymouth-theme-edubuntu openclipart-openoffice.org wine kstars kgeography childsplay childsplay-alphabet-sounds-fr glpeces gtans kdeedu drgeo drgeo-doc verbiste anki python-wxgtk2.8 python-reportlab python-imaging abuledu-*
+</code>
+
+  * Rendre le fichier exécutable. Depuis le serveur :
+<code> 
+sudo chmod +x /usr/local/bin/build_client_i386.sh
+</code>
+
+  * Exécuter le script. Depuis le serveur :
+<code> 
+build_client_i386.sh
+</code>
+
+===== Gestion des Utilisateurs =====
+<note help>Il est préférable de n'utiliser l'utilisateur "ami du root" uniquement sur le serveur et pas sur les clients LTSP. Dans notre cas, il s'agit de l'utilisateur 'master'</note>
+
+==== Création d'un compte utilisateur ====
+
+<note tip>
+La création des utilisateurs doit se faire depuis le serveur avec le compte disposant des droits d'administration ('master' dans notre cas)
+
+Les utilisateurs des clients LTSP doivent être des utilisateurs ayant un type de compte 'personnalisé'.
+
+Pourquoi faire cela : certains privilèges génèrent des problèmrd entre les sessions qui sont ouvertes sur le client ou sur le serveur (synchronisation des homes, langues, sessions etc etc)
+
+Une investigation plus précise sera menée pour savoir quels sont les paramètres qui influent et pourquoi.
+</note>
+
+  * Avec l'outil de gestion des utilisateurs depuis le serveur (Système --> Administration --> Utilisateurs et Groupes), créer un utilisateur comme étant 'utilisateur de l'ordinateur'.
+  * Une fois que c'est fait, cliquer sur 'paramètres avancés' et supprimer sans remords tous les privilèges (Cela n’empêchera pas de lui donner quelques privilèges par la suite...)
+
+Dans notre cas, nous créons 2 utilisateurs comme cela :
+  * "prof"
+  * "eleve"
+
+Les utilisateurs créés possèdent maintenant chacun leur 'home' et on peut personnaliser chaque session en se connectant avec depuis le serveur ou de n'importe quel poste client.
+
+===== ITALC =====
+ITALC, à l’instar du propriétaire Netsupport school permet, depuis un poste maitre, de surveiller les écrans des élèves d’un seul coup d’oeil, leur envoyer des messages ou fichiers, prendre la main sur un des ordinateurs, ou de montrer l’écran maitre pour faire une démonstration. Et tout ça, sans aucune connaissance en informatique !
+
+Le paramétrage d'iTalc est relativement simple pour des clients lourds à condition de faire attention à ce que l'on fait
+
+A TERMINER

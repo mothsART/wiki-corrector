@@ -1,0 +1,118 @@
+
+{{tag>tutoriel latex travail_colaboratif BROUILLON}}
+
+----
+
+<note warning>Ce tutoriel n'est pas encore complet et ne propose dès lors pas toutes les solutions existantes. La solution exposée ici sera l'utilisation de différents fichiers Latex</note>
+
+====== Comment travailler à plusieurs sur un rapport ? ======
+
+<note tip>Rédigez ici une courte introduction à propos du tutoriel.</note>
+
+Ce tutoriel explique une manière de travailler à plusieurs sur un rapport/document. Cette solution utilise [latex]. D'autres méthodes existent bien sûr, à vous de trouver celle qui correspond le mieux à votre groupe de travail. 
+
+===== Pré-requis =====
+  * Avoir des bases en [[:latex]]
+  * Avoir  [[:tutoriel:comment_installer_un_paquet|installé le paquet]] [[apt>latex]] (ou [[apt>pdflatex]]). 
+
+===== Principe de base =====
+
+L'important pour travailler à plusieurs sur un rapport latex est de subdiviser le rapport en plusieurs fichiers (par exemple un par chapitre). De cette manière il y aura la possibilité que chacun travaille sur un chapitre de manière individuelle et puisse compiler le chapitre sur lequel il est en train de travailler. Un autre point important est de pouvoir compiler à n'importe quel moment l'ensemble du rapport afin d'avoir une vue d'ensemble correcte.
+
+===== Les différents fichiers =====
+Les différents fichiers pour faire cela sont les suivants : 
+  * **index.tex** : Fichier qui permettra de compiler le rapport entier
+  * **header.tex** : Fichier qui contiendra les différentes références aux paquets latex, et éventuellement d'autres options et paramètres
+  * **introduction.tex**, **chapitre1.tex**, **chapitre2.tex**,… : Les différentes parties du rapport à proprement parler. 
+  * **compileRapport** : Script permettant de compiler l'entièreté du rapport.
+
+==== index.tex ====
+Le fichier d'index est assez simple, il contient juste les appels aux différents autres fichiers dans l'ordre voulu.
+<file tex index.tex> 
+\include{header} %Fichier d'en-téte
+\begin{document}
+\input{introduction}
+\clearpage
+\input{chapitre1}
+\clearpage
+\input{chapitre2}
+\clearpage
+\input{chapitre3}
+\clearpage
+%etc…
+\input{conclusion}
+\end{document}
+</file>
+
+==== header.tex ====
+Ce fichier dépendra fortement de vos besoins. Il contiendra tout ce que vous auriez mis au dessus de ''\begin{document}'' dans un fichier latex classique.
+<file tex header.tex>
+\documentclass[twoside,a4paper,12pt,]{article} %Type de doc.
+\usepackage[french]{babel} %En francais
+\usepackage[T1]{fontenc}
+…
+…
+</file>
+
+==== introduction.tex, chapitre1.tex,... ====
+Ces fichiers contiendront le contenu proprement dit de votre rapport. Ils auront tous la structure suivante : 
+<file tex chapitreX.tex>
+\include{header}
+\begin{documen}
+%Le contenu du chapitre ICI
+\end{document}
+</file>
+Cela permettra de compiler vos chapitres individuellement puisqu'il contiendront les en-têtes nécessaires pour se faire.
+
+==== compileRapport ====
+Ce script permettra de compiler tout le rapport. En effet si vous tentez de compiler le fichier index.tex, cela ne fonctionnera pas car chaque chapitre contient les en-têtes et surtout ''\begin{document}'' ce que latex n'aime pas.  La compilation ce fait dans le répertoire temporaire /tmp/compileRapport
+
+<file bash compileRapport>
+#!/bin/sh 
+rapportDir=`pwd`
+rm -R /tmp/compileRapport/
+mkdir /tmp/compileRapport/
+cp *.tex /tmp/compileRapport/
+cp *.bib /tmp/compileRapport/
+#On copie aussi les répertoires contenant les images, les annexes et les autres fichiers nécessaires à la compilation (code sources,...) 
+cp -R Images/ /tmp/compileRapport/
+cp -R Annexes/ /tmp/compileRapport/
+
+#On en profite également pour faire un peu de nettoyage
+rm *.out *.aux *.log *.synctex.gz *.bbl *.blg
+
+
+cd /tmp/compileRapport
+
+#On supprime tout les appels au en-tete et les début de documents, sauf pour le fichier index.tex
+mv index.tex index.texB
+grep -rl "header" *.tex | xargs sed -i 's/\\include{header}//g'
+grep -rl "document" *.tex | xargs sed -i 's/\\begin{document}//g'
+grep -rl "document" *.tex | xargs sed -i 's/\\end{document}//g'
+mv index.texB index.tex
+
+#Compilation proprement dites, ici, la compilation est faites à plusieurs reprises pour avoir les références et la bibliographie
+pdflatex index.tex
+bibtex index.aux #Uniquement si on fait une bibliographie.
+pdflatex index.tex
+pdflatex index.tex
+
+#On place le rapport compilé dans le répertoire de base
+mv index.pdf "$rapportDir/rapport.pdf"
+</file>
+Donner les droits d'execution sur ce fichier avec la commande ''chmod +x compileRapport''
+
+===== Synchronisation des fichiers entre les ordinateurs =====
+Bien entendu, il va falloir s'échanger les documents entre vous. Diverses solutions existent, certaines spécifiques à Linux et d'autres multi-plateforme.
+Pour en citer quelques-uns : Ubuntu One, Dropbox,... 
+
+Il y a également possibilité d'utiliser un [[:subversion|SVN]] (pas testé) .
+
+Vous pouvez également vous échanger les documents au fur et à mesures de leurs mises à jours par e-mails ou clé USB mais c'est peut-être (surement) moins pratique.
+
+=====  À faire attention également =====
+Pensez à avoir le même encodage de caractère pour tous les documents. 
+
+Placez les images dans un sous-dossier et faites de même pour les autres types de documents qui peuvent être attachées à votre rapport (par exemple des codes Matlab, ou...) 
+
+Arrangez-vous pour ne pas modifier le même fichier en même temps : Vous êtes des humains après tout, ça devrait pouvoir se faire assez facilement en communiquant ;-) 

@@ -1,0 +1,108 @@
+
+{{tag>courriel sécurité VÉTUSTE}}
+
+----
+
+====== Utiliser OpenPGP et PGP/MIME avec KMail ======
+===== Introduction =====
+Cette manipulation va permettre d'étendre le support de Kmail pour OpenPGP, PGP/MIME (via GnuPG) à l'aide de l'//agent de GnuPG//. Ceci permet d'envoyer des messages signés (déjà avec KMail de base) mais aussi de déchiffrer les messages chiffrés (ce qui provoquait des messages types ''Bad Passphrase'').
+
+===== Prérequis =====
+
+  - Savoir [[:depots|installer un paquet]] (en [[:synaptic|interface graphique]] ou en [[:apt|ligne de commande]])
+  - Savoir se servir d'un éditeur de texte standard
+  - Avoir installé [[KMail]] ((sur [[:kubuntu|Kubuntu]] ou juste le [[:bureau_kde|gestionnaire de bureau KDE]])).
+  - Avoir une paire de clef (voir la documentation sur [[:GnuPG]])
+  - Savoir lancer une console
+
+
+
+===== Installation =====
+Voici la liste des paquets à installer (s'ils ne le sont pas)
+  * ''gnupg-agent''
+Et l'un des deux suivants:
+  * ''pinentry-qt'' (plutôt pour KDE) **(Testé, marche parfaitement)**
+  * ''pinentry-gtk2'' (plutôt pour GNOME) **(Testé, marche parfaitement)**
+A priori, les deux devraient fonctionner autant avec KDE qu'avec GNOME. Question de goût.
+
+
+===== Configuration ======
+La configuration se fait par utilisateur. Il faut donc la répéter pour chaque utilisateur qui désire utiliser GnuPG et KMail.
+
+
+==== Modification de la configuration de GnuPG ====
+Tout d'abord, il faut modifier la configuration de GnuPG pour lui dire d'utiliser l'//agent// au lieu de son propre système de vérification de mot de passe. À cet effet, il faut éditer le fichier ''~/.gnupg/gpg.conf''((s'il n'existe pas, cf. [[#prerequis|Prérequis]], et si malgré cela il n'existe toujours pas, n'hésitez pas à le créer vous même.)).
+
+Il faut ensuite décommenter((enlever le dièse (#) et l'espace de début de ligne)) la ligne suivante :
+<file># use-agent</file>
+
+==== Configuration de GnuPG-agent ====
+Ensuite, il faut configurer l'agent GnuPG. Il faut créer le fichier ''~/.gnupg/gpg-agent.conf'' et lui donner le contenu suivant :
+<file>pinentry-program "/usr/bin/pinentry-qt"
+no-grab
+default-cache-ttl 1800</file>
+N.B: Si c'est ''pinentry-gtk2'' qui a été installé, il faut évidemment remplacer ''pinentry-qt'' par ''pinentry-gtk-2''
+
+N.B 2 : correction de synthaxe : ajout des apostrophes
+
+Dans les nouvelles distribution => Natty, nous pouvons utiliser kwallet avec pinentry.\\
+ Pour se faire, il faut [[:tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt>kwalletcli]]**\\
+
+puis remplacer dans .gnupg/gpg-agent.conf
+<file>
+#pinentry-program "/usr/bin/pinentry-qt"
+pinentry-program "/usr/bin/pinentry-kwallet"</file>
+
+==== Premier test ====
+Nous allons à présent tester si l'installation et la configuration fonctionnent correctement.
+
+Il faut pour ça lancer une console ((désolé pour ceux qui n'aiment pas ça, mais c'est **vraiment** le moyen le plus simple dans ce cas)). Donc, après avoir ouvert une console, taper les commandes suivantes :
+<code>$ eval "$(gpg-agent --daemon)"</code>Cette commande permet de lancer le //démon// ''gpg-agent''. On y reviendra plus tard.
+Ensuite, afin de tester si l'agent est bien utilisé, il faut taper cette commande:<code>echo "Test" | gpg -ase -r 0xDEADBEEF | gpg</code>
+**N.B. Évidemment, il faut remplacer ''DEADBEEF''((''DEADBEEF'' pourrait se traduire par ''BŒUFMORT'', mais les identifiants de clés sont des suites de caractères hexadécimaux (de 0 à 9 et de A à F). Si quelqu'un a une suite rigolote de 8 lettres en français, merci de modifier. :-P ))par l'identifiant de votre clé !**
+
+Cette commande envoie la chaîne ''Test'' pour être codée (''| gpg -ase'') avec votre clé privée (''-r 0xDEADBEEF''), puis envoie le tout pour être décodé (''| gpg''). Par conséquent, le mot de passe devrait être demandé deux fois via  l'interface graphique. Finalement, le mot ''Test'' devrait apparaître dans la console (si le bon mot de passe a été entré correctement).
+
+Si le test s'est bien déroulé, passez à la suite.
+
+NB: Sur Natty, le daemon gpg est lancé automatiquement à l'ouverture de session X. Il faut donc rebooter pour tester la configuration et ne pas tenter de lancer un nouveau daemon avec <code>$ eval "$(gpg-agent --daemon)"</code>
+
+==== Démarrer le démon à chaque session ====
+=== Sous KDE ===
+Il faut créer un fichier ''~/.kde/Autostart/GnuPG''((si le dossier ''Autostart'' n'existe pas, le créer. Si le dossier ''.kde'' n'existe pas, voir [[#sous_gnome|sous Gnome]])) qui doit contenir les lignes suivantes :
+<file>#!/bin/sh
+if grep -q '^use-agent' ~/.gnupg/gpg.conf; then
+ eval "`gpg-agent --daemon`"
+fi</file>
+Ce petit programme teste si une le fichier ''~/.gnupg/gpg.conf'' contient une ligne qui commence par ''use-agent''. Si c'est le cas, il démarre le démon ''gpg-agent''.
+
+Il faut rendre ce fichier exécutable :
+<code>chmod +x ~/.kde/Autostart/GnuPG</code>
+
+Grâce à ce fichier, le démon devrait être lancé à chaque démarrage de session.
+
+Afin de pouvoir tester sous KMail, le mieux est de redémarrer sa session graphique.
+  - Quitter sa session
+  - ''[Ctrl]-[Alt]-[<-]'' (Backspace)
+  - Se connecter
+=== Sous Gnome ===
+
+
+  - Aller dans **Système/Préférences/Session**
+  - Cliquer sur le bouton **Nouveau**
+  - Dans Nom, indiquer **gpg-agent**
+  - Dans Commande, indiquer **eval "$(gpg-agent --daemon)"**
+  - Valider
+  - Vérifier que la case de gpg-agent est cochée
+  - Fermer la fenêtre
+  - Redémarrez la session pour que cela soit pris en compte
+
+
+===== Conclusion =====
+Normalement, cette manipulation devrait, après redémarrage de la session graphique, permettre de :
+  * Envoyer des messages signés
+  * Recevoir des messages chiffrés
+
+----
+
+//Contributeur : [[http://kmail.kde.org/kmail-pgpmime-howto.html|Traduit]] et adapté par [[utilisateurs:didier|Didier]]//

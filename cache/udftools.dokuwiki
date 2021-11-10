@@ -1,0 +1,211 @@
+
+{{tag>gravure BROUILLON}}
+----
+
+
+====== udftools : transformez vos CD/DVD en disque dur amovible ======
+
+Le paquet udftools vous permet de créer et gérer un volume (CD ou DVD) au format UDF. Par la suite, il vous suffit de monter ce volume avec les bonnes options et vous pouvez directement accèder en lecture et écriture sur ce support. On parle de packet-writing
+
+<note important>doc en cours d'élaboration ... 
+TODO : - Manque la même manipulation en définitif (configuration de /etc/default/udftools)
+- Problème de droits sur les périphériques et point de montage.
+- Gestion du point de montage par Gnome ou pas</note>
+
+
+
+
+
+==== procédure ====
+
+Voici la procédure fonctionnelle. 
+
+  # ---------------------------------------------------------------------
+  # configuration
+  
+  # device du CD/DVD
+  dev=/dev/hdc
+  
+  # point de montage
+  mnt=/media/udf
+  
+  # ----------------------------------------------------------------------
+  # on s'assure que le pilote est chargé
+  modprobe pktcdvd
+  [ ! -d $mnt ] && mkdir $mnt
+  
+  # démontage éventuel du device
+  umount $dev
+  
+  # on crée une association entre le device DVD/CD et le packet-drivers
+  pktsetup pktcdvd0 $dev
+  
+  # formatage d'un CD-RW
+  cdrwtool -d $dev
+  
+  # formatage d'un DVD+RW
+  dvd+rw-format -force $dev
+  
+  # Création du système de fichiers d'un DVD au format UDF
+  mkudffs --media-type=dvd --udfrev=0x0150 /dev/pktcdvd/pktcdvd0
+  
+  # Création du système de fichiers d'un CD au format UDF
+  # A noter que cette opération peut être faite en même temps
+  # que le formatage par la commande cdrwtool -d $dev **-q**
+  mkudffs --media-type=cdrw --udfrev=0x0150 /dev/pktcdvd/pktcdvd0
+  
+  # montage du volume
+  mount -t udf -o rw,noatime /dev/pktcdvd/pktcdvd0 $mnt
+  
+  # le premier montage donne un accès en lecture seul (bug) remontage en RW
+  mount -t udf -o remount,rw,noatime /dev/pktcdvd/pktcdvd0 $mnt
+  
+  # copier des fichiers sur le point de montage
+  cp $HOME/.bash* /etc/passwd $mnt
+  
+  # terminer l'opération : démontage du volume 
+  # il y a finalisation de l'enregistrement (attendre un peu)
+  umount $mnt
+  
+
+Notes :
+  * cette procédure fonctionne avec de petits volumes de fichiers, mais est très longue ou ne fonctionne pas avec des plus gros volumes ; a vérifier ...
+  * la procédure varie légèrement suivant le type de média utilisé (CD, DVD+RW, DVD-RW). Voir les liens.
+  * il est possible de rendre le disque inscriptible pour un utilisateur ordinaire.
+
+==== procédure pour une installation permanente ====
+
+=== Configurer la gravure par paquet ===
+
+
+Installer le paquet udftools
+<code>sudo apt-get install udftools</code>
+
+Signaler au système quels sont les graveurs que vous voulez utiliser pour du //packet-writing//.
+Dans le fichier le fichier **etc/default/udftools** décommenter la ligne DEVICES et indiquez le nom de votre ou vos graveurs (ex. DEVICES="/dev/scd0 /dev/scd1")
+<code>DEVICES="$dev"</code>
+
+Ceci créera pour chaque périphérique //$dev// un nouveau périphérique //$pktdev//. Par exemple si vous avez mis //DEVICES="/dev/scd0 /dev/scd1"// alors vos deux périphériques pour le packet-writing s'appelleront **/dev/pktcdvd/0** et **/dev/pktcdvd/1**.
+
+Créez un nouveau point de montage pour chacun de vos nouveaux graveurs dans **/media/** pour qu'ils soient gérés par Gnome. Par exemple 
+<code>sudo mkdir /media/cdpacketwriting</code>
+
+Modifiez le fichier **/etc/fstab** et ajoutez à la fin la ligne suivante :
+<code>$pktdev  $mnt  udf rw,user,noauto,noatime,utf8    0       0</code>
+par exemple //<nowiki>/dev/pktcdvd/0  /media/dvdpacketwriting  udf rw,user,noauto,noatime,utf8    0       0</nowiki>//
+
+Changez les droits du fichier suivant :
+<code>sudo chown root:cdrom /dev/pktcdvd/pktcdvd0
+sudo chmod g+rw /dev/pktcdvd/pktcdvd0</code>
+
+Changez les droits du point de montage :
+<code>sudo chown root:cdrom /media/dvdpacketwriting
+sudo chmod -R go+rwx /media/dvdpacketwriting</code>
+
+<note important>Il faudra renouveler les changements de droits du point de montage ci-dessus pour CHAQUE CD/DVD la première fois qu’il est monté.</note> 
+
+<note>Désactiver l'automontage des media dans Gnome</note> Dans le menu 
+> / Système / Préférences / Préférences des périphériques et des médias / -> onglet Stockage -> option “{Monter les media amovibles lors de l'insertion}”
+(depuis Hardy/8.04 l’automontage se désactive en lançant l’éditeur de configuration de Gnome, //gconf-editor//, puis en décochant la clé <code>/apps/nautilus/preferences/media_automount</code>).
+
+Activer les changements en redémarrant le PC (le plus simple)
+
+=== Préparer les médias ===
+
+== Préparer un DVD+RW ==
+
+Formatage :
+<code>dvd+rw-format -force $dev</code>
+<note tip>L’option //-force// n’est nécessaire que pour un DVD-RW déjà utilisé et n’est pas nécessaire pour un media neuf.</note>
+
+Créer le système de fichier UDF : 
+<code>mkudffs --udfrev=0x0150 --spartable=2 --media-type=dvdrw --utf8 $pktdev</code>
+
+<note important>Attention pour mkudffs c’est le nouveau périphérique qu’il faut utiliser.</note>
+
+== Préparer un CD-RW ==
+
+Formatage :
+<code>cdrwtool -d $dev -q -t $x</code>
+<note important>$x doit correspondre au plus petit de la vitesse max du CD et du graveur. Précisez bien cette vitesse max car il n’y a pas d’auto-détection.</note>
+
+Créer le système de fichier UDF :
+<code>mkudffs --udfrev=0x0150 --spartable=2 --media-type=cdrw  --utf8 $pktdev</code>
+
+<note important>Comme pour le DVD-RW c’est le nouveau périphérique qu’il faut utiliser avec mkudffs.</note>
+
+<note important>IMPORTANT : Si une commande se termine en erreur "illegal seek", alors que le graveur clignote toujours, LAISSEZ VOTRE CD DANS LE GRAVEUR JUSQU’À CE QUE LE VOYANT CESSE DE CLIGNOTER. Malgré cette erreur l'opération pourrait se passer normalement à condition d'attendre l'arrêt du graveur (pour info en 4X environ 40 minutes).</note>
+
+=== Montage du média ===
+
+Dans le poste de travail de Gnome vous devriez voir vos graveurs habituels plus les points de montage que vous avez créés pour la gravure par paquet. Par exemple //cdpacketwriting// et //dvdpacketwriting// comme ci-dessous :
+
+{{packet_writing_1.png|}}
+
+Insérez un média réinscriptible. Il ne se montera plus automatiquement puisque qu’on a désactivé cette fonctionnalité.
+
+Ensuite faites un Clic Droit sur le nouveau périphérique -> 
+> “Monter le volume”
+
+<note warning>Rappel : pour chaque CD la première fois qu’il est monté : changez les droits du point de montage  comme décrit plus haut.</note>
+
+Vous pouvez maintenant utilisez votre média comme une clé USB ou une disquette.
+
+<note warning>
+Pour éviter tout problème, démontez votre média manuellement avant d’éteindre ou de redémarrer votre PC, sinon vous risquez de perdre toutes vos données.</note> 
+
+<note warning>Pendant le démontage, attendez que la commande soit terminée et que le graveur cesse de clignoter avant d’enlever le média. Attention ça peut être long !
+</note>
+
+Bonne gravure !
+
+
+==== Créer un fichier ISO udf ====
+
+La procédure décrite avec brio ci-dessus peut aussi s'appliquer à un fichier en vue de créer un fichier ISO au format UDF.
+
+Tout d'abord il faut créer le réceptacle, c'est à dire un fichier suffisamment gros pour contenir les datas (700Mo ou 4,7Go).
+
+Prenons le cas d'un CD-RW de 700Mo, la commande sera:
+
+<code>sudo dd if=/dev/zero of=MonFichier.iso bs=1M count=700</code>
+Ensuite on formate ce fichier
+<code>sudo mkudffs --udfrev=0x0150 --spartable=2 --media-type=cdrw  --utf8 MonFichier.iso</code>
+Ce fichier doit être rattaché à un périphérique au même titre qu'un lecteur CD/DVD dans les paramètres de udftools, donc on le rajoute dans le fichier de configuration /etc/default/udftools.
+
+Cela doit ressembler à ça:
+<code>DEVICES="/dev/sr0 /home/utilisateur/patati/patata/MonFichier.iso"</code>
+Il faut redémarrer le PC pour que cela soit pris en compte...
+
+Ensuite la procédure reste la même, monter le disque quelque part, changer les droits du point de montage et enfin écrire dans le fichier ISO.
+<code>
+mkdir MonPoint
+sudo mount -t udf -o loop /home/utilisateur/patati/patata/MonFichier.iso MonPoint
+sudo chown -R 1000:1000 MonPoint
+cd MonPoint</code>
+
+**N'oubliez pas de démonter votre fichier ISO pour finaliser les écritures**
+<code>sudo umount MonPoint</code>
+=== Changer de fichier ISO udf ===
+Cette technique est pratique, mais elle a le désavantage de créer des images à taille fixe. 
+Si vous n'avez que 400Mo à mettre dans l'ISO, créer un fichier de 450Mo par sécurité
+
+Vous pouvez facilement passer d'un fichier ISO à un autre en modifiant la ligne de /etc/default/udftools.
+Il faut alors recharger le module pour que cette modification soit prise en compte sans redémarrer le PC.
+<code>sudo rmmod pktcdvd
+sudo modprobe pktcdvd</code>
+**Attention à bien avoir démonté le fichier ISO précédent avant de faire ces changements**
+==== mots-clés ====
+  * udf, packet-writing, DVDRAM, udftools, 
+
+==== liens ====
+  *http://forum.ubuntu-fr.org/viewtopic.php?id=168339
+  * http://forum.ubuntu-fr.org/viewtopic.php?pid=718127
+  * http://www.abclinuxu.cz/forum/show/190736
+  * http://www.lea-linux.org/documentations/index.php/Hardware-hard_plus-packet-writing
+  * http://gentoo-wiki.com/HOWTO_Packet_Writing_on_CD-RW
+  * http://www.g-loaded.eu/2005/11/10/packet-writing-on-cdrw-and-dvdrw-media/
+
+==== contributeurs ====
+
+[[:utilisateurs/marc31]] thierrybo

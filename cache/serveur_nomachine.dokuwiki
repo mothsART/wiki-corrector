@@ -1,0 +1,279 @@
+
+{{tag>freenx bureau_a_distance BROUILLON}}
+----
+
+====== Serveur NoMachine ======
+
+<note important>Solution à un bug occasionnel après installation du client nomachine sous Lucid (blocage du lancement de nautilus et du gestionnaire de fenêtres aux redémarrages suivants) : [[http://forum.ubuntu-fr.org/viewtopic.php?pid=3826345|Sujet sur le forum]]</note>
+
+
+===== Introduction =====
+
+Cette documentation décrit la procédure à suivre pour mettre en œuvre le **"bureau à distance"** à l'aide des clients et serveurs de [[http://www.nomachine.com/|NoMachine]]. Si vous voulez pouvoir travailler à distance sur votre ordinateur Ubuntu, via Internet, une connexion ADSL ou même un modem classique 50Ko/s, NoMachine est ce qu'il vous faut. 
+
+Vous installez le serveur sur votre ordinateur Ubuntu, et le client sur les autres ordinateurs à partir desquels vous voulez pouvoir vous connecter sur votre ordinateur Ubuntu.
+
+La session ouverte à distance sur votre ordinateur Ubuntu est indépendante de votre session locale. Ce service ne fait pas une réplication de votre session locale sur l'ordinateur distant, qu'il soit sous Windows, Mac ou autre Linux. Si vous cherchez une solution pour montrer une manœuvre dans votre session à un utilisateur distant, tournez-vous vers [[VNC]].
+
+{{ http://img265.imageshack.us/img265/1845/img7uv5.jpg| fenêtre de connexion à Ubuntu depuis un client sous Windows}}
+
+On appelle 
+  * //logiciel "Serveur"//, le logiciel installé sur la machine hôte des  sessions (NxServer), et 
+  * //logiciel "Client"//, le logiciel exécuté à distance et visualisant la session (NxClient).
+
+L'accès distant à votre machine se fait de manière sécurisée, c'est-à-dire que vos échanges entre client et serveur sont totalement chiffrés. Le chiffrement des données est assuré par un protocole qui s'appelle ssh.
+Nous installerons donc tout d'abord cette fonctionnalité.
+
+Ensuite, nous installerons le serveur proprement dit.
+
+Quelques conseils terminent cette page, pour simplifier encore la fonction bureau à distance.
+
+=== Avantages et inconvénients de FreeNX par rapport à NX Free Server ===
+__**FreeNX:**__
+**Avantages**
+  * Open source
+  * pas de limite du nombre de connexions simultanées à la même session
+**Inconvénients**
+  * Pas encore de support pour la transmission audio (si. En tout cas avec la version 0.7.1, mais uniquement esd, comme avec le serveur payant)
+  * Pas encore capable de se connecter sur une session locale déjà ouverte à travers le protocole NX, ni même avec VNC
+
+Probablement meilleur pour une utilisation institutionnelle.
+
+**__NX Free Server__**
+**Avantages**
+  * Supporte la transmission audio
+  * Permet la reprise d'une session locale ouverte
+**Inconvénients**
+  * Source fermée
+  * Limité à 2 connexions simultanées à la même machine (ce ne devrait pas être un problème pour un usage personnel)
+
+===== Installation =====
+
+
+==== Installation et configuration de ssh ====
+
+NoMachine et NxFree utilisent ssh pour assurer une communication sécurisée (authentifiée et chiffrée) entre le client et le serveur. Il vous faut donc installer ssh si cela n'a pas encore été fait. 
+
+Référez vous à ce [[:tutoriel:comment_installer_un_paquet|tutoriel]] pour apprendre comment installer un paquet et installez **ssh**. Ou bien tapez directement la commande suivante dans un terminal (Menu Application->Accessoires->Terminal).
+
+  sudo apt-get install ssh
+
+La suite de cette section détaille la configuration de sshd requise pour les besoins de NxServer. Normalement, celle qui a été mise en place lors de l'installation de sshd convient parfaitement, mais il peut être utile de vérifier cette configuration que vous trouverez dans le fichier **/etc/ssh/sshd_config**.
+
+Ce fichier doit avoir une section ''Authentication'' qui doit contenir ce qui suit:
+
+<file>
+# Authentication:
+LoginGraceTime 120
+PermitRootLogin no
+StrictModes yes
+ 
+RSAAuthentication yes
+PubkeyAuthentication yes
+#AuthorizedKeysFile      %h/.ssh/authorized_keys
+</file>
+
+La ligne AuthorizedKeysFile commentée indique la valeur par défaut. Elle est importante et c'est cette valeur qu'on utilisera pour la suite. Ce fichier contient la liste des clés publiques des clients autorisés à se connecter à un compte via ssh sans avoir à donner de mot de passe. Il joue donc un rôle très important dans la sécurité d'un système. Il est ainsi une bonne pratique d'administrateur d'ordinateur de surveiller l'absence d'un tel fichier dans le compte des utilisateurs. Il ne doit être présent que si c'est volontaire et nécessaire.
+
+Pour NoMachine, sa présence est nécessaire et ne présente pas de risque pour la sécurité. Une fois que NX sera installé, vous pourrez le vérifier avec la commande suivante
+
+  grep nx: /etc/passwd
+
+Qui doit renvoyer 
+
+  > nx:x:113:65534::/usr/NX/home/nx:/usr/NX/bin/nxserver
+Les valeurs numériques apparaissant chez vous peuvent être différentes. Ce qui est important est la suite. Elle indique que le répertoire racine de l'utilisateur //nx// est /usr/NX/home/nx et que c'est le programme //nxserver// qui prend en charge les connexions au compte de cet utilisateur. C'est ce programme qui va vérifier l'identité et le mot de passe présenté par le client. C'est pour cela qu'il n'y a donc pas de danger d'autoriser une connexion ssh sans authentification. 
+
+Cependant il y a un hic. NoMachine va installer la clé publique des clients dans le fichier /usr/NX/home/nx/.ssh/**authorized_keys2**. Comme vous pouvez le constater, ce nom de fichier ne correspondant pas à ce qui est défini dans la configuration de sshd. Il faudra donc corriger cela pour rendre la connexion de clients NoMachine possible. 
+
+Si vous modifiez la configuration de sshd, il faut faire en sorte que ssh prenne en compte cette nouvelle configuration. Pour cela tapez la commande suivante:
+
+  sudo /etc/init.d/ssh reload
+
+
+
+==== Installation de NX Server ====
+
+Il n'y a pas de paquet disponible dans les dépôts, on va donc télécharger et installer manuellement les paquets :
+  - Aller sur [[http://www.nomachine.com/download-package.php?Prod_Id=5| le site de NoMachine]]
+  - Télécharger NX Free Edition for Linux avec les paquets : Client, Node et Server
+  - [[:tutoriel:comment_installer_un_paquet|Les installer]] dans l'ordre : Client, Node et Server
+
+Pour finaliser l'installation il vous faut encore exécuter l'instruction suivante:
+
+  pushd /usr/NX/home && sudo cp nx/.ssh/authorized_keys2 nx/.ssh/authorized_keys && popd
+
+Cette commande fait en sorte que sshd accepte la connexion des clients NoMachine. Elle fait simplement une copie du fichier authorized_keys2 en authorized_keys dans le répertoire /usr/NX/home/nx/.ssh
+
+==== Configuration de NX Server ====
+Vous pouvez maintenant vous connecter directement avec le client NoMachine à votre ordinateur. Mais il vous faudra vous connecter avec un compte existant du serveur mais différent que celui que vous utilisez actuellement, sinon cela ne fonctionne pas.
+
+Le client NoMachine peut être lancé à partir du menu Applications->Internet->NX Client for Linux->NX Client for Linux. La première fois que vous lancez ce programme vous aurez droit à un assistant de connexion. Les fois suivante vous aurez directement un dialogue de login. 
+
+
+<note>Si le programme n'apparaît pas dans le menu, redémarrez votre serveur X: CTRL+ALT+BACKSPACE (ALT+IMP ECR/SYST+K pour les dernières versions d'Ubuntu)</note>
+
+Les images suivantes sont des copies d'écran de l'assistant de connexion. 
+
+{{http://img230.imageshack.us/img230/3733/connexionwizardpk4.png?400}} 
+
+{{http://img223.imageshack.us/img223/4494/connexionwizard1ha6.png?400}}
+
+ou directement le client :
+
+{{ http://img220.imageshack.us/img220/6332/fenetredeconfigurationeq2.png }}
+Le nom de Session est laissé à votre imagination
+  * Host : mettez votre IP (voir les commentaires plus bas à ce sujet)
+  * Port : laissez 22
+  * Choisissez Unix et Kde ou Gnome selon vos préférences,  Depuis ubuntu 11.10 et gnome3 pour utiliser un bureau gnome, il faut modifier un paramètre du fichier de configuration de nxnode. Voir le forum anglophone : http://ubuntuforums.org/showpost.php?s=8a3cbd476f7ebef5d5eff22615622917&p=11586915&postcount=8
+  * Ne cochez pas "Disable SSL encryption" : cela est pour avoir une connexion sécurisée.
+  * Avaible Array si vous voulez le programme dans une fenêtre, et FullScreen pour avoir votre session en plein écran
+
+A la première connexion, vous aurez un message demandant d'authentifier une clé. Répondez simplement OUI.
+
+<note>Si vous avez un message contenant
+> ''NX> 204 Authentication failed.''
+essayer de réinstaller openssh et ssh :
+
+  sudo apt-get purge openssh-server
+  sudo apt-get install openssh-server ssh
+</note>
+
+<note>
+Si ça ne marche toujours pas, désinstallez tout (suppression complète, de ssh, les trois paquets de nomachine), effacez également le dossier ~/.ssh et ~/.nx, le répertoire /usr/NX, et réinstallez ssh et les 3 paquets de NoMachine.
+</note>
+
+==== Installer les clients où vous voulez ====
+
+Cela se fait sans problème, en téléchargeant celui qui vous convient en fonction de l'OS à la page [[http://www.nomachine.com/download.php]], rubrique "NX CLient Product".
+
+Si vous voulez utiliser le client sur une machine pour laquelle vous ne possédez pas les droits d'installation de programme, ce n'est pas encore perdu. Voyez la "solution portable" ci-dessous.
+
+===== Autres =====
+==== Les sessions ====
+
+Par défaut le client NX propose des sessions GNOME, KDE, CDE et XDM. Cela ne peut fonctionner que si l'interface en question est installé sur le serveur.
+
+Si votre session ne se lance pas et que vous récupériez des messages concernant la souscription au logiciel, pas d'inquiétude, ce type de message doit être le message par défaut de nxserver quand il n'arrive pas à lancer la session correctement.
+
+=== Session Gnome===
+
+La session GNOME a un peu de mal à s'intégrer à Unity (et aussi à GnomeShell).
+
+Pour arriver à obtenir un résultat 'potable', il faut lancer la session en Gnome Classic en modifiant, à la fin du fichier "node.cfg" du serveur, la ligne du lancement Gnome.
+
+CommandStartGnome = "/usr/bin/gnome-session --session=gnome-classic"
+
+Sujet abordé plus en détail ici aussi : http://forum.ubuntu-fr.org/viewtopic.php?pid=14619421#p14619421
+
+=== Autres sessions non listées... ===
+Si la session n'est pas listée (normalement différent de GNOME, KDE, CDE et XDM), dans l'interface du client, il faut  :
+  * Selectionner la session **Custum**
+  * Cliquer dans **Settings..**
+  * Régler le lancement de la session directement sur le serveur avec un script. Pour XFCE : entrer la ligne **xfce4-session**. Le mode "floating windows" est un peu déroutant, des bouts de fenêtres se promènent partout sur le bureau du client. Préférez le mode "New virtual desktop", vous n'aurez qu'une seule fenêtre avec le bureau distant dedans.
+
+
+==== Problèmes à l'installation / parefeu ====
+
+<note important>**En cas de problème de connexion**
+Utilisez-vous un pare-feu ? Vérifiez que le port 22 est autorisé pour le SSH (ou le port que vous auriez choisi)
+</note>
+
+<note tip>Si vous êtes en mode Routeur : voici comment vous dépatouiller 
+  * Au niveau du client : si vous utilisez le protocole DHCP, le serveur risque de ne pas savoir où vous trouver. Préférez l'attribution d'une adresse précise de votre routeur pour votre ordinateur (typiquement, 192.168.0.1). Ensuite, assurez-vous une redirection du port 22 (avec les options par défaut) vers le port 22 de la destination 192.168.0.1 (si vous avez suivi l'exemple précédent). 
+</note>
+
+<note tip>**Connaitre son IP**
+
+Allez sur la page [[http://www.mon-ip.com/]] ou [[https://mon-ip-addresse.com/]]. L'adresse que vous verrez est celle à renseigner sous l'intitulé "Host" dans le client.
+</note>
+
+==== Confort d'utilisation ====
+<note tip>**Retenir facilement son IP**
+
+Si vous trouvez barbare de devoir retenir votre numéro IP, ou si celui-ci change, sachez que vous pouvez entrer à la place une adresse du genre chezmoi.homelinux.net . C'est un service proposé par différents sites internet, comme [[http://www.dyndns.com/services/dns/dyndns/ | DynDns]]
+</note>
+<note tip>**Quelques raccourcis dans le client Nx**
+  * passer de la fenêtre au plein-écran : <ctrl>-<alt>-F
+  * Finir la session à distance : <alt>-F4 (avec possibilité de la suspendre)
+  * Sur windows on bascule de la session Ubuntu à la session windows à l'aide de la combinaison de touche <alt>-<tab>.
+  * Sous windows ou linux, pour réduire le client nx quand on est en plein écran sur la barre des tâches, cliquer avec la souris tout en haut à droite
+</note>
+
+<note tip>**Utilisation d'un client portable**
+La dernière version windows, compatible Vista, ne nécessite pas les droits d'admin pour être installée.</note>
+
+<note tip>**Comment accéder à son serveur s'il est éteint ?!**
+
+Il suffit de l'allumer à distance ! C'est possible, à la condition que le serveur soit relié à internet par une connexion ethernet.
+La méthode s'appelle Wake On LAN, et est décrite [[wakeonlan |ici]] 
+</note>
+
+
+==== Sécurité ====
+
+<note warning>**Mode parano 1**
+
+En installant le serveur SSH, vous laissez la possibilité à quelqu'un d'extérieur de se connecter à votre ordinateur. Dès lors, il est INDISPENSABLE que vous ayez un vrai **mot de passe digne** de ce nom. Vous pouvez voir [[securite#choisir_de_bons_mots_de_passe|sur cette page]] quelques conseils pour trouver un mot de passe solide.
+
+La connexion se fait en utilisant le couple clé publique/clé privée standard de NoMachine. Cela ne pose pas de problème, pourvu que votre mot de passe soit bon, et que vous ne le laissiez pas trainer. Si vous êtes un peu parano, vous pouvez **générer une paire personnelle de clé**, qui sera utilisée entre le client et le serveur pour leur authentification mutuelle.((The initial login between client and server happens through a DSA key-pair. The public part is provided during the installation of the server, while the private part is distributed together with the NX Client. In order to replace the default keys used by clients, you need to generate a new DSA key-pair and distribute the private part to those clients you want to get connected to the server.))
+
+La démarche ([[http://www.nomachine.com/documentation/admin-guide.php : | sources)]]) est alors la suivante :
+
+  * Générer une nouvelle paire de clé DSA : 
+
+  sudo /usr/NX/scripts/setup/nxserver --keygen 
+
+  * Distribuer la nouvelle clé privée aux clients : changer les permissions ainsi :
+
+  sudo chown nx:root /usr/NX/home/nx/.ssh/authorized_keys2
+  sudo chmod 0644 /usr/NX/home/nx/.ssh/authorized_keys2
+  sudo chown nx:root /usr/NX/home/nx/.ssh/default.id_dsa.pub
+  sudo chmod 0644 /usr/NX/home/nx/.ssh/default.id_dsa.pub 
+
+puis distribuer la clé privée de la paire de clé nouvellement créé et située dans le fichier /usr/NX/share/keys/default.id_dsa.key copier son contenu
+
+  cat /usr/NX/share/keys/default.id_dsa.key
+
+Le coller dans le client : vous ouvrez le client, et dans l'onglet "General", il y a un bouton "Key". Remplacez la clé existante par celle que vous venez de copier là :
+
+{{http://img220.imageshack.us/img220/2226/generalkeymanagerid3.png?300| Il faut coller là votre clé perso}}
+
+Evidemment, il vous faudra conserver cette clé sur une clé USB ou un autre support, afin de pouvoir la copier dans le client que vous voudrez utiliser.</note>
+
+<note warning>**Mode parano 2.**
+Il existe un mode d'attaque pour trouver le mot de passe d'un utilisateur: c'est d'essayer plein de mots de passes possibles.
+
+  * Parade 1 : choisir un mot de passe robuste
+  * Parade 2 : utiliser une clé privée : sans la clé, on ne peut même pas essayer un mot de passe
+  * Parade 3 : empêcher d'essayer plein de mots de passes : c'est ce que propose l'application fail2ban. Voyez la [[fail2ban|page qui lui est consacrée]] pour plus de précisions !
+</note>
+
+===== FreeNX ou NX Server ? =====
+
+Ce système a la particularité de préserver une très bonne performance dans des conditions de réseau limitées. Il est possible de travailler normalement à travers une liaison ADSL aux performances classiques (ex: 500Kb/s et 90 à 200ms de ping), alors que c'est impossible avec une session X11 classique. NoMachine réalise cela grâce à l'utilisation d'une technique de compression propriétaire du protocole X11.
+
+NoMachine fournit gratuitement des clients pour différentes versions de unix, pour Windows, pour Mac et pour Solaris. Il fournit également gratuitement les serveurs pour linux et solaris, mais avec une limitation sur le nombre de sessions que l'on peut ouvrir simultanément sur la machine. Pour supporter un grand nombre de sessions sur un même serveur, ou pour mettre en place une batterie de serveurs avec répartition de charge, il faut alors utiliser la version commerciale. 
+
+**FreeNX**  est une implémentation libre du serveur de NoMachine, car les sources sont sous licence GPL [[http://freenx.berlios.de|FreeNX]]. Freenx est une réalisation de la communauté du logiciel libre qui utilise ces sources.
+  * //Avantages// : c'est sous licence GPL. Pas de limitation du nombre de connexions simultanées.
+  * //Inconvénients// : il n'est pas compatible avec les versions postérieures à la 1.5 du client de NoMachine. Vous ne pouvez pas l'utiliser si vous souhaitez installer un client sous Windows Vista. La fonction "resume" ne fonctionne pas.
+
+**NX Server** est la version maintenue par la société NoMachine.
+  * //Avantages// : il y a des mises à jour, les clients existent pour tous les OS, y compris Windows Vista. Possibilité d'interrompre une session et de la reprendre en l'état ultérieurement.
+  * //Inconvénients// : c'est une version gratuite, mais non libre. Le nombre de connexions simultanées est limité à 2.
+
+**Cette page vous a expliqué comment installer le serveur NX**.
+Si vous souhaitez installer la solution FreeNX, allez à la page [[:freenx]]
+
+===== Dedibox =====
+Beaucoup de personnes utilisent NoMachine pour accéder à un serveur dédié comme celui de Dedibox.
+Si vous installez directement la version desktop d'Ubuntu, vous aurez déjà FreeNX d'installé, avec tous les problèmes évoqués plus haut.
+
+Préférez donc une version [[ubuntu_server|ubuntu-server]], quitte à installer un environnement gnome ou kde par la suite.
+
+----
+
+//Largement inspiré de la page [[:freenx]]//
+
+//Contributeurs : [[utilisateurs:environ314|environ314]]//

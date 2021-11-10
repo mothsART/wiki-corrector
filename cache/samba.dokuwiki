@@ -1,0 +1,351 @@
+
+{{tag>Bionic partage administration personnalisation windows réseau}}
+----
+
+====== Samba (partage de dossiers et imprimantes dans un réseau local) ======
+
+Le **partage de dossiers et d'imprimantes dans un réseau local** est une fonctionnalité des systèmes d'exploitation modernes permettant d'accéder à des ressources d'un ordinateur (dossiers de données et imprimantes) à partir d'un autre ordinateur situé dans un même réseau local (réseau domestique ou d'entreprise).
+
+Le logiciel **Samba** est un outil permettant de partager des dossiers et des imprimantes à travers un réseau local. Il permet de partager et d'accéder aux ressources d'autres ordinateurs fonctionnant avec des systèmes d'exploitation Microsoft(r) Windows(r) et Apple(r) Mac OS(r) X, ainsi que des systèmes GNU/Linux, *BSD et Solaris dans lesquels une implémentation de Samba est installée.
+
+Pour partager de manière simple des ressources entre plusieurs ordinateurs, l'utilisation de Samba est conseillée.
+
+<note important>Pour les utilisateurs de [[:Xubuntu]] et de [[:Lubuntu]] , le partage simple ne fonctionne pas. Suivre cette méthode : [[:shares-admin]] ou [[:system-config-samba]].
+<note tip>**[[https://forum.ubuntu-fr.org/viewtopic.php?pid=22317762#p22317762|Procédure version simplifiée sur le post #13]] dans le forum (configuration manuelle en ligne de commande)**</note>
+</note>
+Dans l'ensemble des articles concernant les réseaux, retenez ces quelques notions :
+  * Le Groupe désigne un ensemble de machines ayant des affinités communes (exemple : le nom de famille, de l'entreprise ou d'un service), auxquelles l'accès sera plus direct.
+    * Sous Windows™, il s'agit du Groupe de travail et cette information se trouve dans les Propriétés de l'ordinateur.
+    * Sous Ubuntu, cette information est le paramètre ''workgroup'' du fichier de configuration Samba.
+  * L'Ordinateur désigne une machine, identifiée par son nom et sa description (exemple : le modèle et l'emplacement de la machine).
+    * Sous Windows™, il s'agit du Nom de l'ordinateur et de sa Description, et ces informations se trouvent dans les Propriétés de l'ordinateur.
+    * Sous Ubuntu, le Nom de l'ordinateur est un paramètre réseau global, alors que la Description se trouve dans le paramètre server string du fichier de configuration Samba.
+  * Les Utilisateurs ont accès à des Répertoires (contenant des fichiers) ou des Ressources (imprimantes, lecteur de CD-Rom).
+
+
+<note important>Pour éviter quelques problèmes, retenez que :
+  * La **casse** doit impérativement être respectée en ce qui concerne le nom de domaine. Par exemple "WORKGROUP" ne sera pas considéré de la même manière que "workgroup".
+  * Le nom de la machine ne doit pas dépasser **16 caractères** pour être visible quand on parcourt le réseau, le nom de la machine (serveur) qui partage un dossier ne doit pas dépasser 15 caractères (et ne peut contenir que des lettres non accentuées, chiffres et signes -).
+Sinon elle sera accessible uniquement par son adresse IP (et donc invisible autrement).\\
+Pour le nom de la machine cf. [[:hosts]]
+Sans ce nommage, on pourra rencontrer des problèmes du type : \\
+**Your hostname could not be resolved** , pour plus d'infos, cf. aussi [[:dns]].
+</note>
+
+=====Pré-requis=====
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+=====Installation=====
+Pour utiliser **Samba**, [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>samba]]**. Vous pouvez également gérer le partage grâce à des interfaces graphiques pour Samba, la plus simple est [[:system-config-samba]], une autre possibilité plus avancée est [[:gsambad]].
+
+=====Accéder à des ressources dans un réseau local=====
+Cette partie décrit la manière d'accéder à des dossiers partagés entre différents ordinateurs, cela suppose qu'il y ait déjà des dossiers partagés sur d'autres PC. Pour partager des ressources rendez-vous directement à cette [[#Partager des ressources dans un réseau local|partie]] de la page.
+
+====D'Ubuntu vers un dossier partagé sur un autre Ubuntu====
+Depuis votre [[:gestionnaire_de_fichiers|navigateur de fichier]] cliquez sur //Réseau// dans le panneau latéral gauche. Sous Lubuntu allez dans le menu //Allez à...->Network//.
+
+Les ordinateurs de votre groupe de travail sont listés dans cette interface. Sélectionnez l'ordinateur distant de votre groupe de travail pour accéder à ses dossiers partagés. Vous voyez les dossiers partagés par cet ordinateur. \\ \\
+
+{{:reseau:samba1_trusty.png?200|L'outil "Réseau" liste les ordinateurs faisant partie du même groupe de travail.}}     {{:reseau:samba2_trusty.png?200|Ressources partagées d'un ordinateur MACHINEVIRTUELLE}} 
+
+==== Accéder à un dossier partagé sous Ubuntu depuis un poste Windows====
+Avec la version 14.04.3, il est impossible d'accèder aux fichiers des partitions NTFS car celles-ci n'appartiennent plus à root! et la commande chown est inefficace.
+
+Aucune configuration particulière n'est à faire sur le poste équipé de Windows. Aller dans : 
+  * Favoris réseau > Tout le réseau > Réseau Microsoft Windows > Workgroup,
+  * Ouvrir la machine pour voir les dossiers partagés, et pouvoir y accéder.
+
+Autre façon de procéder : 
+  * Dans Favoris réseau, choisissez l'action **Ajouter un favori réseau**, puis lorsque le dialogue propose **Parcourir**, parcourez le chemin indiqué ci-dessus jusqu'au dossier partagé et valider.
+
+
+
+==== Accéder à un dossier partagé sous Windows depuis un poste Ubuntu ====
+
+La procédure est la même que dans [[#D'Ubuntu vers un dossier partagé sur un autre Ubuntu|le point plus haut]].
+Pour scanner les partages samba sur le réseau local vous pouvez faire la commande suivante:
+<code>smbtree -N</code>
+
+Néanmoins l'explorateur de réseau peut ne pas afficher les postes Windows avec les versions récentes d'Ubuntu (>18.04). L'accès reste possible (vérifié avec Windows 7) avec la méthode manuelle décrite plus bas en 4 mais **avec une subtilité** !
+
+{{ :reseau:connexion_serveur_18.10.png?direct&400|}}
+Ouvrez Nautilus (Fichiers) et sélectionnez '+ Autres emplacements' dans le bas du bandeau à gauche. Dans la fenêtre, apparaît alors en bas une zone 'Connexion à un serveur'. Saisissez l'adresse\\ ''%%smb://Adresse IP poste Windows/NomPartageDossierWindows/%%''\\ La subtilité est là : si vous ne mettez que l'adresse IP du poste Windows, vous n'avez qu'un message d'erreur au lieu de la liste des dossiers partagés. Il faut donc bien ajouter le nom de partage du dossier que vous avez défini dans Windows.
+
+Ensuite, il peut vous être demandé le nom d'utilisateur et le mot de passe de votre session Windows pour accéder au contenu.
+
+Pour rappel, pour connaître l'adresse IP d'un poste Windows, tapez cmd dans la zone de recherche de Windows puis taper :
+
+<code>ipconfig /all</code>
+
+dans la fenêtre de commande. Une adresse IP fixe est toujours plus pratique pour ce type de procédure.
+
+
+Si vous n'arrivez pas à accéder à un partage Windows 7 sous Ubuntu, même en saisissant correctement vos informations d'identification du poste distant ceci est apparemment dû à une incompatibilité entre les modes de partage de Windows 7 et ceux des précédentes versions de Windows (sur lesquels se base Samba). Pour corriger la situation, vous devez modifier certains paramètres concernant la gestion des partages par Windows 7.
+  - Dans votre ordinateur fonctionnant sous Windows 7, ouvrez une session à l'aide d'un compte d'administrateur;
+  - Ouvrez l'éditeur de base de registre. Appuyez sur le bouton **Démarrer**, puis dans le champ //Rechercher les programmes ou fichiers//, inscrivez **regedit** et appuyez sur la touche [Entrée] de votre clavier;
+  - Développez l'arborescence jusqu'à la clé de registre ''HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Lsa\'' puis:
+     * Modifiez la valeur de la clé ''everyoneincludesanonymous'' de //0// vers //**1**//;
+     * Modifiez la valeur de la clé ''NoLmHash'' de //1// vers //**0**//;
+  - Développez l'arborescence jusqu'à la clé de registre ''HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\LanmanServer\Parameters'', puis:
+    * Modifiez la valeur de la clé ''restrictnullsessaccess'' de //1// vers //**0**//;
+  - Redémarrez votre ordinateur.
+
+
+==== Partages protégés par mot de passe ====
+===D'Ubuntu vers un dossier partagé sur un autre Ubuntu===
+{{  :reseau:samba-motdepasse_trusty.png?300|Certains dossiers partagés sont protégés par mot de passe}}
+
+Certains ordinateurs protègent l'accès à leurs ressources partagées dans un réseau local. Dans ces cas-là, une ou plusieurs de leurs ressources peuvent être restreintes aux utilisateurs disposant d'un compte d'utilisateur dans l'ordinateur distant uniquement. Si une fenêtre d'identification apparaît lorsque vous tentez d'accéder à l'ordinateur distant ou à un dossier partagé, vous devez saisir l'identifiant et le mot de passe //de votre compte de l'ordinateur distant//.
+
+Si vous n'avez pas de compte d'utilisateur dans l'ordinateur distant auquel vous voulez accéder, vous pouvez en créer un avec cette [[:commande_shell|commande]]: <code>sudo useradd -s /bin/true nom_utilisateur_samba</code>
+Puis vous devrez certainement lui attribuer un mot de passe samba, grâce à cette [[:commande_shell|commande]]: <code>sudo smbpasswd -a nom_utilisateur_samba</code>
+
+Les mots de passe enregistrés sont ensuite gérables avec [[:seahorse|Le gestionnaire de mots de passe et clés de chiffrement]].
+
+=== Accès sous Windows 7 (ou 8) à un dossier partagé par Ubuntu ===
+Quand on veut accéder depuis Windows 7 ou 8 à un dossier partagé par Ubuntu avec des restrictions de droits, une fenêtre demandant l'autorisation apparaît. Il faut simplement donner le nom d'utilisateur Linux et son mot de passe associé pour accéder au dossier partagé.
+Si vous n'arrivez à accéder au dossier partagé, il s'agit probablement d'un niveau de sécurité trop élevé demandé par Windows par défaut. Pour résoudre cela, Suivez la procédure suivante :
+   * Aller dans //Panneau de configuration -> Système et sécurité -> Outils d’administration -> Stratégie de sécurité locale// (ou la commande %windir%\system32\secpol.msc /s),
+   * Dans la nouvelle fenêtre, ouvrez l'arborescence sur //Stratégies locales - > Options de sécurité//,
+   * Changer la valeur de  //Sécurité réseau : niveau d'authentification LAN manager// qui par défaut n'est pas défini (double-cliquez dessus),
+   * Remplacer par la 2e valeur proposée ''Envoyer LM et NTLM – utiliser NTLMv2 si négocié'',
+   * Réessayer la connexion au dossier partagé (rentrez à nouveau le nom d'utilisateur et le mot de passe),
+   * Fermer la session et se reconnecter si le point précédent n'a pas fonctionné.
+
+==== Accéder à un ordinateur membre d'un groupe de travail différent ====
+
+Les partages SMB et CIFS sont dans la sous-catégorie //**Réseau Windows**//
+
+Pour accéder à des ordinateurs d'autres groupes de travail de votre réseau local, allez dans ce dossier **Réseau Windows**. Les groupes de travail de votre réseau local s'affichent (par défaut seulement WORKGROUP) ; sélectionnez le groupe de travail dans lequel se trouve l'ordinateur auquel vous désirez accéder. Sélectionnez ensuite l'ordinateur distant pour lequel vous souhaitez accéder à ses ressources. Vous voyez les dossiers partagés par cet ordinateur.\\ \\
+
+{{:reseau:samba-workgroup1_trusty.png?200|Sélectionnez le groupe de travail dans lequel se trouve l'ordinateur distant}}   {{:reseau:samba-workgroup2_trusty.png?200|Sélectionnez l'ordinateur dans lequel se trouvent des ressources partagées}}   {{:reseau:samba-workgroup3_trusty.png?250|Dossiers partagés par un ordinateur d'un réseau domestique}}
+
+===== Accéder manuellement à un dossier partagé =====
+{{  :reseau:samba-serveur_trusty.png?200|Saisissez manuellement vos informations de connexion}}
+
+Il est parfois possible qu'un ordinateur distant n'apparaisse pas dans la liste des ordinateurs proposant des ressources partagées. Dans ces cas-là, vous pouvez saisir manuellement les informations de connexion pour accéder au partage distant.
+  - Ouvrir [[:Nautilus]], dans //**__F__ichier->Se Connecter à un __s__erveur...**// ou directement par le raccourcis dans le panneau latéral gauche,
+  - Dans le champ //Adresse du serveur//, après avoir entré **smb:..** ajoutez l'adresse IP de l'ordinateur du réseau local ou son nom d'ordinateur dans le réseau local ;
+  - Appuyez sur le bouton **Se connecter** pour afficher les dossiers partagés.
+
+<note tip>Il est possible de créer un [[:raccourci-lanceur|lanceur]] pour monter manuellement un partage Windows. Renseigner l'option **Commande** du lanceur selon la syntaxe suivante: **nautilus %%smb://MachineDistante/DossierPartagé%%** sous Ubuntu (remplacer nautilus par **konqueror** sous Kubuntu ou par **thunar** sous Xubuntu).</note>
+
+===== Partager des ressources dans un réseau local ======
+Pour partager des dossiers ou des imprimantes //(devenir un serveur de partage)//, des composantes supplémentaires doivent être installées.
+
+==== Partager un dossier personnel====
+
+{{  :reseau:samba-usershare_trusty.png?250|Partage utilisateur pour un dossier "Public"}}
+
+Vous pouvez facilement partager un répertoire dont vous êtes le propriétaire -- ce sont essentiellement les répertoires se trouvant dans votre dossier personnel d'Ubuntu. Ce mode de partage de dossier est appelé //partage utilisateur// (ou //usershare//), car il est administré par chacun des utilisateurs de votre système Ubuntu (et non pas d'une manière centralisée). La configuration d'un partage utilisateur se fait très simplement, et les options de partage sont limitées. De ce fait, il est probablement préférable de désactiver la capacité de configurer des partages utilisateur dans une structure complexe (ex : un réseau d'entreprise) ; toutefois, ce mode est très pratique et pertinent pour un partage simple (ex : dans un réseau domestique).
+
+Pour configurer un partage utilisateur :
+  - Faites un clic-droit sur le dossier que vous souhaitez partager et sélectionnez **Partage de réseau local** ; 
+  - Si l'option de partage n'apparaît pas dans le menu, [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>nautilus-share]]**, si vous utilisez [[:Gnome]], et **[[apt>caja-share]]**, si vous utilisez [[:Mate]] ;
+  - Cochez la case **Partager ce dossier** ;
+  - Dans le champ //Nom du partage//, saisissez le nom de partage que doit avoir le dossier. Ce nom ne peut excéder 12 caractères. Par défaut, le nom actuel du dossier est recopié ; vous devrez modifier manuellement ce champ pour le réduire à au plus 12 caractères, si besoin est ;
+  - //(Optionnel)// Dans le champ //Commentaire//, entrez la description du dossier partagé ou des limitations imposées sur ce dossier partagé ;
+  - //Modification du dossier à distance :// Cochez la case **Permettre aux autres utilisateurs de créer et de supprimer des fichiers dans ce dossier** pour permettre aux autres utilisateurs de créer, modifier ou supprimer des fichiers dans votre dossier partagé. Laissez cette case décochée pour n'autoriser l'accès qu'en lecture seule ;
+  - //Accès aux utilisateurs non authentifiés :// Cochez la case **Accès d'évaluation (pour les personnes sans compte utilisateur)** pour autoriser tout le monde à accéder au dossier partagé. Laissez cette case décochée pour n'autoriser que les utilisateurs authentifiés (possédant un compte d'utilisateur dans votre système Ubuntu) à accéder au contenu du dossier partagé. Dans ce cas le mot de passe de l'utilisateur pour Samba doit être défini par la commande: <code>sudo smbpasswd -a nom_utilisateur</code>
+  - Appuyez sur le bouton **Créer le partage** pour prendre en compte la modification.
+
+{{  :reseau:permissions_inclus_18.10.png?direct&300|Modifier permissions éléments inclus}}
+
+<note help>A savoir : les privilèges d'accès aux fichiers ou dossiers fournis par Samba n'ont pas priorité sur les [[permissions|permissions]] des éléments contenus dans le dossier partagé. Ainsi, pour pouvoir accéder aux fichiers inclus, écrire dans un sous-dossier, etc, il faut s'assurer des permissions nécessaire des éléments en question. Dans la fenêtre des permissions, un bouton permet de changer les permissions de tous les éléments inclus.</note>
+
+<note tip>{{  :reseau:samba-usershare2_trusty.png?250|Nautilus vous propose d'installer la fonction serveur de Samba}}
+**Installation de la fonction serveur, lors du premier partage** \\ La toute première fois que vous souhaitez partager un dossier personnel, votre gestionnaire de fichiers Nautilus vous informe que le service de partage n'est pas encore installé. Seul un administrateur du système peut procéder à l'installation de cette composante supplémentaire.
+  * Si vous êtes un administrateur, appuyez sur le bouton **Installer le service** pour procéder à l'installation du service. Vous devrez fermer votre session, une fois l'installation terminée, puis la rouvrir pour prendre en compte ce nouveau service ;
+  * Si vous n'êtes pas un administrateur de l'ordinateur, demandez à un administrateur d'installer le paquet de logiciel **[[apt>samba|samba]]**. Ce paquet correspond à la fonctionnalité serveur de Samba. Lorsqu'il sera installé, votre session doit être close puis rouverte pour que le nouveau service soit pris en compte. 
+  * Il est peut être nécessaire de modifier la [[:samba_smb.conf|configuration samba]]
+</note>
+
+<note help>Nautilus n'édite pas le fichier /etc/samba/smb.conf , mais il va créer un fichier par dossier partagé dans /var/lib/samba/usershares qui ressemble à : 
+<code>
+#VERSION 2
+path=/paht/to/folder
+comment=
+usershare_acl=S-1-1-0:F
+guest_ok=y
+sharename=nom-partage_SMB
+</code>
+N'essayez pas de faire des modifications dans /etc/samba/smb.conf en parallèle si le partage via Nautilus ne fonctionne pas. Il vaut mieux supprimer les fichiers qu'il a créer et faire quelque chose de propre dans /etc/samba/smb.conf comme par exemple : 
+<code>
+[musique]
+  path=/paht/to/folder
+  force user = votre_login_Ubuntu
+  public = yes
+  guest ok = yes
+  writable = yes
+</code>
+
+Puis relancer le service : 
+<code>
+[musique]
+sudo service smbd restart
+</code>
+</note>
+
+==== Partager un dossier du système de fichiers ====
+
+Les dossiers partagés, ou partages administratifs (//shares//), sont gérés de manière centralisée. Ils sont uniquement configurables par les administrateurs du système Ubuntu, et leurs options sont plus complètes. Le paquet supplémentaire **[[apt>samba|samba]]** doit être installé afin de profiter de la fonctionnalité serveur de Samba dans le poste Ubuntu.
+
+
+La configuration de Samba peut se faire :
+  * Manuellement, dans le fichier de configuration **[[:samba_smb.conf|Le fichier de configuration /etc/samba/smb.conf de Samba]]**. C'est dans ce fichier que vous paramétrez le nom du domaine et le groupe de travail de l'ordinateur, les paramètres de sécurité et les dossiers et imprimantes partagés.
+  * Graphiquement, à l'aide de divers outils. Cependant, tous les outils n'offrent pas la possibilité de configurer tous les multiples paramètres de Samba. Ces outils sont fort utiles (par exemple, ajouter des nouveaux partages administratifs ou retirer des partages administratifs d'un serveur Samba déjà configuré). Voici quelques outils graphiques pouvant vous assister dans le paramétrage de vos partages ; leur utilisation propre est décrite dans leur document dédié : {{  :reseau:samba-system-config-samba_trusty.png?300|L'utilitaire Configuration du serveur Samba}}
+    * **[[:system-config-samba|Configuration du serveur Samba (system-config-samba)]]** recommandé,
+    * [[:shares-admin]],
+    * [[:gsambad|Gadmin-Samba]],
+    * [[:Webmin]].
+
+==== Voir les miniatures sur les partages samba dans nautilus ====
+
+Ouvrir [[:nautilus]] et aller dans le menu //Éditions -> Préférences -> Aperçu//.
+Puis indiquez l'option //Toujours// pour **Afficher les vignettes** (par défaut : "Uniquement les fichiers locaux"). Vous pouvez faire de même pour les **Dossiers**.
+
+==== Penser au Pare-feu ====
+En cas de problème de connexion, si par exemple, en essayant de parcourir votre réseau,  vous obtenez ce message d'erreur: //"L'obtention de la liste des partages du serveur a échoué"// , regardez la configuration du [[:firewall|pare-feu]] de chaque machine. Vous pouvez consulter ses logs ou le désactiver temporairement, pour vérifier si le problème vient bien de là, avant de le [[:samba#ports_lies_au_partage_de_fichiers_par_les_protocoles_smb_et_cifs|paramétrer]] par exemple à l'aide d'[[:ufw]]. Les ports à ouvrir sont indiqués dans le paragraphe [[:samba#ports_lies_au_partage_de_fichiers_par_les_protocoles_smb_et_cifs|Ports liés au partage de fichiers par les protocoles SMB et CIFS]].
+
+<note important>Attention à la sécurité de votre réseau local, si une seule des machines de celui-ci est compromise alors vous n'êtes plus protégés contre une intrusion sur votre propre machine.</note>
+
+Si l'erreur //"L'obtention de la liste des partages du serveur a échoué"// persiste, c'est qu'il n'y a pas de serveur WINS sur votre réseau. Pour activer cette fonction de Samba, [[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/etc/samba/smb.conf** en remplaçant: <file>wins support = no</file>par: <file>wins support = yes</file>puis redémarrez Samba<code>sudo service smbd restart</code>
+
+<note help>FIXME Sous Ubuntu 11.10, si vous obtenez l'erreur //"L'obtention de la liste des partages du serveur a échoué"//, éditez votre fichier **/etc/nsswitch.conf**.
+Remplacez la ligne 
+<code>hosts:          files mdns4_minimal [NOTFOUND=return] dns mdns4</code>
+par
+<code>hosts:          files mdns4_minimal [NOTFOUND=return] wins dns mdns4</code>
+
+Au reboot, vos partages devraient fonctionner.</note>
+
+===== Aller plus loin... =====
+
+==== Désactiver ou limiter les partages utilisateurs ====
+Les partages utilisateurs sont bien pratiques dans un milieu domestique. Toutefois, ils peuvent représenter un risque de sécurité dans un environnement contrôlé, tel une entreprise, où la gestion du partage des ressources devrait être confiée à un administrateur réseau. Les partages utilisateurs devraient être désactivés afin que seuls les membres autorisés puissent partager des dossiers à travers un réseau local.
+
+Pour désactiver ou limiter les partages utilisateurs, ouvrez le fichier de configuration de Samba ///etc/samba/**smb.conf**//. Localisez la section suivante :
+<file># Maximum number of usershare. 0 (default) means that usershare is disabled.
+;	usershare max shares = 100
+
+# Allow users who've been granted usershare privileges to create
+# public shares, not just authenticated ones
+	usershare allow guests = yes</file>
+  * Décommentez l'option //usershare max shares// pour limiter la création de //N// partages utilisateurs par compte d'utilisateur. Lorsque cette option est commentée, les utilisateurs peuvent créer un nombre illimité de partages utilisateurs ;
+  * Paramétrez l'option //usershares max shares// à //**0**// pour qu'aucun compte d'utilisateur ne puisse créer de partage utilisateur ;
+  * Si vous souhaitez autoriser la création de partages utilisateur mais n'autoriser l'accès qu'aux utilisateurs autorisés //(interdire les connexions invitées)//, paramétrez l'option //usershares allow guests// à //**no**//.
+
+==== Monter manuellement ou automatiquement un dossier partagé dans le système de fichiers ====
+<note>Il y a aussi une page qui traite du montage automatique et manuel ici => [[tutoriel:monterpartagewindows|Monter des partages Windows au démarrage]]</note>
+Il est possible de monter un dossier partagé dans un point de montage de l'arborescence d'un système Ubuntu, tout comme il est possible de le faire avec une partition de disque dur. Ceci est intéressant, par exemple, pour partager des ressources entre plusieurs postes dans une grande entreprise ou pour accéder de manière transparente à un serveur de stockage réseau (//Network Attached Storage//, ou NAS).
+
+Les tâches suivantes doivent être exécutées par [[:sudo|un administrateur]]. Assurez-vous que le paquet **[[apt>smbfs]]** (ou **[[apt>cifs-utils]]** depuis 12.10) est installé. De plus, assurez-vous de disposer d'un point de montage valide //(un répertoire __vide__ dans lequel devra être monté le dossier partagé)//.
+
+Pour les exemples suivants, nous établirons que :
+  * le PC distant ou le NAS se nomme //MACHINEDISTANTE// ;
+  * le dossier partagé par l'ordinateur distant est //Multimedia// ;
+  * le point de montage dans l'ordinateur local est //%%/media/MédiasPartagés/%%//.
+
+=== Montage manuel ===
+Si aucune authentification n'est requise pour accéder au dossier partagé ou si vous ne possédez pas d'identifiant dans le poste distant : <code>sudo mount.cifs //MACHINEDISTANTE/Multimedia /media/MédiasPartagés -o guest</code>
+La connexion peut vous être refusée si l'authentification est nécessaire, ou certaines actions peuvent ne pas être disponibles pour vous en tant qu'invité.
+
+Si une authentification dans le poste distant est requise pour accéder au dossier partagé ou pour débloquer certaines actions autorisées pour votre compte dans le poste distant : 
+<code>sudo mount -t cifs //MACHINEDISTANTE/Multimedia /media/MédiasPartagés -o  guest,rw,nosetuids,sec=ntlmv2</code>
+
+
+=== Montage automatique ===
+[[:tutoriel:comment_modifier_un_fichier|Modifiez]], avec [[:sudo|les droits d'administration]]  le fichier ** /etc/fstab/** afin d'ajouter une nouvelle règle de montage. Si aucune authentification n'est requise pour accéder au dossier partagé ou si vous ne possédez pas d'identifiant dans le poste distant, inscrivez la règle suivante, sur une seule ligne :
+<file>//MACHINEDISTANTE/Multimedia     /media/MédiasPartagés     cifs     _netdev,guest     0     0</file>
+Le montage peut vous être refusé si l'authentification est nécessaire, ou certaines actions peuvent ne pas être disponibles pour vous en tant qu'invité.
+
+Si une authentification dans le poste distant est requise pour accéder au dossier partagé ou pour débloquer certaines actions autorisées pour votre compte dans le poste distant, inscrivez la règle suivante, sur une seule ligne :
+<file>//MACHINEDISTANTE/Multimedia     /media/MédiasPartagés     cifs     _netdev,credentials=/root/.smbcredentials     0     0</file>
+De plus, [[:tutoriel:comment_modifier_un_fichier|créez un fichier]] **/root/.smbcredentials** contenant le texte suivant -- et uniquement ce texte-là :
+<file>username=IDENTIFIANT
+password=MOTDEPASSE</file>
+Remplacez //IDENTIFIANT// par votre identifiant dans le poste distant et //MOTDEPASSE// par le mot de passe de votre compte dans le poste distant. Il peut être nécessaire de mettre comme identifiant IDENTIFIANT@WORKGROUP. Des guillemets peuvent être utilisées.
+
+Un redémarrage de l'ordinateur est nécessaire pour que le dossier partagé soit monté automatiquement dans le point de montage sélectionné. \\ //(L'option de montage //''_netdev''// indique au système d'attendre que la liaison au réseau local soit établie avant de tenter le montage de ce dossier partagé.)// Cependant la commande "sudo mount -a" monte automatiquement tous les systèmes de fichiers énumérés dans **/etc/fstab** immédiatement.
+
+Dans le cas où le nom de partage contient des espaces on remplace les espaces par \040. Exemple avec un nom de partage Dossier Multimedia :
+<file>//MACHINEDISTANTE/Dossier\040Multimedia     /media/MédiasPartagés     cifs     _netdev,credentials=/root/.smbcredentials     0     0</file>
+
+<note tip>
+Si le nom de la machine distante n'est pas reconnu (le dossier partagé ne remonte pas en dépit d'une syntaxe correcte), remplacer le nom de la machine distante par son adresse IP dans le réseau local (nécessaire par exemple sur un réseau domestique connecté à une Livebox Orange).
+</note>
+==== Gérer les accès concurrentiels ====
+Par défaut, les utilisateurs ne sont pas notifiés lorsqu'ils accèdent à un fichier déjà ouvert par un autre utilisateur. Pour activer la notification d'un accès concurrentiel, [[:tutoriel:comment_modifier_un_fichier|modifiez le fichier]] ///etc/samba/**smb.conf**//, [[:sudo|avec les droits d'administration]]. Pour chacun des dossiers partagés, ajoutez les deux options suivantes :
+<file>
+strict locking=yes
+share modes=no
+</file>
+Vous trouverez un complément d'informations (en anglais) [[http://www.oreilly.com/openbook/samba/book/ch05_05.html|ici]] et [[https://www.samba.org/samba/docs/man/Samba-HOWTO-Collection/locking.html|là]]
+
+==== Ports liés au partage de fichiers par les protocoles SMB et CIFS ====
+Si vos postes clients et serveurs ont de la difficulté à communiquer entre eux, il est possible qu'une des causes soit qu'[[:pare-feu|un logiciel de pare-feu]] soit installé dans l'un ou l'autre des ordinateurs et que celui-ci bloque les communications entrantes ou sortantes utilisés par Samba. Si tel est votre cas, assurez-vous que votre pare-feu laisse passer les communications sur ces ports ; à ce sujet, reportez-vous au manuel d'administration de votre logiciel de pare-feu.
+
+Voici la liste des ports TCP et UDP utilisés par les protocoles SMB et CIFS  pour le partage de fichiers et d'imprimantes. 
+
+^ Port ^ Protocole     ^ Nom du service                                            ^
+| 135  | TCP et UDP  | Localisateur de services RPC                      |
+| 137  | TCP et UDP  | NetBIOS Name Service (nbname)                |
+| 138  | UDP              | NetBIOS Datagram Service (nbdatagram)   |
+| 139  | TCP              | NetBIOS Session Service (nbsession)         |
+| 445  | TCP et UDP  | Services de dossiers partagés Windows     |
+
+
+<note tip>**Configuration du pare-feu par défaut d'Ubuntu** \\ Par défaut, le service de pare-feu [[UFW]] est installé et actif dans Ubuntu. à moins d'utiliser un autre logiciel de pare-feu ou d'avoir complètement désactivé UFW, vous devez mettre à jour également la section suivante dans le fichier ''/etc/default/**ufw**''  : <file># extra connection tracking modules to load \\
+# ajout de nf_conntrack_netbios_ns pour Samba \\
+IPT_MODULES="nf_conntrack_ftp nf_nat_ftp nf_conntrack_irc nf_nat_irc nf_conntrack_netbios_ns"</file></note>
+
+==== Fonctionnement de Samba ====
+Le fonctionnement de Samba repose principalement sur trois services (//daemons//): ''smbd'' , ''nmbd'' et ''winbindd''. Lors de l'installation des services de Samba, votre système Ubuntu a été configuré automatiquement pour gérer ces services dès le démarrage du système.
+  * **smbd** \\ Ce service est celui qui permet le partage des fichiers et des imprimantes. Son paramètrage se fait par l'intermédiaire du fichier de configuration ///etc/samba/**smb.conf**//. ''smbd'' vérifie toutes les trois minutes ce fichier pour prendre en compte les modifications ; pour une application immédiate des changements, relancez ce service \\ \\
+  * **nmbd** \\ Ce service sert à l'envoi et la découverte des noms NetBIOS (nom des machines) dans le réseau local. Il est également utilisé pour la résolution de noms et la fonction WINS, lorsque votre serveur Samba est le serveur d'un réseau NetBIOS. Ses paramètres sont aussi renseignés dans le fichier de configuration ///etc/samba/**smb.conf**//. \\ \\
+  * **winbindd** \\ Ce service n'est utilisé que lorsqu'un serveur Samba intègre un domaine NT ou pour gérer les relations d'approbation entre le serveur Samba et un domaine Windows / Active Directory.
+
+==== Fichiers log ====
+Bien que robuste, en cas de soucis, vous pouvez allez voir les fichiers log qui se trouvent dans 
+///var/log/samba// dont le fichier// log.%m// spécifié par le paramètre //log file// de //smb.conf//
+
+===== Problèmes connus =====
+==== Trouver un partage réseau via gestionnaire de fichier Ubuntu 18.04 impossible ====
+Pour corriger ce problème il suffit :
+  * D'installer le paquet **[[apt>smbclient]]** si ce n'est déjà fait,
+  * [[:tutoriel:comment_modifier_un_fichier|Modifiez le fichier]] de configuration **/etc/samba/smb.conf** [[sudo|en administrateur]], pour y ajouter juste en dessous de ''workgroup = WORKGROUP'' cette ligne : <file>client max protocol = NT1</file>
+
+[[https://ubuntuforums.org/showthread.php?t=2384959|Source]]
+
+==== Impossible de se connecter à un partage réseau via gestionnaire de fichier Ubuntu 20.04====
+Depuis la version 4.11 (livré dans 20.04) //Samba// ne prend plus en charge le vieux protocole SMBv1, seuls SMB2 et SMB3 sont gérés. Certains partages sur les box et les NAS ne sont plus accessibles. Ainsi pour résoudre tous problèmes de connexion à un réseau samba suivez la procédure qui suit :
+  * s'assurer que les paquets suivants sont installés : **[[apt>smbclient,cifs-utils|smbclient cifs-utils]]** .
+  * [[:tutoriel:comment_modifier_un_fichier|Modifiez le fichier]] de configuration **/etc/samba/smb.conf** [[sudo|en administrateur]], pour y ajouter juste en dessous de ''workgroup = WORKGROUP'' (dans la section [global] ces lignes : <file bash>client min protocol = NT1
+server min protocol = NT1</file>
+
+Un redémarrage peut être nécessaire.
+
+
+
+Voir une [[https://forum.ubuntu-fr.org/viewtopic.php?id=2051986|discussion sur le forum]] pour plus d'informations.
+
+===== Ressources supplémentaires =====
+  * **[[http://www.samba.org|Site officiel]] (en)**
+  * [[http://www.commentcamarche.net/reslinux/reslsamba.php3|Mise en place de Samba sous Linux]] (fr)
+  * [[http://www.mirabellug.org/docs/samba/x307.html|Les variables de Samba]] (fr)
+  * //[[http://www.editions-eyrolles.com/Livre/9782746401532/samba|Samba, le guide de l'administrateur]]// (Éditions Eyrolles)
+  * //Using Samba, Second Edition// ([[http://samba.org/samba/docs/using_samba/toc.html|en ligne]] et [[http://oreilly.com/catalog/9780596002565/|O'Reilly Medias]])
+  * [[http://www.reponses.net/blog/2010/02/15/573-integrer-facilement-une-machine-ubuntu-dans-un-environnement-windows|Intégrer une machine Ubuntu dans un environnement Windows avec SADMS]] (Samba as Active Directory Member Server/Station)
+  * [[http://support.microsoft.com/kb/204279|Hébergement direct de SMB sur TCP/IP]]
+  * [[http://us1.samba.org/samba/docs/man/Samba-HOWTO-Collection/securing-samba.html#firewallports|Securing Samba]]
+
+===== Documents en lien avec Samba =====
+{{topic>samba}}
+----
+
+//Contributeurs :[[contributeurs|les contributeurs d'Ubuntu-fr]], [[utilisateurs:Gogy]], julientux. \\
+
+Sources: [[http://www.mistipi.com/emtec-partage-de-fichier-en-reseau-avec-windows-seven/|EMTEC : Partage de fichier en réseau avec Windows Seven]]//
+
+[[http://wiki.samba.org/index.php/Windows7|Windows 7 sur le wiki de samba]] **(EN)**
+

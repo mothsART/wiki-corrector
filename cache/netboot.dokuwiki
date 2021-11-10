@@ -1,0 +1,784 @@
+
+{{tag>Trusty installation réseau serveur}}
+
+----
+
+
+====== NetBoot : installation par TFTP, PXE, DHCP  ======
+
+Ce document décrit une installation par le réseau, sur une machine pouvant démarrer PXE sur la carte réseau ou un autre média amovible Cette option de démarrage se configure dans le SETUP du PC client et elle est souvent appelée "Network Boot".
+
+Nous utiliserons un autre PC comme serveur et nous y installerons [[apt>isc-dhcp-server]] et [[apt>tftpd-hpa]]  pour nous fournir les services et la configuration du fichier spécifique au système installé.
+
+Vous devez modifier les noms d'hôte et les adresses IP de ce document pour votre propre installation. Les principes décrits ici sont applicables à d'autres serveurs de DHCP et de TFTP que ceux spécifiés ci-dessous.
+
+<note tip>
+Il existe une autre page sur le netboot permettant de démarrer une session //live//, comme depuis un CDRom ou une clé USB, disponible [[netboot_live|ici]].
+\\
+Préférez-la, si tel est votre but.
+
+Il est aussi possible d'utiliser iPXE : [[:ipxe]]
+</note>
+
+===== Explication du processus de démarrage PXE =====
+
+  - L'ordinateur client démarre par l'//interface réseau// en mode PXE.
+  - Le serveur [[:isc-dhcp-server|DHCP]], présent sur le réseau, lui envoie le fichier [[#Installer les fichiers NETBOOT nécessaire au démarrage réseau|pxelinux.0]] précisé dans [[:isc-dhcp-server|filename de la section générale]].
+  - L'ordinateur client accède alors, par TFTP, au fichier de configuration de la machine se trouvant dans le répertoire [[#Configurer les fichiers PXELINUX.CFG|pxelinux.cfg]].
+  - Il charge le fichier de configuration par défaut. 
+  - Le fichier contient les informations nécessaire à l'affichage d'un menu sur l'écran de l'ordinateur client.
+
+===== Description du matériel =====
+
+Une machine cliente même sans lecteur de CD-ROM possédant une carte réseau compatible PXE. Il est à noter qu'elle peut amorcer sur une disquette ou sur un autre média amovible.
+
+La machine qui fait office de serveur **TFTP** et **DHCP** est basé sur GNU/Linux et possède l'adresse IP « 192.168.2.1 ».
+
+<note warning>Vous devez être protégé et ne pas vous exposer sur Internet pour cet exercice.\\
+Si votre Box ou Routeur internet ne protège pas votre serveur, installez le paquet [[apt>ufw]] et gérez votre protection en suivant la [[:ufw|documentation UFW]]</note>
+
+
+===== Installer et lancer le serveur DHCP =====
+
+Voir la documentation sur [[isc-dhcp-server]].
+
+Cette machine sert une adresse IP et les informations réseaux ainsi que le fichier « [[#Installer les fichiers NETBOOT nécessaire au démarrage réseau|pxelinux.0]] » à « portable » par DHCP.
+
+Sa configuration est identique à celle décrite [[:netboot_live#serveur_dhcp|ici]]
+
+===== Installer et lancer le serveur TFTP =====
+
+Le serveur TFTP est celui qui va fournir les fichiers nécessaires au démarrage   réseau.
+
+Installez le paquet **[[apt>tftpd-hpa]]** et configurez le comme décrit [[:netboot_live#serveur_tftp|ici]]
+
+
+
+===== Installer les fichiers NETBOOT nécessaires au démarrage réseau =====
+==== Installation des fichiers propres à chaque version ====
+Chaque version d'Ubuntu propose dans les dépôts des fichiers d'installateur pour les architectures i386 et amd64.
+Ces fichiers s'appellent tous **netboot.tar.gz**\\
+
+Pour chaque version et pour chaque architecture, il vous faudra télécharger les 2 fichiers et les renommer à bon escient (par exemple netboot_1204_32.tar.gz, ...).\\
+http://archive.ubuntu.com/ubuntu/dists/VERSION/main/installer-ARCH/current/images/netboot/netboot.tar.gz
+
+Remplacez **VERSION** par la version que vous voulez (//lucid, precise, quantal//) et **ARCH** par la version de l'architecture (//i386, amd64//)
+
+Ensuite pour pouvoir différencier tous ces installateurs, il va falloir créer sur le serveur des répertoires spécifiques à chaque version et y décompresser les fichiers téléchargés.
+Nous allons donner l'exemple de la version Precise Pangolin (12.04).
+<code>sudo mkdir /var/lib/tftpboot/precise
+cd  /var/lib/tftpboot/precise
+sudo tar -xzf /<Chemin_du_téléchargement>/netboot_1204_32.tar.gz
+sudo tar -xzf /<Chemin_du_téléchargement>/netboot_1204_64.tar.gz</code>
+
+Les contenus sont fusionnés et le répertoire "ubuntu-installer" contient maintenant un répertoire "i386" et un répertoire "amd64".
+
+Vous pouvez répéter l'opération avec une autre version en créant un autre répertoire à coté de "precise". **Ne mélangez pas les versions !**
+==== Création du menu de démarrage ====
+Il faut pour cela installer sur votre serveur le paquet [[apt>syslinux]] qui contient les bases de l'installation, le fichier « pxelinux.0 » ainsi que le gestionnaire de menu "menu.c32".
+Copiez maintenant depuis les librairies de "syslinux" les fichiers nécessaires:
+<code>sudo cp /usr/lib/syslinux/pxelinux.0 /var/lib/tftpboot/
+sudo cp /usr/lib/syslinux/vesamenu.c32 /var/lib/tftpboot/
+sudo cp /usr/lib/syslinux/chain.c32 /var/lib/tftpboot/</code>
+
+Il faut maintenant créer un menu permettant de choisir entre les options (32 et 64 bits).
+<code>sudo mkdir /var/lib/tftpboot/pxelinux.cfg
+gksu gedit /var/lib/tftpboot/pxelinux.cfg/default</code>
+
+Remplissez, dans un premier temps, votre menu ainsi (exemple pour distribution Precise Pangolin):
+<code>
+#default menu for all PXE boot
+DEFAULT vesamenu.c32
+# liste des choix 
+label Boot local disk
+    kernel chain.c32 
+    append hd0
+
+label Precise 32bits installer
+        kernel precise/ubuntu-installer/i386/boot-screens/vesamenu.c32
+        append precise/ubuntu-installer/i386/boot-screens/menu.cfg
+
+label Precise 64bits installer
+        kernel precise/ubuntu-installer/amd64/boot-screens/vesamenu.c32
+        append precise/ubuntu-installer/amd64/boot-screens/menu.cfg
+</code>
+Les fichiers de menu des installateurs font appel à plusieurs fichiers (include) qui sont censés se trouver dans le répertoire "ubuntu-installer" à la racine du serveur tftp.\\
+Vous pouvez, si vous ne mettez qu'une version de Ubuntu en ligne créer un lien symbolique pour pallier ce problème : \\
+<code>cd /var/lib/tftpboot
+sudo ln -s  precise/ubuntu-installer  ubuntu-installer</code>
+
+Si vous avez mis en place d'autre répertoires pour d'autres versions, ajoutez les lignes correspondantes en adaptant les chemins du menu.
+Dans ce cas, il faudra éditer un par un chaque menu dans les répertoires "boot-screens" de chaque version pour corriger les chemins des "include".\\
+Il est aussi possible de remplacer automatiquement ces lignes grace à l'utilitaire "sed" (à adapter en fonction de la version utilisée): \\
+<code>sudo sed -i "s/ubuntu-installer/precise\/ubuntu-installer/g" /var/lib/tftpboot/precise/ubuntu-installer/{i386,amd64}/boot-screens/*</code>
+
+<note tip>"vesamenu.c32" est en mesure de présenter un menu avec des couleurs personnelles, une image de fond, etc, etc. Une recherche sur internet vous fera découvrir toutes ses [[https://www.google.fr/search?q=vesamenu.c32+options|options]].</note>
+
+Il ne reste plus qu'à tester en démarrant un PC client en mode PXE.
+===== Démarrage de l'installation =====
+
+  * Démarrez l'ordinateur //portable// par PXE ou au moyen de la disquette Etherboot ou d'un autre media.
+  *  <del>Installez Ubuntu par le réseau.</del>
+
+<note warning>A noter que ceci ne suffit pas pour installer Ubuntu via le réseau, il met simplement en place un sous menu (en plus du menu PXE présent de base) afin de démarrer une éventuelle installation d'Ubuntu. Cet article devrait être corrigé afin de correspondre à sa finalité.</note>
+
+
+
+===== reliquat de documentation temporairement conservé =====
+<note warning>**À partir d'ici cette documentation est trop ciblée et trop complexe**\\
+//  Une simplification s'impose en ne donnant qu'un exemple de configuration permettant l'installation réseau de une ou deux versions récentes avec les deux architectures i386 et amd64// </note>
+=== Préparer les fichiers ===
+
+__Forcer la lecture seule pour tous sauf le propriétaire :__
+
+<code>sudo chmod 755 /var/lib/tftpboot</code>
+
+__S'approprier le dossier (si vous voulez faire des modifications sans passer pas le mode administrateur) :__
+
+<note important>Cela rend les fichiers modifiables par l'utilisateur courant.
+Si vous êtes en environnement de production appliquer les règles de séparation de droits en créant un utilisateur autorisé à modifier ce dossier</note>
+
+Remplacer **$USER** par le nom de l'utilisateur autorisé à modifier les fichiers.
+
+<code> sudo chown $USER:$USER /var/lib/tftpboot</code>
+
+Décompressez l'archive dans le répertoire tftp, par exemple : /var/lib/tftpboot/**distrib**/**version** où vous remplacez distrib et version par la distribution désirée et la version de cette distribution, dans notre cas ubuntu et karmic.
+
+<code>mkdir -p /var/lib/tftpboot/ubuntu/karmic/i386 && tar -xzf netboot.tar.gz -C /var/lib/tftpboot/ubuntu/karmic/i386</code>
+
+ou
+
+<code>version=$(grep CODENAME /etc/lsb-release | sed s/D.*\=//g)
+distrib=$(grep ID /etc/lsb-release | sed s/D.*\=//g)
+arch=$(dpkg --print-architecture)
+
+mkdir -p /var/lib/tftpboot/$distrib/$version/$arch && tar -xzf netboot.tar.gz -C /var/lib/tftpboot/$distrib/$version/$arch</code>
+
+__Appropriation des fichiers décompressés :__
+
+<code> sudo chown -R $USER:$USER /var/lib/tftpboot</code>
+
+    * Remplacez **karmic** par la version que vous voulez (//dapper feisty gutsy hardy intrepid karmic//)
+    * Remplacez **i386** par la version de l'architecture que vous voulez (//amd64 powerpc sparc//)
+
+== Le fichier « pxelinux.0 » et le répertoire « pxelinux.cfg » ==
+
+Il faut indiquer l'emplacement où se trouvent ces 2 fichiers. Pour cela, il faut éditer le fichier "dhcpd.conf" :
+
+  gksudo gedit /etc/dhcp3/dhcpd.conf
+
+et remplacer la ligne **filename "pxelinux.0";** par **filename "ubuntu/karmic/i386/pxelinux.0";** . En faisant cela on indique le chemin à partir du répertoire de départ qui est /var/lib/tftpboot .
+
+Autre méthode :
+Pour qu'il soient démarrables par tftp, le fichier « pxelinux.0 » et le répertoire « pxelinux.cfg » doivent être à la racine du serveur tftp. Déplacez-les donc par la commande :
+
+  cp -R /var/lib/tftpboot/$distrib/$version/$arch/pxelinux.* /var/lib/tftpboot/
+  
+
+==== Configurer les fichiers « PRESEED » et « PXELINUX.CFG » nécessaire au démarrage réseau ====
+
+=== Configurer les fichiers « PXELINUX.CFG » ===
+
+== le fichier « pxelinux.cfg/MAC_ADRESSE_CLIENT » ==
+<note tip> Il se peut que la prise en compte de l'adresse MAC ne fonctionne pas.
+L'adresse MAC doit être indiquée sur 7 paires hexadécimal alors qu'elle n'est généralement indiqué que sur 6. il vous faut donc rajouter la paire 01 devant : 01-xx-xx-xx-xx-xx-xx
+</note>
+
+Vous pouvez également utiliser la notation Hexadécimale des IP (utiliser gethostip pour l'obtenir facilement):
+
+  * pxelinux.cfg/C0A80025
+  * pxelinux.cfg/C0A8002
+  * pxelinux.cfg/C0A800
+  * pxelinux.cfg/C0A80
+  * pxelinux.cfg/C0A8
+  * pxelinux.cfg/C0A
+  * pxelinux.cfg/C0
+  * pxelinux.cfg/C
+
+
+Si ces configurations ne correspondent pas, le fichier default sera alors appliqué:
+pxelinux.cfg/default
+
+Voici un exemple de fichier de configuration, pour l'installation par réseau à distance, proposant la possibilité de démarrer différents systèmes.
+
+<file>
+display ubuntu/edgy/ubuntu-installer/i386/boot-screens/boot.txt
+#ubuntu/edgy/ubuntu-installer/i386/boot-screens/syslinux.txt
+default edgyi386server-expert
+#sargex8626
+
+F1 ubuntu/edgy/ubuntu-installer/i386/boot-screens/f1.txt
+F2 ubuntu/edgy/ubuntu-installer/i386/boot-screens/f2.txt
+F3 ubuntu/edgy/ubuntu-installer/i386/boot-screens/f3.txt
+F4 ubuntu/edgy/ubuntu-installer/i386/boot-screens/f4.txt
+F5 ubuntu/edgy/ubuntu-installer/i386/boot-screens/f5.txt
+F6 ubuntu/edgy/ubuntu-installer/i386/boot-screens/f6.txt
+F7 ubuntu/edgy/ubuntu-installer/i386/boot-screens/f7.txt
+F8 ubuntu/edgy/ubuntu-installer/i386/boot-screens/f8.txt
+F9 ubuntu/edgy/ubuntu-installer/i386/boot-screens/f9.txt
+F0 ubuntu/edgy/ubuntu-installer/i386/boot-screens/f10.txt
+### *** UBUNTU EDGY ***
+# preseed/url=https://server7.kproxy.com/servlet/redirect.srv/sruj/shhzdcy/s7iwolzo/p2/servlet/redirect.srv/sruj/shhzdcy/s7iwolzo/p2/servlet/redirect.srv/sruj/shhzdcy/s7iwolzo/p2/servlet/redirect.srv/s591/s442/s822/s28/p1/edgy-preseed.cfg
+LABEL edgyi386
+	kernel ubuntu/edgy/ubuntu-installer/i386/linux
+	append vga=normal initrd=ubuntu/edgy/ubuntu-installer/i386/initrd.gz ramdisk_size=16464 root=/dev/rd/0 rw  --
+LABEL edgyi386oem
+	kernel ubuntu/edgy/ubuntu-installer/i386/linux
+	append vga=normal oem-config/enable=true initrd=ubuntu/edgy/ubuntu-installer/i386/initrd.gz ramdisk_size=16464 root=/dev/rd/0 rw  --
+LABEL edgyi386server
+	kernel ubuntu/edgy/ubuntu-installer/i386/linux
+	append base-installer/kernel/linux/extra-packages-2.6= pkgsel/install-pattern=~t^ubuntu-standard$ pkgsel/language-pack-patterns= pkgsel/install-language-support=false vga=normal initrd=ubuntu/edgy/ubuntu-installer/i386/initrd.gz ramdisk_size=16464 root=/dev/rd/0 rw  --
+LABEL edgyi386expert
+	kernel ubuntu/edgy/ubuntu-installer/i386/linux
+	append DEBCONF_PRIORITY=low vga=normal initrd=ubuntu/edgy/ubuntu-installer/i386/initrd.gz ramdisk_size=16464 root=/dev/rd/0 rw  --
+LABEL edgyi386server-expert
+	kernel ubuntu/edgy/ubuntu-installer/i386/linux
+	append base-installer/kernel/linux/extra-packages-2.6= pkgsel/install-pattern=~t^ubuntu-standard$ pkgsel/language-pack-patterns= pkgsel/install-language-support=false DEBCONF_PRIORITY=low vga=normal initrd=ubuntu/edgy/ubuntu-installer/i386/initrd.gz ramdisk_size=16464 root=/dev/rd/0 rw  --
+
+LABEL edgyi386rescue
+	kernel ubuntu/edgy/ubuntu-installer/i386/linux
+	append vga=normal initrd=ubuntu/edgy/ubuntu-installer/i386/initrd.gz ramdisk_size=16464 root=/dev/rd/0 rw  rescue/enable=true --
+
+### *** UBUNTU DAPPER ***
+#preseed/url=https://server7.kproxy.com/servlet/redirect.srv/sruj/shhzdcy/s7iwolzo/p2/servlet/redirect.srv/sruj/shhzdcy/s7iwolzo/p2/servlet/redirect.srv/sruj/shhzdcy/s7iwolzo/p2/servlet/redirect.srv/s591/s442/s822/s28/p1/dapper-preseed.cfg
+LABEL dapperia64
+	kernel ubuntu/dapper/ubuntu-installer/ia64/linux
+	append vga=normal initrd=ubuntu/dapper/ia64/initrd.gz ramdisk_size=16464 root=/dev/rd/0 rw  --
+LABEL dapperia64server
+	kernel ubuntu/dapper/ubuntu-installer/ia64/linux
+	append base-installer/kernel/linux/extra-packages-2.6= pkgsel/install-pattern=~t^ubuntu-standard$ pkgsel/language-pack-patterns= pkgsel/install-language-support=false vga=normal initrd=ubuntu/dapper/ubuntu-installer/ia64/initrd.gz ramdisk_size=16464 root=/dev/rd/0 rw  --
+
+LABEL dapperia64expert
+	kernel ubuntu/dapper/ubuntu-installer/ia64/linux
+	append DEBCONF_PRIORITY=low vga=normal initrd=ubuntu/dapper/ubuntu-installer/ia64/initrd.gz ramdisk_size=16464 root=/dev/rd/0 rw  --
+LABEL dapperia64server-expert
+	kernel ubuntu/dapper/ubuntu-installer/ia64/linux
+	append base-installer/kernel/linux/extra-packages-2.6= pkgsel/install-pattern=~t^ubuntu-standard$ pkgsel/language-pack-patterns= pkgsel/install-language-support=false DEBCONF_PRIORITY=low vga=normal initrd=ubuntu/dapper/ubuntu-installer/ia64/initrd.gz ramdisk_size=16464 root=/dev/rd/0 rw  --
+
+LABEL dapperia64rescue
+	kernel ubuntu/dapper/ubuntu-installer/ia64/linux
+	append vga=normal initrd=ubuntu/dapper/ubuntu-installer/ia64/initrd.gz ramdisk_size=16464 root=/dev/rd/0 rw  rescue/enable=true --
+	
+### *** DEBIAN SARGE ***
+#preseed/url=https://server7.kproxy.com/servlet/redirect.srv/sruj/shhzdcy/s7iwolzo/p2/servlet/redirect.srv/sruj/shhzdcy/s7iwolzo/p2/servlet/redirect.srv/sruj/shhzdcy/s7iwolzo/p2/servlet/redirect.srv/s591/s442/s822/s28/p1/sarge-preseed.cfg
+label sargex86
+	kernel debian/sarge/i386/linux
+	append vga=normal initrd=debian/sarge/i386/initrd.gz ramdisk_size=9458 root=/dev/rd/0 devfs=mount,dall rw  --
+label sargex86expert
+	kernel debian/sarge/i386/linux
+	append DEBCONF_PRIORITY=low vga=normal initrd=debian/sarge/i386/initrd.gz ramdisk_size=9458 root=/dev/rd/0 devfs=mount,dall rw  --
+label sargex8626
+	kernel debian/sarge/i386/2.6/linux
+	append vga=normal initrd=debian/sarge/i386/2.6/initrd.gz ramdisk_size=10938 root=/dev/rd/0 devfs=mount,dall rw  --
+label sargex86expert26
+	kernel debian/sarge/i386/2.6/linux
+	append DEBCONF_PRIORITY=low vga=normal initrd=debian/sarge/i386/2.6/initrd.gz ramdisk_size=10938 root=/dev/rd/0 devfs=mount,dall rw  --
+
+label sargeia64
+	kernel debian/sarge/ia64/vmlinuz
+	append vga=normal initrd=debian/sarge/ia64/initrd.gz ramdisk_size=9458 root=/dev/rd/0 devfs=mount,dall rw  --
+label sargeia64expert
+	kernel debian/sarge/ia64/vmlinuz
+	append DEBCONF_PRIORITY=low vga=normal initrd=debian/sarge/ia64/initrd.gz ramdisk_size=9458 root=/dev/rd/0 devfs=mount,dall rw  --
+label sargeia6426
+	kernel debian/sarge/ia64/2.6/vmlinuz
+	append vga=normal initrd=debian/sarge/ia64/2.6/initrd.gz ramdisk_size=10938 root=/dev/rd/0 devfs=mount,dall rw  --
+label sargeia64expert26
+	kernel debian/sarge/ia64/2.6/vmlinuz
+	append DEBCONF_PRIORITY=low vga=normal initrd=debian/sarge/ia64/2.6/initrd.gz ramdisk_size=10938 root=/dev/rd/0 devfs=mount,dall rw  --
+
+prompt 1
+timeout 600
+</file>
+
+== le fichier « ../boot-screens/f3.txt » ==
+
+Si vous voulez voir les possibilités à distance, il faut éditer le fichier f3.txt et y rajouter les labels par exemple comme ceci.
+
+<file>
+0fBOOT METHODS07                                                                  09F307
+0fAvailable boot methods:07
+0f*** UBUNTU ***07
+0fedgyi38607
+0fedgyi386server07
+0fedgyi386expert07
+0fedgyi386server-expert07
+0fedgyi386rescue07
+0fdapperia6407
+0fdapperia64server07
+0fdapperia64expert07
+0fdapperia64server-expert07
+0fdapperia64rescue07
+0f*** DEBIAN ***07   
+0fsargex8607
+0fsargex86expert07
+0fsargex862607
+0fsargex86expert2607
+0fsargeia6407
+0fsargeia64expert07
+0fsargeia642607
+0fsargeia64expert2607
+0fsargememtest07
+  Perform a memory test.
+Press F1control and F then 1 for the help index, or ENTER to 
+</file>
+
+=== Configurer les fichiers « Preseed » ===
+
+<note important>**Rappel :** "d-i il est inhérent à //PRESEED// de ne pas être securisé. Rien dans les vérifications de l'installeur ne permet de vérifier les tentatives d'exploitation de faille(exploits) ou de dépassement de tampon(buffer overflows) des valeurs d un ficher preseed comme celui-ci. N'utilisez que des fichiers preseed d'hôtes de confiances!".</note>
+
+
+Le fichier preseed permet d'automatiser certaine tâche de l'installation.\\
+il faut le spécifier dans la ligne de chargement du noyau, du fichier  « [[#Configurer les fichiers PXELINUX.CFG|pxelinux.cfg]] ».\\
+Celui-ci est pour dapper accéssible du net, il en existe aussi un pour edgy (edgy-preseed.cfg).
+<code>
+LABEL dapperi386
+	kernel ubuntu/dapper/ubuntu-installer/i386/linux
+	append vga=normal initrd=ubuntu/dapper/ubuntu-installer/i386/initrd.gz ramdisk_size=16464 root=/dev/rd/0 rw  preseed/url=https://server7.kproxy.com/servlet/redirect.srv/sruj/shhzdcy/s7iwolzo/p2/servlet/redirect.srv/sruj/shhzdcy/s7iwolzo/p2/servlet/redirect.srv/sruj/shhzdcy/s7iwolzo/p2/servlet/redirect.srv/s591/s442/s822/s28/p1/dapper-preseed.cfg --
+</code> 
+
+== le fichier « preseed » ==
+
+Voici un exemple de fichier de configuration, pour l'installation par réseau a distance, preseed.cfg pour les differentes versions le paramètre à changer obligatoirement est la section mirror/suite :
+
+<file>
+d-i	mirror/suite		string edgy
+</file>
+
+Vous pouvez aussi changer l'adresse du miroir dans country (si vous avez une erreur « ne peut recupérer les modules noyau » ou « aucun module pour ce noyau » mettez à jour le noyau et l'//initrd// en les re-récuperant) :
+
+<file>
+d-i	mirror/country	string fr
+</file>
+
+Le fichier complet :
+
+<file>
+#### Modifying syslinux.cfg.
+
+# Edit the syslinux.cfg (or similar) file, and add parameters to the end
+# of the append line(s) for the kernel.
+#
+# You'll at least want to add a parameter telling the installer where to
+# get its preseed file from.
+# If you're installing from USB media, use this, and put the preseed file
+# in the toplevel directory of the USB stick.
+#   preseed/file=/hd-media/preseed
+# If you're netbooting, use this instead:
+#   preseed/url=https://server7.kproxy.com/servlet/redirect.srv/sruj/shhzdcy/s7iwolzo/p2/servlet/redirect.srv/sruj/shhzdcy/s7iwolzo/p2/servlet/redirect.srv/sruj/shhzdcy/s7iwolzo/p2/servlet/redirect.srv/syyvp/p1/path/to/preseed# If you're remastering a CD, you could use this:
+#   preseed/file=/cdrom/preseed
+# Be sure to copy this file to the location you specify.
+# 
+# While you're at it, you may want to throw a debconf/priority=critical in
+# there, to avoid most questions even if the preseeding below misses some.
+# And you might set the timeout to 1 in syslinux.cfg to avoid needing to hit
+# enter to boot the installer.
+#
+# Language, country, and keyboard selection cannot be preseeded from a file,
+# because the questions are asked before the preseed file can be loaded.
+# Instead, to avoid these questions, pass some more parameters to the kernel:
+#
+#   preseed/locale=fr_FR
+#   console-keymaps-at/keymap=fr
+#
+# If you need to pick a particular interface when netbooting before reading
+# a preseed URL, pass a parameter like this as well:
+#
+#    netcfg/choose_interface=eth1
+#
+# Note that the kernel accepts a maximum of 8 command line options and
+# 8 environment options (including any options added by default for the
+# installer). If these numbers are exceeded, 2.4 kernels will drop any
+# excess options and 2.6 kernels will panic. With kernel 2.6.9 or newer,
+# you can use 32 command line options and 32 environment options.
+# Some of the default options, like 'vga=normal' and 'devfs=mount' may be
+# safely removed for most installations, which may allow you to add more
+# options for preseeding.
+
+#### Shell commands.
+
+# d-i preseeding is inherently not secure. Nothing in the installer checks
+# for attempts at buffer overflows or other exploits of the values of a
+# preseed file like this one. Only use preseed files from trusted
+# locations! To drive that home, and because it's generally useful, here's
+# a way to run any shell command you'd like inside the installer,
+# automatically.
+
+# This first command is run as early as possible, just after
+# preseeding is read.
+#d-i	preseed/early_command		string wget http://url/to/my.udeb -O /tmp/my.udeb ; udpkg -i /tmp/my.udeb
+# This command is run just before the install finishes, but when there is
+# still a usable /target directory.
+#d-i	preseed/late_command		string for deb in /hd-media/*.deb; do cp $deb /target/tmp; chroot /target dpkg -i /tmp/$(basename $deb); done
+# This command is run just as base-config is starting up.
+#base-config	base-config/early_command	string echo hi mom
+# This command is run after base-config is done, just before the login:
+# prompt. This is a good way to install a set of packages you want, or to
+# tweak the configuration of the system.
+#base-config	base-config/late_command	string apt-get install zsh; chsh -s /bin/zsh
+
+#### Network configuration.
+
+# Of course, this won't work if you're loading your preseed file from the
+# network! But it's great if you're booting from CD or USB stick. You can
+# also pass network config parameters in on the kernel params if you are
+# loading preseed files from the network.
+
+# netcfg will choose an interface that has link if possible. This makes it
+# skip displaying a list if there is more than one interface.
+#d-i	netcfg/choose_interface select auto
+
+# To pick a particular interface instead:
+#d-i	netcfg/choose_interface	select eth1
+
+# If you prefer to configure the network manually, here's how:
+#d-i	netcfg/disable_dhcp	boolean true
+#d-i	netcfg/get_nameservers	string 192.168.1.1
+#d-i	netcfg/get_ipaddress	string 192.168.1.42
+#d-i	netcfg/get_netmask	string 255.255.255.0
+#d-i	netcfg/get_gateway	string 192.168.1.1
+#d-i	netcfg/confirm_static	boolean true
+
+# Note that any hostname and domain names assigned from dhcp take
+# precedence over values set here. However, setting the values still
+# prevents the questions from being shown even if values come from dhcp.
+#d-i	netcfg/get_hostname	string unassigned-hostname
+#d-i	netcfg/get_domain	string unassigned-domain
+
+# Disable that annoying WEP key dialog.
+#d-i	netcfg/wireless_wep	string 
+# The wacky dhcp hostname that some ISPs use as a password of sorts.
+#d-i	netcfg/dhcp_hostname	string radish
+
+#### Mirror settings.
+
+d-i	mirror/country		string fr
+d-i	mirror/http/hostname	string http://archive.ubuntu.com
+d-i	mirror/http/directory	string /ubuntu
+d-i	mirror/suite		string edgy
+#d-i	mirror/http/proxy	string 
+
+### Partitioning.
+
+# If the system has free space you can choose to only partition that space.
+#d-i	partman-auto/init_automatically_partition	select Use the largest continuous free space
+# Alternatively, you can specify a disk to partition. The device name can
+# be given in either devfs or traditional non-devfs format.
+# For example, to use the first disk devfs knows of:
+#d-i	partman-auto/disk	string /dev/discs/disc0/disc
+
+# You can choose from any of the predefined partitioning recipes:
+#d-i	partman-auto/choose_recipe	select All files in one partition (recommended for new users)
+#d-i	partman-auto/choose_recipe	select Desktop machine
+#d-i	partman-auto/choose_recipe	select Multi-user workstation
+# Or provide a recipe of your own...
+# The recipe format is documented in the file devel/partman-auto-recipe.txt.
+# If you have a way to get a recipe file into the d-i environment, you can
+# just point at it.
+#d-i	partman-auto/expert_recipe_file	string /hd-media/recipe
+# If not, you can put an entire recipe in one line. This example creates
+# a small /boot partition, suitable swap, and uses the rest of the space
+# for the root partition:
+#d-i	partman-auto/expert_recipe	string boot-root :: 20 50 100 ext3 $primary{ } $bootable{ } method{ format } format{ } use_filesystem{ } filesystem{ ext3 } mountpoint{ /boot } .  500 10000 1000000000 ext3 method{ format } format{ } use_filesystem{ } filesystem{ ext3 } mountpoint{ / } .  64 512 300% linux-swap method{ swap } format{ } . 
+# For reference, here is that same recipe in a more readable form:
+# 	boot-root ::
+# 	40 50 100 ext3
+#		$primary{ } $bootable{ }
+#		method{ format } format{ }
+#		use_filesystem{ } filesystem{ ext3 }
+#		mountpoint{ /boot }
+#	.
+# 	500 10000 1000000000 ext3
+#		method{ format } format{ }
+#		use_filesystem{ } filesystem{ ext3 }
+#		mountpoint{ / }
+#	.
+# 	64 512 300% linux-swap
+#		method{ swap } format{ }
+#	.
+
+# This makes partman automatically partition without confirmation.
+#d-i	partman/confirm_write_new_label	boolean true
+#d-i	partman/choose_partition	select Finish partitioning and write changes to disk
+#d-i	partman/confirm			boolean	true
+
+#### Boot loader installation.
+
+# Grub is the default boot loader (for x86). If you want lilo installed
+# instead, uncomment this:
+#d-i	grub-installer/skip		boolean true
+
+# This is fairly safe to set, it makes grub install automatically to the MBR
+# if no other operating system is detected on the machine.
+#d-i	grub-installer/only_debian	boolean true
+# This one makes grub-installer install to the MBR if if finds some other OS
+# too, which is less safe as it might not be able to boot that other OS.
+#d-i	grub-installer/with_other_os	boolean true
+# Alternatively, if you want to install to a location other than the mbr,
+# uncomment and edit these lines:
+#d-i	grub-installer/bootdev		string (hd0,0)
+#d-i	grub-installer/only-debian	boolean false
+#d-i	grub-installer/with_other_os	boolean false
+
+##### Finishing up the first stage install.
+
+# Avoid that last message about the install being complete.
+#d-i	prebaseconfig/reboot_in_progress	note 
+
+
+##### Preseeding base-config.
+# XXX: Note that most of this will not work right until base-config 2.40.4
+# is available.
+
+# Avoid the introductory message.
+#base-config	base-config/intro	note 
+
+# Avoid the final message.
+#base-config	base-config/login	note 
+
+# If you installed a display manager, but don't want to start it immediately
+# after base-config finishes.
+#base-config	base-config/start-display-manager	boolean false
+
+###### Time zone setup.
+
+# Controls whether or not the hardware clock is set to GMT.
+#base-config	tzconfig/gmt		boolean true
+
+# If you told the installer that you're in the United States, then you
+# can set the time zone using this variable.
+# (Choices are: Eastern, Central, Mountain, Pacific, Alaska, Hawaii,
+# Aleutian, Arizona East-Indiana, Indiana-Starke, Michigan, Samoa, other)
+#base-config	tzconfig/choose_country_zone/US	select Eastern
+# If you told it you're in Canada.
+# (Choices are: Newfoundland, Atlantic, Eastern, Central,
+# East-Saskatchewan, Saskatchewan, Mountain, Pacific, Yukon, other)
+#base-config	tzconfig/choose_country_zone/CA	select Eastern
+# If you told it you're in Brazil. (Choices are: East, West, Acre,
+# DeNoronha, other)
+#base-config	tzconfig/choose_country_zone/BR	select East
+# Many countries have only one time zone. If you told the installer you're
+# in one of those countries, you can choose its standard time zone via this
+# question.
+#base-config	tzconfig/choose_country_zone_single boolean true
+# This question is asked as a fallback for countries other than those
+# listed above, which have more than one time zone. You can preseed one of
+# the time zones, or "other".
+#base-config	tzconfig/choose_country_zone_multiple select 
+
+###### Account setup.
+
+# To preseed the root password, you have to put it in the clear in this
+# file. That is not a very good idea, use caution!
+#passwd		passwd/root-password		password r00tme
+#passwd		passwd/root-password-again	password r00tme
+
+# If you want to skip creation of a normal user account.
+#passwd		passwd/make-user		boolean false
+# Alternatively, you can preseed the user's name and login.
+#passwd		passwd/user-fullname		string Ubuntu User
+#passwd		passwd/username			string ubuntu
+# And their password, but use caution!
+#passwd		passwd/user-password		password insecure
+#passwd		passwd/user-password-again	password insecure
+
+###### Apt setup.
+
+# This question controls what source the second stage installation uses
+# for packages. Choices are cdrom, http, ftp, filesystem, edit sources list
+# by hand
+base-config	apt-setup/uri_type	select http
+
+# If you choose ftp or http, you'll be asked for a country and a mirror.
+#base-config	apt-setup/country	select enter information manually
+base-config	apt-setup/hostname	string http://archive.ubuntu.com
+base-config	apt-setup/directory	string /ubuntu
+# Stop after choosing one mirror.
+base-config	apt-setup/another	boolean true
+
+# You can choose to install non-free and contrib software.
+#base-config	apt-setup/universe	boolean true
+#base-config	apt-setup/multiverse	boolean true
+
+# Do enable security updates.
+base-config	apt-setup/security-updates	boolean true
+
+###### Package selection.
+
+# You can choose to install any combination of tasks that are available.
+# Available tasks as of this writing include: Desktop environment,
+# Web server, Print server, DNS server, File server, Mail server, 
+# SQL database, manual package selection. The last of those will run
+# aptitude. You can also choose to install no tasks, and force the
+# installation of a set of packages in some other way.
+# XXX: this will not work until tasksel 2.12 is available
+tasksel	tasksel/first multiselect Desktop environment, Web server, Mail server, DNS server
+
+###### Mailer configuration.
+
+# During a normal install, exim asks only two questions. Here's how to
+# avoid even those. More complicated preseeding is possible.
+#exim4-config	exim4/dc_eximconfig_configtype	select no configuration at this time
+# It's a good idea to set this to whatever user account you choose to
+# create. Leaving the value blank results in postmaster mail going to
+# /var/mail/mail.
+#exim4-config	exim4/dc_postmaster		string 
+
+###### X Configuration.
+
+# Preseeding Ubuntu's X config is possible, but you probably need to know
+# some details about the video hardware of the machine, since Ubuntu's X
+# configurator does not do fully automatic configuration of everything.
+
+# X can detect the right driver for some cards, but if you're preseeding,
+# you override whatever it chooses. Still, vesa will work most places.
+#xserver-xorg	xserver-xorg/config/device/driver	select vesa
+
+# A caveat with mouse autodetection is that if it fails, X will retry it
+# over and over. So if it's preseeded to be done, there is a possibility of
+# an infinite loop if the mouse is not autodetected.
+#xserver-xorg	xserver-xorg/autodetect_mouse	boolean true
+
+# Monitor autodetection is recommended.
+#xserver-xorg		xserver-xorg/autodetect_monitor	boolean true
+# Uncomment if you have a LCD display.
+#xserver-xorg	xserver-xorg/config/monitor/lcd	boolean true
+# X has three configuration paths for the monitor. Here's how to preseed
+# the "medium" path, which is always available. The "simple" path may not
+# be available, and the "advanced" path asks too many questions.
+#xserver-xorg	xserver-xorg/config/monitor/selection-method	select medium
+#xserver-xorg	xserver-xorg/config/monitor/mode-list	select 1024x768 @ 60 Hz
+
+###### Everything else.
+
+# Depending on what software you choose to install, or if things go wrong
+# during the installation process, it's possible that other questions may
+# be asked. You can preseed those too, of course. To get a list of every
+# possible question that could be asked during an install, do an
+# installation, and then run these commands:
+#   debconf-get-selections --installer > file
+#   debconf-get-selections >> file
+
+# If you like, you can include other preseed files into this one.
+# Any settings in those files will override pre-existing settings from this
+# file. More that one file can be listed, separated by spaces; all will be
+# loaded. The included files can have preseed/include directives of their
+# own as well. Note that if the filenames are relative, they are taken from
+# the same directory as the preseed file that includes them.
+#d-i	preseed/include	string x.cfg
+# More flexably, this runs a shell command and if it outputs the names of
+# preseed files, includes those files. For example, to switch configs based
+# on a particular usb storage device (in this case, a built-in card reader):
+#d-i	preseed/include_command	string if $(grep -q "GUID: 0aec3050aec305000001a003"  /proc/scsi/usb-storage-*/*); then echo kraken.cfg; else echo otherusb.cfg; fi
+</file>
+
+
+==== Activez le serveur TFTP-HPA ====
+
+ - Si vous utilisez **inetd**, vérifiez que le serveur est actif grâce à la commande :
+
+<code>
+$ cat /etc/inetd.conf | grep tftp
+tftp    dgram   udp     wait    root  /usr/sbin/in.tftpd /usr/sbin/in.tftpd -s /var/lib/tftpboot
+</code>
+
+Sinon ajoutez la ligne au fichier /etc/inetd.conf.
+Redémarrer inetd :
+
+  sudo /etc/init.d/inetd restart
+
+ - Si vous utilisez **xinetd**, ajouter dans « /etc/xinetd.d/tftp » :
+
+<file>
+       service tftp
+       {
+            disable     = no
+            socket_type = dgram
+            wait        = yes
+            user        = root
+            server      = /usr/sbin/in.tftpd
+            server_args = -v -s /var/lib/tftpboot
+            only_from   = 192.168.2.0/24
+            interface   = 192.168.2.1
+        }
+</file>
+
+Redémarrez **xinetd** :
+
+  sudo killall -HUP xinetd
+
+
+===== Disquette d'amorçage pour « portable » (pas nécessaire pour PXE) =====
+
+Construisez une disquette de démarrage **Etherboot** (Ethernet). //portable// (la cible) à une carte réseau 3Com : 3c905 NIC
+
+Téléchargez et décompréssez Etherboot (etherboot-X.X.X.tar.bz2 depuis SourceForge dans mon cas).
+
+[[http://etherboot.sourceforge.net/doc/html/documentation.html | Documentation « Etherboot »]]
+
+Créez une disquette d'amorçage (insérez une disquette dans le lecteur).
+
+  make bin/3c90x.zfd0
+
+(remplacez « 3c90x » par le type de votre carte)
+
+
+
+
+
+
+
+===== Netboot et test mémoire =====
+
+Il est possible de réaliser le test mémoire d'un PC client "PXE" avec l'utilitaire MemTest86+ située sur un serveur tel que défini ci dessus. Ceci est particulièrement intéressant si vous possédez par exemple un PC portable sans lecteur Disquette/CD/DVD, incapable de booter sur support USB, et dont vous avez un doute sur l'état de la mémoire vive ... et bien non ! votre cas n'est pas désespéré :
+
+L'utilitaire est disponible ici : [[http://www.memtest.org/]]. Vous choisirez le « Pre-Compiled Bootable Binary ».
+
+Télécharger le fichier "memtest86+-2.11.bin.gz". Le décompresser pour obtenir le binaire au format  memtest86+-2.10.bin (la version importe peu).
+Déplacer et renommer le binaire dans le répertoire dédié au transfert tftp.
+
+<code>mv memtest86+-2.10.bin /var/lib/tftpboot/memtest.gz
+</code>
+(Pour une raison que j'ignore le fichier doit avoir une extension ".gz")
+
+Editer, modifier ou créer le fichier /var/lib/tftpboot/pxelinux.cfg/default suivant votre cas.
+
+<code>
+DEFAULT menu.c32
+MENU MARGIN 0
+MENU ROWS -9
+MENU TABMSG
+MENU TABMSGROW -3
+MENU CMDLINEROW -3
+MENU HELPMSGROW -4
+MENU HELPMSGENDROW -1
+MENU COLOR SCREEN 30;47
+MENU COLOR BORDER 30;47
+MENU COLOR TITLE 30;47
+MENU COLOR SCROLLBAR 30;47
+MENU COLOR SEL 37;40
+MENU COLOR UNSEL 30;47
+MENU COLOR CMDMARK 30;47
+MENU COLOR CMDLINE 30;47
+MENU COLOR TABMSG 37;40
+MENU COLOR DISABLED 37;40
+MENU COLOR HELP 37;40
+
+LABEL Lancer MemTest
+KERNEL memtest.gz
+</code>
+
+Voilà, c'est fini, vous pouvez démarrer votre PC client et bénéficier du fameux logiciel de test mémoire. 
+
+{{:memtest.png}}
+
+===== Voir aussi =====
+
+  * [[netboot_live | Netboot avec l'environnement LiveCD]]
+  * [[http://etherboot.sourceforge.net/doc/html/documentation.html | Documentation sur « Etherboot »]]
+  * http://nlsn.free.fr/lin-docs/xterminal/diskless-xterminal/node5.html
+
+
+----
+
+// Contributeurs :[[contributeurs|les contributeurs d'Ubuntu-fr]] [[utilisateurs:benje]], [[utilisateurs:lo_pescofi]].//

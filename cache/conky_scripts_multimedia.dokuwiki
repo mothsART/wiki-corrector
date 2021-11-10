@@ -1,0 +1,341 @@
+
+{{tag>personnalisation}}
+
+----
+
+====== Conky : Scripts Multimédia ======
+
+Compléments à la documentation [[/conky|Conky]]\\
+Les codes donnés ci dessous sont à placer __après__ la section **TEXT** de votre //conkyrc//\\
+Références des [[http://doc.ubuntu-fr-secours.org/astuces/conky_variables.html|Variables]]
+
+
+===== Rhythmbox =====
+
+Si vous desirez juste sur votre Conky, ce que vous ecoutez sur [[:Rhythmbox]], voici la portion à rajouter dans votre .conkyrc
+
+<code>
+${color lightgrey}Now Playing :
+${exec rhythmbox-client --print-playing}
+</code>
+
+Pour une version plus complète, il suffit de regarder le manuel de rhythmbox-client pour imaginer
+
+<code>
+${color lightgrey}RhythmBox Now Playing :
+${alignc}${exec rhythmbox-client --print-playing-format "%ta - %at"}
+${alignc}${exec rhythmbox-client --print-playing-format "%tn - %tt"}
+</code>
+
+Les différents scripts conky pour Rhythmbox lancent Rhythmbox pour récupérer des informations sur le morceau en cours. Cela peut ralentir votre ordinateur, et laisse Rhythmbox en marche, ce qui n'est pas forcément utile. On peut remédier à ce problème en insérant le code suivant autour des commandes qui récupèrent les informations sur Rhythmbox.
+<code>
+${if_running rhythmbox}
+# commandes en relations avec Rhythmbox
+$endif
+</code>
+
+==== Afficher la pochette du CD ====
+
+Il existe aussi un script (que j'ai créé à l'instant)((mon premier script :-))), assez basique, qui permet de récupérer les pochettes des CD depuis le dossier ''~/.cache/rhythmbox/covers/''. Il fonctionne à l'aide d'un petit script bash. \\ 
+**Script "conky_album_cover"**
+<code>
+#!/bin/bash
+
+album=$(rhythmbox-client --print-playing-format "%ta - %at")
+fichier="$HOME/.cache/rhythmbox/covers/$album.jpg"
+
+if test -s "$fichier"
+then
+	ln -sf "$fichier" "$HOME/.conky_cover.jpg"
+
+else
+	if test -s "$HOME/.conky_cover.jpg"
+	then
+		rm "$HOME/.conky_cover.jpg"
+	fi
+fi
+</code>
+
+Et pour votre **.conkyrc**
+<code>${exec ~/.script/conky_album_cover}${image ~/.conky_cover.jpg -n -p 240,640 -s 64x64}</code>
+<note tip>Remplacez ''240'' et ''640'' par les coordonnées de l'endroit où afficher la pochette, et adapter l'adresse du script.</note>
+==== Afficher une barre de progression ====
+
+**conky_rhythmbox_bar**((corrigez le script si nécessaire))
+<file>
+#!/bin/bash
+#Par Ph3nix_
+
+convert_sec() {
+	min=`echo $1 | cut -d':' -f1`
+	sec=`echo $1 | cut -d':' -f2`
+	[ ${sec:0:1} = '0' ] && sec=${sec:1:2}
+	res=$((min*60+sec))
+}
+convert_sec $(rhythmbox-client --print-playing-format "%te")
+now=$res
+convert_sec $(rhythmbox-client --print-playing-format "%td")
+[ $res -eq 0 ] && echo 0 && exit
+echo ` echo "$now*100/$res" | bc -l`
+</file>
+**.conkyrc**
+<file>
+${execbar ~/.script/conky_rhythmbox_bar}
+</file>
+
+{{ :conky:conky_rhythmbox_progressbar.png }}
+
+===== AmaroK =====
+
+Si vous desirez voir sur votre Conky, ce que vous ecoutez sur [[:AmaroK]], voici la portion à rajouter dans votre .conkyrc
+
+<code>
+${if_running amarok}
+${color}AmaroK${color white}
+${alignc}${execi 10 ~/.conky/amarok artist}
+${alignc}${execi 10 ~/.conky/amarok title}
+${execibar 1 ~/.conky/amarok progress}
+${alignc}"${execi 10 ~/.conky/amarok album}"
+${alignc}${execi 10 ~/.conky/amarok year} - ${color white}${alignc}${execi 10 ~/.conky/amarok genre}$endif
+</code>
+
+<note tip>
+Pour faire fonctionner ce script, j'ai dû remplacer à la première ligne "**amarok**" par "**amarokapp**". Si ça ne marche toujours pas chez vous, vérifiez le nom du processus lancé par Amarok grâce à la commande //ps -aux// et remplacez si besoin.
+</note>
+
+Ensuite vous créez un dossier caché dans le home nommé ".conky"
+
+Créez un dossier caché dans le home: 
+<code> mkdir ~/.conky </code>
+
+Aller dans ce dossier :
+<code> cd ~/.conky/ </code>
+
+Puis créez un fichier nommé "amarok"
+<code> gedit ~/.conky/amarok </code>
+
+Et ajouter :
+
+<code>#!/bin/bash
+# amaroK info display script by eirc <eirc.eirc@gmail.com>
+
+case "$1" in
+
+# Now Playing Info
+artist) dcop amarok player artist ;;
+title)  dcop amarok player title ;;
+album)  dcop amarok player album ;;
+year)   dcop amarok player year ;;
+genre)  dcop amarok player genre ;;
+progress)
+    curr=`dcop amarok player trackCurrentTime`
+    tot=`dcop amarok player trackTotalTime`
+    if (( $tot )); then
+        expr $curr \* 100  / $tot
+    fi
+    ;;
+
+esac </code>
+
+<note tip>
+Le script précédent n'a pas fonctionné pour moi sous Karmic/Gnome. Le paquet dcop n'est d'ailleurs pas installé par défaut. Une alternative avec dbus fonctionne par contre parfaitement sous Gnome. Je me suis également permis de rajouter quelques autres infos récupérables via dbus que l'on peut donc rajouter au .conkyrc indiqué plus haut.
+<code>#!/bin/sh
+
+export DISPLAY=:0
+
+NOWPLAYING=`qdbus org.kde.amarok /Player org.freedesktop.MediaPlayer.GetMetadata`
+
+if [ $? = 0 ] && [ -n "$NOWPLAYING" ]; then
+	case "$1" in
+		album ) echo "$NOWPLAYING" | sed -ne 's/^album: \(.*\)$/\1/p' ;;
+		artist ) echo "$NOWPLAYING" | sed -ne 's/^artist: \(.*\)$/\1/p' ;;
+		genre ) echo "$NOWPLAYING" | sed -ne 's/^genre: \(.*\)$/\1/p' ;;
+		rating ) echo "$NOWPLAYING" | sed -ne 's/^rating: \(.*\)$/\1/p' ;;
+		title ) echo "$NOWPLAYING" | sed -ne 's/^title: \(.*\)$/\1/p' ;;
+		track ) echo "$NOWPLAYING" | sed -ne 's/^tracknumber: \(.*\)$/\1/p' ;;
+		year ) echo "$NOWPLAYING" | sed -ne 's/^year: \(.*\)$/\1/p' ;;
+		progress)
+		    curr=`qdbus org.kde.amarok /Player org.freedesktop.MediaPlayer.PositionGet`
+		    tot=`echo "$NOWPLAYING" | sed -ne 's/^mtime: \(.*\)$/\1/p'`
+		    echo `expr $curr \* 100  / $tot`
+		;;
+	esac
+fi</code>
+</note>
+
+<code>sudo chmod +x ~/.conky/amarok </code>
+
+Voila :)
+===== Audacious (v1.2) =====
+<note important>Depuis la version **Audacious2**, audtool est passé a la version **audtool2** .Script a modifier !</note>
+
+[[:Audacious]] intègre un outil dédié très pratique : "audtool". Celui-ci fourni des informations console qui peuvent être utilisé ensuite pour des programmes tels que Conky.
+
+Pour cela, il faut rajouter des "exec audtool <commande>" dans votre script, par exemple :
+
+<code>
+${color #e49c16}Audacious:${color white}     ${exec audtool --current-song-length}    ${exec audtool --current-song-bitrate-kbps} kbps
+${exec audtool --current-song | cut -b-50}
+${color #ffc11f}${execbar expr 99 \* $(audtool --current-song-output-length-seconds) \/ $(audtool --current-song-length-seconds)}
+</code>
+
+Pour plus de commandes :
+
+<code>
+man audtool
+</code>
+
+Attention tout de même, si Audacious n'est pas lancé, vous aurez des messages d'erreur. Ceux-ci peuvent déformer Conky, alors pour éviter cela, il faut bidouiller l'argument "maximum_width" dans l'en-tête (350 semble être une valeur correcte pour du 1024*768 :)).
+
+
+Moi j'ai une formule simple pour éviter le message d'erreur  :
+${if_running audacious}       au début de la partie "audacious", puis on ajoute à la fin de cette partie  : $endif
+on pourra "bidouiller" pour rajouter des choses comme une barre etc... 
+mais ça je sais pas faire.
+
+
+
+Ainsi on peut faire comme conseillé sur un site anglais :
+
+<code>${if_running audacious}
+${color black}AUD:${color #C0C8CD} ${exec audtool --current-song | cut -b-34}
+${color #C0C8CD} ${exec audtool --current-song-bitrate-kbps} kbps * ${exec audtool --current-song-length} ${execbar expr 100 \* $(audtool --current-song-output-length-seconds) \/ $(audtool --current-song-length-seconds)}
+${color black}${hr 2}$endif</code>
+Selon les versions d'audacious,** ${if_running audacious}** doit être remplacé par **${if_running audacious2}**
+
+==== Afficher la pochette du CD avec Audacious ====
+
+Si vous souhaitez rajouter la pochette du CD, voici un petit script (en reprenant le script plus vu plus haut)
+<code>
+#!/bin/bash
+IFS=$'\n'
+coverPath=$HOME$(audtool --current-song-tuple-data file-path | sed -e 's/~//')
+image=$(ls -1 $coverPath | grep '\.\(jpg\|jpeg\)' | grep -m 1 '.*')
+fullPath=$coverPath/$image
+
+if test -s "$fullPath"
+then
+	ln -sf "$fullPath" "$HOME/.conky_cover.jpg"
+
+else
+	if test -s "$HOME/.conky_cover.jpg"
+	then
+		rm "$HOME/.conky_cover.jpg"
+	fi
+fi
+
+</code>
+
+Pour le **.conkyrc** il suffit d'utiliser le code vu plus haut
+===== gmusicbrowser =====
+
+Conky peut afficher les informations de lecture de [[http://squentin.free.fr/gmusicbrowser/gmusicbrowser.html|gmusicbrowser]] grâce à un patch créé par l'auteur Quentin Sculo ; par contre, cela nécessite de compiler soi-même conky depuis les sources.
+Pas de panique cependant, un How-To est disponible [[http://squentin.free.fr/gmusicbrowser/dokuwiki/doku.php?id=translations:fr:applications_tierces:conky|ici]].
+
+
+===== Exaile =====
+
+
+**Première possibilité (la meilleure !) :**
+
+Avec ConkyExaile & Conky :
+
+Ouvrez votre terminal puis tapez dans l'ordre les commandes suivantes :
+
+<code>
+sudo wget -q http://www.kaivalagi.com/m-buck-ppa.list -O /etc/apt/sources.list.d/m-buck-ppa.list
+wget -q http://www.kaivalagi.com/m-buck-ppa-key.gpg -O- | sudo apt-key add -
+sudo apt-get update && sudo apt-get install conkyexaile
+</code>
+pour jaunty
+<code>
+sudo wget -q http://www.kaivalagi.com/ubuntu/ppa/m-buck-conky-jaunty.list -O /etc/apt/sources.list.d/m-buck-conky-jaunty.list
+wget -q http://www.kaivalagi.com/ubuntu/ppa/m-buck-conky-key.gpg -O- | sudo apt-key add -
+sudo apt-get update && sudo apt-get install conkyexaile
+</code>
+
+Pour afficher le titre, l'artiste et la durée de la musique jouée par [[:Exaile]], voici la portion à ajouter dans votre fichier ".conkyrc".
+
+Lorsque vous lancez [[:Exaile]] et que vous lancez une musique celle-ci s'affiche sur votre bureau, lorsque vous le fermer, il disparaît.
+
+//Remplacez les fonts, couleurs, par ce que vous souhaitez...//
+
+<code>
+${if_existing /home/VOTRE_NOM_D_UTILISATEUR/.exaile/music.db-journal}
+${color4}${font Deejay Supreme:size=20}j ${color1}${font Zero Twos:size=9}Musique :
+${voffset 5}${color1}${font Zero Twos:size=9}Titre :  ${font Comic Sans Ms:size=8}$color${exec conkyExaile --datatype=TI}
+${color1}${font Zero Twos:size=9}Artiste :  ${font Comic Sans Ms:size=8}$color${exec conkyExaile --datatype=AR}
+${color1}${font Zero Twos:size=9}Durée :  ${font Comic Sans Ms:size=8}$color${exec conkyExaile --datatype=PT}/${exec conkyExaile --datatype=LE}
+$endif
+</code>
+
+//Pourquoi ne pas utiliser le processus ?
+Tout simplement car cela ne fonctionne pas, même avec le bon (il faut faire des modifications de Exaile en lui même), par conséquent ceci est le meilleur moyen trouvé.//
+
+
+**Deuxième possibilité :**
+
+Pour afficher le titre, l'artiste et l'album de la musique jouée par [[:Exaile]], voici la portion à ajouter dans votre fichier ".conkyrc"
+
+<code>
+Musique en cours :
+${color #B44F47} ${exec exaile --get-title} $color de ${color #B44F47} ${exec exaile --get-artist}
+$color sur l'album ${color #B44F47} ${exec exaile --get-album}
+</code>
+
+===== Banshee =====
+
+[[:Banshee]] est le nouveau gestionnaire multimédia par défaut sur Ubuntu 10.04.
+
+Voici un exemple d'utilisation permettant d'afficher quelques caractéristiques d'une piste en cours de lecture :
+<code>
+${if_running banshee}
+${color #0077ff}__________________BANSHEE__________________
+${color #0077ff}Artist :${exec banshee --query-artist | cut -d ":" -f 2}
+${color #0077ff}Album :${exec banshee --query-album | cut -d ":" -f 2}
+${color #0077ff}Title :${exec banshee --query-title | cut -d ":" -f 2}
+${color #0077ff}Length : ${exec ~/.conky_banshee position} / ${exec ~/.conky_banshee duration}
+$endif
+</code>
+
+Pour ajouter plus d'informations, allez voir le man de banshee:
+<code>
+man banshee
+</code>
+
+Créez ensuite un fichier **.conky_banshee** à la racine de votre home, rendez-le exécutable, puis ouvrez-le. Il permet de calculer les minutes et les secondes de la piste en cours de lecture :
+<code>
+cd
+touch .conky_banshee
+chmod +x .conky_banshee
+gedit 
+</code>
+
+Ajoutez y ceci :
+<code>
+temps_sec=`banshee --query-$1 | cut -d ":" -f 2 | cut -d "," -f 1`
+temps_min=$(($temps_sec/60))
+temps_sec=$(($temps_sec-$temps_min*60))
+echo "$temps_min:$temps_sec"
+</code>
+
+ou si ça ne marche pas pour Ubuntu 11.10 (remplacer la , par un .). Ajout d'un 0 pour les secondes quand on est inférieur à 10 secondes
+On a le code suivant :
+<code>
+#!/bin/bash
+temps_sec=`banshee --query-$1 | cut -d ":" -f 2 | cut -d "." -f 1`
+temps_min=$(($temps_sec/60))
+temps_sec=$(($temps_sec-$temps_min*60))
+vartmp='0'
+if [ $temps_sec -lt 10 ]; then
+	temps_sec=`echo "$vartmp$temps_sec"`
+fi 
+echo "$temps_min:$temps_sec"
+</code>
+
+Le tour est joué ;-)
+
+----
+
+
+//Contributeurs: [[utilisateurs:moi.néo]], [[utilisateurs:McPeter]], [[utilisateurs:ljere]], [[:utilisateurs:TheCaméléon|TheCaméléon]] (script pour les pochettes), Heziode (script pour afficher la pochette du CD avec Audacious) //

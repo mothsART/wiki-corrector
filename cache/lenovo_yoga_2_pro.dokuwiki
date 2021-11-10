@@ -1,0 +1,153 @@
+
+{{tag>bionic portable}}
+
+----
+
+======  Lenovo Yoga 2 pro ======
+
+===== En un clin d’œil =====
+Le tableau suivant récapitule la prise en charge du matériel de portable par les différentes versions d'Ubuntu.
+Il utilise les notations suivantes :
+  * {{:icons:ok_32.png|OK 32 bits}} **Fonctionne immédiatement en 32 bits.**
+  * {{:icons:ok_64.png|OK 64 bits}} **Fonctionne immédiatement en 64 bits.**
+  * {{:icons:ok_32_64.png|32 et 64 bits}} **Fonctionne immédiatement en 32 et 64 bits.**
+  * {{wiki:modeles:laptop_work.png|Fonctionne après config}} **Fonctionne après quelques manipulations**
+  * {{wiki:modeles:laptop_notok.png|Ne fonctionne pas}} **Ne fonctionne pas**
+  * {{:laptop_help.png||Pas testé}} **Pas d'informations disponibles**
+  * {{:icons:edit-clear.png?32|Information obsolète}} **Information de support trop ancienne**, si possible mettez là à jour.
+
+^ Version ^ Installation ^ Carte graphique ^ Son ^ Wifi ^ Bluetooth ^ Webcam ^ Touchpad ^ Raccourcis multimédia ^ Ecran tactile ^
+|  [[:17.04]]  |  {{:icons:ok_64.png|OK 64 bits}}   |  {{:icons:ok_64.png|OK 64 bits}}   |  {{:icons:ok_64.png|OK 64 bits}}  |  {{:icons:ok_64.png|OK 64 bits}}   |  {{:icons:ok_64.png|OK 64 bits}}   |   {{:icons:ok_64.png|OK 64 bits}}  |   {{:icons:ok_64.png|OK 64 bits}}  |   {{:icons:ok_64.png|OK 64 bits}}  |  {{:icons:ok_64.png|OK 64 bits}}   |
+
+
+**Utilisateurs du Wiki possédant cet ordinateur, fonctionnel :**
+  * **[[:utilisateurs:grouar]]** : [[:14.04]]
+  * **[[:utilisateurs:malice]]** : [[:17.04]]
+
+**Cet ordinateur portable n'est à priori pas [[:pc_tatoué|tatoué]].**
+
+===== Installation =====
+Pour démarrer sur le BIOS, il faut démarrer l'ordinateur non pas en appuyant sur le "gros" bouton sur la tranche droite, mais sur le petit bouton rond situé juste à côté.
+==== Impossible de booter sur le live USB ====
+Il faut aller dans le bios/UEFI pour passer en mode ''Legacy''. 
+Pour accéder au bios : éteindre l'ordinateur, et appuyer sur le petit bouton rond à côté du bouton power.
+
+==== L'écran est tout noir après avoir lancé le liveUSB ====
+C'est en fait la luminosité de l'écran qui est au minimum : il est possible de la remonter avec les touches dites "multimedia" du clavier.
+Autre solution : ajouter "acpi_backlight=vendor" à la ligne de boot de grub.
+
+<note> Ce problème n'a pas lieu avec l'alpha de Kubuntu 14.04, ni en version 17.04. </note>
+
+===== Post-Installation =====
+
+==== Faire fonctionner le wifi ====
+=== Test de la solution ===
+<code>sudo rmmod ideapad_laptop</code>
+=== Rendre la solution permanente ===
+Créer le fichier /etc/modprobe.d/blacklist-ideapad.conf et y ajouter "blacklist ideapad_laptop" :
+<code>echo "blacklist ideapad_laptop" |sudo tee -a /etc/modprobe.d/blacklist-ideapad.conf</code>
+
+==== Faire fonctionner le bluetooth ====
+
+<code>sudo rfkill unblock bluetooth</code>
+
+==== Pavé tactile ====
+
+Vous pouvez consulter la page consacrée au [[:touchpad|pavé tactile]] //(touchpad)// pour savoir comment utiliser toutes ses possibilités (ascenseur vertical, ascenseur horizontal, ...).
+**Le Touchpad présente souvent le défaut suivant : lorsqu'on tape au clavier, on clique sans le vouloir avec la paume. Consultez [[:touchpad#problemes_de_contact_de_paume|ce paragraphe]] pour corriger ce défaut.**
+
+==== Ecran Tactile ====
+=== Multitouch ===
+Si le multitouch ne fonctionne pas immédiatement après l'installation, installez ces paquets:
+<code>sudo apt-get install xserver-xorg-input-evdev touchegg</code>
+
+Pour tester si cela fonctionne, tapez "touchegg" dans un terminal et essayez de "scroller" avec deux doigts dans une application avec un ascenseur.
+Si ça fonctionne, vous devrez ajouter touchegg dans vos [[tutoriel:application_demarrage|programmes au démarrage de session]].
+
+<note>En version 17.04, cela n'a pas suffit. Je cherche. </note>
+
+=== Avec plusieurs écrans ===
+Si vous avez un second écran branché, vous vous apercevrez que le touchscreen ne fonctionne pas comme vous l'attendez probablement : toucher un point sur l'écran ne clique pas en ce point : l'écran tactile couvre la surface totale des deux écrans, et pas seulement la sienne.
+
+Essayez la commande suivante:
+<code>xinput --map-to-output "ELAN Touchscreen" eDP1</code>
+Si ça fonctionne bien pour vous, ajoutez cette commande aux [[tutoriel:application_demarrage|programmes au démarrage de votre session]] 
+==== Mode tablette : désactiver le clavier et le touchpad ====
+Voici un script bash qui permet de basculer entre le mode tablette (clavier et touchpad désactivés) et le mode laptop :
+
+<code bash>#!/bin/bash
+
+# you can find touchpad and keyboard labels with the command xinput --list
+TOUCHPAD_LABEL="SynPS/2 Synaptics TouchPad"
+KEYBOARD_LABEL="AT Translated Set 2 keyboard"
+
+STATUS_ON=1
+STATUS_OFF=0
+
+function getStatus {
+    # first argument is device id or device name
+    status=$(xinput --list-props "$1" | grep "[^\"]Device Enabled.*" | grep -o "[01]$")
+    echo $status
+}
+
+function setStatus {
+    xinput set-int-prop "$1" "Device Enabled" 8 $2
+}
+
+
+tp_status=$(getStatus "$TOUCHPAD_LABEL")
+kb_status=$(getStatus "$KEYBOARD_LABEL")
+
+if [[ $tp_status == $STATUS_ON ]] && [[ $kb_status == $STATUS_ON ]]
+then
+    #kdialog --passivepopup 'Keyboard and touchpad disabled' 3 # uncomment if you use kde and want notifications
+    setStatus "$TOUCHPAD_LABEL" $STATUS_OFF
+    setStatus "$KEYBOARD_LABEL" $STATUS_OFF
+else
+    #kdialog --passivepopup 'Keyboard and touchpad enabled' 3 # uncomment if you use kde and want notifications
+    setStatus "$TOUCHPAD_LABEL" $STATUS_ON
+    setStatus "$KEYBOARD_LABEL" $STATUS_ON
+fi</code>
+
+Je l'utilise avec un fichier .desktop placé dans ~/.local/share/applications dont le contenu est le suivant : 
+<code>[Desktop Entry]
+Encoding=UTF-8
+Name=Toggle Tablet
+Comment=Toggle keyboard and touchpad
+Exec=~/scripts/toggletablet.sh
+Icon=preferences-desktop-display
+Type=Application 
+</code>
+Ce qui permet de lancer le script via le menu (dans mon cas, Homerun dans KDE)
+<note help>Dans mon cas, le script toggletablet.sh est placé dans un dossier script dans /home/grou, à vous d'adapter la ligne Exec à votre installation.</note>
+
+==== Mode tablette : retourner l'écran ====
+Un autre script pour alterner entre trois orientations d'écran :
+
+<code bash>#!/bin/sh
+# Switch between 3 orientations
+state=$(xrandr -q|grep eDP1|cut -d' ' -f5)
+case $state in
+    inverted)
+	xrandr -o normal
+	xinput set-prop 'ELAN Touchscreen' 'Coordinate Transformation Matrix' 1 0 0 0 1 0 0 0 1
+	xinput enable 'SynPS/2 Synaptics TouchPad'
+	;;
+    right)
+	xrandr -o inverted
+	xinput set-prop 'ELAN Touchscreen' 'Coordinate Transformation Matrix' -1 0 1 0 -1 1 0 0 1
+	xinput disable 'SynPS/2 Synaptics TouchPad'
+	;;
+    *)
+	xrandr --screen 0 -o right
+	xinput set-prop 'ELAN Touchscreen' 'Coordinate Transformation Matrix' 0 1 0 -1 0 1 0 0 1
+	xinput disable 'SynPS/2 Synaptics TouchPad'
+	;;
+esac</code>
+===== Sources =====
+
+  * (en) [[http://askubuntu.com/questions/367963/ubuntu-on-lenovo-yoga-2-pro|Ask Ubuntu]] 
+  * (en) [[https://wiki.archlinux.org/index.php/Touchscreen#Using_a_touchscreen_in_a_multi-head_setup|Documentation ArchLinux]]
+----
+
+//Contributeurs : [[:utilisateurs:grouar]]//

@@ -1,0 +1,178 @@
+
+{{tag>système administration services log Focal}}
+----
+
+====== systemd ======
+Systemd est le gestionnaire de système qui remplace [[:upstart]] et son prédécesseur ([[:script_sysV|les scripts system V]]) depuis [[:xenial|Ubuntu 16.04 LTS Xenial]]. Le nom de ce programme vient de « system daemon » : le daemon du système\\
+C'est une pièce maîtresse de l'architecture [[:GNU]]/[[:Linux]]. En effet, c'est le premier programme lancé par le noyau (il a donc le PID N°1) et il se charge de lancer tous les programmes suivants en ordre jusqu'à obtenir un système opérationnel pour l'utilisateur, selon le mode déterminé (single user, multi-user, graphique). C'est également à lui qu'incombe la tache de redémarrer ou arrêter votre ordinateur proprement.
+
+<note warning>À la lecture de l’introduction, il apparaît très clairement que toute modification malencontreuse de l'architecture des services lancés par systemd peut avoir des conséquences dramatiques sur le fonctionnement de votre ordinateur. \\ Il faut être très prudent lorsque l'on touche à la configuration de systemd. \\ __Une mauvaise manipulation peut rendre votre système instable__, jusqu'à le rendre totalement inutilisable.</note>
+<note warning>D'anciennes versions de Ubuntu proposent dans les dépôts le paquet systemd et il est donc possible de l'installer en remplacement de Upstart. Néanmoins, cette manipulation est complexe et extrêmement risquée. Pour cette raison, cette procédure ne sera pas décrite ici.</note>
+
+Il a été développé dans le but de mieux appréhender la gestion d'un système multitâches, notamment en matière de dépendance entre les différents services lancés au démarrage avec pour objectif principal l'optimisation des performances système.\\ Son rôle est plus étendu que [[:Upstart]], il gère également le [[:montage]] des différents [[:systeme_de_fichiers|systèmes de fichier]] et introduit un nouveau système de log appelé "The Journal".\\
+
+Il introduit la notion d'unité. Une unité représente un fichier de configuration. Entre autres, une unité peut être un service (*.service), une cible (*.target), un montage (*.mount), un socket (*.socket)… \\
+C'est donc un sujet très vaste et nous allons donc nous concentrer dans ce wiki sur les aspects basiques des [[:services]], des cibles et du journal.
+
+=====Les services=====
+Un [[:services|service]] ou daemon est un programme qui tourne en arrière plan et s'active sous certaines conditions. Par exemple, le service hddtemp surveille la température de vos disques durs et déclenche une alerte si elle dépasse un certain seuil.\\
+====Gestion basique des services====
+L'outil de gestion des [[:services]] (et des autres unités d'ailleurs) dans systemd s'appelle **systemctl**.\\
+Il est généralement utilisé dans un [[:terminal]]:
+<code>systemctl ACTION <Nom_du_service>.service</code>
+Où  
+  * ACTION sera la commande que l'on souhaite appliquer à la dite unité:
+      * // start // : démarrer le service
+      * // stop // : arrêter le service
+      * // restart // : relancer le service
+      * // reload // : recharger le service
+      * // status // : connaitre l'état du service
+  * <Nom_du_service> est le nom du service visé.
+ 
+Quelle que soit l'action menée sur un service, au prochain démarrage de la machine celui-ci devrait retrouver le status qui lui a été [[#Modifier l'exécution d'un service|défini par défaut]]. 
+<note>Il n'est pas nécessaire d'utiliser sudo devant ces commandes. Systemctl vous demandera votre mot de passe root en cas de besoin (presque à chaque fois, donc)</note>
+
+===Exemples===
+
+<code>systemctl status ssh.service</code>donnera l'état du service [[:ssh]], son PID et les dernières lignes de son fichier de log. 
+<code>systemctl stop ufw.service</code> arrêtera le service [[:ufw]], Uncomplicated Firewall,
+<code>systemctl restart lightdm.service</code> relancera le serveur graphique.\\
+
+<note tip>Afin de conserver une compatibilité avec les anciens [[:script_sysV|scripts system V]], des liens vers les commandes principales de systemctl sont installés par défaut. Il s'agit de //start//,// stop//,// restart //et //status//.\\
+Par exemple **sudo restart lightdm** est équivalent à **systemctl restart lightdm.service**.\\
+De même, l'outil **service** de Upstart est également branché sur systemctl. **service automount restart** est équivalent à **systemctl restart automount.service**</note>
+
+
+====Lister les services démarrés====
+
+Pour obtenir la liste triée de tous les services accompagnés de leur état, saisissez dans un [[:terminal]] :
+<code>systemctl list-unit-files --type=service</code>
+
+Pour la liste des services actifs avec leur description :
+<code>systemctl list-units --type=service</code>
+
+Pour la liste des services actifs, encours d'exécution, avec leur description :
+<code>systemctl list-units --type=service --state=running</code>
+
+Il y a d'autres possibilités pour voir es services activés, désactivés, etc. qui sont décrites dans la page de manuel de systemctl.
+
+Vous pouvez également obtenir la liste des services lancés au démarrage, triés selon leur temps d’exécution :
+<code>systemd-analyze blame</code>
+Cela peut-être pratique pour trouver le service qui ralentit votre démarrage.
+
+====Modifier l'exécution d'un service====
+
+Pour désactiver un service, il faut taper :
+<code>sudo systemctl disable <Nom_du_service>.service</code>
+Ainsi, au prochain redémarrage du système, le service correspondant ne sera plus lancé.\\
+
+Pour activer un service (c'est à dire le lancer à chaque démarrage de l'ordinateur) ou relire son fichier de configuration, il faut taper:
+<code>sudo systemctl enable <Nom_du_service>.service</code>
+
+Néanmoins si vous souhaitez modifier l'état d'un service selon certaines conditions, vous devrez [[:tutoriel:comment_modifier_un_fichier|modifier ou créer le fichier]] **/etc/systemd/system/<nom_du_service>.service**. Les fichiers de configuration par défaut se trouvent dans **/lib/systemd/system/**\\
+
+===Exemples===
+Si vous souhaitez désactiver la [[:synchronisation]] des fichiers [[:syncthing]], dans un [[:terminal]] saisissez:
+<code>sudo systemctl disable syncthing.service</code>
+Pour réactiver le service, il faudra faire la manipulation inverse:
+<code>sudo systemctl enable syncthing.service</code>
+
+====Logiciel graphique====
+
+Il existe un utilitaire graphique qui se nomme **systemadm** pour gérer systemd.\\
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>systemd-ui|systemd-ui]]**
+==== Personnaliser un fichier de configuration systemd====
+Voir la page [[:creer_un_service_avec_systemd|créer un service avec systemd]]
+
+===== Les targets =====
+ 
+Systemd introduit la notion de target au sein de ses unités. Une target permet de regrouper dans un seul paquet plusieurs autres unités et de retrouver la notion de runlevel ([[:script_sysV|des scripts system V]]).\\
+
+====Tableau de correspondance ====
+
+^ Runlevel 	^ Systemd Target 								^ Notes 										^
+^       0		| runlevel0.target, poweroff.target 					| Arrête le système 								|
+^ 	1 		| runlevel1.target, rescue.target 					| Mode single user 								|
+^ 	3 		| runlevel3.target, multi-user.target 					| Mode multi-utilisateur, non graphique				|
+^ 	2, 4 		| runlevel2.target, runlevel4.target, multi-user.target 	| Mode défini par l'utilisateur, identique au 3 par défaut.	|
+^ 	5 		| runlevel5.target, graphical.target 					| Mode graphique multi-utilisateur 					|
+^ 	6 		| runlevel6.target, reboot.target 					| Redémarre									|
+^  emergency 	| emergency.target 								| Shell d'urgence 								|
+
+====Gérer l'état de votre ordinateur ====
+Pour changer de cible, on utilise la commande **isolate** de **systemctl**. Par exemple, pour passer en mode multi-utilisateur non graphique, il faut taper dans un [[:terminal]]:
+<code>systemctl isolate multi-user.target</code>
+ou son équivalent selon le tableau ci-dessus :
+<code>systemctl isolate runlevel3.target</code>
+ou son equivalent dans le [[:script_sysV|system V]]
+<code>telinit 3</code>
+
+C'est donc systemd qui gère le démarrage, l’arrêt ou encore le redémarrage de l'ordinateur. En fait, lorsque vous tapez dans un [[:terminal]] :
+<code>sudo reboot</code>
+Vous appelez la commande:
+<code>sudo systemctl reboot</code>
+
+Vous pouvez utilisez d'autres commandes pour gérer l'état de votre ordinateur (dans l'ordre, éteindre / mettre en veille / hiberner) :
+<code>
+systemctl poweroff
+systemctl suspend
+systemctl hibernate
+</code>
+
+Enfin, vous pouvez définir la cible par défaut au démarrage en tapant :
+<code>systemctl set-default -f multi-user.target</code>
+Votre ordinateur démarrera désormais en mode multi-utilisateur sans mode graphique.\\
+
+====Infos sur les cibles ====
+Pour connaitre la liste des cibles configurées sur votre ordinateur, tapez dans un [[:terminal]] :
+<code>systemctl list-unit-files | grep target </code>
+
+Pour savoir quelles unités sont regroupées au sein d'une cible, tapez :
+<code>systemctl show -p Wants -p Requires <target></code>
+
+
+
+===== Les journaux =====
+systemd possède son propre mécanisme de journalisation, appelé "The Journal".
+
+Ils sont enregistrés dans le répertoire **/var/log/journal/**.
+==== Consultation ====
+
+Pour accéder au log, tapez dans un [[:terminal]] :
+<code>journalctl</code>
+
+Pour une vision plus fine, vous pouvez consulter les messages d'un seul service par son //nom//, son //PID// ou même son //exécutable// :
+<code>journalctl -u wicd
+journalctl _PID=1
+journalctl /usr/sbin/dhcpcd
+</code>
+
+<note tip>Lorsque vous consultez le ''status'' d'un service avec la commande ''systemctl status <nom_du_service>'', systemd vous affiche quelques lignes des logs les plus recents</note>
+
+journalctl permet aussi de filtrer par le niveau de log (tel que défini par syslog). Pour n'afficher que les erreurs :
+
+<code>journalctl -p err</code>
+
+Il existe un logiciel graphique nommé **Gnome-logs** pour lire les fichiers de log generés par systemd.
+ [[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>gnome-logs|gnome-logs]]**
+==== Gestion ====
+
+Le volume de ces fichiers de suivi peut devenir important (plusieurs Go) et s'enregistrer sur plusieurs mois. Vous pouvez ramener immédiatement ces fichiers à une taille moindre en éliminant les plus vieux événements par la commande :
+<code>sudo journalctl --vacuum-size=200M</code>
+Vous choisissez le paramètre "size" ; dans cet exemple, la taille totale des fichiers est ramenée à 200 Mo.
+
+Vous pouvez modifier les différents paramètres de gestion de ce journal par le fichier /etc/systemd/journald.conf (informations disponibles sur cette page [[https://www.freedesktop.org/software/systemd/man/journald.conf.html#SystemMaxUse=|journal systemd]] avec les paramètres par défaut). Pour passer outre les paramètres par défaut, vous devez modifier ce fichier avec les [[sudo|Droits de super utilisateur]].
+
+
+===== Ressources ======
+  * [[creer_un_service_avec_systemd|Créer un nouveau service avec systemd]]
+  * [[wpfr>systemd|systemd]] sur Wikipedia en français
+  * [[http://casteyde.christian.free.fr/system/linux/guide/index.html|YAGIL]] Yet Another « Guide d'installation de Linux » de Christian Casteyde. Pour tout savoir sur le fonctionnement de [[:GNU]] / [[:Linux]].
+  * [[https://wiki.archlinux.fr/Systemd|Archlinux et systemd]] Systemd sur le wiki de Archlinux
+  * [[http://doc.fedora-fr.org/wiki/Systemd|Fedora et systemd]] notamment pour la partie [[#Personnaliser un fichier de configuration systemd]]
+  * [[https://docs.syncthing.net/users/autostart.html#using-systemd|Documentation de Syncthing]] Créer un service systemd pour lancer Syncthing au démarrage (en anglais)
+  * [[http://dev.deluge-torrent.org/wiki/UserGuide/Service/systemd|Documentation de Deluge]] Créer un service systemd pour lancer Deluge au démarrage (en anglais)
+
+
+----
+//Contributeurs: [[:utilisateurs:zarmu]]//

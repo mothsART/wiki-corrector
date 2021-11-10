@@ -1,0 +1,143 @@
+
+{{tag>Focal Bionic Xenial sauvegarde synchronisation}}
+----
+====== Anacron ======
+Anacron sert à lancer __automatiquement__ des tâches informatiques (sauvegardes ou autres) à des intervalles prédéfinis (tout comme [[cron|cron]]).
+
+  - [[Cron]] est utilisé pour des machines à fonctionnement permanent (plutôt des serveurs). 
+  - **Anacron** est utilisé pour des machines à fonctionnement discontinu (plutôt des PC).
+
+En effet, [[cron|cron]] lance une tâche à un moment pré-déterminé (« le 14 janvier 2018 à 15h 30 »). Si la machine n'est pas allumée, la tâche n'est pas lancée, et ne le sera jamais, même après le re-démarrage. Elle est __perdue__.
+
+**Anacron** utilise au contraire des indications de temps relatives (« une fois par jour / par semaine / par mois »). Si vous avez demandé une tâche toute les semaines, et que votre PC est démarré seulement au bout de 10 jours, **anacron** constatera le retard, et lancera donc la tâche juste après le démarrage de votre PC.
+
+**Anacron** démarre automatiquement à chaque lancement d'Ubuntu (vous n'avez rien à définir à ce niveau), vérifie si une ou des tâches sont à lancer, les démarre, puis se désactive jusqu'au prochain démarrage de votre système OU jusqu'à 7h30 le matin suivant (c'est d'ailleurs cron qui redémarre **anacron** à 7h30 - c'est du moins le paramétrage sur Ubuntu). Bien que **anacron** soit plutôt prévu pour les PC, on peut donc l'utiliser sur des serveurs Ubuntu. L'inverse (cron sur PC) est moins évident.
+
+Le créateur d'**anacron** s'appelle Christian Schwarz. Le logiciel a depuis été totalement réécrit en [[https://fr.wikipedia.org/wiki/C_(langage)|langage C]] par Itai Tzur.
+===== Pré-requis =====
+  * Disposer des [[:sudo|droits d'administration]].
+
+===== Installation =====
+Le programme **anacron** est normalement installé de base sur Ubuntu. Si ce n'est pas le cas, il suffit d'[[:tutoriel/comment_installer_un_paquet|installer le paquet]] **[[apt>anacron]]**
+
+===== Fonctionnement simple=====
+Avec les [[:sudo|droits d'administration]], ouvrir le fichier **/etc/anacrontab** : 
+
+<code>pkexec mousepad /etc/anacrontab</code> ou 
+<code>gedit admin:///etc/anacrontab</code> (selon votre éditeur de texte favoris).
+
+Ajouter à la fin du fichier votre automatisation, au format 
+<file>intervalle   délai   étiquette   commande</file>
+où **intervalle** = nombre de jour entre les lancements.
+
+où **délai** = nombre de minutes entre le démarrage du PC et le lancement de la tâche : pour ne pas ralentir le démarrage PC, pour ne pas lancer plusieurs tâches en même temps (à ce titre, vérifiez qu'une tâche déjà dans le fichier ne se lance pas au même nombre de minutes après le démarrage que la nouvelle).
+
+où **étiquette** = nom de la tâche (choisi par vous). Attention, __jamais__ d'espace vide ou de slash.
+
+où **commande** = une commande [[bash|bash]], le nom d'un programme, d'un script .... les espaces vides sont autorisés.
+
+__Exemple__ :
+<file>   1	15	sauvegarde		rsync -avz /home/vous/Documents/ root@192.168.0.101:/home/</file>
+=> La sauvegarde [[rsync]] est lancée tous les **1** jour (si le PC est allumé), **15** minutes après le démarrage du PC, pour sauvegarder le répertoire /Documents dans un répertoire se trouvant sur un serveur distant.
+
+**Attention, c'est l'__utilisateur root__ qui lance anacron. Il ne connait pas le répertoire par défaut de l'utilisateur courant, il faut donc (si besoin) le lui indiquer en clair (par exemple **/home/vous/Documents**, et pas **~/Documents**). \\
+De plus, l'utilisateur __root n'ayant pas d'écran affecté__, on ne peut donc pas lancer et afficher par ce biais une application graphique, sauf a créer un anacrontab associé a l'utilisateur courant, et non a root (cf. plus bas).**
+
+===== Fonctionnement détaillé=====
+
+  * sur un système fonctionnant en permanence, c'est [[cron]] qui lance anacron à 7h30 chaque jour (voir le fichier /etc/cron.d/anacron)
+  * sur un système ne tournant pas en permanence, anacron est lancé au démarrage car configuré en tant que service.
+  * anacron recherche les « fichiers dateurs » (anglais timestamps) correspondant à ses différents lancements (jobs) dans /var/spool/anacron. C'est dans ces fichiers que anacron sauvegarde les dates et heure de ses dernières automatisations.
+     - si, d'après un des fichiers dateurs, un job est en attente, anacron le lance
+     - puis anacron met à jour le fichier dateur du job en question. Il se basera dessus pour connaître la date du prochain lancement.
+
+Le fonctionnement d'anacron est contrôlé par le fichier **/etc/anacrontab**.
+
+Inspectez-le en saisissant : <code>cat /etc/anacrontab</code>
+
+Modifiez le par un :
+<code>sudo -H gedit /etc/anacrontab</code>
+Chaque ligne du fichier de configuration correspond à une tâche selon le schéma suivant :
+<file>intervalle   délai   étiquette   commande</file>
+
+  * 1ère colonne, intervalle : c'est le nombre de __jours__ entre 2 exécutions d'une même tâche. Vous pouvez remplacer le nombre de jours par **@monthly**, ce qui lancera la tâche au début de chaque mois. Peu importe alors le nombre de jours du mois (28, 29, 30 ou 31). La macro **@yearly** est également acceptée (lancement annuel). Enfin, un intervalle = "**0**" (sans guillemets) demande un lancement à chaque démarrage du système (donc potentiellement plusieurs fois par jour).
+  * 2ème colonne, délai : c'est le nombre de __minutes__ entre le lancement d'**anacron** et l’exécution de la tâche. Cela permet d'éviter que toutes les tâches s'exécutent en même temps que le démarrage du système, en le ralentissant.
+  * 3ème colonne, étiquette : nom que vous donnez à la tâche, pour les logs de anacron. __Ne doit pas comprendre d'espace vide ou de slash__ !!
+  * 4ème colonne, commande : tâche à exécuter (nom d'un script, commande bash, lancement d'un programme ...). Peut contenir des espaces vides.
+ 
+Voici le contenu par défaut du fichier **/etc/anacrontab** (sur une [[bionic|Bionic 18.04]]). Ces lignes ne sont pas à modifier (elles sont utilisées pour générer des fichiers de log). On ajoute en-dessous sa ou ses commandes à automatiser.
+<file>
+   # /etc/anacrontab: configuration file for anacron
+   
+   # See anacron(8) and anacrontab(5) for details.
+   
+   SHELL=/bin/sh
+   PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+   HOME=/root
+   LOGNAME=root
+   
+   # These replace cron's entries
+   1	5	cron.daily	 nice run-parts --report /etc/cron.daily
+   7	10	cron.weekly	 nice run-parts --report /etc/cron.weekly
+   @monthly	15	cron.monthly nice run-parts --report /etc/cron.monthly
+   </file>
+
+==== Lancement d'applications graphiques ====
+Par défaut, anacron est lancé par l'utilisateur root. Les commandes, même les commandes "systèmes", n'ont donc pas besoin de mot de passe (root a tous les droits). Et rien n’apparaît à l'écran, car l'utilisateur root n'a pas d'écran affecté.
+
+Si on souhaite lancer une application graphique visible à l'écran (bien sûr, si un mot de passe est nécessaire, il sera désormais demandé), il faut donc créer un anacrontab spécifique à l'utilisateur (à vous). Pour ce faire :
+
+1/ __Créez les 3 répertoires nécessaires__ dans votre compte utilisateur :
+<code>mkdir ~/.anacron ~/.anacron/etc ~/.anacron/spool</code>
+
+2/ __Créez un fichier texte **anacrontab**__ (qui est un simple fichier texte sans extension) dans le répertoire **~/.anacron/etc/**, et placez-y un contenu simplifié, qui ne remplace pas, mais s'ajoute à l'anacrontab du système. Par exemple :
+<code>
+# Ceci est mon anacrontab perso.
+
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/home/VOTRE_IDENTIFIANT/.anacron
+
+4	2	test	thunar
+</code>
+**Personnalisez VOTRE_IDENTIFIANT** (ligne 4)! Dans cet exemple, anacron lance tous les 4 jours, 2 minutes après le démarrage, un processus nommé test (le nom est libre) qui lance l'explorateur de fichier Thunar (celui de Xubuntu).
+Vous pouvez mettre autant de lignes de commandes et de réglages que désiré.
+
+3/ __Ouvrez votre fichier **~/.profil**, et placez cette ligne à la fin__ :
+<code>/usr/sbin/anacron -s -t ${HOME}/.anacron/etc/anacrontab -S ${HOME}/.anacron/spool</code>
+
+Cette ligne lance votre **anacrontab** personnel. Désormais, l'exemple ci-dessus exécutera 2 Mn après le démarrage la commande choisie (le logiciel **thunar**) si 4 jours (ou plus si pas de démarrage) se sont écoulés depuis la précédente exécution.
+
+==== Options de lancement ====
+Tapez **anacron**, suivi d'un option (par exemple **anacron -T**) :
+
+**-f** : Force l'exécution des tâches, en ignorant les fichiers dateurs.\\
+**-u** : Met à jour à la date courante les fichiers dateurs des tâches, mais ne lance rien.\\
+**-s** : Met en série l'exécution des tâches. Anacron ne lancera pas une nouvelle tâche avant que la précédente ne soit terminée.\\
+**-n** : Lance les tâches tout de suite. Ignore les définitions de délai dans le fichier /etc/anacrontab Cette option implique -s.\\
+**-d** : N'exécute pas en arrière-plan. Dans ce mode, Anacron enverra les messages d'information vers la sortie d'erreurs, ainsi qu'à syslog. La sortie des tâches est envoyée via un message comme d'habitude.\\
+**-q** : Supprime les messages destinés à la sortie d'erreurs. Applicable seulement avec -d.\\
+**-t anacrontab** : Utilise le fichier anacrontab défini, à la place de celui par défaut. Par exemple : **anacron -t ~/.anacron/etc/anacrontab**\\
+**-V** : Affiche l'information de version, puis s'arrête.\\
+**-h** : Affiche un court message d'utilisation, puis s'arrête.\\
+**-T** : Test la syntaxe de votre anacrontab, et indique les erreurs.\\
+
+
+===== Lancement sans redémarrer le PC =====
+Par défaut, **Anacron** (et son fichier de config **anacrontab**) est lancé (par [[cron|cron]]) au démarrage du PC. Après l'exécution des commandes paramétrées, **anacron** se désactive. Si la machine n'est jamais éteinte, le fichier **/etc/anacrontab** est re-lancé (par cron) tout les matins à 7H30. Ses paramétrages seront donc bien testés et (si nécessaire) appliqués chaque jour. Il est à noter que ce lancement de 7H30 fonctionne même si la machine est en veille, du moins après la sortie de veille (ne marche sans doute pas pour une [[veille_et_hibernation|hibernation]], mais à tester).
+
+Par contre, un fichier **anacrontab personnel** (qui est inconnu de [[cron|cron]]) __n'est pas relancé à 7h30__. Il ne l'est qu'au démarrage du PC.
+
+L'avantage d'un **anacrontab** personnel est donc qu'on peut lancer des applications graphiques (contrairement à l'**anacrontab** du système), mais son inconvénient est qu'il ne fonctionne pas sur des machines qu'on arrêtent rarement ou jamais. Le contournement est alors de modifier cron pour qu'il lance votre **anacrontab** personnel tous les jours, à l'heure souhaitée.
+
+
+===== Bon à savoir =====
+<note>anacron n'est pas lancé si l'ordinateur que vous utilisez n'est pas branché sur secteur. Ainsi, il n'entraîne pas de consommation supplémentaire pour un portable.</note>
+
+===== Liens =====
+  * [[:cron]] : planifier/programmer des tâches
+  * [[incron]] : effectuer une action, commande(s), scripts, etc, en cas de modifications de fichiers ou de répertoires donnés
+  * [[fcron]] : programmer des tâches devant être exécutées
+
+Auteurs : [[utilisateurs/sylvainsjc]] - [[utilisateurs/christophe c]]
+
+Contributeurs : 

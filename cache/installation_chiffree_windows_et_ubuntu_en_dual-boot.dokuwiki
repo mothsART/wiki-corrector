@@ -1,0 +1,539 @@
+
+
+{{tag>installation chiffrement dual-boot windows tutoriel À_RECYCLER}}
+
+====== Installation chiffrée en dual-boot de Windows et Ubuntu ====== 
+
+
+<note tip>Pour aller plus loin dans la configuration globale de votre poste de travail, vous pouvez consulter la documentation complète \\ [[installer_ubuntu_selon_besoins|Ubuntu à votre image : Configurer votre ordinateur selon vos besoins]]</note>
+
+=====Introduction=====
+Cette notice décrit une procédure pour obtenir une installation chiffré de windows et Linux Ubuntu en dual-boot. Windows et la partition de données sont chiffrés par TrueCrypt et Ubuntu est chiffré par dm-crypt avec LUKS.
+
+Dans cette procédure, il est possible de conserver une installation de Windows déjà existante (à condition de libérer de l'espace disque pour les partitions Ubuntu). Par contre il faut installer ou réinstaller Ubuntu (ce serait plus compliqué en gardant une installation existante).
+
+La procédure avec Windows XP y est décrite, car il y avait un besoin avec ce système. Cette procédure n'est pas encore testé avec Windows 7 (...ou 8), mais ça ne devrais pas être plus compliqué.
+
+Si vous avez la possibilité de faire une installation en dual-boot sur un ordinateur muni d'un disque chiffrant, faites-le, ce sera beaucoup plus simple !
+
+=====Installation et Chiffrement=====
+====Partitionnement du disque :====
+
+exemple :
+|partition|	type	|		utilisation	|	taille|
+|sda1	|	primaire ntfs	|	Windows-XP	|	25Go|
+|sda2	|	primaire ext2	|	/boot		|	400Mo|
+|sda3	| etendu |
+|sda5	|	logique LUKS	|	Volume Group	|	15 Go|
+|sda6	|	logique ntfs	|	donnee		|	le reste|
+
+4 partitions primaires ou étendus maximum.\\
+La partition étendu contient les partitions logiques.\\
+la partition au format LUKS contiendra à la fin de l'installation les volumes logiques :\\ LV-swap = swap et LV-slash = système Ubuntu.
+
+Peut être fait complètement à partir d'un live-CD Ubuntu avec l'utilitaire [[:gparted|gparted]] (ou presque, on ne peu que réserver l'espace disque pour la partition LUKS).\\
+
+
+Peut être fait partiellement à partir du CD d'installation de Windows, puis complété en suivant la procédure d'installation d'Ubuntu chiffré. ça évite de démarrer 2 fois sur un CD Ubuntu.\\
+Pendant l'installation de Windows, l’important est de laisser libre l'espace disque pour Ubuntu et les données partagé par les 2 systèmes.
+
+====installation de Windows XP (non chiffré) :====
+
+Nouvelle installation : Laisser libre l'espace disque pour Ubuntu et les données partagé par les 2 systèmes.
+Ou à partir d'un Windows déjà en utilisation, réduire la partition du système Windows si nécessaire.
+
+====installation de Ubuntu chiffré :====
+===les premiers paramètres===
+Cette partie est largement inspiré de ce tutoriel :  [[:tutoriel:chiffrer_son_disque|chiffrer_son_disque]]  \\
+Mais avec tout de même quelques modifications.
+
+démarrer sur Ubuntu alternate CD
+(test fait avec Ubuntu 12.04 alternate i-386)
+
+Dans le menu, choisir « installer sur le disque dur ».
+
+
+Les écrans suivant ont cet aspect : \\
+{{debian-installer-capture1.png|}} \\
+Dans ce document, les paramètres à sélectionner seront représenté dans un cadre, les choix ou saisis au clavier sont représenté en gras. \\
+<note important>Un cadre peu correspondre à plusieurs écran successif sur le même thème !</note>
+
+<box>choix région \\
+clavier \\
+nom de la machine \\
+nom et mot de passe du premier utilisateur \\
+Chiffrer votre dossier personnel : **non** \\
+time zone Europe/Paris : **oui** \\
+Méthode de Partitionnement : **manuel**</box>
+
+===Création des partitions logiques===
+Création de la partition /boot :
+<box>(sélectionner l'espace libre) \\
+Créer une nouvelle partition \\
+nouvelle taille : **400MB** \\
+type : **primaire** \\
+emplacement : **début** \\
+utiliser comme : **EXT2** \\
+point de montage : **/boot** \\
+indicateur d'amorçage : **absent** \\
+fin du paramétrage de cette partition</box>
+l'indicateur d'amorçage reste sur la partition Windows, ce qui permettra au chargeur d’amorçage de TrueCrypt de démarrer Windows sans passer par le chargeur d'amorçage « Grub » de Ubuntu.
+
+Création de la partition qui sera chiffré :
+<box>	(selectionner l'espace libre) \\
+Créer une nouvelle partition \\
+nouvelle taille : **15 à 20 GB** \\
+type : **logique** \\
+emplacement : **début** \\
+utiliser comme : **ne pas utiliser** \\
+fin du paramétrage de cette partition</box>
+__Attention !__\\
+Sur cette écran on peu lire le nom des disques sous cette forme : SCSI1 (0,0,0) (sda) – 60GB ATA \\
+sous lequel on peu lire le numéro de chaque partitions : N°4 logique 15GB  K \\
+Notez l'emplacement de cette partition « non utilisé » sous la forme : /dev/sda3
+
+===Création du conteneur chiffré LUKS :===
+<box>	configurer les volumes chiffrés \\
+écrire des modifications sur le disque et configurer les volumes chiffré ? **Oui** \\
+Action de configuration du chiffrement : **create encrypted volumes** (créer des volumes chiffrés) \\
+Périphérique à chiffrer : **(choisir la partition non utilisé que l'on viens de créer)** \\
+fin du paramétrage de cette partition \\
+écrire des modifications sur le disque et configurer les volumes chiffré ? **Oui** \\
+Action de configuration du chiffrement : **Finish** \\
+Phrase secrète de chiffrement : _________________</box>
+
+==Création des volumes logiques :==
+<box>Configurer le gestionnaire de volumes logiques (LVM) \\
+écrire les modifications sur les disques et configurer LVM : **oui** \\
+Action de configuration de LVM : **Créer un groupe de volumes** \\
+Nom du groupe de volumes : **VG-ubuntu** \\
+Périphérique pour le nouveau groupe : **(celui que l'on vient de chiffrer)**</box>
+
+Volume logique pour la « swap »
+<box>Créer un volume logique \\
+Groupe de volume : **VG-ubuntu** \\
+Nom du volume logique : **LV-swap** \\
+taille du volume logique : **(1 à 2 fois la taille de la mémoire vive)**</box>
+
+Volume logique pour la racine « / »
+<box>Créer un volume logique \\
+Groupe de volume : **VG-ubuntu** \\
+Nom du volume logique : **LV-slash** \\
+taille du volume logique : **(taille max)** \\
+terminer</box>
+
+==Montage des volumes logiques==
+<box>(sélectionner le volume logique « LV-slash ») \\
+utiliser comme : **EXT4** \\
+point de montage : / \\
+fin du paramétrage de cette partition</box>
+
+<box>(sélectionner le volume logique « LV-swap ») \\
+utiliser comme : **swap** \\
+fin du paramétrage de cette partition \\</box>
+
+<box>terminer le partitionnement et appliquer les changements \\
+faut-il appliquer les changements sur les disques ? **Oui**</box>
+
+===les derniers paramètres et l'installation===
+<box>(installation du système de base) \\
+Mandataire HTTP : **(ne rien mettre)** \\
+Télécharger le support pour votre langue ?:**oui** \\
+(suite de l'installation)</box>
+
+<box>Installer le programme de démarrage GRUB sur le secteur d'amorçage : **oui**</box>
+(j'ai tenté d'installer GRUB sur la partition /boot en répondant « non », mais ça faisait planter l'installation)
+fin de l'installation de Ubuntu.
+
+
+====Déplacement du gestionnaire de boot GRUB vers la partition /boot :====
+
+Les actions suivantes se font en ligne de commande. Les lignes précédé de « ~$ » sont à copier dans un terminal, les autres lignes sont la réponse du système :
+
+(Initialement GRUB est dans le secteur de démarrage du disque)
+Après avoir démarrer sous Ubuntu, notez l'emplacement de la partition /boot en vous servant de « Utilitaire de disque ».
+
+<note warning>un soucis est apparu après 2 - 3 mois d'utilisation d'un dual-boot avec GRUB déplacé avec cette commande :  <code>~$ sudo grub-install --force /dev/sda2</code> 
+le démarrage se faisait directement sur GRUB et non-plus sur le pré-amorçage de TrueCrypt. Il n'y avait alors plus d'accès à Windows, car pas de possibilité de rentrer la pass-phrase de TrueCrypt.\\
+Après avoir restauré le pré-amorçage de TrueCrypt, c'est Le grub qui devenait inaccessible. Il à fallut le réinstaller sur /boot à l'aide de l'alternate CD de ubuntu en mode récupération. \\
+Vraisemblablement le pré-amoçage GRUB à du ce réinstaller sur le MBR du disque, ce qui à causé cette panne. page
+<note tip>mais il aurait été plus judicieux alors de redéplacer GRUB dans la partition /boot **puis** de restaurer le pré-amorçage de TrueCrypt</note></note>
+
+<note important>préférez la méthode suivante :\\ (mais il est encore temps d'éxecuter cette commande après un grub-install --force)
+<note warning>en cours de test (au 3 septembre 2013, on verra dans quelques mois si le problème ne resurgit pas...)</note>  </note>
+
+reconfigure le paquet "grub-pc".
+<code>~$ sudo   dpkg-reconfigure   grub-pc</code>
+Cette commande pose les questions de configuration suivante :
+<box>Ligne de commande Linux : **(laissez ce qu'il y a)**</box>
+<box>Ligne de commande par défaut de Linux : **(laissez ce qu'il y a)**</box>
+<box>**Garder le paquet actuellement installé**</box>
+<box>Le paquet grub-pc est en cours de mise à jour...</box>
+<box> Périphériques où installer GRUB : **/dev/sda2 (419 Mo; /boot)** </box>
+<code>/usr/sbin/grub-setup : attention : Tentative d'installation de GRUB sur un disque sans partition ou sur une partition. C'est une très mauvaise idée..
+/usr/sbin/grub-setup : attention : L'embarquage est impossible. GRUB ne peut être installé sur cette configuration qu'en utilisant les listes de blocs. Cependant, les listes de blocs ne sont PAS fiables et leur utilisation est déconseillée..
+Installation finished. No error reported.
+Generating grub.cfg ...
+Found linux image: /boot/vmlinuz-3.2.0-52-generic-pae
+Found initrd image: /boot/initrd.img-3.2.0-52-generic-pae
+Found linux image: /boot/vmlinuz-3.2.0-23-generic-pae
+Found initrd image: /boot/initrd.img-3.2.0-23-generic-pae
+Found memtest86+ image: /memtest86+.bin
+Found Microsoft Windows XP Professionnel on /dev/sda1
+done</code>
+
+====Rendre le lien de Grub vers Windows « incassable » (Facultatif) :====
+but : Après chiffrement de la partition windows, le lien de Grub vers ce système est susceptible d'être effacé lors d'un « update-grub » car ce système est devenu invisible. Ça peut-être le cas lors d'une mise à jour de Ubuntu. Il faut donc écrire ce lien dans un fichier custom.cfg qui est lu automatiquement par grub.cfg et qui ne sera pas écrasé.
+Cette manip. est facultative car l'indicateur d'amorçage étant sur la partition Windows, le chargeur d’amorçage de TrueCrypt démarre Windows sans passer par le chargeur d'amorçage « Grub » de Ubuntu.
+
+Pour vérifier que le fichier custom.cfg n'existe pas encore, tapez dans un terminal :
+<code>~$ sudo ls -al /boot/grub/*.cfg
+-r--r--r-- 1 root root 5932 avril 17 16:41 /boot/grub/grub.cfg</code>
+
+Pour ouvrir le fichier de configuration de Grub dans l'éditeur de texte « gedit » avec les droits d'administrateur (root), taper dans un terminal :
+<code>~$ gksudo gedit /boot/grub/grub.cfg </code>
+
+Dans l'éditeur de texte gedit rechercher la partie « os-prober »:
+(dans l'exemple on trouve « 30_os-prober »)
+<code>### BEGIN /etc/grub.d/30_os-prober ### 
+menuentry "Microsoft Windows XP Professionnel (on /dev/sdb2)" --class windows --class os { 
+	insmod part_msdos 
+	insmod ntfs 
+	set root='(hd1,msdos2)' 
+	search --no-floppy --fs-uuid --set=root 1EC42F3EC42F1793 
+	drivemap -s (hd0) ${root} 
+	chainloader +1 
+} 
+### END /etc/grub.d/30_os-prober ### </code>
+
+Couper ce qu'il y a entre les deux lignes de commentaire ### BEGIN... et ### END... et les coller dans un nouveau document dans gedit qui sera ensuite enregistré sous : /boot/grub/custom.cfg.
+!!Attention, faire ça dans la fenêtre gedit qui à été ouverte avec les droits « root » !!
+Le fichier custom.cfg contiendra alors :     (dans l'exemple j'ai rajouté « entree incassable!! »)
+<code>menuentry "Microsoft Windows XP Professionnel (on /dev/sdb2) entree incassable!!" --class windows --class os { 
+	insmod part_msdos 
+	insmod ntfs 
+	set root='(hd1,msdos2)' 
+	search --no-floppy --fs-uuid --set=root 1EC42F3EC42F1793 
+	drivemap -s (hd0) ${root} 
+	chainloader +1 
+} </code>
+Ces lignes doivent être effacé de grub.cfg pour ne pas apparaître 2 fois lors du boot.
+
+
+====Chiffrement de Windows XP :====
+
+Chiffrage de Windows XP avec TrueCrypt avec l'option « partition système » et  « amorçage » (correspond à « single boot »)
+
+===1. Sauvegarder les données de l’ordinateur===
+===2. Installer TrueCrypt sur le poste===
+===3. Lancer TrueCrypt===
+
+Exécuter la commande suivante depuis le répertoire truecrypt (C:\Programm files\TrueCrypt\)
+<code>"TrueCrypt Format.exe" /noisocheck</code>
+
+<box>Chiffrer la partition ou l'intégralité du disque système</box>
+
+<box>Type de chiffrement : **Normal**</box>
+
+<box>Zone à chiffrer : **Chiffrer la partition système**</box>
+
+<box>Chiffrement de la zone protégée hôte : **non**</box>
+
+<box>Nombre de système d'exploitation : **Amorçage**</box>
+
+<box>Option de chiffrement : **suivant**</box>
+
+===4. Choix du mot de passe===
+
+<box>mot de passe</box>
+
+<box>Collecte de données aléatoire</box>
+
+<box>Clés générées</box>
+
+===5. Création du disque de secours (séquestre)===
+
+<box>Disque de secours</box>
+
+<box>Disque de secours créé</box>
+
+<box>Mode de nettoyage</box>
+
+===6. Pré-test de chiffrement système===
+
+<box>pré-test du chiffrement système : **Test**</box>
+
+<box>Avertissement : pré-amorçage…</box>
+(uniquement en anglais)
+
+<box>votre ordinateur doit être redémarré : **oui**</box>
+
+==préamorçage :==
+<box>enter password</box>
+Attention : \\ certain pavé numérique ne fonctionne pas lors du  pré-amorçage. En cas de mauvais password, pensez à essayer les chiffres situé au dessus des lettres.
+
+==Démarrage...==
+
+(ouverture automatique de TrueCrypt)
+<box>pré-test concluant</box>
+
+===7. Lancer le chiffrement du disque===
+
+<box>chiffrement : **chiffrer**</box>
+
+<box>le chiffrement à été réalisé avec succes</box>
+
+le secteur de boot contient maintenant le chargeur d'amorçage TrueCrypt.\\
+Depuis le chargeur d'amorçage TrueCrypt faire « Echap » pour accéder au GRUB (dans la partition sdaX)
+=====Autres opération sous Windows=====
+
+====Chiffrer séparément une partition de données :====
+(Cas d'une nouvelle partition vide ou don les données sont intégralement sauvegardé sur un autre support)
+
+lancer TrueCrypt (en cliquant)
+<box>A l'aide du boutons « Créer un volume »</box>
+
+<box>Encrypt a non-system partition/drive</box>
+
+<box>Volume TrueCrypt standard</box>
+
+<box>Emplacement du volume : (bouton Périphérique)</box>
+
+<box>Arre you sure you want to encrypt the device/partition ? **Oui**</box>
+
+<box>Volume Creation Mode : **Create encrypted volume and format it**</box>
+Attention : \\ Si c'est une partition contenant des données qu'il faut conserver, choisir l'option : **Encrypt partition in place**. Mais c'est beaucoup plus long !
+
+<box>Option de chiffrement : **suivant**</box>
+
+<box>Taille du volume : **suivant**</box>
+
+<box>mot de passe</box>
+
+<box>Grands fichiers : **Oui**</box>
+
+<box>Formatage du volume (et collecte de données aléatoire) : **Formatage rapide**</box>
+
+<box>Are you sure you want to use Quick Format ? **Oui**</box>
+
+<box>Formatage du volume (et collecte de données aléatoire) : **Formater**</box>
+
+<box>Êtes vous sure de vouloir procéder au formatage : **Oui**</box>
+Attention : tout les fichiers actuellement stockés sur la partition seront écrasé et perdu !
+
+<box>Le volume TrueCrypt à été créé avec succès.</box>
+
+<box>Volume créé : Quitter</box>
+
+
+====Supprimer la lettre de lecteur de la partition chiffré :====
+(Supprimer la lettre de lecteur attribué par Windows, devenu inutilisable après le chiffrement)
+
+Depuis une session administrateur, lancer le gestionnaire des disques :
+<box>Démarrer → Panneau de configuration
+→ Outils d'administration → Gestion de l'ordinateur → Gestion des disques</box>
+
+Clique droit sur la partition concerné
+<box>Modifier la lettre de lecteur et le chemins d'accès... : **Supprimer**</box>
+
+
+====Monter automatiquement au démarrage une partition de données :====
+
+Depuis une session administrateur, lancer le gestionnaire de Tâches planifiées :
+<box>Démarrer → programmes → Accessoires → Outils système → Tâches planifiées</box>
+
+<box>Création d'une tâche planifiée</box>
+
+<box>Assistant tâche planifiée : **Suivant**</box>
+
+<box>Selectionner le programme **TrueCrypt** dans la liste de l'assistant : **Suivant**</box>
+
+<box>Entrez un nom ; Executer cette tâche : **À l'ouverture d'une session**</box>
+l'option « Au démarrage de mon ordinateur » peu générer une erreur  lorsque l'on fait « appliquer »
+
+<box>Entrez le nom d'utilisateur :**(par défaut)** ; Entrez le mot de passe **(celui de l'utilisateur)**</box>
+
+<box>Vous avez planifié...**Ouvrir les propriétés avancées de cette tâche... ; Terminer**</box>
+
+Rajouter dans le champ « Exécuter » : ( dans l'exemple : lecteur « m », disque N°0 et partition N°3)
+Le mot de passe est celui du chiffrage de la partition.
+<box>...\TrueCrypt.exe **/lm /v \Device\Harddisk0\Partition3 /p "mot de passe" /q**</box>
+Depuis une fenêtre TrueCrypt, il est possible de repérer le chemin « \Device\Harddisk... » puis de le copier-coller.
+
+<box>Appliquer, OK</box>
+Redémarrer.
+
+Remarque :\\
+Le mot de passe apparaît en clair dans le gestionnaire de tâches planifiées, mais est accessible uniquement depuis la session ou elle à été créée et de toute façon après avoir déverrouillé le chiffrement de la partition système.\\
+Le disque se monte aussi quand on ouvre une autre session au démarrage.
+
+====Changer le mot de passe et faire un nouveau séquestre :====
+
+lancer TrueCrypt (en cliquant)
+Pour la partition système active :
+<box>Menu :	Système, Modifier le mot de passe</box>
+
+Ou pour une partition de donnée :
+<box>Périphérique... → **(sélectionner la partition)** \\
+Outils pour le volume → **Modifier le mot de passe du volume**</box>
+
+<box>Modifier le mot de passe ou les fichiers clé</box>
+
+<box>Avertissement : mot de passe court... \\
+(>10 caractères)</box>
+
+<box>Collecte de données aléatoire</box>
+
+<box>Mot de passe changé</box>
+
+<box>Voulez-vous créer un disque de secours : **oui**</box>
+
+====Monter manuellement une partition système windows chiffrée :====
+(et les éventuels partitions donnée dans le cas d'un chiffrement « disque entier »)
+
+depuis un autre système Windows lancer TrueCrypt (en cliquant)
+<box>A l'aide des boutons « monter » ou « montage automatique »\\
+il faut ensuite choisir « option » puis cocher « Monter sans authentification lors du pré-amorçage »</box>
+ou
+A l'aide du menu :
+<box>Menu :\\
+Système\\
+Monter sans authentification lors du pré-amorçage...</box>
+
+=====Autre opération sous Ubuntu=====
+Les actions suivantes se font en ligne de commande. Les lignes précédé de « ~$ » sont à copier dans un terminal, les autres lignes sont la réponse du système :
+====Rajouter ou supprimer une passphrase pour le démarrage :====
+
+===Rajouter une passphrase qui se mettra dans le premier emplacement (key slot) disponible dans l'entête du conteneur chiffré LUKS :===
+(dans l'exemple sda5 est la partition qui contient le conteneur chiffré)
+<code>~$ sudo cryptsetup luksAddKey /dev/sda5
+Enter any passphrase :
+Enter new passphrase for key slot:.</code>
+(Entrer d'abord une passphrase d'un des slot actuellement valide.
+Ensuite entrer une passphrase à rajouter dans un slot libre.)
+
+
+===Lister les slots : ===
+(dans l'exemple sda5 est la partition qui contient le conteneur chiffré)
+<code>~$ sudo cryptsetup luksDump /dev/sda5</code>
+(la passphrase intitial est dans le slot 0)
+
+===Supprimer une passphrase d'un slot :===
+(dans l'exemple on supprime le 2ième slot du conteneur chiffré sda5)
+<code>~$ sudo cryptsetup luksKillSlot /dev/sda5 2
+Enter any remaining LUKS passphrase :</code>
+(Entrer une passphrase d'un des slot actuellement valide.)
+
+====Sauvegarder et restaurer l'entête du conteneur LUKS :====
+
+===faire une sauvegarde de l'entête du conteneur LUKS dans un fichier sur une clef USB :===
+(dans l'exemple, à partir de l'entête LUKS /dev/sda5 on créé le fichier « entete » sur la clé USB « sdb1 ») :
+<code>~$ sudo cryptsetup luksHeaderBackup --header-backup-file /media/sdb1/entete /dev/sda5</code>
+(si cette commande écrit le fichier « entete » sur une partition au format Linux, ce fichier aura les droits limité à root en lecture seul !)
+
+===Restauration de l'entête du conteneur LUKS :===
+possible à partir d'un autre système linux avec dm-crypt et LVM installé. \\
+(les live-CD « System rescue » et « partedMagic » on dm-crypt et LVM installé nativement)
+<code>~$ sudo cryptsetup luksHeaderRestore --header-backup-file /media/sdb1/entete /dev/sda5
+WARNING !
+=========
+Device:dev/sda5 already contains LUKS header. Replacing header will destroy existing keyslots.
+Are you sure ? (Type uppercase yes): YES</code>
+(attention à marquer « YES » et non pas « yes »)
+
+
+
+
+
+====Monter automatiquement au démarrage une partition de données NTFS chiffrée :====
+
+Dans un terminal, créer un répertoire DATA et changer le propriétaire et le groupe en « user »(remplacer user par le login de la session) :
+<code>~$ sudo mkdir /media/DATA; sudo chown user:user /media/DATA</code>
+
+créer un fichier qui contiendra le script du démarrage :
+<code>~$ sudo gedit /usr/local/bin/monteDataTrueCrypt</code>
+
+coller dans la fenêtre gedit et corriger la partition « sda2 » et le mot de passe :
+<box>#!/bin/bash 
+
+# TrueCrypt monte le disque /dev/sda2 sur le dossier \\
+# /media/DATA avec le mot de passe "motdepasse" \\
+# (l'option --mount est implicite) \\
+truecrypt /dev/sda2 /media/DATA -p "motdepasse"</box>
+enregistrer et fermer
+
+Rendre le fichier exécutable et illisible par un simple utilisateur :
+<code>~$ sudo chmod 711 /usr/local/bin/monteDataTrueCrypt</code>
+
+ouvrir l'éditeur de paramétrage de sudo etc/sudoers :
+<code>~$ sudo visudo</code>
+
+ajouter à la fin du fichier « /etc/sudoers.tmp » et remplacer « user » par le login de l'utilisateur :
+<box># autorise user à exécuter monteDataTrueCrypt
+# avec les droits administrateur sans mot de passe
+user ALL = NOPASSWD: /usr/local/bin/monteDataTrueCrypt </box>
+Ctrl X pour quitter l'éditeur
+<box>Sauver l'espace modifié : o
+non du fichier à écrire : (laisser celui par défaut)</box>
+
+ouvrir l'utilitaire graphique : « application au démarrage »
+<box>ajouter \\
+nom : monte DATA avec TrueCrypt \\
+commande : sudo monteDataTrueCrypt \\
+enregistrer \\
+fermer</box>
+
+
+====Monter manuellement une partition linux chiffré :====
+
+Montage de la partition chiffrée, à partir d'un autre système linux avec dm-crypt et LVM installé :
+(« sda5-crypt » est un nom arbitraire donné à la partition)
+<code>~$ cryptsetup luksOpen /dev/sda5 sda5-crypt
+Saisissez la phrase secrète pour /dev/sda5 :
+~$ vgchange -ay
+ 2 logical volume(s) in volume group « VG-ubuntu » now active
+</code>
+
+Montage d'un volume logique :
+<code>~$ sudo mkdir /media/montage_LV
+~$ sudo mount /dev/VG-ubuntu/LV-slash /media/montage_LV
+</code>
+Dans un explorateur de fichier, on peut maintenant ouvrir /media/montage_LV  (le montage peut aussi être fait par une interface graphique)
+
+====Monter manuellement une partition système windows chiffrée :====
+(et les éventuels partitions donnée dans le cas d'un chiffrement « disque entier »)
+
+lancer TrueCrypt (en cliquant) \\
+A l'aide du menu :
+<box>Menu : \\
+Système \\
+Mount partition using system encryption (preboot authentification)</box>
+Remarque : Lors du pré-amorçage de TrueCrypt le clavier est en mode américain (qwerty). \\
+Sous windows, quand on chiffre la partition système ou quand on exécute « Monter sans authentification lors du pré-amorçage », le clavier bascule en mode américain pour la saisi du mot de passe. \\
+Sous Linux, quand on exécute « Mount partition using system encryption (preboot authentification) », le clavier reste dans le mode ou il était.
+
+
+=====Bibliographie=====
+
+« Chiffrement des portables mise en œuvre et utilisation » par François Morris  :
+www.dsi.cnrs.fr/services/securite/Documents/manuel.pdf
+
+[[:tutoriel:chiffrer_son_disque|Documentation pour installer ubuntu chiffré]]
+
+« GRUB2 and Truecrypt – Windows-Linux dual-boot system » par Zoltán Pallagi :
+http://pzolee.blogs.balabit.com/2010/07/grub2-and-truecrypt-windows-linux-dual-boot-system/
+
+Dans GRUB2, créer une ligne de boot qui ne soit pas écrasé par une mise à jours de Grub :
+http://forum.ubuntu-fr.org/viewtopic.php?id=836212
+
+Pour exécuter une commande en tant que root au démarrage d'Ubuntu
+http://blog.cheztoi.net/2009/08/30/ajouter-un-programme-au-demarrage-dubuntu-service/
+
+----
+
+===Autres pages sur le chiffrement :===
+{{topic>chiffrement}}
+
+----
+
+//Contributeurs principaux : [[:utilisateurs:marcusbaslerus]]

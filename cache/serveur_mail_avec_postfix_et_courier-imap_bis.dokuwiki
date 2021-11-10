@@ -1,0 +1,274 @@
+
+{{tag>serveur réseau courriel postfix courrier VÉTUSTE}}
+
+----
+
+====== Installer un serveur IMAP ======
+
+  * Logiciels principaux : [[Postfix]] - [[Procmail]] - [[Courier-IMAP]]
+  * Logiciels secondaires : [[ClamAV]] (antivirus) - [[SpamAssassin]] (anti-spam) - [[TrashScan]] (scanner de pourriel).
+
+Cette procédure a été réalisée à partir d'informations récupérées sur Internet et a été déployée sur une architecture réelle basée sur une [[:dapper|Ubuntu 6.06 LTS]]. Ce serveur permet d'envoyer et de recevoir du courrier sur son propre serveur, à sa propre adresse du type //monNom@monDomaine.com//. Pour le protocole choisi, ça sera IMAP, plus recommandé que POP3 pour la réception, et SMTP pour l'envoi et le transfert.
+
+Durant tout le tutoriel, nous supposerons que votre nom sera **monNom**, votre serveur **monServeur**, votre domaine **monDomaine**, votre fournisseur d'accès **monFAI**, et votre adresse **monNom@monDomaine.com**. On suppose que votre adresse IP est **monIP**.
+
+
+===== Principe de fonctionnement =====
+
+//courier-imap// fournit le protocole IMAP et sera utilisé pour la réception du courrier. Les messages reçus par courier-imap seront déposés tel quel sur le serveur.
+
+Postfix va regarder ces messages et va les transférer dans le répertoire de courrier IMAP de l'utilisateur.
+Il va aussi faire appel à Procmail pour vérifier le message avant de le distribuer.
+
+Procmail va scanner le message pour voir s'il n'y a pas de virus ou s'il ne s'agit pas de messages SPAM.
+Si le message est correct, il sera acheminé par Postfix dans le répertoire local de l'utilisateur ; sinon il sera acheminé vers un autre répertoire, suivant le type de message.
+
+Le programme Mail vérifie les messages et alerte l'utilisateur lors d'un nouveau message.
+
+Un logiciel comme [[Thunderbird]] ou [[Evolution]] permet de les lire et de les écrire.
+Postfix assure aussi l'envoi des messages, à travers le service SMTP du fournisseur d'accès internet.
+Il n'est pas nécessaire de configurer [[fetchmail]] pour la distribution du courrier, celle-ci étant assurée par Postfix.
+
+===== Installation =====
+
+
+==== Programmes principaux ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **courier-imap postfix procmail clamav spamassassin**.
+
+
+==== Programmes secondaires ====
+
+On télécharge le programme TrashScan depuis cette adresse : http://schlayer.org/trashscan-0.12.tar.gz 
+
+TrashScan est un petit script bien utile qui va permet de scanner les fichiers mail à l'aide de l'antivirus clamav et d'autres utilitaires. Une fois le fichier téléchargé, on le décompresse 
+
+  tar -zxvf trashscan-<version>.tar.gz
+
+Ensuite, dans le répertoires //trashscan-<version>//, on modifie l'entête du fichier trashscan selon ses préférences, puis on copie le fichier dans le répertoire **/usr/local/bin/**. 
+
+Pour plus de renseignements, lisez le fichier README présent dans le répertoire de TrashScan.
+
+==== Ajouter un utilisateur sous Linux ====
+
+Pour avoir une adresse mail, il faut créer une adresse du style MonNom@MonDomaine.com.
+Pour créer cet utilisateur, on exécute la commande suivante :
+
+  useradd -g 100 -d /home/MonNom MonNom
+  passwd MonNom
+  mkdir /home/MonNom
+
+===== Configuration =====
+
+==== courier-imap ====
+
+Il n'y a rien à configurer pour courier-imap. Il faut juste s'assurer qu'il est lancé, par la commande :
+
+  sudo /etc/init.d/courier-imap start
+
+Par contre, il faut créer les dossiers de courrier IMAP de l'utilisateur.
+Pour se faire, dans le répertoire de celui-ci on exécute les commandes :
+
+<code>
+maildirmake Maildir
+maildirmake -f Sent Maildir
+maildirmake -f Queue Maildir
+maildirmake -f junkmail Maildir
+maildirmake -f virus Maildir
+maildirmake -f Drafts Maildir
+maildirmake -f Trash Maildir
+</code>
+<note warning>Si l'on utilise "sudo maildirmake ...", les répertoires sont propriété de root et l'on ne peut pas y accéder en IMAP (problème de droits d'accès).</note>
+
+Cette opération créera un répertoire spécial de courrier nommé Maildir, dans lequel doit se trouver les répertoires cachés //.Sent .Queue .junkmail .virus .Drafts et .Trash//.
+
+<note tip>Seul le dossier principal est nécessaire pour démarrer, car les autres seront créés, si besoin, par le client de messagerie tel que [[ThunderBird]]</note>
+
+==== Postfix ====
+<note tip>Voir aussi la page [[Postfix]].</note>
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/etc/postfix/main.cf**.
+
+Tous les paramètres ne sont pas obligatoires, la liste des paramètres possibles étant assez longue, et Postfix disposant par défaut d'une bonne configuration.
+En revanche, on doit le configurer un minimum. Le fichier devra ressembler à ceci.
+
+<file>
+append_dot_mydomain = no
+biff = no
+command_directory = /usr/sbin
+daemon_directory = /usr/lib/postfix
+program_directory = /usr/lib/postfix
+queue_directory = /var/spool/postfix
+
+myhostname = monServeur.monDomaine.com
+mydomain = monDomaine.com
+masquerade_domains = monDomaine.com
+mydestination = $myhostname, $mydomain, localhost.$mydomain, localhost
+inet_interfaces = all
+mynetworks = monIpReseau/24, 127.0.0.0/8
+myorigin = /etc/mailname
+relayhost = smtp.monFAI.fr
+home_mailbox = Maildir/
+mailbox_command = /usr/bin/procmail -Y -a $DOMAIN
+
+alias_maps = hash:/etc/aliases
+alias_database = hash:/etc/aliases
+setgid_group = postdrop
+mail_owner = postfix
+mailbox_size_limit = 0
+mail_spool_directory = /var/spool/mail
+smtpd_banner = $myhostname ESMTP $mail_name (Debian/GNU)
+delay_warning_time = 4h
+recipient_delimiter = +
+</file>
+
+Où :
+  * //myhostname// est le nom d'hôte du serveur, il doit être complet, avec le nom de domaine.
+  * //mydomain// est le nom de domaine, qui doit correspondre au nom complet du serveur défini.
+  * //mydestination// correspond aux adresses qui seront gérées par postfix. Pour éviter les boucles (adresses renvoyées à elles-même sans arrêts), on doit ajouter les paramètres indiqués.
+  * //mynetworks// est la plage d'adresse du réseau, ou plus exactement, l'adresse du réseau. Celle-ci n'est pas l'adresse IP du serveur, mais l'adresse IP du réseau. Par exemple, si l'adresse IP du serveur est de 192.168.0.100, et que son masque est de 255.255.255.0 (24 bits), son adresse réseau (monIpReseau) est 192.168.0.0.
+  * //myorigine// renseigne sur le nom de domaine d'origine. Dans le fichier /etc/mailname doit se trouver votre nom de domaine.
+  * //relayhost// est la passerelle qui va relayer les messages sortant, les courriers envoyés. Si vous avez un fournisseur internet, celle-ci peut-être smtp.<domaine du fournisseur>
+  * //home_mailbox// est le répertoire de courrier de l'utilisateur. Comme on utilise courier-imap, celui-ci doit être Maildir suivi de /
+  * //mailbox_command// est la commande que postfix doit effectuer pour l'acheminement des messages. Ici on fait appel à procmail, qui va scanner les messages avant de les délivrer.
+
+On sauvegarde et l'on recharge postfix avec la nouvelle configuration par la commande : 
+
+  sudo /etc/init.d/postfix restart
+
+
+==== Procmail ====
+
+Procmail va être lancé par postfix à chaque nouveau message. Son fichier de configuration doit se trouver dans le répertoire de l'utilisateur et est nommé « .procmailrc ».
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/home/monNom/.procmailrc**.
+
+<file>
+# Preliminaires
+SHELL=/bin/bash
+MAILDIR=$HOME/Maildir/
+DEFAULT=$MAILDIR
+ORGMAIL=$MAILDIR
+LOCKFILE=$HOME/lockfile.lock
+ASSASSINLOCK=$HOME/assassin.lock
+DEFAULT=$HOME/Maildir/
+JUNKMAIL=$HOME/Maildir/.junkmail/
+TRASH=$HOME/Maildir/.Trash
+NEWBIE=$HOME/Maildir/.LinuxNewbie/
+EXPERT=$HOME/Maildir/.LinuxExpert/
+VIRUS=$HOME/Maildir/.virus/
+BITBUCKET=/dev/null
+LOGFILE=/var/log/procmailrc.log
+VERBOSE=yes
+LOGABSTRACT=all
+
+# Filtres de courrier :
+# on vérifie d'abord si le message est du spam, avec spamassassin
+
+:0
+* ^To:.*spam@monDomaine.com
+* < 256000
+
+{
+:0c: spamassassin.spamlock
+| sa-learn --spam
+
+:0
+$JUNKMAIL
+}
+
+#On revérifie au cas où spamassassin aurait fait une erreur
+
+:0
+* ^To:.*postmaster@monDomaine.com
+* < 256000
+
+{
+:0c: spamassassin.hamlock
+| sa-learn --ham
+
+:0
+$TRASH
+}
+
+#On exécute TrashScan, qui va scanner le fichier à l'aide de l'anti-virus clamav
+
+:0
+* multipart
+* !^X-Virus-Scan:
+| /usr/local/bin/trashscan
+
+#Apposition du label suspect sur les mails scannés positifs aux virus
+
+:0
+* ^X-Virus-Scan: Suspicious
+$VIRUS
+
+#Filtres de news
+
+:0 :
+* ^Sender: newbie-owner
+$NEWBIE
+
+:0 :
+* ^Sender: expert-owner
+$EXPERT
+
+#Redirection de courriers indésirables
+
+:0
+* ^From: Sms Message
+$BITBUCKET
+
+#Exécution du démon SpamAssassin
+
+:0 fw : $ASSASSINLOCK
+| spamc
+
+:0
+* ^X-Spam-Flag: YES
+$JUNKMAIL
+</file>
+
+Une fois cela effectué, on n'a pas besoin de redémarrer procmail, puisque celui-ci est lancé par postfix à chaque nouveau message.
+
+Attention : procmail peut se trouver ici : /etc/procmailrc !
+
+===== Lancement du serveur de courrier =====
+
+On est fin prêt pour lancer le serveur de courrier.
+
+Déjà, on peut vérifier si les messages fonctionnent en local :
+
+<code>
+mail monNom -s test
+ceci est un test local
+. (le point indique la fin du message)
+cc: (pas de cc)
+</code>
+
+Dans le courrielleur (Thunderbird, Evolution), un simple rafraîchissement des courriers devrait faire apparaître le message test.
+
+Ensuite, on vérifie si l'envoi et la réception se fait vers une adresse distante.
+
+En cas de problème, on peut examiner les logs suivants :
+  * Log de Postfix : **/var/log/mail.err**
+  * Log de Procmail : **/var/log/procmailrc.log**
+
+Si tout est correct, on peut modifier le fichier « .procmailrc » pour éviter la surcharge de log.
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/home/monNom/.procmailrc**.
+
+<file>
+VERBOSE=no
+#LOGABSTRACT=all
+</file>
+
+Ne pas oublier lors de l'ajout de nouveaux comptes de mettre les droits 771 pour le fichier procmail.rc et de reconstruire la table des alias.
+
+<code>
+sudo chmod 771 /home/monNom/.procmailrc
+newaliases
+</code>
+
+----
+
+//Contributeurs principaux : FIXME.//

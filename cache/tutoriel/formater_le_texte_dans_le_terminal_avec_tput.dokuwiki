@@ -1,0 +1,365 @@
+
+{{tag>Bionic Xenial console terminal tutoriel tput_formater_le_texte_dans_le_terminal}}
+
+----
+
+====== Tput, jouer avec le curseur et les couleurs dans le terminal ======
+
+Tput est un utilitaire qui utilise la base de données terminfo pour modifier le paramétrage du terminal. Il permet d'initialiser ou réinitialiser le terminal.
+
+Tput peut notamment être utilisé pour déplacer le curseur à l'intérieur du terminal et ajouter un peu de décoration au texte (couleur, formatage). Il peut aussi permettre de personnaliser l'invite de commande.
+
+Ce tutoriel donne quelques pistes pour utiliser la couleur et déplacer le curseur à l'intérieur du terminal, avec et sans tput.
+===== Pré-requis =====
+
+Savoir un peu utiliser le terminal.
+
+===== Méthode bien connue et un peu ésotérique des caractères d'échappement ANSI =====
+
+La méthode semble-t-il la plus fréquemment rencontrée sur le web ne fait pas appel à tput mais à une succession de codes qui, pour efficaces qu'ils soient, rendent la lecture des scripts un peu difficile. Cette méthode nécessite de préfixer le texte à traiter par '\033[' (ou par '\e[' ou '\E['), le code '\033[0m' permettant de rétablir les paramètres par défaut.
+
+Exemples d'utilisation :
+<code>
+echo -e "\033[31mUn texte en rouge,\033[0m la suite ne l'est plus"
+echo -e "Un texte en \e[32m\033[43mvert sur fond jaune\E[0m"
+echo -e "Et voici \033[31m\033[1m\033[4m\033[5m\033[7mun texte\033[0m mis en forme selon une forme particulièrement peu explicite."
+</code>
+
+==== Les codes couleur ====
+
+Les codes numérotés 30 à 37 permettent de définir la couleur du texte (foreground), les codes 40 à 47 concernent l'arrière plan (background). Voici la liste de ces codes :
+^ Code ^  Couleur  ^  ^
+| 30 et 40 | noir|  |
+| 31 et 41 | rouge|  |
+| 32 et 42 | vert|  |
+| 33 et 43 | jaune|  |
+| 34 et 44 | bleu|  |
+| 35 et 45 | rose|  |
+| 36 et 46 | cyan|  |
+| 37 et 47 | gris|  |
+
+==== La décoration ====
+
+Quelques éléments de formatage du texte peuvent également être définis. Ils sont activés par les codes suivants :
+^ code ^ effet ^ 
+| 1 | gras| |
+| 4 | soulignement | |
+| 5 | clignotant (ne fonctionne pas avec tous les terminaux) | |
+| 7 | surlignement | |
+
+==== Retour au formatage par défaut : code 0 ====
+Le retour aux valeurs de base est assuré par l'utilisation du code 0
+
+==== Utilisation de plusieurs codes successifs ====
+Ainsi qu'il a été vu infra, il est possible d'appliquer plusieurs formatages au même texte.
+
+La méthode la plus simple consiste à se faire succéder les différents codes dans leur intégralité. Exemple d'un texte jaune, gras sur fond rouge, avec un mot passé en surligné :
+<code>
+$ echo -e "Voici le \033[33m\033[1m\033[4m\033[41mle \033[7mtexte\033[0m mis en forme."
+</code>
+
+Cette mise en forme peut se condenser ainsi, en séparant les formatages par un ';' :
+<code>
+$ echo -e "Voici le \e[33;1;4;41mle \E[7mtexte\033[0m mis en forme selon la forme condensée."
+</code>
+
+==== Aide-mémoire des séquences d'échappement ====
+
+Un script aide-mémoire est disponible sur le site www.admin-linux.fr dont vous trouverez ci-dessous une version un peu modifiée :
+
+<code>
+#!/bin/bash
+function usage () {
+	echo "Source : https://www.admin-linux.fr/bash-de-la-couleur-dans-le-shell/"
+	echo "Ce script permet de visualiser les codes couleurs et quelques effets de décoration utilisables dans bash"
+	exit 10
+}
+
+	if [[ "$1" == "-h" ]] || [[ "$1" == "-help" ]] || [[ "$1" == "--help" ]]; then usage ; fi
+
+# Texte de l'exemple ( >= 3 caractères ) :
+TEXT=" Bash " ;
+
+# Couleur du texte :
+declare -a FG=('' '1' '4' '5' '7' '30' '31' '32' \
+'33' '34' '35' '36' '37') ;
+
+echo 
+
+# Première ligne :
+printf "FG \ BG\t%${#TEXT}s" ;
+for bg in {40..47} ; do
+	printf "%${#TEXT}s" "${bg}  " ;
+done
+echo ;
+
+# Création du tableau de présentation des combinaisons :
+for fg in ${!FG[*]} ; do
+	echo -ne "${FG[fg]}\t\033[${FG[fg]}m$TEXT" ;
+	for bg in {40..47} ; do
+		echo -ne "\033[${FG[fg]};${bg}m$TEXT\033[0m" ;
+	done
+	echo ;
+done
+
+# Comment déclarer une couleur :
+cat <<_eof_
+
+FG = texte (foreground) \ BG = arrière-plan (background)
+
+Comment déclarer une couleur :
+------------------------------
+ Format de déclaration : \\033[XXm où XX prend les valeurs 
+       de FG ou BG" ;
+ Retour aux paramètres par défaut : \033[0m" ;
+
+Exemples :
+	echo -e "\033[31mUn texte en rouge et\033[0m retour a la normale"
+	echo -e "\033[34m\033[45mBleu sur fond rose\033[0m"
+		peut aussi s'écrire :
+	echo -e "\033[34;45mBleu sur fond rose\033[0m"
+	echo -e "\033[34mbleu, \033[1mgras, \033[4msouligné, \033[5mclignotant \033[7met surligné\033[0m
+ Pour plus de détails : http://www.admin-linux.fr/?p=9011
+
+_eof_
+</code>
+
+===== Méthode tput un peu plus ergonomique =====
+L'utilisation de la commande tput appartenant au paquet ncurses permet d'utiliser une notation plus aidée à appréhender par l'utilisateur.
+
+<note help>Comment savoir si la librairie ncurses est installée sur mon système ?
+
+En général la librairie est installée par défaut. La commande dpkg -l permet de s'en assurer :
+<code>
+$ dpkg -l *ncurses*
+Souhait=inconnU/Installé/suppRimé/Purgé/H=à garder
+| État=Non/Installé/fichier-Config/dépaqUeté/échec-conFig/H=semi-installé/W=attend-traitement-déclenchements
+|/ Err?=(aucune)/besoin Réinstallation (État,Err: majuscule=mauvais)
+||/ Nom                 Version        Architecture   Description
++++-===================-==============-==============-============================================
+ii  libncurses5:amd64   6.0+20160213-1 amd64          shared libraries for terminal handling
+ii  libncurses5:i386    6.0+20160213-1 i386           shared libraries for terminal handling
+ii  libncursesw5:amd64  6.0+20160213-1 amd64          shared libraries for terminal handling (wide
+ii  ncurses-base        6.0+20160213-1 all            basic terminal type definitions
+ii  ncurses-bin         6.0+20160213-1 amd64          terminal-related programs and man pages
+un  ncurses-runtime     <aucune>       <aucune>       (aucune description n'est disponible)
+ii  ncurses-term        6.0+20160213-1 all            additional terminal type definition
+</code>
+
+Si libncurses apparaît dans la liste, le paquet ncurses est installé. Une autre manière un peu simpliste mais très efficace de le savoir consiste tout simplement à saisir 'tput' dans le terminal :
+<code>
+$ tput
+usage: tput [-V] [-S] [-T term] capname
+</code>
+</note>
+
+<note tip>Installation du paquet ncurses
+
+Fin 2018, la dernière version de la libriairie ncurses présente dans les dépôts est la version 5. Elle s'installe ainsi :
+<code>
+$ sudo apt-get install libncurses5
+</code>
+</note>
+==== Mise en couleur ====
+=== Mise en couleur du texte (échappement ANSI) : setaf ===
+La commande setaf, suivie d'un code numérique de 1 à 7 permet de changer la couleur du texte.
+Setaf fonctionne avec les terminaux xterm (a priori cas général sous Ubuntu). On utilise sgr0 pour revenir aux valeurs par défaut.
+syntaxe :
+<code>
+$ tput setaf [code_couleur]
+</code>
+
+=== Mise en couleur du texte (sans échappement du texte) : setf ===
+La commande setf ne paraît pas fonctionner dans les terminaux xterm.
+<code>
+$ tput setf [code_couleur]
+</code>
+
+=== Mise en couleur de l'arrière plan (background - échappement ANSI) : setab ===
+<code>
+$ tput setab [code_couleur]
+</code>
+
+=== Mise en couleur de l'arrière plan (background - sans échappement du texte) : setb ===
+La commande setb ne paraît pas fonctionner dans les terminaux xterm.
+<code>
+$ tput setb [code_couleur]
+</code>
+
+=== Tableau des couleurs : ===
+^ Couleur  ^ Code ^  ^
+|  noir  |0|  |
+|  rouge  | 1  |  |
+|  vert  |2|  |
+|  jaune  |3|  |
+|  bleu  |4|  |
+|  magenta  |5|  |
+|  cyan  |6|  |
+|  blanc  |7|  |
+Le nombre des couleurs possible est désormais généralement égal à 256 au moins. Pour le vérifier, il suffit de saisir dans le terminal la commande suivante :
+<code>
+$ tput colors
+</code>
+Si le retour de la commande est '256', vous pouvez étendre votre terrain de jeux. Le code couleur doit être annoncé sur 3 chiffres (de 001 à 256).
+=== Exemples d'utilisation permettant de rendre l'usage plus simple ===
+Syntaxe de base de tput
+<code>
+$ echo "Texte ordinaire "$(tput setaf 3; tput setab 1)"jaune sur fond rouge"$(tput sgr0)" à nouveau ordinaire."
+</code>
+Cette syntaxe put être rendue plus compréhensible en utilisant des variables bien choisies. Ainsi, dans l'exemple suivant, l’affichage de $rouge place le texte en rouge, celui de $ordinaire rétabli les paramètres par défaut :
+<code>
+$ rouge=$(tput setaf 1)
+$ ordinaire=$(tput sgr0)
+$ echo "avant ""$rouge""Le Texte""$ordinaire"" après"
+</code>
+=== Un script en guise d'aide-mémoire ===
+Pour afficher les 8 couleurs principales :
+<code>
+#!/bin/bash
+couleurs=(Noir Rouge Vert Jaune Bleu Magenta Cyan Blanc); 
+for i in $(seq 1 7); 
+	do 
+		echo -e " $(tput setaf $i)${couleurs[$i]}\tTexte$(tput sgr0)\t$(tput bold)$(tput setaf $i)Texte$(tput sgr0)\t$(tput sgr 0 1)$(tput setaf $i)Texte$(tput sgr0)\t(tput setaf $i)"; 
+	done
+exit 0;
+</code>
+et le résultat :
+{{ :tutoriel:tput_xenial_01.png?direct&600 |}}
+Pour visualiser les 256 couleurs possibles
+<code>
+$ for i in {0..256};do o=00$i;echo -ne "${o:${#o}-3:3} "$(tput setaf $i;tput setab $i)"   "$(tput sgr0);done; 
+</code>
+{{ :administration:tput_xenial_02.png?direct&600 |}}
+==== S'informer sur les dimensions du terminal ====
+tput lines et tput cols permettent de déterminer le nombre de ligne et de colonnes du terminal.
+<code>
+tput lines
+tput cols
+</code>
+
+==== Déplacer le curseur à l'intérieur du terminal ====
+Placer le curseur en position x y (colonnes et lignes)
+<code>
+tput cup Y X
+tput cup 6 9
+</code>
+La dernière commande place le curseur en colonne 6 ligne 9
+=== Déplacer le curseur vers la gauche ===
+Déplacement d'un caractère vers la gauche : cub1
+<code>
+tput cub1
+</code>
+Déplacement de N caractère vers la gauche : cub N
+<code>
+tput cub N
+echo "Anticonstitutionnellement"$(tput cub 10)"sèche"
+echo "Anticonstitutionnellement"$(tput cub 21)"sèche"$(tput el)
+</code>
+
+=== Déplacer le curseur vers la droite ===
+Déplacement d'un caractère vers la droite : cuf1
+<code>
+tput cuf1
+echo "UN""exemple qui ajoute un espace"
+echo "UN"$(tput cuf1)"exemple qui ajoute un espace"
+</code>
+Déplacement de N caractère vers la droite : cuf N
+<code>
+tput cuf N
+</code>
+
+=== Remonter d'une ligne ===
+<code>
+tput cuu1
+</code>
+
+=== Se rendre en dernière ligne, première colonne ===
+<code>
+tput ll
+</code>
+
+=== Revenir à la position initiale ===
+Tput peut enregistrer une position avec 'tput sc' puis y revenir après plusierus dépalcements avec 'tput rc'
+<code>
+tput sc
+...
+tput rc
+</code>
+
+==== Insérer et effacer du texte ====
+=== Insertion ===
+Insertion d'un caractère
+<code>
+tput ich1
+</code>
+Insertion de N caractères
+<code>
+tput ich N
+</code>
+Insertion de N lignes
+<code>
+tput il N Insert N lignes
+</code>
+
+=== Effacement ===
+Effacement de N caractères
+<code>
+tput ech N
+</code>
+Effacement du début de la ligne (par rapport à la position courante)
+<code>
+tput el1
+echo "Anticonstitutionnellement"
+echo "Anti"$(tput el1)"constitutionnellement"
+</code>
+Effacement de la fin de la ligne (par rapport à la position courante)
+<code>
+tput el
+echo "Anticonstitutionnellement"$(tput cub 6; tput el)
+</code>
+Effacement jusqu'à la fin de l'écran (par rapport à la position courante)
+<code>
+tput ed
+</code>
+Effacement de l'ensemble de l'écran et déplacement du curseur en position 0,0 (en haut à gauche)
+<code>
+tput clear Efface l’écran et place le curseur à 0,0 
+</code>
+Pour obtenir davantage d'informations sur tput (en anglais, of course) : ne pas oublier le manuel
+<code>
+man tput
+man terminfo
+</code>
+
+
+
+===== Voir aussi =====
+
+  * [[http://www.tux-planet.fr/les-codes-de-couleurs-en-bash/|les codes couleurs en bash]] sur le site tux-planet  **(fr)**
+  * [[https://www.commentcamarche.com/faq/14740-coloration-du-shell-bash|coloration du shell bash]]  **(fr)**
+  * [[https://www.admin-linux.fr/bash-de-la-couleur-dans-le-shell/|Bash : De la couleur dans le shell]]  **(fr)**
+  * [[https://unix.stackexchange.com/questions/269077/tput-setaf-color-table-how-to-determine-color-codes|Connaître les couleurs disponibles avec setaf]]  **(en)**
+  * [[http://tldp.org/HOWTO/Bash-Prompt-HOWTO/x361.html|Mouvement du curseur]]  **(en)**
+
+Tput
+  * [[http://ti1.free.fr/index.php/bash-tput/|Aide-mémoire tput]]  **(fr)**
+  * [[https://www.it-connect.fr/linux-gestion-dadressage-du-curseur-avec-tput/|Linux : Gestion d’adressage du curseur avec tput]]  **(fr)**
+  * [[https://www.commentcamarche.com/faq/6458-la-commande-tput|La commande tput]]  **(fr)**
+  * [[http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html|Coloration et déplacement du curseur avec tput]]  **(en)**
+  * [[https://raymii.org/s/snippets/Bash_Bits_Add_Color_Output_To_Your_Scripts.html|Ajoutez des couleurs aux sorties de vos scripts]]  **(en)**
+  * [[http://www.linuxcommand.org/lc3_adv_tput.php|Créer une horloge]]  **(en)**
+  * [[https://en.wikipedia.org/wiki/Tput|Tput sur wikipedia]]  **(en)**
+  * [[http://man7.org/linux/man-pages/man1/tput.1.html|Page man]]  **(en)**
+  * [[https://www.gnu.org/software/termutils/manual/termutils-2.0/html_chapter/tput_1.html|tput sur gnu.org]]
+  * [[https://www.thegeekstuff.com/2011/01/tput-command-examples/|9 UNIX / Linux tput Examples: Control Your Terminal Color and Cursor]]  **(en)**
+  * [[https://stackoverflow.com/questions/14259311/set-or-change-vertical-position-of-the-cursor|Un menu pour vos scripts]]  **(en)**
+  * [[https://stackoverflow.com/questions/18893492/why-is-there-both-setf-setb-and-setaf-setab-in-tput|Why is there both setf/setb and setaf/setab in tput?]]  **(en)**
+
+Personnaliser le prompt
+  * [[https://www.admin-linux.fr/personnaliser-le-prompt/|Personnaliser le prompt]]  **(fr)**
+  * [[https://www.commentcamarche.com/faq/14740-coloration-du-shell-bash|Coloration de l'invite de commande]]  **(fr)**
+  * [[https://wiki.archlinux.org/index.php/Bash/Prompt_customization|Personnalisation du prompt]]  **(en)**
+
+----
+
+//Contributeurs principaux : [[:utilisateurs:zococo|zococo]].//

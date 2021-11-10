@@ -1,0 +1,255 @@
+
+{{tag>rclone rclone-browser hubic deja-dup tutoriel}}
+----
+
+{{  https://forum.rclone.org/uploads/default/original/2X/3/328f860878d4acb13d550a2b12505d181f181713.png?90}}
+====== Monter un cloud comme disque local avec Rclone ======
+
+L'objectif ici est de mettre en place un accès ponctuel ou permanent à son cloud (Hubic ici, mais ça marche avec Onedrive, [[:dropbox|Dropbox]], [[:google_drive|Google Drive]] ...) pour stocker ses données et pouvoir sauvegarder directement dessus à la manière de l'application Onedrive sur les os Microsoft.
+L'intérêt de cette utilisation est de pouvoir sauvegarder son système et ses données de manière assez simple (une fois configuré) sans utiliser d'espace disque en local et éventuellement de sauvegarder son système de manière sécurisé (chiffré et décentralisé) avec [[:deja-dup]].
+
+<note>Rclone va monter le cloud. Vous aurez accès au cloud directement, et non à un dossier local synchronisé. Il y a 2 inconvenients à ça :
+  * La vitesse sera plus faible qu'en local, puisque les fichiers seront lus directement sur Internet
+  * Pas d'internet, pas d'accès aux fichiers
+  * Pas de possiblité d'éditer les documents. On ne peut que les lire, effacer, renommer
+
+
+Y aurait-il une possibilité de synchroniser le dossier monté Rclone avec un dossier local ???
+</note>
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Avoir un compte cloud actif (ici Hubic)
+  * Savoir utiliser le [[:terminal]] et ne pas en avoir peur, malgré le fait que ce tutoriel soit fait en pas-à-pas
+  * Avoir un peu de temps, surtout pour la première étape qu'il faut faire en une seule fois sous peine de devoir repartir de zéro
+
+===== Installation de Rclone =====
+
+==== Via les dépôts officiels ====
+Pour installer ce logiciel, il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>rclone]]**.
+
+==== Via un paquet deb ====
+
+Sur la [[https://rclone.org/downloads/|page de téléchargement de Rclone]], télécharger et [[:tutoriel:comment_installer_un_paquet#en_ligne_de_commande|installer]] le paquet DEB correspondant à votre [[:architecture_materielle|architecture matérielle]] (32 ou 64 bits) 
+
+==== Via un script (ligne de commande)====
+
+
+<note critique>**Avertissement de sécurité à lire attentivement :**
+  * Les lignes de commande suivante touchent à la sécurité de votre système, si vous avez un doute ne vous en servez pas
+  * Les lignes sont expliquées pas à pas avec le détail de l'action de chacune d'entre elles, prenez le temps de tout lire, et encore une fois en cas de doute ne vous en servez pas ! 
+(Vous pouvez regarder l'historique de modification de ce tutoriel pour détecter d'éventuelles modifications malveillantes).
+</note>
+En ligne de commande via le .zip du site rclone.org en utilisant le [[:terminal]]
+avec les [[:commande_shell|commandes]] suivantes : 
+
+- Récupérez l'installation : <code>wget https://downloads.rclone.org/rclone-current-linux-amd64.zip</code>
+- Décompressez le .zip : <code>unzip rclone-current-linux-amd64.zip</code>
+- Allez dans le dossier : <code>cd rclone-v*.**-linux-amd64</code>
+- Copiez dans le sbin pour utilisation : <code>sudo cp rclone /usr/sbin/</code>
+- Attribuez le au super-utilisateur (root) : <code>sudo chown root:root /usr/sbin/rclone</code>
+- Donnez les droits d'accès complet : <code>sudo chmod 755 /usr/sbin/rclone</code>
+- Retournez dans le home et effacez le dossier téléchargé et le .zip : <code>cd ~ && rm -r rclone-v*.**-linux-amd64 && rm rclone-current-linux-amd64.zip</code>
+
+<note important> Pour une question de rapidité d’exécution, et pour ceux qui maîtrise plus le sujet, la ligne de commande suivante exécute toutes les actions précédentes en une fois</note>
+
+L'ensemble en une ligne de [[:commande_shell|commande]] :
+
+<code>wget https://downloads.rclone.org/rclone-current-linux-amd64.zip && unzip rclone-current-linux-amd64.zip && cd rclone-v*.**-linux-amd64 && sudo cp rclone /usr/sbin/ && sudo chown root:root /usr/sbin/rclone && sudo chmod 755 /usr/sbin/rclone &&cd ~ && rm -r rclone-v*.**-linux-amd64 && rm rclone-current-linux-amd64.zip</code>
+
+
+===== Paramétrage de Rclone =====
+
+<note important>**Avertissement de sécurité :**
+  * Le paramétrage se fait en ligne de commande uniquement, à moins d'utiliser l'interface graphique Rclone Browser
+  * Vous allez devoir vous identifier sur une page web de votre fournisseur de cloud, faites attention de ne pas être sur une page d'hameçonnage  (phishing), en cas de doute arrêtez-vous là et venez vérifier l'historique de la page
+</note>
+
+==== Créer le fichier de configuration ====
+
+Il faut créer le fichier de configuration au bon endroit sinon vous ne pourrez pas utiliser Rclone-browser.
+
+En ligne de [[:commande_shell|commande]] :
+
+Créez le dossier rclone dans le .config et le fichier rclone.conf : <code>mkdir ~/.config/rclone && touch ~/.config/rclone/rclone.conf</code>
+ 
+==== Lancer la configuration de Rclone ====
+
+Avec la [[:commande_shell|commande]] : <code>rclone config</code>
+
+Alors il doit vous parler en anglais (apparemment il n'existe pas de traduction), le terminal vous renvoie :
+
+<code>
+No remotes found - make a new one
+n) New remote
+s) Set configuration password
+q) Quit config
+n/s/q>
+</code>
+
+Tapez "n" puis "entrée"
+<code>
+name> 
+</code>
+
+Choisissez le nom de votre configuration ici "Hubic" et tapez "entrée"
+
+<code>
+name> "votre nom"
+Type of storage to configure.
+Choose a number from below, or type in your own value
+ 1 / Amazon Drive
+   \ "amazon cloud drive"
+ 2 / Amazon S3 (also Dreamhost, Ceph, Minio)
+   \ "s3"
+ 3 / Backblaze B2
+   \ "b2"
+ 4 / Dropbox
+   \ "dropbox"
+ 5 / Encrypt/Decrypt a remote
+   \ "crypt"
+ 6 / FTP Connection
+   \ "ftp"
+ 7 / Google Cloud Storage (this is not Google Drive)
+   \ "google cloud storage"
+ 8 / Google Drive
+   \ "drive"
+ 9 / Hubic
+   \ "hubic"
+10 / Local Disk
+   \ "local"
+11 / Microsoft OneDrive
+   \ "onedrive"
+12 / Openstack Swift (Rackspace Cloud Files, Memset Memstore, OVH)
+   \ "swift"
+13 / SSH/SFTP Connection
+   \ "sftp"
+14 / Yandex Disk
+   \ "yandex"
+15 / http Connection
+   \ "http"
+Storage> 
+</code>
+
+Choisissez le fournisseur de cloud voulu et tapez le chiffre correspondant (ici Hubic) tapez "9" (adaptez le chiffre à votre fournisseur) puis tapez "entrée"
+
+<code>
+Hubic Client Id - leave blank normally.
+client_id> 
+</code>
+
+Laissez vide et tapez "entrée"
+
+<code>
+Hubic Client Secret - leave blank normally.
+client_secret> 
+</code>
+
+Laissez vide et tapez "entrée"
+
+<code>
+Remote config
+Use auto config?
+ * Say Y if not sure
+ * Say N if you are working on a remote or headless machine
+y) Yes
+n) No
+y/n>
+</code>
+
+Tapez "y" et "entrée"
+
+Vous êtes renvoyé sur la page de votre fournisseur de cloud, et il faut vous identifier et accepter ensuite fermez la page et retournez au terminal.
+
+<code>
+token = {"access_token":"****","token_type":"Bearer","refresh_token":"****","expiry":"****"}
+--------------------
+
+--------------------
+y) Yes this is OK
+e) Edit this remote
+d) Delete this remote
+y/e/d> 
+</code>
+
+Si c'est bon tapez "y" et "entrée"
+
+La configuration est finie tapez "q" et "entrée"
+
+===== Montage de son cloud =====
+
+Il existe plusieurs manière pour monter son cloud :
+
+==== En ligne de commande : ====
+
+Avec cette méthode vous n'avez rien à installer en plus et vous pouvez automatiser le montage avec un script (voir plus bas), l'inconvénient est que vous n'avez pas d'interface graphique.
+
+Ouvrez un [[:terminal]] et utilisez les [[:commande_shell|commande]] suivantes :
+
+<code>mkdir ~/cloud/</code>
+"cloud" sera votre point de montage
+
+<code>rclone mount Hubic:default ~/cloud/</code>
+
+"rclone mount" c'est l'action que l'on souhaite faire, "Hubic" le nom de votre cloud ":default" la racine de votre cloud et "~/cloud" l'emplacement de montage.
+
+Si vous avez un dossier précis sur votre cloud et que vous voulez le monter la [[:commande_shell|commande]] devient :
+<code>rclone mount Hubic:default/votre_dossier ~/cloud/</code>
+
+Vous pouvez fermer le terminal, malgré l'avertissement le dossier reste monté.
+
+<note tip>N'oubliez pas qu'il s'agit d'un cloud pas d'un espace de travail en temps réel, vous pouvez supprimer, ajouter et récupérer des documents dessus mais pas les éditer.</note>
+
+==== Avec Rclone-browser : ====
+
+Avec cette méthode vous devez installer Rclone-browser et profiter d'une interface graphique pour créer des dossiers, parcourir votre cloud ou monter un dossier en local, l'inconvénient est que vous ne pouvez pas automatiser le montage.
+
+Vous pouvez télécharger rclone-browser_*.*_amd64.deb ou rclone-browser_*.*_i386.deb (selon votre [[:architecture_materielle]])  [[https://github.com/mmozeiko/RcloneBrowser/releases|directement sur le github du projet]]
+
+Ensuite [[:tutoriel:comment_installer_un_paquet|Installez le paquet]] que vous avez téléchargé.
+
+Vous trouverez l'application dans le menu comme toutes les applications installées, lancez la.
+
+Dans l'onglet "remotes" choisissez le cloud configuré et utiliser le bouton "open", cela vous ouvre un onglet du nom de votre cloud.
+Vous pouvez le parcourir et éventuellement monter la racine de votre cloud ou seulement un dossier au choix.
+
+==== Montage avec un script (automatisation)====
+
+<note warning>Sachez que cette partie du tutoriel est sensible, si vous êtes novice faites très attention, prenez le temps de lire le  [[:tutoriel:script_shell|tutoriel sur les scripts]]</note>
+
+Voici la marche à suivre :
+
+- D'abord ouvrez l'éditeur de texte, utilisez le code ci-dessous :
+
+<file bash>
+#!/bin/bash
+# Montage de mon cloud via un script
+echo Montage du cloud
+rclone mount Hubic:default ~/cloud/
+
+
+exit 0
+</file>
+
+Enregistrez le dans votre home, rendez le exécutable et exécutez le.
+
+Pour automatiser le montage au démarrage il suffit d'ajouter votre script. Voir [[:demarrage|Comment Ubuntu démarre / le startup / le démarrage]]
+
+
+===== Conclusion =====
+
+Maintenant vous avez à votre disposition une palette de possibilité pour utiliser votre cloud comme un disque local.
+
+Une utilisation intéressante est celle qui consiste à utiliser votre cloud monté automatiquement pour sauvegarder vos données dessus de manière chiffrée et régulière avec [[:deja-dup|deja-dup]].
+
+
+===== Voir aussi =====
+
+  * [[https://rclone.org/|Site officiel de "Rclone"]]
+  * [[https://github.com/mmozeiko/RcloneBrowser/releases|Github de "Rclone-browser"]]
+
+
+----
+//Contributeurs principaux : [[:utilisateurs:lous]].//

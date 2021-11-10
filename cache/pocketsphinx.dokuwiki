@@ -1,0 +1,328 @@
+
+{{tag>logiciels audio}}
+<note important>Cette page est en cours de rédaction</note>
+====== Pocketsphinx ======
+
+**Pocketsphinx** est une librairie permettant d'intégrer la reconnaissance vocale dans vos projets écrit en language C à l'aide des fonctionnalités du projet open source [[http://cmusphinx.sourceforge.net/|CMUSphinx]].
+
+===== Installation =====
+==== À partir des dépôts ====
+
+[[:tutoriel:comment_installer_un_paquet|Installer les paquets]] **[[apt>python-pocketsphinx libpocketsphinx1 gstreamer1.0-pocketsphinx python-pyaudio]]**.
+
+Ou dans un [[:terminal]] avec les droits [[:sudo|administrateurs]] :
+<code>
+sudo apt-get install python-pocketsphinx libpocketsphinx1 gstreamer1.0-pocketsphinx python-pyaudio
+</code>
+
+==== À partir des sources ====
+D'abord il faut installer les dépendances dans un [[:terminal]] avec les droits [[:sudo|administrateurs]] :
+<code>
+sudo apt-get build-dep pocketsphinx
+sudo apt-get install bison python-pyaudio
+</code>
+
+=== sphinxbase ===
+
+On récupère ensuite les sources de **sphinxbase-0.8**
+<code>
+wget -O sphinxbase-0.8.tar.gz http://sourceforge.net/projects/cmusphinx/files/sphinxbase/0.8/sphinxbase-0.8.tar.gz/download
+</code>
+On les décompresse
+<code>
+tar -xvzf sphinxbase-0.8.tar.gz
+</code>
+On ce rend dans le dossier pour préparer l'installation 
+<code>
+cd sphinxbase-0.8/
+</code>
+On compile
+
+<code>
+./configure --prefix=/usr/local
+make
+sudo make install
+</code>
+
+
+<note important>
+Si vous avez l'erreur :
+<code>
+    import pocketsphinx as ps
+  File "sphinxbase.pxd", line 150, in init pocketsphinx (pocketsphinx.c:7935)
+ValueError: PyCapsule_GetPointer called with invalid PyCapsule object
+</code>
+il faut régénérer le fichier  python/sphinxbase.c [[http://sourceforge.net/p/cmusphinx/bugs/284/#b6ea|ref]]
+<code>
+sudo apt-get install cython
+mv python/sphinxbase.c ~
+</code>
+puis relancer la compilation a partir de ./configure
+</note>
+
+<note tip>Par défaut au moment de la configuration de sphinxbase, si les librairies de compilation de pulseaudio sont installées elles seront utilisées.
+Si comme moi vous devez utiliser Alsa, il faut supprimer la librairie pulseaudio :
+<code>
+sudo apt-get remove libpulse-dev
+
+</code>
+</note>
+
+=== pocketsphinx ===
+<code>
+wget -O pocketsphinx-0.8.tar.gz http://sourceforge.net/projects/cmusphinx/files/pocketsphinx/0.8/pocketsphinx-0.8.tar.gz/download
+tar -xvzf pocketsphinx-0.8.tar.gz
+cd pocketsphinx-0.8
+./configure --prefix=/usr/local
+make
+sudo make install
+</code>
+
+=== Modèles français ===
+
+Téléchargement:
+<code>
+wget -O lium_french_f0.tar.gz http://sourceforge.net/projects/cmusphinx/files/Acoustic%20and%20Language%20Models/Archive/French%20F0%20Broadcast%20News%20Acoustic%20Model/lium_french_f0.tar.gz/download
+tar -xvzf lium_french_f0.tar.gz
+cd lium_french_f0/
+sudo mkdir -p `pkg-config --variable=modeldir pocketsphinx`/fr_FR/french_f0
+sudo mv * `pkg-config --variable=modeldir pocketsphinx`/fr_FR/french_f0
+
+wget -O french3g62K.lm.dmp http://sourceforge.net/projects/cmusphinx/files/Acoustic%20and%20Language%20Models/French/fr.lm.dmp/download
+sudo mkdir -p `pkg-config --variable=modeldir pocketsphinx`/fr_FR/
+sudo mv french3g62K.lm.dmp `pkg-config --variable=modeldir pocketsphinx`/fr_FR/
+
+wget -O frenchWords62K.dic http://sourceforge.net/projects/cmusphinx/files/Acoustic%20and%20Language%20Models/French/fr.dict/download
+sudo mv frenchWords62K.dic `pkg-config --variable=modeldir pocketsphinx`/fr_FR/
+</code>
+
+===== Bon alors, est ce que ça marche ? =====
+==== pocketsphinx_continuous ====
+Vous pouvez alors lancer la reconnaissance vocale depuis le micro directement avec la commande pocketsphinx_continuous.
+Il faut simplement préciser un dictionnaire à utiliser, un modèle de langage et un modèle de Markov caché (Hidden Markov Model ou HMM).
+Si vous avez installé pocketsphinx avec le gestionnaire de paquets, le répertoire contenant les modèles est /usr/share/pocketsphinx/model/.
+Pour utiliser les modèles en français que vous venez de télécharger en suivant les instructions ci-dessus, il faut exécuter la commande :
+<code>
+pocketsphinx_continuous -dict /usr/share/pocketsphinx/model/fr_FR/frenchWords62K.dic -hmm /usr/share/pocketsphinx/model/fr_FR/french_f0/ -lm /usr/share/pocketsphinx/model/fr_FR/french3g62K.lm.dmp -inmic yes
+</code>
+
+Si vous l'avez compilé depuis les sources comme indiqué plus haut,  le répertoire contenant les modèles est /usr/local/share/pocketsphinx/model/  . Il faudra alors exécuter la commande :
+
+<code>
+pocketsphinx_continuous -dict /usr/local/share/pocketsphinx/model/fr_FR/frenchWords62K.dic -hmm /usr/local/share/pocketsphinx/model/fr_FR/french_f0/ -lm /usr/local/share/pocketsphinx/model/fr_FR/french3g62K.lm.dmp -inmic yes
+</code>
+
+Plutôt que d'utiliser le micro en entrée, vous pouvez spécifier un fichier audio d'entrée au format wav en remplaçant l'option -inmic yes par -infile <fichier_audio.wav>
+
+
+==== scripts python ====
+=== lister tous les périphériques audio ===
+
+[[http://people.csail.mit.edu/hubert/git/?p=pyaudio.git;a=blob;f=test/system_info.py;h=3c81432d7ffa3feaae06fa9804f41ffa03d4865d;hb=HEAD#l49|ref]]
+<code language='python'>
+#!/usr/bin/python
+"""
+PyAudio Example:
+
+Query and print PortAudio HostAPIs, Devices, and their
+support rates.
+"""
+
+import pyaudio
+
+standard_sample_rates = [8000.0, 9600.0, 11025.0, 12000.0,
+                         16000.0, 22050.0, 24000.0, 32000.0,
+                         44100.0, 48000.0, 88200.0, 96000.0,
+                         192000.0]
+
+p = pyaudio.PyAudio()
+max_apis = p.get_host_api_count()
+max_devs = p.get_device_count()
+
+print("\nPortAudio System Info:\n======================")
+print("Version: %d" % pyaudio.get_portaudio_version())
+print("Version Text: %s" % pyaudio.get_portaudio_version_text())
+print("Number of Host APIs: %d" % max_apis)
+print("Number of Devices  : %d" % max_devs)
+
+print("\nHost APIs:\n==========")
+
+for i in range(max_apis):
+    apiinfo = p.get_host_api_info_by_index(i)
+    for k in list(apiinfo.items()):
+        print("%s: %s" % k)
+    print("--------------------------")
+
+print("\nDevices:\n========")
+
+for i in range(max_devs):
+    devinfo = p.get_device_info_by_index(i)
+
+    # print out device parameters
+    for k in list(devinfo.items()):
+        name, value = k
+
+        # if host API, then get friendly name
+
+        if name == 'hostApi':
+            value = str(value) + \
+                    " (%s)" % p.get_host_api_info_by_index(k[1])['name']
+        print("\t%s: %s" % (name, value))
+
+    # print out supported format rates
+
+    input_supported_rates = []
+    output_supported_rates = []
+    full_duplex_rates = []
+
+    for f in standard_sample_rates:
+
+        if devinfo['maxInputChannels'] > 0:
+            try:
+                if p.is_format_supported(
+                    f,
+                    input_device = devinfo['index'],
+                    input_channels = devinfo['maxInputChannels'],
+                    input_format = pyaudio.paInt16):
+                    input_supported_rates.append(f)
+            except ValueError:
+                pass
+
+        if devinfo['maxOutputChannels'] > 0:
+            try:
+                if p.is_format_supported(
+                    f,
+                    output_device = devinfo['index'],
+                    output_channels = devinfo['maxOutputChannels'],
+                    output_format = pyaudio.paInt16):
+                    output_supported_rates.append(f)
+            except ValueError:
+                pass
+
+        if (devinfo['maxInputChannels'] > 0) and \
+           (devinfo['maxOutputChannels'] > 0):
+            try:
+                if p.is_format_supported(
+                    f,
+                    input_device = devinfo['index'],
+                    input_channels = devinfo['maxInputChannels'],
+                    input_format = pyaudio.paInt16,
+                    output_device = devinfo['index'],
+                    output_channels = devinfo['maxOutputChannels'],
+                    output_format = pyaudio.paInt16):
+                    full_duplex_rates.append(f)
+            except ValueError:
+                pass
+
+    if len(input_supported_rates):
+        print("\tInput rates: %s" % input_supported_rates)
+    if len(output_supported_rates):
+        print("\tOutput rates: %s" % output_supported_rates)
+    if len(full_duplex_rates):
+        print("\tFull duplex: %s" % full_duplex_rates)
+
+    print("\t--------------------------------")
+
+print("\nDefault Devices:\n================")
+try:
+    def_index = p.get_default_input_device_info()['index']
+    print("Default Input Device : %s" % def_index)
+    devinfo = p.get_device_info_by_index(def_index)
+    for k in list(devinfo.items()):
+        name, value = k
+        if name == 'hostApi':
+            value = str(value) + \
+                    " (%s)" % p.get_host_api_info_by_index(k[1])['name']
+        print("\t%s: %s" % (name, value))
+    print("\t--------------------------------")
+except IOError as e:
+    print("No Input devices: %s" % e[0])
+
+try:
+    def_index = p.get_default_output_device_info()['index']
+    print("Default Output Device: %s" % def_index)
+    devinfo = p.get_device_info_by_index(def_index)
+    for k in list(devinfo.items()):
+        name, value = k
+        if name == 'hostApi':
+            value = str(value) + \
+                    " (%s)" % p.get_host_api_info_by_index(k[1])['name']
+        print("\t%s: %s" % (name, value))
+    print("\t--------------------------------")
+except IOError as e:
+    print("No Output devices: %s" % e[0])
+
+p.terminate()
+
+</code>
+=== essayer de faire une reconnaissance vocale ===
+
+[[http://pythonism.wordpress.com/2013/06/06/pocketsphinx-voice-recognition-with-python/|ref]]
+
+<code language='python'>
+#!/usr/bin/python
+
+import sys,os
+import pyaudio
+import wave
+
+hmdir = "/usr/share/pocketsphinx/model/FR/"
+lmd = "/usr/share/pocketsphinx/model/FR/french3g62K.lm.dmp"
+dictd = "/usr/share/pocketsphinx/model/FR/frenchWords62K.dic"
+
+def decodeSpeech(hmmd,lmdir,dictp,wavfile):
+
+    import pocketsphinx as ps
+    import sphinxbase
+
+    speechRec = ps.Decoder(hmm = hmmd, lm = lmdir, dict = dictp)
+    wavFile = file(wavfile,'rb')
+    wavFile.seek(44)
+    speechRec.decode_raw(wavFile)
+    result = speechRec.get_hyp()
+
+    return result[0]
+
+#CHUNK = 1024
+CHUNK = 512
+#FORMAT = pyaudio.paInt16
+FORMAT = pyaudio.paALSA
+CHANNELS = 1
+RATE = 16000
+#RATE = 44100
+RECORD_SECONDS = 10
+
+for x in range(10):
+    fn = "o"+str(x)+".wav"
+    p = pyaudio.PyAudio()
+    stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
+    print("* recording")
+    frames = []
+    print str(RATE / CHUNK * RECORD_SECONDS) + " size\n"
+    for i in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
+        data = stream.read(CHUNK)
+        frames.append(data)
+    print("* done recording")
+    stream.stop_stream()
+    stream.close()
+    wf = wave.open(fn, 'wb')
+    wf.setnchannels(CHANNELS)
+    wf.setsampwidth(p.get_sample_size(FORMAT))
+    p.terminate()
+    wf.setframerate(RATE)
+    wf.writeframes(b''.join(frames))
+    wf.close()
+    wavfile = fn
+    recognised = decodeSpeech(hmdir,lmd,dictd,wavfile)
+    print recognised
+    cm = 'espeak "'+recognised+'"'
+    os.system(cm)
+</code>
+===== Références =====
+
+  * Site officiel : http://cmusphinx.sourceforge.net/wiki/download/
+  * Github : https://github.com/cmusphinx/pocketsphinx
+  * Python audio : http://people.csail.mit.edu/hubert/pyaudio/docs/
+  * http://stackoverflow.com/questions/8567366/geting-ioerror-errno-input-overflowed-9981-when-setting-pyaudio-stream-input
+  * installer sur raspberry pi :http://stackoverflow.com/questions/17778532/raspberrypi-pocketsphinx-ps3eye-error-failed-to-open-audio-device
+

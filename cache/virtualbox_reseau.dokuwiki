@@ -1,0 +1,316 @@
+
+{{tag>virtualisation réseau À_RECYCLER}}
+
+----
+
+{{ :applications:virtualbox.png?70|}}
+====== VirtualBox et le réseau ======
+
+Cette page n'est qu'une annexe destinée à alléger la page principale de [[:VirtualBox]] et permettant de vous présenter  la façon de mettre en œuvre la mise en réseau de l'hôte //(host interface networking)//. 
+
+<note important>Cette page est assez ancienne et est donc à prendre avec précautions, n'hésitez pas à consulter le chapitre 6 de la doc officielle (fr) :\\ [[http://download.virtualbox.org/virtualbox/UserManual_fr_FR.pdf]]\\
+et à amender cette page</note>
+
+<note important>Attention si l'hôte (le système qui exécute VirtualBox) est connecté à votre réseau par wifi : beaucoup de cartes wifi **ne supportent pas bridge**, malheureusement les deux exemples donnés ci-dessous utilisent **bridge**. Plus d'information : [[http://www.linux-foundation.org/en/Net:Bridge#It_doesn.27t_work_with_my_Wireless_card.21|It doesn't work with my Wireless card!]] 
+Cependant, un workaround avec iptables et le nat peut permettre à VirtualBox de se connecter au réseau même si l'interface wifi ne supporte pas le bridge.
+</note>
+
+Pour la rédaction de cet article, les options suivantes ont été utilisées dans la configuration réseau de VirtualBox:
+  * **Adapter Type**: //''PCnet-FAST III (Am 79C973)''//
+  * **Adresse MAC**: Laisser la valeur par défaut, ou ''Générer''.
+
+<note tip>
+ Sous [[Jaunty]] avec la version des dépôts (version 2.1.4 OSE) il suffit d'installer **[[apt>bridge-utils]]** et de configurer l'adaptateur réseau sur "attaché à: Adaptateur réseau Hôte" pour la machine virtuelle. Si vous êtes en DHCP le tour est joué, la machine virtuelle est accessible directement sur le réseau local sans plus de configuration.
+</note>
+===== NAT =====
+
+Sélectionner simplement l'option //''NAT''// du menu **attaché à** dans la configuration réseau de la machine virtuelle.
+
+
+===== Adaptateur réseau hôte =====
+
+[[:tutoriel:comment_installer_un_paquet|Installer les paquets]] **[[apt>bridge-utils,uml-utilities|bridge-utils uml-utilities]]** (attention, ces paquets sont dans le dépôt **Universe**).
+
+==== Création du pont ====
+
+Nous créons le pont quelle que soit la méthode utilisée (permanente ou dynamique), car il est nécessaire aux deux.
+
+Le fait que le pont soit permanent nous permet, pour la méthode dynamique, d'ajouter les interfaces virtuelles sans couper la connection réseau de l'hôte.
+
+Sauvegarder le fichier **/etc/network/interfaces**:
+<code bash>
+sudo cp /etc/network/interfaces /etc/network/interfaces.orig
+</code>
+
+[[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/network/interfaces**.
+<note>
+Remplacer "eth0" par le nom de l'interface à laquelle on désire attacher le pont.\\ Remplacer les valeurs de "address", "netmask" et "gateway" par celles utilisées sur le réseau.
+</note>
+L' interface est probablement déjà configurée par le système, repérer les lignes du type
+<file - /etc/network/interfaces>
+auto eth0 
+iface eth0 inet dhcp
+</file>ou<file>
+auto eth0 
+iface eth0 inet static
+        address xxx.xxx.xxx.xxx
+        netmask xxx.xxx.xxx.xxx
+        gateway xxx.xxx.xxx.xxx
+</file>puis les supprimer.
+
+Configurer l'interface en mode manuel, pour cela ajouter<file>
+auto eth0
+iface eth0 inet manual
+</file>
+
+Ajouter le pont. Si votre interface se configure automatiquement (//''DHCP''//), ajouter<file>
+auto br0
+iface br0 inet dhcp
+	bridge_ports eth0
+</file>sinon, ajouter (remplacer les xxx par les valeurs qui se trouvaient dans la configuration de eth0)<file>
+auto br0
+iface br0 inet static
+	bridge_ports eth0
+	address xxx.xxx.xxx.xxx
+	netmask xxx.xxx.xxx.xxx
+	gateway xxx.xxx.xxx.xxx
+</file>
+
+==== Préparation des interfaces virtuelles ====
+
+Quelques préparatifs sont nécessaires afin que VirtualBox puisse accéder aux interfaces virtuelles.
+
+Ajouter l'utilisateur au groupe **uml-net**:<code bash>sudo adduser $USER uml-net</code>
+Créer le groupe **tunusers**:<code bash>sudo addgroup tunusers</code>
+Y ajouter l' utilisateur:<code bash>sudo adduser $USER tunusers</code>
+Modifier les droits d'acces a //''/dev/net/tun''// pour que les utilisateurs du groupe **tunusers** puissent l'utiliser:\\ [[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/udev/rules.d/20-names.rules**.\\ 
+Remplacer
+<file>
+KERNEL=="tun", NAME="net/%k"</file>
+par
+<file>KERNEL=="tun", NAME="net/%k", GROUP="tunusers", MODE="0660"</file>
+Si le node //''/dev/net/tun''// est créé par recopie du fichier //''/lib/udev/devices/net/tun''// avec ses droits d'accès.\\ Modifier les permissions de **/lib/udev/devices/net/tun** afin que le fichier soit accessible pour les membres du groupe **tunusers**:
+<code bash>
+sudo chown :tunusers /lib/udev/devices/net/tun
+sudo chmod g+rw /lib/udev/devices/net/tun
+</code>
+Redémarrer le système.
+
+==== Méthode dynamique ====
+
+L'interface utilisée par la machine virtuelle est créée au démarrage de celle-ci, puis supprimée à son extinction.
+
+<note important>
+Nous allons ici utiliser la commande "VBoxTunctl", cet outil n'est pas fourni avec la version OpenSource de VirtualBox, il nous faut donc [[virtualbox#installation_de_la_version_officielle_methode_classique|installer la version officielle]].
+</note>
+
+[[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/opt/bin/vbox-network**.
+<file - /opt/bin/vbox-network>
+#!/bin/bash
+
+# include lib
+. /opt/lib/vbox-network
+
+CALLNAME=$(basename $0)
+
+case "$CALLNAME" in
+	"vbox-network_start")
+		# if the fd is set, interface already exists
+		[ "$IF_FD" = "0" ] || { echo $IF_NAME; exit $NO_ERROR; }
+		create_iface
+		exit $?
+	;;
+	"vbox-network_stop")
+		delete_iface
+		exit $?
+	;;
+	*)
+		exit $E_BAD_CALLNAME
+	;;
+esac
+</file>
+
+[[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/opt/lib/vbox-network**.
+<file - /opt/bin/vbox-network>
+# include configuration
+. /opt/etc/vbox-network
+
+IF_FD="$1"
+IF_NAME="$2"
+
+# get the user running vbox
+if [ "$SUDO_USER" = "" ]; then
+	VBOX_USER=$USER
+else
+	VBOX_USER=$SUDO_USER
+fi
+
+# errors
+NO_ERROR=0
+E_ERROR=1
+E_NOT_ROOT=2
+E_TUNCTL_CREATE=3
+E_BAD_CALLNAME=4
+
+function create_iface
+{
+	# need to be root
+	[ "$UID" = "0" ] || return $E_NOT_ROOT
+
+	# create the interface
+	TUNCTL_CMD="$TUNCTL -b -u $VBOX_USER"
+	[ "$IF_NAME" = "" ] || TUNCTL_CMD="$TUNCTL_CMD -t $IF_NAME"
+	IF=$( $TUNCTL_CMD )	
+	[ -z "$IF" ] && return $E_TUNCTL_CREATE
+
+	# bring it up
+	$IFCONFIG $IF up >> /dev/null
+
+	# bridge it
+	$BRCTL addif $BRIDGE $IF >> /dev/null
+
+	echo $IF
+	return $NO_ERROR
+}
+
+function delete_iface
+{
+	# need to be root
+	[ "$UID" = "0" ] || return $E_NOT_ROOT
+
+	# unbridge
+	$BRCTL delif $BRIDGE $IF_NAME >> /dev/null
+
+	# delete
+	$TUNCTL -d $IF_NAME >> /dev/null
+}
+</file>
+
+[[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/opt/etc/vbox-network**.
+<file - /opt/bin/vbox-network>
+BRIDGE="br0"
+TUN="/dev/net/tun"
+
+TUNCTL="/usr/bin/VBoxTunctl -f $TUN"
+BRCTL="/usr/sbin/brctl"
+IFCONFIG="/sbin/ifconfig"
+</file>
+
+Modifier les permission de **/opt/bin/vbox-network** afin qu'il soit exécutable par les membres du groupe **vboxusers**:
+<code bash>
+sudo chown :vboxusers /opt/bin/vbox-network
+sudo chmod ug+rx /opt/bin/vbox-network
+</code>
+
+Créer les liens **vbox-network_start** et **vbox-network_stop**:
+<code bash>
+cd /opt/bin
+sudo ln -s vbox-network vbox-network_start
+sudo ln -s vbox-network vbox-network_stop
+</code>
+
+Editer **/etc/sudoers** afin que Virtualbox puisse exécuter les commandes nécessaires sans se voir demander de mot de passe:
+<code bash>
+sudo visudo
+</code>
+Ajouter
+<file>
+# Members of vboxusers can run /opt/bin/vbox-network_start and /opt/bin/vbox-network_stop without asked for a password
+%vboxusers ALL=(ALL) NOPASSWD: /opt/bin/vbox-network_start, /opt/bin/vbox-network_stop
+</file>
+
+Pour utiliser ces interfaces virtuelles, sélectionner l'option //''Adaptateur Réseau Hôte''// du menu **attaché à** dans la configuration réseau de la machine virtuelle.\\ 
+Laisser le champ **Nom de l'interface** vide.\\ 
+Remplir le champ **Application d'installation** avec //''sudo /opt/bin/vbox-network_start''//.\\ 
+Remplir le champ **Application de désinstallation** avec //''sudo /opt/bin/vbox-network_stop''//.
+
+
+==== Méthode permanente ====
+
+Les interfaces virtuelles seront créées au démarrage du systeme, meme si elles ne sont pas utilisées par la suite.
+
+[[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/network/interfaces**.
+<note>
+Remplacer **eth0** par le nom de l'interface à laquelle on a attaché le pont.\\ Remplacer **tapX** par le nom de l'interface (tap0, puis tap1, tap2, tap3 ...)\\ 
+Remplacer **<user>** par le nom de l'utilisateur.
+</note>
+
+Pour chaque interface virtuelles, ajouter (avant la section de l'interface br0)
+<file - /etc/network/interfaces>
+auto tapX
+iface tapX inet manual
+	up ifconfig $IFACE up
+	down ifconfig $IFACE down
+	tunctl_user <user>
+</file>
+puis, dans la section de l'interface br0, rajouter tapX à la fin de la ligne suivante
+<file>bridge-ports eth0</file>
+ce qui donne
+<file>bridge-ports eth0 tapX</file>
+
+Redémarrer le réseau:
+<code bash>
+sudo /etc/init.d/networking restart
+</code>
+
+Pour utiliser ces interfaces virtuelles, sélectionner l'option //''Accès par pont''// du menu **attaché à** dans la configuration réseau de la machine virtuelle, puis indiquer le nom de l'interface (tap0, tap1, tap2 ... ) dans le champ **Nom de l'interface**.
+
+Pour la version 1.6.0 de Sun il faut utiliser les cartes réseaux Intel Pro/1000 au lieu des PCNet .
+Télécharger [[http://downloadcenter.intel.com/download.aspx?url=/4275/a08/PRO2KXP.exe&DwnldId=4275&ProductID=871&lang=fra|Pilotes Windows XP]] et les installer.
+
+==== Pour les utilisateurs de Firestarter ====
+
+=== Méthode dynamique : ===
+
+FIXME A compléter
+
+=== Méthode permanente : ===
+
+Allez dans //Préférences->Pare-Feu->Configuration du réseau//:
+
+  * //Périphérique réseau connecté à Internet:// br0
+
+  * //Périphérique réseau connecté au réseau local//:
+
+<note>
+  * Sélectionnez br0 si une seule interface réseau physique est utilisée (l'ordinateur ne gère pas le partage de la connexion Internet pour le réseau local)
+
+  * Sélectionnez ethx (x à remplacer par le numéro correspondant) si l'ordinateur est relié au réseau local par ethx et à internet par br0 (par exemple pour gérer le partage de la connexion internet) 
+</note>
+
+  * Dans les 2 cas : cocher //Autoriser le partage de la connexion internet// (que ce soit pour le réseau local ou seulement pour les machines virtuelles)
+
+===== Réseau interne =====
+
+Pour utiliser le réseau interne, dans le gestionnaire de machines VirtualBox, dans les propriétés de la machine, choisissez réseau interne dans les interfaces réseau.
+
+Puis, il vous faudra préciser le nom de réseau que vous allez utiliser. Sur la documentation de Virtualbox, il est précisé qu'il faut utiliser le nom "intnet" avec l'interface graphique. Ce qui se confirme après un test.
+Dans la documentation il est précisé qu'il est possible d'utiliser un autre nom de réseau interne seulement avec la ligne de commande. (à confirmer ou infirmer)
+
+Ensuite, vous faites ça pour une deuxième machine virtuelle et elles pourront communiquer. Penser à configurer le réseau des deux machines soit en installant un serveur DHCP, soit en configurant les interfaces réseau à la main.
+
+Vous pouvez utiliser autant de machines que désiré (sur le même réseau) en considérant seulement les limites de la machine hôte.
+
+(à compléter éventuellement avec des captures d'écran ou autre)
+
+==== Donner un accès internet aux machines virtuelles présentes dans un réseau interne ====
+
+Cela est possible en insérant un routeur dans le réseau interne et si votre machine hôte à un accès internet.
+
+Il suffit de créer une machine virtuelle qui servira de routeur (j'ai pour ma part utilisé PFSense mais une machine sous Débian peut fonctionner également).
+Sur cette machine, il faut deux interfaces:
+  * Une interface WAN, connectée en NAT.
+  * Une interface LAN, connectée au réseau interne.
+
+Avec PFSense, la configuration est très facile, il suffit de se laisser guider. Il faut bien penser à configurer l'interface LAN en statique et dans le bon réseau et penser également à activer le serveur DHCP sur cette interface.
+
+Ainsi, toutes les machines virtuelles connectées au réseau internes auront une adresse automatiquement attribuée et auront accès à internet en passant par le routeur précédemment créé.
+
+(Partie à compléter avec captures d'écran et utilisation d'exemples)
+
+===== Liens et sources =====
+
+  * Documentation VirtualBox: [[http://www.virtualbox.org/wiki/End-user_documentation]] (EN)
+---
+
+//Contributeurs : [[utilisateurs:narsil]], Igor.B, [[utilisateurs:tigermickrs]], [[utilisateurs:Marvinux]].//

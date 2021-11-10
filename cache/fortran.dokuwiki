@@ -1,0 +1,223 @@
+
+{{tag>programmation calcul_numérique compilation IDE}}
+
+====== Fortran ======
+
+Fortran est un langage de programmation normalisé destiné au calcul scientifique. Il intègre la programmation orientée objet et l'interfaçage avec le langage C depuis Fortran 2003 et la programmation parallèle //(coarrays)// depuis Fortran 2008. La norme actuelle est Fortran 2018 : elle améliore en particulier l'interfaçage entre C et Fortran et ajoute de nouveaux concepts pour la programmation parallèle //(teams, events, collective subroutines).// La prochaine norme est prévue pour 2023 (nommée Fortran 202X pour l'instant).
+
+===== Compilateurs =====
+
+Le langage Fortran dispose de [[https://fortran-lang.org/compilers/|nombreux compilateurs]], en particulier :
+  * Le compilateur libre GNU Fortran (GFortran).
+  * Le propriétaire Intel Fortran Compiler (ifort), et son successeur ifx basé sur LLVM (actuellement en version beta), téléchargeables gratuitement pour tous les développeurs depuis début 2021.
+  * Le compilateur commercial [[http://www.pgroup.com/resources/docs.htm| PGI]] édité par [[wp>The_Portland_Group]], qui devrait être remplacé prochainement par le compilateur [[https://github.com/flang-compiler/flang|Flang]] intégré à LLVM.
+
+gfortran est très utilisé par les scientifiques, bien que le compilateur Intel ifort puisse être plus performant sur certains problèmes ([[https://polyhedron.com/?page_id=175|voir une comparaison des différents compilateurs ici)]]. Mais plutôt que de se fier aux benchmarks, qui se concentrent sur des problèmes spécifiques, il vaut mieux faire le test sur vos programmes. Il est de toute façon toujours conseillé de compiler ses programmes avec plusieurs compilateurs afin d'obtenir un code plus robuste : un compilateur peut afficher des messages de diagnostique différents, et à l'exécution certains bogues subtiles peuvent se révéler avec un compilateur mais pas un autre.
+
+Un autre compilateur prometteur est actuellement en développement : [[https://lfortran.org/|LFortran]], qui permettra de travailler en Fortran de façon interactive, à l'aide par exemple de Jupyter.
+
+==== GFortran ====
+
+[[https://gcc.gnu.org/wiki/GFortran|GNU Fortran (GFortran)]], qui fait partie de la collection de compilateurs GCC, intègre à peu près intégralement la norme Fortran 2008 et commence à intégrer les nouveautés apportées par la norme Fortran 2018. L'installer dans Ubuntu ne présente pas de difficulté : [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>gfortran|gfortran]]** de la dernière version majeure disponible dans le dépôt ''main''.
+
+Mais le dépôt ''universe'' propose plusieurs autres versions : par exemple, dans Ubuntu 20.10 le dépôt ''main'' propose gfortran 10.2 et le dépôt ''universe'' les versions 9.3, 8.4 et 7.5. Or les versions avec un numéro de version mineure plus élevé sont déboguées depuis plus longtemps. En particulier, pour des calculs très longs, la dernière version n'est pas toujours la plus rapide. Il est donc intéressant d'installer plusieurs versions et de les tester sur votre problème. 
+
+=== Options de diagnostic ===
+
+  * ''-std'' permet de spécifier la norme à respecter, par exemple ''-std=f2008'' pour Fortran 2008. On peut lui associer l'option ''-pedantic'' pour être encore plus strict.
+  * ''-Wall -Wextra'' permettront d'obtenir un maximum d'avertissements lors de la compilation.
+
+=== Options d'optimisation ===
+
+Exemple de commande avec optimisation poussée ''-O3'' (l'exécutable est nommé par défaut ''a.out'') :
+
+<code>
+gfortran -O3 test.f90
+./a.out
+</code>
+
+Parmi les [[https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html|options d'optimisation]] de gfortran, citons :
+
+  * ''-Ofast'' : permet d'aller au-delà de ''-O3'', mais ne respecte pas la norme Fortran de façon stricte.
+  * ''-Os'' : permet de minimiser la taille de l'exécutable. Cela peut en particulier être intéressant si l'exécutable occupe en mémoire une place similaire à celle des caches du processeur, afin de réduire les allers-retours coûteux entre cache et mémoire vive.
+
+L'option ''-static-libgfortran'' permet d'utiliser [[https://gcc.gnu.org/onlinedocs/gfortran/Link-Options.html|la version statique de la librairie gfortran]], plutôt que la version partagée : cela peut permettre dans certains cas (à tester) de gagner un peu en vitesse (quelques pourcents) au détriment de la taille de l'exécutable, qui va embarquer les fonctions de la librairie que vous utilisez. Cette option est compatible avec OpenMP et les coarrays, contrairement à l'option ''-static''.
+
+Pour faire du calcul parallèle avec OpenMP, l'option de compilation est ''-fopenmp''. Parmi les méthodes utilisables pour régler le nombre de //threads,// on peut alors utiliser la variable d'environnement (exemple avec ici 4 threads) :
+<code>
+export OMP_NUM_THREADS=4
+</code>
+
+=== OpenCoarrays ===
+
+Contrairement à ifort, gfortran ne gère pas encore les cotableaux de façon native. Si vous voulez les utiliser vous aurez besoin d'installer [[http://www.opencoarrays.org/|OpenCoarrays]] :
+<code>
+sudo apt install libcoarrays-dev libcoarrays-mpich-dev
+</code>
+
+Vous pouvez également l'installer depuis les sources, par exemple dans un répertoire Logiciels de votre compte :
+<code>
+cd Logiciels
+git clone https://github.com/sourceryinstitute/OpenCoarrays.git
+cd OpenCoarrays
+./install.sh
+</code>
+S'il vous propose d'installer la librairie [[https://www.mpich.org/|MPICH]], acceptez. Sinon, OpenCoarrays peut également fonctionner avec [[https://www.open-mpi.org/|OpenMPI]].
+
+Définissez ensuite les variables d'environnement :
+<code>
+source /home/mon_login/Logiciels/OpenCoarrays/prerequisites/installations//opencoarrays/2.9.2/setup.sh
+</code>
+
+[[:tutoriel:comment_modifier_un_fichier|Ajoutez à la fin de votre fichier]] **~/.bash_profile** la dernière commande afin de ne pas avoir à la taper à chaque fois que vous ouvrez votre terminal.
+
+Au lieu d'utiliser directement gfortran, vous compilerez et exécuterez ainsi votre programme :
+<code>
+caf test.f90
+cafrun -n 4 ./a.out 
+</code> 
+où l'option ''-n'' permet de choisir le nombre d'images à exécuter en parallèle (ici 4 pour tourner sur un processeur à 2 coeurs / 4 threads). 
+
+
+
+==== Intel Fortran Compiler ====
+
+Intel® oneAPI Toolkits est désormais disponible gratuitement pour tous les développeurs.
+
+=== Installation ===
+
+//Basé sur [[https://software.intel.com/content/www/us/en/develop/articles/installing-intel-oneapi-toolkits-via-apt.html|Installing Intel® oneAPI Toolkits via APT]].//
+
+Vous pouvez installer le paquet ''intel-basekit'' mais il utilise 16 Go sur votre disque dur ! Nous détaillons donc ci-dessous les instructions nécessaires pour installer juste les compilateurs Fortran (téléchargement : 560 Mo, sur disque : ~1.5 Go) :
+<code>
+wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
+sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
+rm GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
+sudo add-apt-repository "deb https://apt.repos.intel.com/oneapi all main"
+sudo apt update
+sudo apt install intel-oneapi-compiler-fortran
+source /opt/intel/oneapi/setvars.sh
+</code>
+
+La dernière commande sert à définir les variables d'environnement. [[:tutoriel:comment_modifier_un_fichier|Ajoutez-là à votre fichier]] **~/.bash_profile**, sinon vous devrez la taper à chaque ouverture d'un terminal.
+
+Vérifiez que les deux compilateurs Intel sont bien accessibles :
+<code>
+ifort --version
+ifort (IFORT) 2021.2.0 20210228
+Copyright (C) 1985-2021 Intel Corporation.  All rights reserved.
+ 
+ifx --version
+ifx (IFORT) 2021.2.0 Beta 20210317
+Copyright (C) 1985-2021 Intel Corporation. All rights reserved.
+</code>
+
+Le nouveau compilateur ifx, encore en version Beta, est basé sur LLVM mais ne permet pas encore d'utiliser les cotableaux (coarrays) pour le calcul parallèle, même si l'option apparaît dans son aide. 
+
+=== Utilisation ===
+
+Voir le manuel pour plus d'informations :
+
+<code>man ifort</code>
+
+L'ajout d'informations de débogage se fait avec l'option ''-g''.
+
+Exemple de commande avec optimisation poussée ''-O3'' (l'exécutable est nommé par défaut ''a.out'') :
+
+<code>
+ifort -O3 test.f90
+./a.out
+</code>
+
+<code>
+ifx -O3 test.f90
+./a.out
+</code>
+
+Parmi les options d'optimisation, on citera également ''-Ofast'', ainsi que ''-xHost'' pour choisir le jeu d'instructions le plus élevé disponible sur le processeur de la machine.
+
+Pour utiliser OpenMP, l'option de compilation est ''-qopenmp''.
+
+ifort supporte nativement la programmation parallèle à l'aide des cotableaux : il suffit d'utiliser l'option de compilation ''-coarray''.
+
+Parmi les méthodes utilisables pour régler le nombre de //threads///images, on peut alors utiliser ces variables d'environnement (exemple avec ici 4 //threads//) :
+<code>
+export OMP_NUM_THREADS=4
+export FOR_COARRAY_NUM_IMAGES=4
+</code>
+ou utiliser l'option de compilation ''-coarray-num-images=4'' pour les cotableaux.
+===== Editeurs et Environnement de Développement Intégré =====
+
+La plupart des éditeurs de texte disposent d'une coloration syntaxique pour le Fortran : [[:Kate]], [[apt>gedit|gedit]], [[:Geany]], [[:vim]], [[:emacs]], etc.
+
+Les grands IDE gèrent également le Fortran :
+
+  * [[:code_blocks|Code::Blocks]] : il en existe une version [[https://cbfortran.sourceforge.io/|CBFortran]] dédiée au Fortran. 
+  * [[:Eclipse]] avec le [[http://www.eclipse.org/photran/|plugin Photran]] 
+  * [[:KDevelop]] 
+  * [[:Anjuta]] 
+  * [[:netbeans]] (cf [[http://netbeans.org/community/releases/67/cpp-setup-instructions.html]])
+
+[[apt>findent|findent]] est un utilitaire en ligne de commandes permettant d'indenter automatiquement un code Fortran et de transformer un code du format fixe vers le format libre du Fortran moderne.
+
+===== Débogueurs et outils d'analyse =====
+
+On peut utiliser [[:gdb]], le débogueur GNU ou [[http://en.wikipedia.org/wiki/Intel_Debugger|idb]] //(Intel Debugger).//
+
+Avec gfortran, lors de la compilation on utilisera l'option ''-g'' (mode debug) :
+<code>
+gfortran -g test.f90
+gdb ./a.out
+</code>
+Une fois dans gdb, on pourra exécuter le programme pas à pas avec les instructions suivantes : ''start'', ''next'' (ne rentre pas dans les fonctions), ''step'' (rentre dans les fonctions), ''finish'' (pour continuer jusqu'à la fin d'une fonction), ''until n'' (continue jusqu'à la ligne n). Et afficher le contenu des variables avec : ''display i'', ''watch i'', ''print i''. L'instruction ''help'' permettra d'afficher l'aide de ces instructions.
+
+On peut activer toutes les vérifications (limites de tableau, dépassement de capacité...) pendant l'exécution avec l'option ''-fcheck=all'' de gfortran.
+
+Pour visualiser les appels système lors de l'exécution, on peut utiliser [[apt>strace]] : 
+<code>
+strace ./a.out
+</code>
+
+Pour repérer les portions de code consommant le plus de temps processeur, on peut utiliser le profileur gprof du paquet [[apt>binutils]]. Il faut compiler le programme avec l'option ''-pg'' et ne pas activer d'optimisation :
+<code>
+gfortran -pg test.f90
+gprof ./a.out
+</code>
+
+===== Gestionnaire de paquets Fortran fpm =====
+
+Depuis 2020, [[https://github.com/fortran-lang/fpm|fpm (Fortran Package Manager)]] est en développement. Bien que disponible en version 0.4.0 alpha au 30 août 2021, il est déjà pleinement utilisable pour des projets simples. Vous pouvez l'installer en ligne de commandes à l'aide de git :
+<code>
+git clone https://github.com/fortran-lang/fpm.git
+cd fpm
+./install.sh
+export PATH=/home/mon_login/.local/bin/:$PATH
+</code>
+en remplaçant ''mon_login'' par votre identifiant de session.
+
+[[:tutoriel:comment_modifier_un_fichier|Ajoutez à la fin de votre fichier]] **~/.bashrc** la commande d'export afin de ne pas avoir à la taper à chaque fois que vous ouvrez votre terminal.
+
+fpm est inspiré de Cargo, le couteau suisse du langage Rust. Créer, compiler et tester un nouveau projet de type Hello World devient aussi simple que de taper les commandes :
+<code>
+fpm new mon_projet
+cd mon_projet
+fpm run
+</code>
+
+fpm gère les dépendances, qu'il peut télécharger automatiquement depuis GitHub.
+
+===== Bibliothèques graphiques =====
+
+Fortran ne dispose pas d'instructions graphiques. La visualisation des résultats peut se faire avec des programmes externes comme [[gnuplot]] ou [[apt>paraview|ParaView]], ou des bibliothèques graphiques, comme par exemple :
+  * [[apt>libplot-dev libplplotfortran0|PLplot]],
+  * [[https://github.com/vmagnin/gtk-fortran/wiki|gtk-fortran]] qui permet de créer des interfaces GTK en Fortran,
+  * [[https://github.com/kookma/ogpf|ogpf]] qui permet d'appeler simplement gnuplot depuis un programme en Fortran, grâce à son interface orientée objet. Il peut être installé en tant que paquet fpm.
+
+Un programme Fortran peut également générer facilement des fichiers graphiques au format [[https://fr.wikipedia.org/wiki/Portable_pixmap|Portable pixmap (PPM)]] (voir cet [[https://github.com/certik/fortran-utils/blob/master/src/ppm.f90|exemple]]).
+===== Liens =====
+  * La page française [[wpfr>Fortran|Fortran]] fournit de nombreuses informations, liens et références bibliographiques concernant le Fortran.
+  * [[https://fortran-lang.org/|Fortran-lang.org]] se veut depuis 2020 la page d'accueil du langage Fortran. La communauté développe en particulier le gestionnaire de paquets Fortran fpm, une bibliothèque standard stdlib et le compilateur interactif LFortran. Les utilisateurs de Fortran se retrouve dans le [[https://fortran-lang.discourse.group/|Discourse Fortran]].
+  * [[https://groups.google.com/g/comp.lang.fortran|comp.lang.fortran]] est un groupe de discussion Usenet actif depuis 1983. 
+  * [[http://fortranwiki.org/fortran/show/HomePage|Fortran Wiki]] offre en anglais de nombreuses ressources proposées par les développeurs Fortran.
+
+

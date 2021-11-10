@@ -1,0 +1,306 @@
+
+{{tag>système serveur administration VÉTUSTE}}
+
+----
+
+====== Loadaverage : La charge d'une machine sous Ubuntu... ======
+
+<note warning>FIXME Cette page n'a pas été vérifiée pour les dernières versions supportées d'ubuntu. Si vous pouvez valider ces informations ou les compléter, merci d'éditer cette page et de rajouter le tag de la version d'ubuntu sur laquelle cela fonctionne.</note>
+
+===== Introduction =====
+
+Une question fréquente que l'on se pose lorsqu'on a un ensemble de serveurs à gérer est l'état de charge des serveurs. La charge sur un serveur est classiquement évaluée de plusieurs manières :
+  * l'usage du CPU
+  * mémoire vive disponible
+  * espace disque disponible
+  * mémoire swap utilisée
+  * et bien d'autres encore...
+
+Personnellement, je pense que ces éléments de mesures sont difficiles à mettre en relation avec __la charge réelle__ de la machine. Explications...
+
+== L'usage du CPU ==
+
+Le pourcentage d'usage du CPU est l'exemple type d'une information difficile à traiter. Lorsque vous lancez un ''top'', vous avez dans le haut de votre écran des informations de ce type :
+
+<code>
+Cpu(s):  0.3% us,  0.3% sy,  0.0% ni, 95.9% id,  3.4% wa,  0.0% hi,  0.2% si
+</code>
+
+Est-ce que cela signifie pour autant que votre serveur est chargé à 0,3% ???
+
+Le taux d'usage du CPU donne une information extrêmement volatile ; notre petit utilitaire ''top'' se rafraîchit toutes les deux secondes... or, le taux d'usage du CPU change quasi toutes les milli-secondes.
+
+Pour moi, c'est une bonne indication pour déterminer si un processus consomme du CPU de manière inattendue mais pas assez pour évaluer la charge d'une machine.
+
+== La mémoire vive disponible ==
+
+La quantité de mémoire vive disponible peut également donner une information. Voyons un petit ''top'' sur un autre serveur :
+
+<code>
+Mem:   1036100k total,  1022588k used,    13512k free,   376616k buffers
+</code>
+
+Cette information est-elle significative ? Est-ce que mon serveur est chargé à 99% ?
+
+Le noyau Linux utilise un système de libération des zones mémoires dit **paresseuse**. C'est-à-dire qu'il va utiliser un maximum de mémoire disponible et qu'il va en libérer uniquement au besoin.
+
+== Espace disque utilisé ==
+
+L'espace disque utilisé est une indication de charge lorsque le serveur est essentiellement un serveur de fichier mais ça nous indique uniquement qu'il faut ajouter des disques. Cette information obtenue par ''df -h'' ne nous est pas utile dans ce contexte :
+
+<code>
+Sys. de fich.            Tail. Occ. Disp. %Occ. Monté sur
+/dev/cciss/c0d0p1      56G  4,1G   49G   8% /
+tmpfs                 506M     0  506M   0% /dev/shm
+192.168.254.40:/srv/archive
+                      661G  368G  259G  59% /srv/archive
+/dev/drbd0            138G   26G  105G  20% /srv/fotpad
+/dev/drbd1            138G   60G   72G  46% /srv/files
+</code>
+
+== Mémoire swap utilisée ==
+
+Reprenons notre outil ''top'' pour examiner la mémoire swap utilisée :
+
+<code>
+Swap:  4104596k total,        0k used,  4104596k free,   425472k cached
+</code>
+
+Encore une fois, ça ne nous donne aucune information sur la charge du serveur. Cette donnée nous indique néanmoins quelque chose d'important ; la mémoire vive est suffisante car le noyau ne ressent pas la nécessité de swapper.
+
+Pour moi, la mémoire swap utilisée m'indique surtout un manque de mémoire vive ; rien de plus.
+
+===== Les "load average" ====
+
+Après avoir passé en revue les quelques indicateurs de l'introduction, qui ont leurs avantages et leurs inconvénients ; je vais vous parler des **load average**, disponible avec l'utilitaire **uptime**.
+
+Les **load average** existent depuis longtemps sur les systèmes Unix et Linux a hérité de cette notion. Vous trouverez cette information de plusieurs manières (locales ou distantes) et est généralement représentée comme 3 chiffres à 2 décimales.
+
+<code>
+load average: 0.26, 0.28, 0.35
+</code>
+
+<code>
+load average: 0.26, 0.28, 0.35, 0.46
+</code>
+
+
+
+==== Que représentent les "load average" ? ====
+
+Les **load average** représentent le nombre moyen de processus dans la file d'attente des processus //ready for running// pour, respectivement, la dernière minute, les 5 dernières minutes et les 15 dernières minutes.
+
+Donc, en clair, si vous avez un ''1.00'' dans le deuxième nombre, cela signifie que //durant les 5 dernières minutes, il y avait 1 processus prêt à être exécuté (c'est-à-dire que les I/O sont satisfaits, qu'il a toutes ses ressources...) mais qui est en attente//.
+
+FIXME: Dans le kernel linux, le load-average contient également les processus en attente d'I/O, ce n'est pas uniquement la charge processeur (
+http://www.brendangregg.com/blog/2017-08-08/linux-load-averages.html
+)
+==== On peut voir ça comme une usine... ====
+
+L'usine (qui fait le travail) est le serveur. 
+La matière première est en entrée de cette usine (les processus en attente). 
+Les produits finis sont en sortie de l'usine (les processus terminés).
+
+Si vous avez beaucoup de matière première en attente, c'est que l'usine est sous-dimensionnée.
+Si vous avez peu ou pas de matière première en attente, c'est que l'usine est bien dimensionnée.
+
+En clair, si votre serveur est bien dimensionné ; vous aurez un load average relativement faible.
+
+
+==== En bref... ====
+
+Les **load average** permettent d'évaluer si le processeur est suffisamment puissant, mais également tout ce qui touche au travail devant être réalisé (la mémoire, la vitesse des contrôleurs, la vitesse des entrées/sorties sur disques...)
+
+Pour moi (et pour beaucoup d'administrateurs systèmes), les **load average** sont une solution efficace et éprouvée pour évaluer la charge d'un serveur.
+
+===== Qu'est-ce qu'une bonne valeur de load average ? =====
+
+Maintenant que je vous ai vanté les mérites des load averages, vous allez vous empressez de faire un ''uptime'' et d'observer les trois chiffres indicateurs en vous demandant si ces chiffres sont bons ou mauvais.
+
+La bonne valeur de load average n'existe pas. Tout dépend de votre environnement de travail et des tâches assignées au serveur.
+
+Dans mon parc, j'ai un serveur de mail qui ne dépasse jamais les ''0.20''. J'ai un serveur de production qui oscille entre ''0.20'' et ''1.50'' et j'ai un serveur de centralisation de sauvegardes et de mise sur bandes qui oscille entre ''6.00'' et ''8.30'' lors de la mise sur bande et qui est à ''0.00'' en heures creuses.
+
+**En fait, tout est relatif !**
+
+Que les tâches soient un peu plus lentes sur le serveur de centralisation des sauvegarde m'importe peu. Par contre, je ne veux pas que la production devienne insupportable pour les clients.
+
+En règle générale (d'après la littérature et quelques expériences personnelles), un taux supérieur à ''3.00'' est un assez mauvais signe. Quand le taux de load average atteint trois sur le serveur de production, on attend plusieurs secondes avant d'obtenir la console en SSH (pour vous donner une petite idée).
+
+
+===== Comment obtenir les load average ? =====
+
+Il y a deux manières essentielles pour obtenir les load averages ; soit localement sur la machine ; soit de manière distante à des fins de supervisions.
+
+
+==== Localement ====
+
+Pour obtenir les informations de load average localement ; vous pouvez utiliser les programmes suivants :
+
+  * ''[[indicator-applications|indicator-applications]]'' : Graphiquement dans la barre de notification :
+Pour se faire il suffit d'installer le paquet Indicator-multiload
+
+--- //[[:utilisateurs:ratm54|ratm54]] Le 28/05/2015, 20:57// la partie suivante, relative à systray-whitelist  est dépreciée depuis ubuntu 14.04
+ensuite pour unity exécuter en ligne de commande :
+ <code>
+  gsettings set com.canonical.Unity.Panel systray-whitelist "['all']"
+</code>
+
+
+  * ''[[tutoriel:console_commandes_de_base#top|top]]'' : un classique...
+
+<code>
+top - 13:19:57 up 19 days,  1:15,  1 user,  load average: 0.02, 0.03, 0.00
+Tasks:  61 total,   1 running,  60 sleeping,   0 stopped,   0 zombie
+Cpu(s):  0.2% us,  0.3% sy,  0.0% ni, 96.8% id,  2.5% wa,  0.0% hi,  0.1% si
+Mem:   1036100k total,  1015272k used,    20828k free,   141812k buffers
+Swap:  4104596k total,        0k used,  4104596k free,   791624k cached
+
+  PID USER      PR  NI  VIRT  RES  SHR S %CPU %MEM    TIME+  COMMAND
+32750 root      15   0     0    0    0 S  2.0  0.0   8:21.60 drbd1_receiver
+    1 root      00   0  0000  000  000 S  0.0  0.1   0:02.58 init
+    2 root      RT   0     0    0    0 S  0.0  0.0   0:00.04 migration/0
+[...]
+</code>
+
+  * ''[[tutoriel:console_commandes_de_base#uptime|uptime]]'' : la version "light"...
+
+<code>
+ 13:20:44 up 19 days,  1:16,  1 user,  load average: 0.09, 0.05, 0.01
+</code>
+
+  * ''[[tutoriel:console_commandes_de_base#cat|cat]] /proc/loadavg'' : la version parfaite pour les scripts...
+<code>
+0.05 0.04 0.00 1/67 32139
+</code>
+
+\\
+Sinon il est possible d'ajouter dans la barre supérieur (droite) de unity le programme indicator-multiload :
+<code>
+  sudo apt-get install indicator-multiload
+</code>
+
+puis relancer la session (ou dans une console lancer la commande indicator-multiload &)
+Ce programme permet de visualiser directement différents paramètres issus de l'application "moniteur système".
+
+Pour le paramétrage cliquer droit sur l’icône et sélectionner préférences. Dans l'écran sélectionner la case à cocher "charge" qui de loin est l'indicateur le plus pertinent. Basiquement un load supérieur aux nombres de processeurs indique un système chargé.
+==== A distance ====
+
+Pour obtenir les load average à distance (ce qui est pratique pour la supervision ou plus simplement pour éviter de devoir ouvrir de nombreuses consoles SSH), nous allons utiliser la RPC ''rstatd'' (un standard provenant de chez Sun).
+
+=== Installation sur les serveurs à superviser ===
+<note important>Dans la version 12.04 d'Ubuntu, il n'est plus necessaire de créer un script init. 
+En effet, l'installation du paquet "rstatd" va automatiquement installer et configurer le démon inetd.</note>
+Pour installer ''rstatd'' sur les serveurs à superviser, il vous suffit de suivre la procédure suivante :
+  * Activez les [[:depots|dépôts]] //Universe//.
+  * Installer le paquet ''rstatd'' (avec ''sudo apt-get install rstatd'').
+  * Créer un petit script pour qu'il démarre tout seul au démarrage du serveur (''sudo vi /etc/init.d/rstatd'') :
+<code>
+#!/bin/sh
+
+/usr/sbin/rpc.rstatd
+</code>
+  * Activez ce script comme exécutable (''sudo chmod +x /etc/init.d/rstatd'').
+  * Liez le script avec les niveaux de démarrage :
+<code>
+update-rc.d rstatd defaults
+</code>
+  * Lancez le démon ''rstatd'' (''sudo /etc/init.d/rstatd'').
+
+Voilà, la machine est prête à recevoir les requêtes distantes.
+
+=== Installation et usage du client ===
+Sur la machine devant interroger les serveurs :
+  * Activez les [[:depots|dépôts]] //Universe//.
+  * Installer le paquet ''rstat-client'' (avec ''sudo apt-get install rstat-client'').
+
+Vous avez maintenant deux commandes supplémentaires vous permettant d'obtenir des informations distantes sur les serveurs équipés de ''rstatd'' : 
+  * ''rup'' : qui permet d'obtenir la commande ''uptime'' à distance.
+  * ''rsysinfo'' : qui permet d'obtenir diverses informations systèmes en plus du ''uptime''.
+
+En introduisant uniquement ''rup'' dans une console, vous envoyez une requête broadcast sur votre réseau vous permettant d'obtenir tous les load average des serveurs possèdant ''rstatd'' :
+
+<code>
+mail                  13:31 up  43 days, 56 mins, load 0.11 0.06 0.01
+ns                    13:31 up  43 days, 56 mins, load 0.11 0.06 0.01
+nodeprod1             13:31 up  19 days,    1:28, load 0.37 0.15 0.05
+backup                13:31 up  43 days, 45 mins, load 3.09 1.96 2.17
+nodeprod2             13:31 up  10 days,  6 mins, load 1.28 0.63 0.34
+nodearch2             13:31 up  10 days, 19 mins, load 1.00 1.00 1.00
+nodearch1             13:31 up  43 days, 49 mins, load 0.00 0.00 0.00
+clusterprod           13:31 up  10 days,  6 mins, load 1.28 0.63 0.34
+</code>
+
+En faisant suivre ''rup'' du nom d'hôte ou de l'IP de la machine, vous n'obtiendrez que les informations concernant la machine en paramètres.
+
+Concernant la commande ''rsysinfo'', il faut toujours la faire suivre d'un nom d'hôte/IP et elle fournit les informations suivantes :
+
+<code>
+System Information for: mail
+uptime:  43 days, 57 mins, load average: 0.14 0.08 0.02
+cpu usage (jiffies): user 8937954  nice 551364  system 840299  idle 728313726
+page in: 0  page out: 0   swap in: 0  swap out: 0
+intr: -1     context switches: 158521092
+disks: 0 0 0 0
+ethernet:  rx: 1586681326   rx-err: 1064754
+           tx: 1583182307   tx-err: 2081    collisions: 36153189
+</code>
+
+
+
+===== Couplage avec Nagios =====
+
+  * Pour la surveillance des load averages avec [[:nagios|Nagios]], j'utilise ce script comme vérificateur :
+<code>
+#!/bin/sh
+
+# Usage : check_rup $HOSTNAME $WARNING $CRITICAL
+# (remarque : les valeurs limites s'expriment en 1/100e
+#
+# Exemple : check_rup 192.168.254.30 100 320
+# (warning vaut 1.00, critical vaut 3.20)
+
+STATE_OK=0
+STATE_WARNING=1
+STATE_CRITICAL=2
+STATE_UNKNOWN=3
+
+HOSTNAME=$1
+WARNING=$2
+CRITICAL=$3
+
+VALUE=`rup $1 | awk '{print $10}' | awk -F "." '{print $1$2}'`
+REAL_VALUE=`echo $VALUE | awk '{print $1/100}'`
+
+if test -z $VALUE
+then
+        echo "Error during execute of 'rup' command."
+        exit $STATE_UNKNOWN
+fi
+
+if test $VALUE -ge $CRITICAL
+then
+        echo "Load average 1 minute is CRITICAL ($REAL_VALUE)"
+        exit $STATE_CRITICAL
+fi
+
+if test $VALUE -ge $WARNING
+then
+        echo "Load average 1 minute is WARNING ($REAL_VALUE)"
+        exit $STATE_WARNING
+fi
+
+echo "Load average 1 minute is OK ($REAL_VALUE)"
+exit $STATE_OK
+</code>
+      * et ces informations comme "misccommand" :
+<code>
+define command{
+        command_name    check_ruptime
+        command_line    /usr/lib/nagios/plugins/check_rup $HOSTADDRESS$ $ARG1$ $ARG2$
+        }
+</code>
+
+----
+
+//Contributeurs : [[utilisateurs:ostaquet]] //

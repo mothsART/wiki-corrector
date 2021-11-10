@@ -1,0 +1,150 @@
+
+{{tag>Xenial sécurité sauvegarde}}
+----
+
+
+====== Sauvegarde avec Disk Archive (DAR) ======
+
+Le but de ce tutoriel est de présenter l'utilisation du logiciel Disk Archive (DAR) pour faire des sauvegardes de données et des sauvegardes différentielles.
+
+Il complète le tutoriel sur [[:rdiff-backup|rdiff-backup]] ainsi que [[:backup-manager|Backup-manager]]. 
+L'outil de sauvegarde mis en oeuvre dans ce tutoriel est DAR et l'automatisation des tâches est faite avec Anacron.
+
+Il montre comment faire une sauvegarde différentielle périodique d'un répertoire donné. Différentiel signifie que la sauvegarde ne prend en compte que ce qui a changé depuis une sauvegarde de référence. Ceci permet d'optimiser le temps et la taille de la sauvegarde. L'automatisation de la tâche est faite avec anacron. Cet outil similaire à Cron est adapté lorsque l'ordinateur n'est pas allumé en continu. La programmation des tâches se fait en périodicité relative par rapport à la dernière exécution des tâches et non pas à date fixe comme avec Cron.
+
+Les principales fonctions sont :
+
+  * archivage différentiel
+  * paramétrage de la taille des archives
+  * création d'un fichier catalogue contenant la liste des fichiers de l'archive (utile si on veut des archives différentielles sans garder l'archive de référence complète)
+  * compression des données avec gzip ou bzip
+  * extraction partielle de l'archive
+
+À noter que DAR existe aussi pour windows
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée. 
+
+===== Installation =====
+Pour installer ce logiciel, il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>dar]]**.
+
+=====Utilisation=====
+
+
+==== Sauvegarde complète ====
+ 
+Un exemple vaut mieux qu'un long discours.
+
+<code>
+dar -v -c "/home/famille/dar_backups/full_backup" -R "/home" -w -s 734003200 -y -m 150 -P "famille/dar_backups" -P famille/mp3 -P famille/photo -P famille/.Trash -X "*.iso" -Z "*.jpg"
+</code>
+
+dar : commande pour lancer DAR
+
+-v : actionne le mode verbose, DAR fournit des indications sur ce qu'il fait en particulier la liste des fichiers (trame) qu'il archive.
+
+-c "/home/famille/dar_backups/full_backup" : création de l'archive, le paramètre qui suit -c indique la localisation de l'archive (ici /home/famille/dar_backups/) et son nom générique (ici full_backup) le (ou les) fichier(s) archive(s) portera le nom générique avec l'extension .1.dar (dans le cas ou plusieurs fichiers sont créés les extensions seront nom-de-la-trame.n.dar avec n l'indice du fichier, si trois fichiers sont créés on aura nom-de-la-trame.1.dar, nom-de-la-trame.2.dar, nom-de-la-trame.3.dar)
+
+-R "/home" : indique l'arborescence à sauvegarder, ici on sauvegarde le répertoire /home et tous les sous répertoires.
+
+-w : DAR écrase le fichier archive s'il existe déjà sans vous prévenir.
+
+-s 734003200 : taille des fichiers archive en octet (byte), dans ce cas la taille des fichiers archives est limité à 730 Mo , pour tenir sur un cd.
+
+-y : spécifie le type de compression bzip2.
+
+-m 150 : signifie que les fichiers de moins de 150 octets ne sont pas compressés.
+
+-P chemin : défini les chemins des répertoires à ne pas prendre en compte dans l'archive.
+
+-X *.iso : défini les type de fichiers à exclure, ici les fichiers avec l'extension .iso.
+
+-Z *.jpg : défini les type de fichiers à ne pas compresser.
+
+==== Sauvegarde différentielle ====
+
+Ce type de sauvegarde permet de sauver les fichiers qui ont changés depuis la dernière sauvegarde complète.
+
+<code>
+dar -v -c  "/home/famille/dar_backups/diff_backup_`date -I`" -R "/home" -A "/home/famille/dar_backups/full_backup" -w -s 734003200  -y -m 150 -P "famille/dar_backups" -P famille/mp3 -P famille/photo -P famille/.Trash -X "*.iso" -Z "*.jpg"
+</code>
+
+les paramètres sont :
+
+-c  "/home/famille/dar_backups/diff_backup_`date -I`" : défini le nom de l'archive différentielle. La "commande" `date -I` permet d'ajouter la date dans le nom du fichier. Le nom des fichiers produit est du type suivant : diff_backup_2007-01-13.1.dar
+
+-A "/home/famille/dar_backups/full_backup" : ce paramètre est important, il permet d'indiquer le nom de l'archive de référence. 
+
+
+===== Restauration d'une archive  DAR =====
+
+Avant tout, il faut bien se rappeler que les sauvegardes sont des trames (plusieurs fichiers). Les indices de numérotation étant présent sous la forme d'un suffixe dans le nom de chacun des fichiers.
+Ainsi, pour un projet comportant 3 fichiers etc.1.dar etc.2.dar et etc.3.dar, sa restauration se notera :
+<code>dar -v -R /etc -x "etc"</code>
+(dans cet exemple, on suppose que vous êtes dans le dossier contenant la trame et que vous vous attribuiez les bons droits d'accès et de copie...)
+
+-v : actionne le mode verbose, DAR fournit des indications sur ce qu'il fait en particulier la liste des fichiers qu'il restaure.
+
+-x : indique que l'on veut extraire l'archive "etc"
+
+-R  /etc : indique l'arborescence où restaurer, ici on restaure dans le répertoire /etc et tous les sous répertoires.
+
+  * D'autres options sont disponibles (liste non exhaustive) :
+
+-n : permet de répondre automatiquement et négativement à une action utilisateur de réécriture.
+
+-w : permet de répondre automatiquement et positivement à une action utilisateur de réécriture.
+
+-r : ne restaure que les fichiers absents ou plus récents.
+
+-f : ne restaure pas la structure des dossiers (intéressant pour la récupération de fichiers indépendants)
+
+  * Examiner une archive sans la décompresser :
+
+<code>dar -v -t home</code>
+
+-v actionne le mode verbose
+
+-t : supprime l'action utilisateur de demande de continuation (après une vérification de la non-corruption de l'archive ainsi qu'une brève étude statistique du document.)
+
+Vous désirez trouver un ou plusieurs fichiers particuliers, rien de plus simple :
+<code>dar -v -t home | grep cv</code>
+
+  * restaurer un fichier unique :
+
+<code>dar -v -R /etc -x "etc" -g pcmcia/cis/DP83903.dat</code>
+
+Ce dernier point peut être relativement salvateur : imaginons le cas ou votre sauvegarde de votre /etc comporte des erreurs dans un fichiers de config. Pourquoi ? Tout simplement parce qu'elle se passait juste au moment ou vous étiez en train de le trifouiller. Vu que vous êtes organisé, vous avez d'autres sauvegardes sous le coude mais celles-ci sont bien trop anciennes pour vous intéresser sauf... votre fichier de config bien sûr !!
+Cet exemple peut-être aussi vrai pour un fichier personnel tout simple etc.
+
+[[http://dar.linux.free.fr/doc/man/index.html|Les pages de manuel]] peuvent être utile pour les nombreuses options disponibles (anglais)
+
+
+==== Automatisation des tâches avec anacron ====
+
+> Anacron permet d'exécuter des tâches périodiquement. A la différence de Cron (voir  [[:cron]]) qui exécute des tâches à heure/date fixe, Anacron est bien adapté à un ordinateur qui n'est pas allumé en permanence. Les tâches s'exécutent tous les x jours depuis le dernière exécution de ladite tâche.
+
+Dans notre cas nous voulons exécuter régulièrement une sauvegarde. Pour ce faire, il faut créer un script shell qui contient la ligne de commande dar à exécuter. La création d'un script shell est expliqué dans [[:rdiff-backup|ce tutoriel]]
+
+Une fois le script créé il suffit de compléter le fichier anacrontab. Le fichier se trouve dans /etc et se nomme anacrontab. Le format d'entrée se présente comme suit 
+
+période  délai  identification de la tâche commande  script à exécuter
+
+Par exemple pour exécuter diff_backup.sh (sauvegarde différentielle) tous les jours on ajoute la ligne suivante dans le fichier.
+<code>
+1	1	sauvegarde_diff	/home/famille/shell_scripts/diff_backup.sh
+</code>
+
+Ce qui signifie que le délai depuis l'exécution de la dernière tâche est de 1 jour et avec un délai de 1 minute.
+
+A noter que les tâches sont exécutées avec les [[sudo|droits root]].
+
+===== Désinstallation =====
+ 
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée. Les journaux du système, et les fichiers de préférence des utilisateurs dans leurs dossiers personnels sont toujours conservés.
+
+
+----
+
+// Contributeur : Novotni31, [[utilisateurs:MulX]] //

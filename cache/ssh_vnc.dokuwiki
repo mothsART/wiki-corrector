@@ -1,0 +1,83 @@
+
+{{tag>Trusty Xenial "Bureau a distance" sécurité ssh vnc}}
+----
+
+====== Tunneliser une connexion VNC via SSH ======
+Le tutoriel ci-dessous va vous permettre de prendre le contrôle d'une machine distante via [[:ssh]]. Nous créerons à cet effet un lanceur qui sera inclus dans le menu principal. L'intérêt de l'utilisation de **xvnc4viewer** en lieu et place de [[:vinagre]] est l'option -via. Celle-ci permet à vncviewer de se connecter directement en SSH.
+Cette méthode permet de sécuriser l'accès VNC classique hautement intrusif de l'extérieur.
+Pour réaliser une telle connexion, il faudra :
+  - [[#Création d'une paire de clefs sur le poste client|Créer un paire de clefs sur le poste client]],
+  - [[#Configuration du poste client|Configurer le poste client]],
+  - [[#Diffusion de la clé publique sur le poste serveur|Diffuser la clef sur le poste serveur]],
+  - Enfin [[#Configuration du poste serveur et prise à distance via vnc|configurer le poste serveur]].
+
+=====Création d'une paire de clefs sur le poste client =====
+On doit d'abord créer les clés sur le ou les postes clients avant de les exporter sur le ou les ordinateurs auxquels on veut accéder. Pour cela reportez-vous au [[:ssh#authentification_par_un_systeme_de_cles_publiqueprive|paragraphe sur les clés de la page ssh]].
+
+===== Configuration du poste client =====
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>xvnc4viewer]]** et **[[apt>openssh-client]]** (ce dernier est normalement installé par défaut sous ubuntu).
+
+[[:tutoriel:comment_modifier_un_fichier|Editez le fichier]] de configuration SSH client **/etc/ssh/ssh_config** avec les [[:sudo|droits d'administration]] et enlever le **#** présent devant **PasswordAuthentication** et passer la valeur à **no** (ceci exclut l'authentification par mot de passe). Faîtes de même avec **Protocol** pour qu'il ne reste que **Protocol 2** (le protocole 1 des clés RSA ou DSA est à proscrire car moins sécurisé).
+
+Relancez le client SSH afin de prendre en compte les modifications avec la commande: <code>sudo /etc/init.d/ssh restart</code>
+
+====Sous Windows côté client avec PUTTY====
+Une solution simple et efficace existe sous Windows afin de prendre en main une machine Ubuntu, le tout via un tunnel SSH.
+
+Les manipulations sont les mêmes pour la machine à contrôler, les changements interviennent seulement sur la machine qui contrôle (dans mon cas sous Windows XP).
+
+    * [[http://www.chiark.greenend.org.uk/~sgtatham/putty/|Télécharger]] le logiciel PUTTY permettant l'accès à la console en SSH.
+    * Démarrez Putty, entrez l'adresse sur laquelle vous voulez vous connecter (IP publique ou nom de domaine, pour en ouvrir un gratuit voyez la page sur les [[:dns_dynamique|DNS dynamiques]]).
+    * Choisissez SSH en 'Connexion Type'. Sur la gauche de l'écran rendez vous dans l'onglet 'SSH', puis 'Tunnel':
+      * en 'source port', ajoutez <del>5900</del> 5901
+      * en 'destination', ajoutez 127.0.0.1:5900
+    * Cochez éventuellement sous SSH « Enable Compression ».
+    * Sauvegarder votre profil.
+
+
+VNC <= 5900 (local) => Putty <= 22 (distant) => machine_a_controler
+
+===== Diffusion de la clé publique sur le poste serveur =====
+
+Enregistrez sur le ou les postes auxquels vous souhaitez accéder la clé publique copiée de votre [[:fichier_cache|fichier caché]] **~/.ssh/id_dsa.pub**.\\
+Vous devez l'enregistrer dans le [[:fichier_cache|fichier caché]] **~/.ssh/** du poste serveur.\\
+Puis renommez sur le poste serveur ce fichier en **authorized_keys2** (le 2 signifie qu'on souhaite bénéficier du protocole SSH2). 
+Vous vous retrouvez alors avec le [[:fichier_cache|fichier caché]] **~/.ssh/authorized_keys2**.
+
+<note important>Le fichier **authorized_keys2** doit comporter la clé publique SSH sur une seule ligne. Vérifiez que c'est bien le cas avec votre [[editeur_de_texte|éditeur de texte]] favori.
+Veillez aussi à décocher la case "activer le retour à la ligne automatique" pour être sûr qu'il n'y a pas de retour à la ligne.</note>
+
+Vous pouvez diffuser cette clé par le moyen de votre choix (copie par clé usb, envoi email...)
+
+===== Configuration du poste serveur et prise à distance via vnc=====
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]]   **[[apt>x11vnc]]** et **[[apt>openssh-server]]**
+
+[[:tutoriel:comment_modifier_un_fichier|Éditez le fichier]] de configuration SSH serveur **/etc/ssh/sshd_config** avec les [[:sudo|droits d'administration]] et mettez ''PermitRootLogin no'' (**à vous de voir mais le laisser sur yes peut permettre toutes les modifications possibles**) et ''AuthorizedKeysFile	/home/[nom_d'utilisateur]/.ssh/authorized_keys2''
+
+Ajouter tout ça FIXME [[:tutoriel:application_demarrage|aux applications au démarrage]].
+
+
+Sur le poste client il ne vous reste plus qu'à taper dans un [[:terminal]]:
+  * <code>ssh -L 5901:localhost:5900 [adresse poste serveur]</code>
+  * dans un nouvel onglet <code>xvnc4viewer 127.0.0.1:5901</code>
+
+<note help>
+Il est inutile de laisser le serveur vnc activé tout le temps, si le but est de ne l'utiliser que par ssh.
+Plutôt que d'ajouter une application au démarrage, utilisez la méthode suivante:
+connectez vous au serveur avec la ligne suivante:
+<code>
+ ssh -X -L 5901:localhost:5900 [adresse poste serveur]
+</code>
+depuis le serveur lancez x11vnc:
+<code>
+sudo x11vnc -display :0
+</code>
+et enfin dans un nouvel onglet (donc sur le client):
+<code>
+xvnc4viewer 127.0.0.1:5901
+</code>
+</note>
+
+Un message doit vous demander sur le poste serveur si vous autorisez la prise de contrôle...
+
+__//contributeurs//__: djoser,

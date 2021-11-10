@@ -1,0 +1,422 @@
+
+{{tag>Xenial p2p}}
+
+----
+
+{{ :applications:deluge.png?70}}
+====== Deluge ======
+
+Deluge est un client [[:p2p|BitTorrent]] basé sur Python et GTK+. il s'intègre donc bien dans [[:Gnome]], [[:XFCE]], [[:Mate]] et [[:LXDE]].
+
+{{:image:deluge_lucid_10.png?600}}
+
+
+== Fonctionnalités de base == 
+  * Affichage dans une seule fenêtre des téléchargements simultanés
+  * Gestion des priorités de téléchargement (par torrent, mais aussi pour chacun des fichiers compris dans un torrent)
+  * Supporte la Mainline DHT, 
+  * Supporte l'UPnP et le mappage des ports NAT-PMP
+  * Supporte le chiffrement des flux
+  * Supporte le µTorrent Peer Exchange
+
+== Greffons intégrés == 
+  * Création de torrents
+  * Déplacements de torrents (une fois le téléchargement entamé)
+  * Sauvegarde de différents paramétrages pour une utilisation "nomade"
+  * Blocage d'IP par import de listes noires
+  * Affichage graphique des flux entrants et sortants
+  * Planificateur
+  * Support des flux RSS
+
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+
+=====Installation=====
+==== Version Desktop ====
+[[:tutoriel:comment_installer_un_paquet|Installez]] le paquet **[[apt>deluge]]**.
+
+Si vous souhaitez utiliser **Deluge** en ligne de commandes, [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>deluge-console]]**.
+
+==== Version Serveur ====
+
+Il peut être intéressant d'installer Deluge dans ce mode si vous avez un ordinateur qui tourne en permanence et qui n'a pas d'écran ou de mode graphique installé. Vous pourrez y accéder depuis un autre poste au travers d'une interface web très proche de la version desktop.
+
+[[:tutoriel:comment_installer_un_paquet|Installez]] les paquets **[[apt>deluged,deluge-web|deluged deluge-web]]**
+
+=====Configuration de la version serveur =====
+
+==== Gestion des utilisateurs ====
+
+Premièrement, par securité, nous allons créer un utilisateur ''deluge''. C'est avec les privilèges de cet utilisateur que le serveur sera lancé pour des raisons de sécurité.
+ 
+<code>sudo adduser --system  --gecos "Deluge Service" --disabled-password --group --home /var/lib/deluge deluge</code>
+
+Il est intéressant d'en profiter pour inclure les utilisateurs qui vont utiliser Deluge dans le groupe ''deluge'' afin qu'ils puissent facilement récupérer les fichiers téléchargés. En effet, les fichiers téléchargés seront la propriété de l'utilisateur ''deluge'' du groupe ''deluge'', donc initialement inaccessibles aux autres utilisateurs de votre machine. Exemple pour inclure l'utilisateur ''Toto'' au groupe ''deluge'' :
+<code>sudo adduser Toto deluge</code>
+
+====Avant Ubuntu 16.04====
+Nous allons maintenant faire en sorte que deluged (le daemon deluge) et deluge-web (son interface graphique web) soient lancés automatiquement au démarrage de l'ordinateur. Pour cela nous allons créer le [[:services|service]] correspondant.
+
+[[:tutoriel:comment_modifier_un_fichier|Créez le fichier]] **/etc/default/deluge-daemon** [[:sudo|avec les droits d'administration]].
+Remplissez-le par le contenu suivant :
+<file bash /etc/default/deluge-daemon>
+# Configuration for /etc/init.d/deluge-daemon
+ 
+# The init.d script will only run if this variable non-empty.
+DELUGED_USER="deluge"
+ 
+# Should we run at startup?
+RUN_AT_STARTUP="YES"
+</file>
+
+Créez un autre fichier du même nom dans **/etc/init.d** avec ce contenu:
+<file bash /etc/init.d/deluge-daemon>
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          deluge-daemon
+# Required-Start:    $local_fs $remote_fs
+# Required-Stop:     $local_fs $remote_fs
+# Should-Start:      $network
+# Should-Stop:       $network
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Daemonized version of deluge and webui.
+# Description:       Starts the deluge daemon with the user specified in
+#                    /etc/default/deluge-daemon.
+### END INIT INFO
+ 
+# Author: Adolfo R. Brandes 
+# Modified: Sami Olmari
+ 
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+DESC="Deluge Daemon"
+NAME1="deluged"
+NAME2="deluge-web"
+DAEMON1=/usr/bin/deluged
+DAEMON1_ARGS="-d -c /var/lib/deluge -l /var/log/deluged.log -L warning"
+DAEMON2=/usr/bin/deluge-web
+DAEMON2_ARGS="-p 9092 -c /var/lib/deluge -l /var/log/deluge-web.log -L warning"
+PIDFILE1=/var/run/$NAME1.pid
+PIDFILE2=/var/run/$NAME2.pid
+PKGNAME=deluge-daemon
+SCRIPTNAME=/etc/init.d/$PKGNAME
+ 
+# Exit if the package is not installed
+[ -x "$DAEMON1" -a -x "$DAEMON2" ] || exit 0
+ 
+# Read configuration variable file if it is present
+[ -r /etc/default/$PKGNAME ] && . /etc/default/$PKGNAME
+ 
+# Load the VERBOSE setting and other rcS variables
+[ -f /etc/default/rcS ] && . /etc/default/rcS
+ 
+# Define LSB log_* functions.
+# Depend on lsb-base (>= 3.0-6) to ensure that this file is present.
+. /lib/lsb/init-functions
+ 
+if [ -z "$RUN_AT_STARTUP" -o "$RUN_AT_STARTUP" != "YES" ]
+then
+   log_warning_msg "Not starting $PKGNAME, edit /etc/default/$PKGNAME to start it."
+   exit 0
+fi
+ 
+if [ -z "$DELUGED_USER" ]
+then
+    log_warning_msg "Not starting $PKGNAME, DELUGED_USER not set in /etc/default/$PKGNAME."
+    exit 0
+fi
+ 
+#
+# Function that starts the daemon/service
+#
+do_start()
+{
+   # Return
+   #   0 if daemon has been started
+   #   1 if daemon was already running
+   #   2 if daemon could not be started
+   start-stop-daemon --start --background --quiet --pidfile $PIDFILE1 --exec $DAEMON1 \
+      --chuid $DELUGED_USER --user $DELUGED_USER --test > /dev/null
+   RETVAL1="$?"
+   start-stop-daemon --start --background --quiet --pidfile $PIDFILE2 --exec $DAEMON2 \
+      --chuid $DELUGED_USER --user $DELUGED_USER --test > /dev/null
+   RETVAL2="$?"
+   [ "$RETVAL1" = "0" -a "$RETVAL2" = "0" ] || return 1
+ 
+   start-stop-daemon --start --background --quiet --pidfile $PIDFILE1 --make-pidfile --exec $DAEMON1 \
+      --chuid $DELUGED_USER --user $DELUGED_USER -- $DAEMON1_ARGS
+   RETVAL1="$?"
+        sleep 2
+   start-stop-daemon --start --background --quiet --pidfile $PIDFILE2 --make-pidfile --exec $DAEMON2 \
+      --chuid $DELUGED_USER --user $DELUGED_USER -- $DAEMON2_ARGS
+   RETVAL2="$?"
+   [ "$RETVAL1" = "0" -a "$RETVAL2" = "0" ] || return 2
+}
+ 
+#
+# Function that stops the daemon/service
+#
+do_stop()
+{
+   # Return
+   #   0 if daemon has been stopped
+   #   1 if daemon was already stopped
+   #   2 if daemon could not be stopped
+   #   other if a failure occurred
+ 
+   start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --user $DELUGED_USER --pidfile $PIDFILE2
+   RETVAL2="$?"
+   start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --user $DELUGED_USER --pidfile $PIDFILE1
+   RETVAL1="$?"
+   [ "$RETVAL1" = "2" -o "$RETVAL2" = "2" ] && return 2
+ 
+   rm -f $PIDFILE1 $PIDFILE2
+ 
+   [ "$RETVAL1" = "0" -a "$RETVAL2" = "0" ] && return 0 || return 1
+}
+ 
+case "$1" in
+  start)
+   [ "$VERBOSE" != no ] && log_daemon_msg "Starting $DESC" "$NAME1"
+   do_start
+   case "$?" in
+      0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+      2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+   esac
+   ;;
+  stop)
+   [ "$VERBOSE" != no ] && log_daemon_msg "Stopping $DESC" "$NAME1"
+   do_stop
+   case "$?" in
+      0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+      2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+   esac
+   ;;
+  restart|force-reload)
+   log_daemon_msg "Restarting $DESC" "$NAME1"
+   do_stop
+   case "$?" in
+     0|1)
+      do_start
+      case "$?" in
+         0) log_end_msg 0 ;;
+         1) log_end_msg 1 ;; # Old process is still running
+         *) log_end_msg 1 ;; # Failed to start
+      esac
+      ;;
+     *)
+        # Failed to stop
+      log_end_msg 1
+      ;;
+   esac
+   ;;
+  *)
+   echo "Usage: $SCRIPTNAME {start|stop|restart|force-reload}" >&2
+   exit 3
+   ;;
+esac
+
+:
+</file>
+
+Rendez le script exécutable :
+<code>sudo chmod a+x /etc/init.d/deluge-daemon</code>
+
+Configurez le lancement au démarrage du système et lancez le service :
+<code>sudo update-rc.d deluge-daemon defaults
+sudo service deluge-daemon start</code>
+
+=== Installation automatisée ===
+Ce script réalise l'installation et le démarrage tel que vu dans ce tutoriel:
+<file bash>
+sudo apt-get update
+sudo apt-get install deluged deluge-web
+sudo adduser --disabled-password --system --home /var/lib/deluge --gecos "SamRo Deluge server" --group deluge
+sudo wget http://doc.ubuntu-fr.org/_export/code/deluge?codeblock=2 --output-document=/etc/default/deluge-daemon
+sudo wget http://doc.ubuntu-fr.org/_export/code/deluge?codeblock=3 --output-document=/etc/init.d/deluge-daemon
+sudo chmod a+x /etc/init.d/deluge-daemon
+sudo update-rc.d deluge-daemon defaults
+sudo /var/lib/deluge
+sudo service deluge-daemon start
+</file>
+
+==== À partir de Ubuntu 16.04====
+Comme [[:Xenial|Ubuntu 16.04]] utilise **systemd** en remplacement de [[:Init_d|Init.d]] ou [[:upstart]] pour la gestion des services, la configuration est légèrement différente.
+
+=== Suppressions des anciennes configurations ===
+
+Assurez vous qu'il n'y ait pas d'anciens fichiers de configuration [[:services|Init.d]] ou [[:upstart]] sur votre machine.\\
+Pour init.d :
+<code>sudo /etc/init.d/deluge-daemon stop
+sudo rm /etc/init.d/deluge-daemon
+sudo update-rc.d deluge-daemon remove </code>
+
+Pour upstart :
+<code>sudo stop deluged
+sudo stop deluge-web
+sudo rm /etc/init/deluge-web.conf
+sudo rm /etc/init/deluged.conf</code>
+
+
+=== Création du service Deluge Daemon (deluged) ===
+
+[[:tutoriel:comment_modifier_un_fichier|Créez le fichier]] **/etc/systemd/system/deluged.service** [[:sudo|avec les droits d'administration]] et remplissez-le comme ceci :
+<file txt /etc/systemd/system/deluged.service>
+[Unit]
+Description=Deluge Bittorrent Client Daemon
+After=network-online.target
+
+[Service]
+Type=simple
+User=deluge
+Group=deluge
+UMask=007
+
+ExecStart=/usr/bin/deluged -d
+
+Restart=on-failure
+
+# Configures the time to wait before service is stopped forcefully.
+TimeoutStopSec=300
+
+[Install]
+WantedBy=multi-user.target
+</file> 
+
+<note tip>Modifiez UMask=007 selon votre convenance :
+  * 007 donne l'accès complet à l'utilisateur et les membres du groupe ''deluge'', aucun accès aux autres
+  * 022 donne l'accès complet à l'utilisateur ''deluge'' et l'accès en lecture seul aux membres du groupe ''deluge'' et aux autres
+  * 000 donne l'accès complet à tout le monde
+</note>
+
+Vous pouvez maintenant configurer le service pour qu'il soit lancé au démarrage, le lancer et vérifier son bon fonctionnement :
+<code>systemctl enable /etc/systemd/system/deluged.service
+systemctl start deluged
+systemctl status deluged</code>
+
+<note tip>Ces lignes de commandes sont également à utiliser [[:sudo|avec les droits d'administration]]. Erreur reçu sans :
+<code>Failed to execute operation: The name org.freedesktop.PolicyKit1 was not provided by any .service files
+
+Failed to start deluged.service: The name org.freedesktop.PolicyKit1 was not provided by any .service files
+See system logs and 'systemctl status deluged.service' for details.</code></note>
+
+=== Création du service Deluge Web UI (deluge-web) ===
+[[:tutoriel:comment_modifier_un_fichier|Créez le fichier]] **/etc/systemd/system/deluge-web.service** [[:sudo|avec les droits d'administration]]  et remplissez-le comme ceci :
+<file txt /etc/systemd/system/deluge-web.service>
+[Unit]
+Description=Deluge Bittorrent Client Web Interface
+After=network-online.target
+
+[Service]
+Type=simple
+
+User=deluge
+Group=deluge
+UMask=027
+
+ExecStart=/usr/bin/deluge-web -d -p 9092
+
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+</file>
+
+Vous pouvez maintenant configurer le service pour qu'il soit lancé au démarrage, le lancer et vérifier son bon fonctionnement :
+<code>systemctl enable /etc/systemd/system/deluge-web.service
+systemctl start deluge-web
+systemctl status deluge-web</code>
+
+=== Mise en service des log ===
+Pour le débogage, il est recommandé de mettre en service les logs en créant le répertoire ''/var/log/deluge'' et en assignant les logs à l'utilisateur ''deluge''
+<code>sudo mkdir -p /var/log/deluge
+sudo chown -R deluge:deluge /var/log/deluge
+sudo chmod -R 750 /var/log/deluge</code>
+
+Pour que nos 2 services précédemment créés et lancés activent les logs, il faut modifier la ligne ''ExecStart='' en y ajoutant l'option ''-l'' et ''-L''
+<file>ExecStart=/usr/bin/deluged -d -l /var/log/deluge/daemon.log -L warning</file>
+<file>ExecStart=/usr/bin/deluge-web -p 9092 -l /var/log/deluge/web.log -L warning</file>
+
+Il n'y a plus qu'a relancer les services pour que les modifications prennent effet.
+<code>systemctl restart deluged
+systemctl restart deluge-web</code>
+
+Et configurer la rotation des logs en creant le fichier ''/etc/logrotate.d/deluge'' avec le contenu suivant
+<file txt /etc/logrotate.d/deluge>
+/var/log/deluge/*.log {
+        rotate 4
+        weekly
+        missingok
+        notifempty
+        compress
+        delaycompress
+        sharedscripts
+        postrotate
+                systemctl restart deluged >/dev/null 2>&1 || true
+                systemctl restart deluge-web >/dev/null 2>&1 || true
+        endscript
+}
+</file>
+
+===== Utilisation =====
+====Version Desktop====
+Lancez l'application via le [[:unity#tableau_de_bord_dash|tableau de bord]] (Unity) ou via le [[:terminal]] (toutes versions d'Ubuntu) avec la [[:commande_shell|commande]] suivante : <code>deluge</code>
+ 
+====Version Web / Serveur ====
+Par défaut l'interface est joignable sur le port 8112. Mais dans le fichier de configuration ci-dessus, on a spécifié le port 9092, donc rendez-vous à l'adresse : ''http://localhost:9092'' en local ou ''http://xxx.xxx.xxx.xxx:9092'' depuis un autre poste (où xxx.xxx.xxx.xxx est l'adresse IP de votre serveur).
+Notez que vous ne pouvez pas configurer un port inférieur à 1024.
+
+Lors de la connexion à l'interface web, celle-ci vous demande de rentrer un mot de passe. Par défaut (lors de la première connexion), le mot de passe est ''deluge''. Le système vous demandera alors d'en changer.
+
+==== Chiffrer vos échanges ====
+Si vous utilisez **Deluge** en dehors de votre réseau local (en déplacement, ou via votre mobile avec une application comme Transdroid), il est possible que vous souhaitiez chiffrer vos échanges avec votre serveur.
+
+Pour ce faire, **Deluge** supporte le chiffrement via SSL que vous pouvez activer dans //Préférences>Interface>Use SSL// de l'interface Web de Deluge.
+Vous pouvez éventuellement [[tutoriel:comment_creer_un_certificat_ssl|créer vos propres certificats SSL]] que vous placerez dans le dossier ///var/lib/deluge/ssl// avant de modifier vos préférences.
+
+
+===== Problèmes connus =====
+
+====Deluge refuse de démarrer====
+
+Si Deluge refuse de démarrer, il peut y avoir plusieurs raisons à cela.
+Lancer Deluge dans un terminal pour voir un peu plus en détail ce qui se passe.
+
+Si vous obtenez quelque chose qui ressemble à l'analyse des trackers actifs suivi d'une erreur semblable, lisez la méthode de résolution après. 
+
+Exemple :
+<code>
+Torrent Size 71904023.0
+Available Space 5355061248
+Raising error: 
+deluge_core; using libtorrent 0.11.0.0. Compiled with NDEBUG value: 1
+terminate called after throwing an instance of 'boost::filesystem::filesystem_error'
+  what():  boost::filesystem::default_name_check: default name check already set
+Abandon (core dumped)
+</code>
+
+il suffit d'exécuter cette commande dans un terminal :
+
+<code>$ rm ~/.config/deluge/*.state && rm ~/.config/deluge/torrentfiles/*.fastresume</code>
+
+====Impossible de créer un torrent====
+
+Certaines versions de Deluge (dont la 1.3.10-3) peuvent comporter un bug empêchant la création d'un torrent. Il suffit de mettre à jour vers la version suivante 1.3.12-1. Voir discussion [[https://forum.ubuntu-fr.org/viewtopic.php?id=926501|ici]].
+
+
+===== Désinstallation =====
+ 
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée. Les journaux du système, et les fichiers de préférence des utilisateurs dans leurs dossiers personnels sont toujours conservés.
+ 
+
+===== Voir aussi =====
+
+  * [[https://deluge-torrent.org/|Site officiel]]
+  * [[https://deluge.readthedocs.io/en/latest/how-to/systemd-service.html|Notice d'installation officielle]]
+
+
+----
+
+//Contributeurs :[[utilisateurs:Id2ndR]], [[utilisateurs:pmd]], [[utilisateurs:mavosaure]],[[utilisateurs:deathdwarf]],[[utilisateurs:linuxforhumanbeings]], [[utilisateurs:lexuor76]], , [[utilisateurs:zarmu]].//

@@ -1,0 +1,145 @@
+
+{{tag>netbook asus asus_eee_pc BROUILLON}}
+
+----
+
+
+====== Asus Eee PC 1225B  ======
+
+
+Le tableau suivant récapitule la prise en charge du matériel de ce portable par les différentes versions d'Ubuntu.
+Il utilise les notations suivantes :
+
+  * {{wiki:modeles:laptop_ok.png|Fonctionne immédiatement}} : **Fonctionne immédiatement**
+  * {{wiki:modeles:laptop_work.png|Fonctionne après config}} : **Fonctionne après quelques manipulations**
+  * {{icons:icon-support.png?32|Pas testé}} : **Pas d'informations disponibles**
+  * {{icons:process-stop.png?32|Ne fonctionne pas}} : **Ne fonctionne pas**
+
+^ Version ^ Installation ^ Carte graphique ^ Son ^ Ethernet ^ Wifi ^ Webcam ^ Touchpad ^ Raccourcis multimédia ^ Autres ^
+| [[:precise | 12.04 (Precise Pangolin)]] desktop |  {{wiki:modeles:laptop_ok.png|Fonctionne immédiatement}}  |  {{wiki:modeles:laptop_ok.png|Fonctionne immédiatement}} noyau 3.5 ou postérieur requis (version 64 bits conseillée). Le pilote propriétaire n'est pas utile dans ce cas. Pour les autres cas, se référer à la partie [[asus_eee_pc_1225b|resolution_des_problemes]]{{wiki:modeles:laptop_work.png|Fonctionne après config}}  | {{wiki:modeles:laptop_ok.png|Fonctionne immédiatement}} | {{wiki:modeles:laptop_ok.png|Fonctionne immédiatement}} | {{wiki:modeles:laptop_ok.png|Fonctionne immédiatement}} | {{wiki:modeles:laptop_ok.png|Fonctionne immédiatement}} | {{wiki:modeles:laptop_ok.png|Fonctionne immédiatement}} | {{wiki:modeles:laptop_ok.png|Fonctionne immédiatement}} | {{icons:icon-support.png?32|Pas testé}} |
+
+**Attention**, l'accélération matérielle pour la lecture des vidéos n'est pas prise en charge par défaut avec un noyau inférieur au 3.5 : le résultat est calamiteux (http://forum.ubuntu-fr.org/viewtopic.php?id=998161&p=1). Une solution a toutefois été trouvée pour l'Asus 1225c, qui peut fonctionner sur l'Asus 1225b.
+
+
+**Cet ordinateur portable n'est pas [[:pc_tatoué|tatoué]].**
+===== Caractéristiques =====
+voir les specifications [[ http://www.asus.com/Eee/Eee_PC/Eee_PC_1225B/#specifications | Asus 1225b ]]
+
+===== Résolution des problèmes =====
+
+==== Ubuntu 12.04 ====
+=== Accélération matérielle ===
+Sur les modèles Asus eeePC 1225b et 1225c, un problème d'activation matérielle a été détecté. 
+
+La piste suivante a fonctionné pour un Asus eeePC 1225c sur Xubuntu 12.04: 
+
+- activer les dépôts Multiverse dans Synaptic puis installer les paquets: 
+<code> sudo apt-get install cedarview-drm libva-cedarview-vaapi-driver cedarview-graphics-drivers </code>
+- puis redémarrez
+<code> sudo reboot </code>
+
+Au redémarrage, vous risquez d'avoir un message d'erreur "broken pipe". démarrer le terminal en appuyant sur les touches Ctrl + Alt + F1 simultanément. Faire les manipulations suivantes: 
+<code> sudo mv /etc/lightdm/lightdm.conf /etc/lightdm/lightdm.conf.bak
+sudo cp /etc/lightdm/lightdm.conf.cedarview-drm /etc/lightdm/lightdm.conf
+sudo reboot </code>
+
+Votre accélération matérielle devrait fonctionner. 
+Source [[http://forum.ubuntu-fr.org/viewtopic.php?pid=11004451]]
+
+<note>Il semblerait que //cedarview-drm// ne soit disponible que pour l'architecture 32 bits. </note>
+
+=== Mise en veille ===
+[[:tutoriel:comment_modifier_un_fichier|Éditez le fichier]] **''/etc/pm/sleep.d/20_custom-ehci_hcd ''** (s'il n'existe pas, créez le) et  remplacer son contenu par celui-ci :
+<code>
+#!/bin/sh
+#inspired by http://art.ubuntuforums.org/showpost.php?p=9744970&postcount=19
+#...and http://thecodecentral.com/2011/01/18/fix-ubuntu-10-10-suspendhibernate-not-working-bug    
+# tidied by tqzzaa :)
+
+VERSION=1.1
+DEV_LIST=/tmp/usb-dev-list
+DRIVERS_DIR=/sys/bus/pci/drivers
+DRIVERS="ehci xhci" # ehci_hcd, xhci_hcd
+HEX="[[:xdigit:]]"
+MAX_BIND_ATTEMPTS=2
+BIND_WAIT=0.1
+
+unbindDev() {
+  echo -n > $DEV_LIST 2>/dev/null
+  for driver in $DRIVERS; do
+    DDIR=$DRIVERS_DIR/${driver}_hcd
+    for dev in `ls $DDIR 2>/dev/null | egrep "^$HEX+:$HEX+:$HEX"`; do
+      echo -n "$dev" > $DDIR/unbind
+      echo "$driver $dev" >> $DEV_LIST
+    done
+  done
+}
+
+bindDev() {
+  if [ -s $DEV_LIST ]; then
+    while read driver dev; do
+      DDIR=$DRIVERS_DIR/${driver}_hcd
+      while [ $((MAX_BIND_ATTEMPTS)) -gt 0 ]; do
+          echo -n "$dev" > $DDIR/bind
+          if [ ! -L "$DDIR/$dev" ]; then
+            sleep $BIND_WAIT
+          else
+            break
+          fi
+          MAX_BIND_ATTEMPTS=$((MAX_BIND_ATTEMPTS-1))
+      done  
+    done < $DEV_LIST
+  fi
+  rm $DEV_LIST 2>/dev/null
+}
+
+case "$1" in
+  hibernate|suspend) unbindDev;;
+  resume|thaw)       bindDev;;
+esac
+</code>
+  
+Puis, donnez les droits d'exécution au fichier en tapant, dans un terminal :
+  sudo chmod 755 /etc/pm/sleep.d/20_custom-ehci_hcd
+  
+=== Redémarrage après extinction ===
+Lorsque l'Eee PC est branché sur le courant, le fait de l'éteindre provoque un redémarrage. Cette manipulation permet de régler ce problème :
+[[:tutoriel:comment_modifier_un_fichier|Éditez le fichier]] **''/etc/rc.local''**, et  rajoutez, avant "exit 0" (ou à la fin du fichier si vous ne trouvez pas "exit 0") :
+
+   echo "LID" > /proc/acpi/wakeup
+
+Il faudra redémarrer pour que la modification soit prise en compte.
+
+=== Problème de la gestion du son ===
+
+Pour changer la carte son par défaut, essayer <code>sudo asoundconf set-default-card SB</code> puis redémarrer
+Pour avoir la liste des cartes son : asoundconf list
+
+Ou, pour Xubuntu 12.04 :
+
+<code> sudo apt-get autoremove indicator-sound indicator-sound-gtk2 && sudo apt-get install -y xfce4-mixer </code>
+Puis
+ <code>xfconf-query -c xfce4-mixer -p /active-card -s `xfconf-query -c xfce4-mixer -p /sound-card`</code> 
+
+=== Blocage du pavé tactile et du clavier ===
+
+Le clavier et le pavé tactile se bloquent au démarrage de façon aléatoire, sur environ un démarrage sur 20. Pour régler ce problème,  [[:tutoriel:comment_modifier_un_fichier|Éditez le fichier]] **''/etc/default/grub ''**  et remplacez la ligne GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
+
+Par
+<code>
+#GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash i8042.reset i8042.nomux"
+</code>
+
+effectuez ensuite 
+
+<code>
+sudo update-grub
+</code>
+
+[[https://bugs.launchpad.net/ubuntu/+bug/1014240|(Source : bug#1014240)|]]
+===== Voir aussi =====
+
+  * Discussion sur le forum ubuntu-fr : http://forum.ubuntu-fr.org/viewtopic.php?pid=9441941
+  * Mise en veille des laptops Asus sur askubuntu : http://askubuntu.com/questions/53372/suspend-hibernate-doesnt-work-on-an-asus-laptop
+  * Rapport de bug sur Launchpad signalant les problèmes : https://bugs.launchpad.net/ubuntu/+source/linux/+bug/951143

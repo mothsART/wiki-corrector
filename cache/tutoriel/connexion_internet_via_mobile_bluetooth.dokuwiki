@@ -1,0 +1,119 @@
+
+{{tag>tutoriel internet téléphonie bluetooth}}
+----
+
+====== Configuration d'une connexion internet via un téléphone portable bluetooth ======
+
+L'objectif de cette page est d'accéder à internet avec un ordinateur, en utilisant comme modem un téléphone portable, via une liaison bluetooth.
+Il est aussi possible de le faire via un câble USB, une liaison infrarouge, ou un câble série dans ce cas regardez [[:telephone_modem|ici]]. Cette procédure est propre à Ubuntu.\\
+Sous [[:Lubuntu]], [[:Xubuntu]] et [[:Mate|Ubuntu Mate]] le logiciel de gestion pour bluetooth est [[:Blueman]], suivez les instructions de  [[:blueman#Connecter à internet|la partie connexion à internet]] pour ces variantes.
+
+<note importante>Si vous souhaitez tout de même suivre cette procédure sous ces autres variantes d'Ubuntu vous pouvez [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>gnome-bluetooth]]** ou bien suivre cette [[http://ubuntuforums.org/showthread.php?t=2124919|procédure]].</note>
+
+=====Graphiquement=====
+Dans les versions récentes d'Ubuntu, la connexion internet via bluetooth est totalement automatisée. Vous avez juste à activer et paramétrer votre bluetooth sur votre pc et votre téléphone comme indiqué [[:bluetooth|ici]], puis vous n'avez qu'à suivre les instructions.\\
+\\
+Si votre téléphone le permet, une fenêtre s'ouvrira pendant le paramétrage, vous demandant si vous souhaitez vous connecter à internet avec votre téléphone, ou bien si vous voulez l'utiliser comme périphérique réseau :
+\\
+\\   {{:bluetooth:bluetooth_precise_01.png?700}}\\
+
+Vous pourrez alors cocher l'option "Accéder à internet à l'aide d'un téléphone portable". Une nouvelle fenêtre s'ouvre, pour vous permettre de paramétrer la connexion 3G, si elle n'est pas encore activée. Répondez successivement aux questions demandées.  \\
+\\
+{{:bluetooth:bluetooth_precise_02.png}}\\
+\\
+Si votre opérateur n'est pas dans la liste, renseignez-vous auprès de lui pour connaître l'**apn** et entrez-le manuellement lorsque la procédure vous en donnera l'occasion :\\
+\\
+{{:bluetooth:bluetooth_precise_03.png}}
+\\
+Une fois cela fait, il vous suffit alors d'aller dans [[:network-manager|Network-manager]] et de choisir votre connexion par le téléphone via bluetooth pour vous connecter à internet. 
+
+<note> Le choix de l'opérateur n'a en réalité que peu d'importance car le système reconnaît automatiquement votre opérateur, même si vous avez choisi le mauvais. Choisir le bon vous permet d'avoir un affichage cohérent.</note>
+
+=====En ligne de commande=====
+
+<note importante>Cette méthode n'a pas été vérifiée fonctionnelle sur de récentes versions d'Ubuntu. Elle est donc sans garantie quant à son fonctionnement.</note>
+====Pré-requis====
+
+  * Avoir le [[:bluetooth]] fonctionnel,
+  * Désactiver le réseau avec nm-applet (clic droit sur nm-applet et décocher "activer le réseau") sinon ça ne marche pas...
+  * [[:tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt>gnome-ppp]]**.
+
+==== Configuration ====
+=== Rechercher l'adresse bluetooth du téléphone ===
+
+Ouvrez un [[:terminal]] et tapez: <code> hcitool scan </code>
+
+vous obtiendrez: <file>
+Scanning ...
+        00:0E:07:30:6B:78       T630 </file>
+
+=== Rechercher la liste des services du téléphone avec sdptool ===
+Tapez dans un [[:terminal]]:<code>sdptool browse 00:0e:07:30:6b:78</code>
+Recherchez dans la liste qui apparaît le service **Dial-up Networking** (voir flèche):<file>
+Browsing 00:0E:07:30:6B:78 ...
+Service Name: Dial-up Networking <-----
+Service RecHandle: 0x10000
+Service Class ID List:
+  "Dialup Networking" (0x1103)
+  "Generic Networking" (0x1201)
+Protocol Descriptor List:
+  "L2CAP" (0x0100)
+  "RFCOMM" (0x0003)
+    Channel: 1 <----
+Profile Descriptor List:
+  "Dialup Networking" (0x1103)
+    Version: 0x0100</file>
+
+Notez le canal (Channel, voir flèche). ici 1\\
+Sur certaines machines (Samsung SGH-X810), ça donne ça :
+<file>
+$ sdptool browse 00:16:DB:2B:88:A3
+Browsing 00:16:DB:2B:88:A3 ...
+Service Search failed: Connection timed out
+</file>
+Sachant que ce modèle permet d'aller sur le net avec un Nokia-Maemo, il doit y avoir une autre méthode...
+
+==== Utilisation ====
+
+=== Créer un périphérique correspondant au téléphone avec rfcomm ===
+
+La syntaxe est :<code>rfcomm connect <n°périph. à créer> [addresse du périph.bluetooth] [canal]</code>
+Ce qui donne, pour notre exemple, cette commande, à taper dans un [[:terminal]]:<code>rfcomm connect 0 00:0E:07:30:6B:78 1</code>
+Vous obtiendrez à peut près ça:<file>
+Connected /dev/rfcomm0 to 00:0E:07:30:6B:78 on channel 1
+Press CTRL-C for hangup</file>
+
+<note important>Si vous avez le message d'erreur suivant : <code>Can't open RFCOMM device: Permission denied </code>
+vous n'avez pas les droits donc tester avec :<code>sudo rfcomm connect 0 00:0E:07:30:6B:78 1</code>
+De plus, en cas d'erreur, remplacer rfcomm connect 0 par rfcomm connect 1. 
+**rfcomm** crée le périphérique **/dev/rfcomm0** (ou **/dev/rfcomm1** si vous avez fait la manipulation en cas d'erreur).
+Ce périphérique devra être mentionné dans la configuration du modem dans la suite.</note>
+
+**Ne pas fermer le terminal que vous avez employé, ceci couperait la connexion**.
+
+<note>Il est possible d'utiliser la commande **rfcomm bind** à la place de **rfcomm connect**. La syntaxe restant la même mais cela permet de lier **/dev/rfcomm0** sans établir une connexion permanente. La liaison Bluetooth avec le téléphone est établie automatiquement et uniquement lorsque une application utilise **/dev/rfcomm0**. De plus cette façon de faire permet de fermer en toute sérénité le terminal utilisé pour lancer la commande. Seul inconvénient: il faut lancer cette commande via un sudo car elle requiert d'avoir les privilèges root pour s'exécuter.</note>
+
+=== Rendre la liaison rfcomm avec le téléphone permanente ===
+Une fois la connexion testée avec succès il est possible de rendre permanente la liaison avec le téléphone. Pour cela il vous faut [[:tutoriel:comment_editer_un_fichier|éditer le fichier]] **/etc/bluetooth/rfcomm.conf** et y copier le contenu suivant en remplaçant avec l'adresse et le channel Bluetooth de votre téléphone:<file>rfcomm0 {
+	# Liaison automatique de rfcomm0 au démarrage
+	bind yes;
+
+	# Adresse Bluetooth du périphérique
+	device 00:0E:07:30:6B:78;
+
+	# Canal RFCOMM à utiliser
+	channel	1;
+}</file>
+
+<note important>Si votre fichier **rfcomm.conf** contient déjà une section **rfcomm0** qui n'est pas commentée il faut aussi remplacer le nom de la section par rfcomm1 ou rfcomm2 ou rfcomm3 ...</note>
+
+À chaque démarrage le fichier **/dev/rfcomm0** sera lié à votre téléphone. La connexion en Bluetooth avec celui-ci sera établie automatiquement dès l'utilisation de **/dev/rfcomm0** par **gnome-ppp** (voir ci-dessous).
+
+<note>Si cela ne fonctionne pas et pour éviter de devoir taper la commande à chaque fois,  [[:raccourci-lanceur|Créez un lanceur]]. Type: Application dans un terminal. Commande:<file>rfcomm connect 0 00:0E:07:30:6B:78 1</file></note>
+
+====Configuration avec gnome-ppp ou wvdial====
+Rendez vous sur cette [[:gnome-ppp|page]] pour gérer graphiquement votre connexion avec gnome-ppp.\\
+Ou [[:wvdial|ici]] pour utiliser  Wvdial au lieu de gnome-ppp pour se connecter.
+
+----
+////Contributeurs: [[:utilisateurs:Harlock1]], [[utilisateurs:Fabien26]], [[utilisateurs:NSB]], [[utilisateurs:cymcy]], [[:utilisateurs:l_africain|L'Africain]].//

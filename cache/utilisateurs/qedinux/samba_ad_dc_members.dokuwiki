@@ -1,0 +1,412 @@
+
+~~REDIRECT>tutoriel/samba_ad_dc_members~~
+====== Samba AD DC - Intégration de machines au domaine ======
+
+L'intégration d'une machine dans un domaine Active Directory (AD) va permettre d'authentifier les utilisateurs du domaine sur cette machine. Cette authentification se fait vis-à-vis d'un domaine contrôleur (DC).
+
+La création d'un domaine contrôleur Active Directory est détaillée dans [[:samba-active-directory|Samba - Active Directory Domain Controller (AD DC)]]. Pour l'exemple, le nom de la machine qui sera jointe au domaine est UBNWKS01.
+
+===== Prérequis =====
+==== Configuration du nom de machine ====
+Il est recommandé de mettre le FQDN ((Full Qualified Domain Name: Nom de machine incluant la partie domaine)) de la machine dans le fichier /etc/hostname
+<file - /etc/hostname>
+ubnwks01.example.com
+</file>
+Pour faciliter la résolution de nom sans passer par le serveur DNS, il faut également ajouter le FQDN dans le fichier /etc/hosts
+<file - /etc/hosts>
+127.0.0.1       localhost
+127.0.1.1       ubnwks01.example.com ubnwks01
+
+# The following lines are desirable for IPv6 capable hosts
+::1     localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+</file>
+Les commandes //hostname// et //hostname -f// doivent retourner le même résultat, le FQDN de la machine, ubnwks01.example.com
+==== Résolution de nom de domaine ====
+Une bonne résolution de nom de domaine est indispensable au sein d'un domaine Samba AD DC. Dans le fichier /etc/resolv.conf, il faut retrouver un serveur DNS du domaine et le domaine de recherche.
+<file - /etc/resolv.conf>nameserver 192.168.1.11
+search example.com</file>
+Ces paramètres sont soit fournis par le serveur DHCP du réseau ou configurés de façon statique dans le fichier /etc/network/interfaces par l'intermédiaire du paquet //resolvconf// avec les commandes dns-nameservers et dns-search.
+<file - /etc/network/interfaces>auto eth0
+iface eth0 inet static
+  address 192.168.1.101
+  netmask 255.255.255.0
+  gateway 192.168.1.1
+  dns-nameservers 192.168.1.11
+  dns-search example.com</file>
+Les tests suivant devraient renvoyer des résultats corrects (se référer à [[:samba-active-directory#tests_du_dns|Samba AD DC - Tests du DNS]])
+<code>dig ubndc01.example.com</code>
+<code>dig -t SRV _kerberos._tcp.example.com</code>
+<code>dig doc.ubuntu-fr.org</code>
+
+==== Synchronisation du temps ====
+Pour plusieurs raisons dont l'authentification Kerberos, la synchronisation des horloges entre les machines est indispensable.
+
+Pour ce faire, il faut installer le paquet **[[apt>ntp]]**
+<code>sudo apt-get install ntp</code>
+
+Configurer //ntp// pour qu'il se synchronise sur le DC. Voici un exemple de configuration simplifiée :
+<file - /etc/ntp.conf>
+driftfile      /var/lib/ntp/ntp.drift
+logfile        /var/log/ntp
+
+# Specify one or more NTP servers.
+server ubndc01.example.com
+
+# By default, exchange time with everybody, but don't allow configuration.
+restrict default kod notrap nomodify nopeer mssntp limited
+
+# Local users may interrogate the ntp server more closely.
+restrict 127.0.0.1
+</file>
+
+Redémarrer le service //ntp//
+<code>sudo service ntp restart</code>
+
+Vérifier le bon fonctionnement de ntp
+<code>ntpq -p
+     remote           refid      st t when poll reach   delay   offset  jitter
+ ==============================================================================
+ 192.168.1.11    10.240.242.252  10 u  887 1024  377    0.632   -0.919   2.476
+</code>
+
+===== Joindre la machine au domaine Samba AD DC =====
+
+==== Installer samba ====
+Il faut installer le paquet **[[apt>samba]]**
+<code>sudo apt-get install samba</code>
+
+Stopper les services
+<code>sudo service smbd stop
+sudo service nmbd stop</code>
+
+==== Configurer samba ====
+La configuration de samba peut être réécrite comme suit :
+<file - /etc/samba/smb.conf>
+# Global parameters                                                                         
+[global]
+        workgroup = EXAMPLE
+        realm = EXAMPLE.COM
+        netbios name = ubnwks01
+        security = ADS
+        encrypt passwords = yes
+
+        idmap config EXAMPLE:backend = ad
+        idmap config EXAMPLE:schema_mode = rfc2307
+        idmap config EXAMPLE:range = 10000-39999
+
+        idmap config *:backend = tdb
+        idmap config *:range = 40000-49999
+
+        winbind nss info = rfc2307
+        winbind trusted domains only = no
+        winbind use default domain = yes
+        winbind enum users = yes
+        winbind enum groups = yes
+        winbind refresh tickets = yes
+                
+        kerberos method = system keytab
+</file>
+Les lignes //idmap config EXAMPLE ...// sont très importantes. Elles définissent le backend (méthode d'accès) AD (Active Directory), le schéma rfc2307 (contenant les extensions NIS utiles pour les systèmes Linux et UNIX) et la plage d'identifiants numériques pour les utilisateurs et groupes du domaine EXAMPLE. Cette plage doit être définie dans la politique du domaine. Afin d'éviter des usurpations d'identité et de droits, il faut garantir que ces numéros soient uniques. Ils ne peuvent donc pas être utilisés localement (sur aucune machine du domaine).
+
+Les lignes //idmap config *:... // définissent le backend tdb (base de données locale) et la plage d'identifiants pour les utilisateurs et groupes venant d'autres domaines. On retrouve ici entre-autre les groupes venant de BUILTIN. Par défaut, une machine qui rejoint le domaine reçoit deux groupes locaux, //BUILTIN\Administrators// et //BUILTIN\Users//. Par défaut, le groupe //EXAMPLE\Domain Admins// est membre du groupe //BUILTIN\Administrators// et le groupe //EXAMPLE\Domain Users// est membre du groupe //BUILTIN\Users//. Les autres groupes qui seraient créés localement sur la machine auront la forme //UBNWKS01\Nom du groupe//.
+
+Les lignes //winbind ...// définissent d'autres options pour l'utilisation de //winbind//. Notamment, la ligne //use default domain// permet de ne pas devoir inscrire à chaque fois le nom du domaine pour un utilisateur ou un groupe appartenant au domaine par défaut. La ligne //winbind offline logon// permet de 
+
+La ligne //kerberos method = system keytab// va générer, lorsque l'on joint la machine au domaine, et maintenir à jour un fichier keytab propre à la machine (/etc/krb5.keytab). Ce fichier est le jeton d'authentification Kerberos pour la machine (UBNWKS01$). Ce jeton comme toute autre jeton Kerberos expire après un certain délais (10 jours ?). Avec cette option, le service //samba// maintient à jour ce jeton en le renouvelant régulièrement à condition d'avoir une connexion avec le DC.
+
+==== Appliquer les modifications ====
+Redémarrer les services //smbd// et //nmbd//.
+<code>sudo service smbd start
+sudo service nmbd start</code>
+
+==== Joindre la machine au domaine ====
+<code>sudo net join -U Administrator
+Enter Administrator's password:
+Using short domain name -- EXAMPLE
+Joined 'UBNWKS01' to dns domain 'example.com'
+</code>
+
+<note>En cas d'erreur: "No DNS domain configure for ubnwks01. Unable to perform DNS Update. DNS update failed ..."
+
+Ceci peut résulter du fait que le fichier /etc/hostname ne contenait pas le FQDN de la machine. Pour y remédier, on peut ajouter manuellement le record dans le DNS avec la commande qui suit :
+<code>samba-tool dns add ubndc01 example.com ubnwks01 A 192.168.1.101 -U Administrator</code></note>
+
+==== Ticket Kerberos de la machine ====
+
+Si la ligne //kerberos method = system keytab// était présente dans la partie globale du fichier /etc/samba/smb.conf, un fichier /etc/krb5.keytab a été crée lorsque la machine a été jointe au domaine. Ce fichier contient le ticket Kerberos de la machine (UBNWKS01$). De par sa nature, cette information est sensible et donc protégée par des droits d'accès restreints (''%%-rw------%% root root''). Tant que la ligne //kerberos method = system keytab//, ce jeton d'authentification sera renouvellé à temps à condition de ne pas dépasser le délais de renouvellement.
+
+On peut vérifier si le fichier existe avec
+<code>ls -l /etc/krb5.keytab
+-rw------- 1 root root 1057 Nov  4 19:37 /etc/krb5.keytab</code>
+Avec les [[utilisateurs:qedinux:samba_ad_dc_members#kerberos|outils Kerberos]], on peut lire ce ticket 
+<code>sudo klist -ket
+Keytab name: FILE:/etc/krb5.keytab
+KVNO Timestamp           Principal
+---- ------------------- ------------------------------------------------------
+   1 11/04/2014 19:37:24 host/ubnwks01.example.com@EXAMPLE.COM (des-cbc-crc) 
+   1 11/04/2014 19:37:24 host/ubnwks01.example.com@EXAMPLE.COM (des-cbc-md5) 
+   1 11/04/2014 19:37:24 host/ubnwks01.example.com@EXAMPLE.COM (aes128-cts-hmac-sha1-96) 
+   1 11/04/2014 19:37:24 host/ubnwks01.example.com@EXAMPLE.COM (aes256-cts-hmac-sha1-96) 
+   1 11/04/2014 19:37:24 host/ubnwks01.example.com@EXAMPLE.COM (arcfour-hmac) 
+   1 11/04/2014 19:37:24 host/ubnwks01@EXAMPLE.COM (des-cbc-crc) 
+   1 11/04/2014 19:37:24 host/ubnwks01@EXAMPLE.COM (des-cbc-md5) 
+   1 11/04/2014 19:37:24 host/ubnwks01@EXAMPLE.COM (aes128-cts-hmac-sha1-96) 
+   1 11/04/2014 19:37:25 host/ubnwks01@EXAMPLE.COM (aes256-cts-hmac-sha1-96) 
+   1 11/04/2014 19:37:25 host/ubnwks01@EXAMPLE.COM (arcfour-hmac) 
+   1 11/04/2014 19:37:25 UBNWKS01$@EXAMPLE.COM (des-cbc-crc) 
+   1 11/04/2014 19:37:25 UBNWKS01$@EXAMPLE.COM (des-cbc-md5) 
+   1 11/04/2014 19:37:25 UBNWKS01$@EXAMPLE.COM (aes128-cts-hmac-sha1-96) 
+   1 11/04/2014 19:37:25 UBNWKS01$@EXAMPLE.COM (aes256-cts-hmac-sha1-96) 
+   1 11/04/2014 19:37:25 UBNWKS01$@EXAMPLE.COM (arcfour-hmac) 
+</code>
+On peut vérifier que ce fichier est toujours valide pour authentifier la machine et ses services vis-à-vis du serveur Kerberos
+<code>sudo kinit -V -k 'UBNWKS01$' -c /dev/null
+Using default cache: /tmp/krb5cc_1000
+Using principal: UBNWKS01$@EXAMPLE.COM
+Authenticated to Kerberos v5
+</code>
+La ligne //Authenticated to Kerberos v5// témoigne de la bonne exécution et donc de la validité du fichier /etc/krb5.keytab. Si au contraire, on reçoit //kinit: Bad encryption type while getting initial credentials//. Ceci signifie que le ticket d'authentification présent dans ce fichier est expiré. Il faut le régénérer avec la commande //net ads keytab create//. On verra alors avec la commande //klist -ket// que le chiffre dans la colonne KVNO a été incrémenté (une ou plusieurs fois)
+
+Si le fichier /etc/krb5.keytab n'existe pas ou que le ticket d'authentification a expiré, il faut vérifier la présence de la ligne //kerberos method = system keytab// dans la partie globale du fichier /etc/samba/smb.conf et recréer manuellement le fichier. Deux opérations sont nécessaires. La première consiste à obtenir un ticket Kerberos au nom de //Administrator// (un compte du domaine possédant les droits d'administration sur celui-ci) pour le superutilisateur //root//.
+<code>sudo kinit administrator
+Password for administrator@EXAMPLE.COM:</code>
+La seconde interroge le DC pour recevoir un nouveau jeton et crée le fichier /etc/krb5.keytab sur la machine.
+<code>sudo net ads keytab create -k</code>
+<note tip>Vous recevez un avertissement si le paramètre "kerberos method" n'est pas définit dans /etc/samba/smb.conf 
+<code>Warning: "kerberos method" must be set to a keytab method to use keytab functions.</code>
+</note>
+Finalement et pour la sécurité, on peut détruire le ticket Kerberos utilisé avec les droits root
+<code>sudo kdestroy</code>
+
+===== Authentifier les utilisateurs =====
+
+==== Installer Winbind ====
+Il faut installer **[[apt>libnss-winbind]]**, **[[apt>libpam-winbind]]** et **[[apt>winbind]]**
+<code>sudo apt-get install libnss-winbind libpam-winbind winbind</code>
+A ce stade, la commande //wbinfo// devrait déjà fonctionner mais pas //getent// pour les utilisateurs et groupes du domaine (correctement configurés).
+<code>wbinfo -u
+wbinfo -g</code>
+
+==== Configurer le Name Service Switch ====
+Il faut ajouter **winbind** aux possibilités //passwd// et //group//.
+<file - /etc/nsswitch.conf>
+passwd:         compat winbind
+group:          compat winbind
+</file>
+<note important>Ceci ne montre que les modifications apportées au fichier</note>
+
+A ce stade, la commande //getent passwd// devrait lister les utilisateurs du domaine (correctement configurés).
+<code>getent passwd
+...
+administrator:*:10000:10000:Administrator:/home/example/administrator:/bin/bash
+...</code>
+
+A ce stade, la commande //getent group// ne devrait pas lister les groupes du domaine (correctement configurés) à cause de la ligne //winbind use default domain = yes// présente dans /etc/samba/smb.conf. Mais, on peut obtenir les informations sur un groupe du domaine en spécifiant ce groupe à la commande //getent//
+<code>getent group "Domain Admins"
+domain admins:x:10000:administrator</code>
+
+La commande //id// peut également être utilisée pour lister l'identifiant d'un utilisateur du domaine (son UID), l'identifiant de son groupe principal (GID) et les identifiants des autres groupes auxquels il appartient tenant compte de l'héritage.
+<code>id administrator
+uid=10000(administrator) gid=10000(domain admins) groups=10000(domain admins),10005(schema admins),10007(group policy creator owners),10017(denied rodc password replication group),10004(enterprise admins),10003(domain users)</code><note>Les commandes ci-dessus ne mentionnent pas le domaine auquel appartient l'utilisateur ou le groupe. Cette information n'est pas nécessaire car //samba// est configuré pour utiliser le domaine par défaut avec la ligne //winbind use default domain = yes//. Dans le cas contraire, il aurait fallu noter EXAMPLE\Administrator</note>
+
+Tout ceci montre une situation correctement configurée c'est-à-dire que chaque utilisateur ou groupe du domaine possède un identifiant NIS unique. Dans le cas contraire, par exemple pas d'identifiant pour le groupe //schema admins// donnerait ce résultat avec la commande //id//
+<code>id administrator
+uid=10000(administrator) gid=10000(domain admins) groups=10000(domain admins),4294967295,10007(group policy creator owners),10017(denied rodc password replication group),10004(enterprise admins),10003(domain users)</code>
+<note warning>L'identifiant **4294967295** n'est pas dans le range du domaine (10000-39999) ou des autres domaines (40000-49999). Ceci montre que l'utilisateur administrator est membre d'un groupe que le système n'est pas capable d'identifier correctement. Ceci générera des problèmes futures. Il faut y remédier. Une possibilité est l'utilisation d'un script qui parcours l'ensemble des utilisateurs et groupes du domaine pour vérifier et au besoin ajouter un identifiant NIS. Plus d'infos [[https://wiki.samba.org/index.php/Using_RFC2307_on_a_Samba_DC|ici]].</note>
+
+<note tip>Après avoir rejoint le domaine, il est possible que les groupes BUILTIN\Administrators et BUILTIN\Users ne soient pas correctement reconnu par //winbind//. Dans ce cas, on peut les lister. Cette opération semble remédier au problème. Après, il faut vider le cache et redémarrer le service //winbind//.
+<code>net rpc group list -U Administrator
+Administrators
+Users
+sudo net cache flush
+sudo service winbind restart</code></note>
+
+==== Configurer PAM ====
+Le module PAM de winbind gère le mécanisme d'authentification des utilisateurs. C'est celui-ci qui va permettre aux utilisateurs de se loguer sur la machine physiquement ou de façon distante. Par défaut, il ne faut rien faire. Cependant lorsqu'un utilisateur du domaine voudra se loguer sur la machine, son répertoire HOME n'existera probablement pas sur cette machine. Afin de remédier à ce problème, il faut créer un fichier /usr/share/pam-configs/mkhomedir qui va permettre de créer automatiquement le répertoire HOME de l'utilisateur qui se connecte.
+<file - /usr/share/pam-configs/mkhomedir>
+Name: Create home directory during login
+Default: yes
+Priority: 900
+Session-Type: Additional
+Session: required pam_mkhomedir.so umask=0077 skel=/etc/skel
+</file>
+
+Il faut finalement activer le module qui vient d'être créé
+<code>sudo pam-auth-update</code>
+<code>Package configuration                                                           
+                                                                                
+   ┌─────────────────────────┤ PAM configuration ├──────────────────────────┐   
+   │ PAM profiles to enable:                                                │   
+   │                                                                        │   
+   │    [*] Create home directory during login                              │   
+   │    [*] Unix authentication                                             │   
+   │    [*] Winbind NT/Active Directory authentication                      │   
+   │    [*] Register user sessions in the systemd control group hierarchy   │   
+   │    [*] Inheritable Capabilities Management                             │   
+   │                                                                        │   
+   │                   <Ok>                       <Cancel>                  │   
+   └────────────────────────────────────────────────────────────────────────┘   </code>
+
+On peut à présent tester l'authentification soit sur une autre console (Ctrl+F2), soit avec ssh
+<code>
+ssh administrator@localhost
+...
+administrator@localhost's password:
+Creating directory '/home/example/administrator'.
+...
+administrator@ubnwks01:~$ pwd
+/home/example/administrator
+</code>
+
+On voit que le répertoire HOME de l'utilisateur a été créé lors du processus de login (même par SSH).
+
+==== Authentification hors ligne ====
+Le cas des ordinateurs portables est typique d'une situation dans laquelle l'utilisateur est amené à ne pas être connecté au réseau et par conséquence, ne pas être capable de se faire authentifier par le DC. Une solution à ce problème consiste à mettre en place un cache des authentifications sur base des authentifications réussies. Ainsi, lorsque le DC est inaccessible, le cache permet d'authentifier l'utilisateur lui permettant de travailler.
+
+La ligne //winbind offline login = yes// dans le fichier /etc/samba/smb.conf indique au PAM pour Winbind d'autoriser l'authentification sur base d'un cache. Il faut donc ajouter cette ligne.
+<file - /etc/samba/smb.conf>...
+        winbind offline logon = yes
+...</file>
+
+Il faut également ajouter l'option //cached_login// au PAM pour Winbind en créant ou modifiant le fichier /etc/security/pam_winbind et en rechargeant PAM
+<file - /etc/security/pam_winbind>[global]
+# request a cached login if possible (needs "winbind offline logon = yes" in smb.conf)
+cached_login = yes</file>
+<code>sudo pam-auth-update</code>
+
+Afin de réaliser le cache des d'informations d'authentification, il faut installer le PAM pour CCRED (Cache Credentials) avec le paquet **[[apt>libpam-ccreds]]**
+<code>sudo apt-get install libpam-ccreds</code>
+
+Le PAM pour CCRED (Cache Credentials) réalise le cache des informations d'authentification. Ce cache est stocké dans une base de données de type Berkeley DB, /var/cache/.security.db. Il est possible d'interroger cette base de données avec les outils //cc_dump// et //cc_test// fournis par le paquet //libpam-ccreds//. Cette base de données équivaut au //shadow// du NSS.
+
+Il faut également ajouter le paquet **[[apt>nss-updatedb]]**
+<code>sudo apt-get install nss-updatedb</code>
+
+Le paquet //nss-updatedb// fourni la commande //nss_updatedb// qui permet de créer des bases de données de type Berkeley DB stockant les données équivalentes aux //passwd// et //group// du NSS. Il faut l'invoquer régulièrement afin de maintenir à jour ces bases de données.
+<code>sudo nss_updatedb winbind</code>
+De plus, il faut informer le système qu'il peut utiliser ces bases de données comme source pour //passwd// et //group// en ajoutant //db// aux entrées respectives du fichier ///etc/nsswitch.conf//
+<file - /etc/nsswitch.conf>
+passwd:        compat winbind db
+group:         compat winbind db
+</file>
+
+Une fois ceci mis en place, un utilisateur du domaine pourra se reconnecter à sa session lorsqu'il est hors ligne.
+
+===== Outils =====
+
+==== Kerberos ====
+Il pourra être utile d'installer les outils Kerberos (notamment kinit, klist, kdestroy, ...) pour investiguer, tester et dépanner les problèmes relatifs à Kerberos.
+<code>sudo apt-get install krb5-user</code>
+
+Plus d'infos, se référer à [[:samba-active-directory#tests_de_kerberos|Samba AD DC - Tests de Kerberos]]
+
+==== Sudo ====
+Afin de donner les droits superutilisateur local à un groupe du domaine (Domain Admins), il faut modifier avec la commande **visudo** le fichier /etc/sudoers.
+<code>sudo visudo</code>
+
+Et ajouter les lignes
+<file - /etc/sudoers>
+...
+# Allow members of domain group "Domain Admins" to execute any command
+%domain\ admins ALL=(ALL:ALL) ALL
+...</file>
+
+A présent, les membres du groupe "Domain Admins" peuvent exécuter toutes les commandes avec //sudo//.
+
+==== Policy-Kit ====
+Les droits d'administration pour PolicyKit sont définis par les fichiers dans ///etc/polkit-1/localauthority.conf.d//. Par défaut dans ce répertoire, il existe déjà 2 fichiers //50-localauthority.conf// et //51-ubuntu-admin.conf//. Ces deux fichiers définissent le même paramètre de configuration //AdminIdentities//, les identités des administrateurs. Le fichier ayant le plus grand nombre écrase les paramètres identiques définis par les fichiers ayant un nombre inférieure. Ainsi par défaut sous Ubuntu, c'est le fichier //51-ubuntu-admin.conf// qui sera utilisé pour définir les identités des administrateurs. Pour redéfinir ces identités d'administration, il est recommandé de créer un nouveau fichier car les fichiers existant pourraient être automatiquement modifiés lors d'une mise à jour. Ce nouveau fichier doit alors avoir un nombre supérieur à 51.
+
+Par exemple, pour ne donner les droits qu'aux administrateurs du domaine
+<file - /etc/polkit-1/localauthority.conf.d/60-example.com-admin.conf>
+[Configuration]
+AdminIdentities=unix-group:Domain Admins
+</file>
+
+__Ou__ pour donner les droits aux administrateurs du domaine et aux administrateurs locaux (environnement mixte)
+<file - /etc/polkit-1/localauthority.conf.d/60-example.com-admin.conf>
+[Configuration]
+AdminIdentities=unix-group:Domain Admins;unix-group:sudo;unix-group:admin
+</file>
+
+==== Samba-tool ====
+L'outil //samba-tool// peut être utilisé pour administrer à distance le domaine en ajoutant en fin de commande -H %%ldap://ubndc01.example.com%%. Ne pas mettre l'IP d'un serveur !
+
+L'authentification peut se faire de façon traditionnelle pour tous les utilisateurs en ajoutant en fin de commande -U <domain username>
+<code>localuser@ubnwks01:~$ samba-tool user list -U Administrator -H ldap://ubndc01.example.com
+Password for [EXAMPLE\Administrator]:
+administrator
+krbtgt
+Guest</code>
+
+Ou sur base du ticket Kerberos en ajoutant en fin de commande -k yes pour un utilisateur du domaine correctement authentifié
+<code>administrator@ubnwks01:~$ samba-tool user list -k yes -H ldap://ubndc01.example.com
+administrator
+krbtgt
+Guest</code>
+
+Ou sur base du ticket Kerberos en ajoutant en fin de commande -k yes pour un utilisateur quelconque ayant demandé un ticket avec //kinit// pour le compte d'un utilisateur du domaine
+<code>localuser@ubnwks01:~$ kinit administrator@EXAMPLE.COM
+Password for administrator@EXAMPLE.COM: 
+localuser@ubnwks01:~$ klist
+Ticket cache: FILE:/tmp/krb5cc_1000
+Default principal: administrator@EXAMPLE.COM
+
+Valid starting       Expires              Service principal
+10/31/2014 15:41:37  11/01/2014 01:41:37  krbtgt/EXAMPLE.COM@EXAMPLE.COM
+        renew until 11/01/2014 15:41:31
+localuser@ubnwks01:~$ samba-tool user list -k yes -H ldap://ubndc01.example.com
+administrator
+krbtgt
+Guest
+localuser@ubnwks01:~$ kdestroy</code>
+===== Applications utilisant le ticket Kerberos =====
+==== ssh ====
+Pour activer l'utilisation de l'authentification par Kerberos pour SSH, il faut décommenter les lignes concernant GSSAPIAuthentication dans /etc/ssh/sshd_config (pour la partie serveur) et GSSAPIAuthentication et GSSAPIDelegateCredentials dans /etc/ssh/ssh_config (pour la partie cliente) et activer ces options en passant la valeur à //yes// au lieu de //no//.
+<file - /etc/ssh/sshd_config>
+...
+        GSSAPIAuthentication = yes
+...</file>
+<file - /etc/ssh/ssh_config>
+...
+        GSSAPIAuthentication = yes
+        GSSAPIDelegateCredentials = yes
+...</file>
+La modification du fichier /etc/ssh/ssh_config doit se faire sur chaque machine à partir de laquelle un client essaye d'ouvrir une session SSH.
+
+La modification du fichier /etc/ssh/sshd_config doit se faire sur chaque machine sur laquelle un client essaye d'ouvrir une session SSH.
+
+Pour que le serveur SSH puissent accepter l'authentification de l'utilisateur, il doit posséder lui-même un ticket Kerberos valide. Sans configuration particulière, le serveur SSH utilisera le ticket Kerberos de la machine pour s'authentifier (c-à-d. le fichier /etc/krb5.keytab). En cas de problème, il faut vérifier la validité du ticket (se référer à [[utilisateurs:qedinux:samba_ad_dc_members#ticket_kerberos_de_la_machine|Ticket Kerberos de la machine]])
+
+A présent, un utilisateur du domaine utilisant une autre machine du domaine peut ouvrir une session SSH sur la machine //ubnwks01// sans devoir introduire son mot de passe.
+
+==== smb4k ====
+Se référer à [[:smb4k|Monter des partages Windows sous KDE]].
+
+Dans //smb4k//, il existe l'option //Essayer de s'authentifier avec Kerberos// de l'onglet //Paramètres généraux// dans //Configuration Smb4k / Samba// qui sert lors de l'authentification de l'utilisateur vis-à-vis du serveur de fichier distant. Cependant, il faut utiliser l'option avancée //Mode de sécurité// de l'onglet //Montage// dans //Configuration Smb4k / Samba// et choisir //Kerberos 5 authentication//. Cette option permet de monter un partage Windows (CIFS) à partir du ticket Kerberos de l'utilisateur reçu lors de son login. Elle correspond exactement à l'option sec=krb5 de //mount.cifs//.
+
+Ceci reviendrait à exécuter la commande :
+<code>sudo mount.cifs //server/share /mnt/point -o sec=krb5</code>
+
+Sous Trusty (14.04), lorsque l'utilisateur essaie de monter son partage ainsi, il reçoit le message d'erreur : //"Mount error (126): Required key not available. Refer to the mount.cifs(8) manual page."// Le problème vient de l'accès au ticket Kerberos. L'application //mount.cifs//, étant toujours exécutée par root via le setuid bit, cherche le ticket Kerberos de l'utilisateur root et non celui de l'utilisateur réel. Ne le trouvant pas, l'application renvoie l'erreur ci-dessus.
+
+La solution à ce problème est de passer l'option //cruid// avec la valeur UID de l'utilisateur dans le champ //Options supplémentaires// de l'onglet //Montage// dans //Configuration Smb4k / Samba//, par exemple //cruid=10000//. Ceci résout le problème et permet d'accéder au partage.
+
+Ceci reviendrait à exécuter la commande :
+<code>sudo mount.cifs //server/share /mnt/point -o sec=krb5,cruid=$UID</code>
+
+Cependant, l'utilisation de l'option //cruid// représente une faille de sécurité qui permet à un utilisateur d'encoder l'UID d'un autre utilisateur et ainsi d'obtenir les droits de cet utilisateur (CVE-2014-2581). Actuellement, Trusty (14.04) fourni le paquet //smb4k// en v1.0.9 sans appliquer une mise à jour de sécurité concernant cette faille. A partir de la version 1.1.1, le réglage du paramètre //cruid// est refusé par l'application //smb4k//. En arrière plan, l'application utilise ce paramètre avec la valeur UID de l'utilisateur réel. Il est donc recommandé d'utiliser la v1.1.2 disponible pour Utopic (14.10) parfaitement compatible d'un point de vue de ces dépendances avec Trusty (14.04).
+
+Pour les utilisateurs de Trusty (14.04), la méthode la plus simple consiste à installer le paquet //smb4k// qui installera automatiquement les dépendances. Après, il faut désinstaller ce paquet mais pas ses dépendances. Il ne faut donc pas exécuter un //autoremove//. Et finalement, il faut télécharger le paquet depuis un dépôt officiel (attention au choix de l'architecture amd64 ou i386) et l'installer manuellement.
+<code>sudo apt-get install smb4k
+sudo apt-get remove smb4k
+wget http://archive.ubuntu.com/ubuntu/pool/universe/s/smb4k/smb4k_1.1.2-1_amd64.deb
+sudo dpkg -i smb4k_1.1.2-1_amd64.deb</code>
+===== Références =====
+  * [[https://wiki.samba.org/index.php/Using_RFC2307_on_a_Samba_DC|Using RFC2307 on a Samba DC]]
+  * [[https://wiki.samba.org/index.php/Setup_a_Samba_AD_Member_Server|Setup a Samba AD Member Server]]
+  * [[https://help.ubuntu.com/community/ActiveDirectoryHowto|Active Directoy HowTo]]
+  * [[https://wiki.debian.org/LDAP/PAM|Debian Wiki : LDAP/PAM]]
+
+//Contributeur principal : [[:utilisateurs:Qedinux|Qedinux]]//

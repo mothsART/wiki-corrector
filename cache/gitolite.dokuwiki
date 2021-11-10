@@ -1,0 +1,258 @@
+
+{{tag>serveur}}
+----
+
+====== Gitolite ======
+
+Gitolite est une réécriture de Gitosis, par Sitaram Chamarty. Il permet de gérer des dépôts [[:Git]] à l'aide d'un utilisateur spécifique sur un serveur, en leur attribuant des utilisateurs ou groupes d'utilisateurs, des droits spécifiques comme la lecture, écriture, etc. Il possède un fichier de configuration complètement diffèrent qui permet le contrôle d'accès sur chaque branche, incluant des spécifications comme qui peut ou ne peut pas revenir sur une branche donnée.
+
+Gitolite utilise évidement les clés publiques ssh pour l'ajout d'utilisateur, mais il est intéressant car il interdit ses utilisateurs de se connecter à un shell de l'utilisateur des dépôts. C'est l'un des points importants de sécurité auxquels répond Gitolite.
+
+===== Pré-requis =====
+
+Gitolite utilise un utilisateur spécifique sur le serveur pour gérer les dépôts.
+
+Dans cette documentation nous considérerons les termes suivants :
+
+  * **''server''** : serveur ;
+  * **''admin''** : administrateur du serveur ;
+  * **''git''** : utilisateur Git du serveur (s'il n'est pas créé, il peut l'être avec ''sudo adduser git'').
+
+Nous considérons donc que les utilisateurs **''admin''** et **''git''** sont sur **''server''**.
+
+**''admin''** doit avoir un accès ssh autorisé sur le compte de l'utilisateur **''git''**. Si ce n'est pas le cas, sur **''server''**, créez une paire de clés (publique et privée) pour **''admin''** avec :
+
+  ssh-keygen
+
+Puis ajoutez la clé publique aux clés autorisées de **''git''** avec :
+
+  ssh-copy-id -i ~/.ssh/id_rsa.pub git@localhost
+
+Cette commande a pour effet d'ajouter votre clé au fichier ''~/.ssh/authorized_keys'' de **''git''**.
+
+Gitolite nécessite évidement Git. Si ce n'est pas fait, [[:tutoriel:comment_installer_un_paquet|installez donc le paquet]] [[apt>git-core|git-core]].
+===== Installation =====
+
+L'installation se fera depuis le dossier personnel de l'utilisateur **''admin''** de votre serveur **''server''**.
+
+Récupérez les sources de Gitolite sur Github, avec :
+
+  git clone http://github.com/sitaramc/gitolite.git
+
+Déplacez-vous dans le dossier des sources :
+
+  cd gitolite
+
+Lancez à présent le script d'installation de Gitolite :
+
+  src/gl-easy-install git localhost admin
+  
+<note important>La commande précédente n'est plus bonne avec la version actuelle du répertoire github. Les changements semble d'ailleurs assez important il n'est plus sur que cette page ne soit pas obsolète !</note>
+Cela signifie que vous lancez l'installation en utilisant **''git''** comme utilisateur contenant les dépôts Git, sur votre serveur (ici la machine sur laquelle vous êtes connectée, donc ''localhost'' représente **''server''**) et utilisez **''admin''** comme administrateur des dépôts.
+
+Il vous sera demandé plusieurs choses au cours de l'exécution du script. Si vous n'êtes pas familier avec Git, utilisez les propositions par défaut.
+
+===== Configuration =====
+
+La configuration de Gitolite est simple. Un dépôt de configuration nommé ''gitolite-admin'' est créé sur le serveur, ainsi que son clône dans le répertoire personnel de **''admin''**. C'est dans celui-ci que nous configurerons nos dépôts. Cette configuration comprend un fichier et un dossier :
+
+  * **''conf/gitolite.conf''** : fichier de configuration de Gitolite, contenant les dépôts, leurs utilisateurs/groupes et leurs droits associés ;
+  * **''keydir/''** : dossier contenant les clés publiques des utilisateurs, sous la forme ''user_name.pub''.
+
+La configuration de Gitolite utilisant un dépôt Git spécifique, il sera nécessaire de //commiter// les changements effectués pour qu'ils prennent effet, c'est pour cela qu'il est nécessaire de se situer dans le dossier de configuration pour appliquer des changements.
+
+Rendez-vous donc dans le dépôt ''gitolite-admin'' de votre utilisateur **''admin''** :
+
+  cd ~/gitolite-admin
+
+==== Créer un dépôt ====
+
+Pour créer un dépôt, [[:tutoriel:comment_editer_un_fichier|éditez votre fichier]] ''conf/gitolite.conf''. Ce fichier se présente sous la forme :
+
+<code>
+repo repo1
+    RW+            = admin
+</code>
+
+ce qui signifie que le dépôt ''repo1'' (//repository// en anglais) admet un utilisateur (**''admin''**) qui possède les droits de lecture (''R'') et d'écriture (''W'').
+
+Pour ajouter un dépôt //my_repo//, ajoutez donc :
+
+<code>
+repo my_repo
+    RW+                 = user1 user2 user3
+</code>
+
+Une fois votre fichier édité, sauvegardez puis //commitez// les changements :
+
+  git add conf/gitolite.conf
+  git commit -m "add repository my_repo"
+  git push
+
+//my_repo// sera automatiquement créé après le //push// dans ''/home/git/repositories/''.
+
+==== Ajouter un utilisateur ====
+
+Pour ajouter un utilisateur, il suffit d'ajouter sa clé publique au dossier ''keydir/'' dans un fichier nommé ''username.pub''.
+
+Pour ajouter par exemple l'utilisateur ''user1'', [[:tutoriel:comment_editer_un_fichier|créez le fichier]] ''keydir/user1.pub'' contenant sa clé publique.
+
+<note>
+Cette clé publique est habituellement créée avec la commande ''ssh-keygen'' (exécutée depuis le poste de l'utilisateur à ajouter) et est contenue dans le fichier ''~/.ssh/id_rsa.pub'' de l'utilisateur.
+</note>
+
+Une fois son fichier ajouté, //commitez// les changements :
+
+  git add keydir/user1.pub
+  git commit -m "add user user1"
+  git push
+
+<note tip>
+Un utilisateur peut avoir plusieurs clés publiques, pratique dans deux cas :
+  * **''admin''** est le nom utilisé pour l'administration de **''server''**, mais aussi le nom utilisé sur une machine de développement ;
+  * un utilisateur peut développer sur plusieurs machine, par exemple son pc et son portable.
+
+Vous pouvez donc définir plusieurs clés pour un même utilisateur en créant des fichiers ''user1.pub'', ''user1@laptop.pub'', ''user1@foo.pub'', etc.
+</note>
+
+==== Ajouter un groupe ====
+
+Pour ajouter un groupe, il suffit de le définir dans le fichier ''gitolite.conf''. [[:tutoriel:comment_editer_un_fichier|Éditez donc le fichier]] ''conf/gitolite.conf'' et ajoutez-y un groupe au début du fichier comme ceci :
+
+  @group1 = user1 user2 user3
+
+<note>
+Le groupe ''@all'' est un groupe pré-définit, représentant tous les utilisateurs.
+</note>
+
+Pour assigner un groupe à un dépôt, il suffit de le définir comme pour un utilisateur :
+
+<code>
+repo my_repo
+    RW+                 = @group1
+</code>
+
+Puis //commitez// les changements avec :
+
+  git add conf/gitolite.conf
+  git commit -m "add group group1 and assign it to repo my_repo"
+  git push
+
+==== Gestion des droits ====
+
+Comme vous l'avez remarqué, les droits sont définis à des utilisateurs pour un dépôt donné. Il existe 3 types de droits :
+
+  * **R** : droit de lecture uniquement (l'utilisateur peut effectuer un ''git clone'', etc) ;
+  * **RW** : droit de lecture et écriture (l'utilisateur peut effectuer un ''git clone'', ''git push'', etc) ;
+  * **RW+** : droit de lecture et écriture, ainsi que les //rewind permissions//, c'est-à-dire le droit de supprimer des étapes du projet, comme par exemple permettre la commande ''git reset --hard HEAD^''.
+
+<note help>
+Pour une configuration plus poussée, comme les permissions sur les branches, Gitweb, etc, voir le [[https://github.com/sitaramc/gitolite/blob/master/README.txt|README]] de Gitolite.
+</note>
+
+==== Rendre un dépôt public ====
+
+Pour permettre à n'importe qui d'accéder en lecture à votre dépôt, il vous faudra installer le ''git daemon''.
+
+[[:tutoriel:comment_installer_un_paquet|Installez donc le paquet]] [[apt://git-daemon-run|git-daemon-run]].
+
+Il faut indiquer au ''git daemon'' où sont situés les dépôts. Pour cela, [[:tutoriel:comment_editer_un_fichier|éditez votre fichier]] ''/etc/sv/git-daemon/run''.
+
+Changez la ligne :
+
+  exec chpst -ugitdaemon git daemon --verbose --base-path=/var/cache /var/cache/git
+
+par :
+
+  exec chpst -u git git daemon --verbose --base-path=/home/git/repositories
+
+puis redémarrez le ''git daemon'' avec :
+
+  sudo /etc/init.d/git-daemon restart
+
+Pour donner le droit de lecture au public pour un dépôt, il suffit d'attribuer le droit de lecture à l'utilisateur ''daemon'' pour ce dépôt. C'est-à-dire, ajouter la ligne :
+
+  R                   = daemon
+
+à votre configuration, puis appliquer les changements, comme décrit dans la section [[#creer_un_depot|Configuration]].
+
+<note important>
+Notez que ''git daemon'' écoute sur le port **9418**. Donc celui-ci devra être accessible depuis l'extérieur pour permettre au public d'accéder à vos dépots.
+</note>
+==== Changer le masque des dépôts ====
+
+Il peut être utile de changer le masque des dépôts, c'est-à-dire attribuer des droits différents aux nouveaux dépôts. Par exemple, //Gitweb// ou [[:redmine|Redmine]] ont besoin de lire les dépôts pour les parcourir. Souvent, la plus propre méthode consistera à ajouter leur utilisateur au groupe //git// et ajouter le droit de lecture à ce groupe.
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **''/home/git/.gitolite.rc''** (sur **''server''**) pour y changer la valeur de la variable ''REPO_UMASK'' comme ceci (commentez la valeur actuelle et décommentez celle voulue) :
+
+  $REPO_UMASK = 0027;       # gets you 'rwxr-x---'
+
+Ce n'est pas tout. Cette modification affectera les nouveaux dépôts créés, pas ceux déjà existants. Pour attribuer les bonnes permissions sur un dépôt existant, procédez comme ceci (dans le cas ou nous voulons attribuer le droit de lecture au groupe) :
+
+  sudo chmod -R g+Xr /home/git/repositories/<mon_depot>.git/
+
+<note important>
+Notez le **'X'** et non pas **'x'**, qui aura pour effet d'attribuer le droit d'exécution seulement sur un dossier, ou sur un fichier si celui-ci est déjà exécutable (par le propriétaire par exemple).
+</note>
+
+===== Utilisation =====
+
+==== Accès à un dépôt ====
+
+=== Par un utilisateur ===
+
+Après avoir ajouté un utilisateur, celui-ci peut //cloner// un dépôt avec :
+
+  git clone git@server:my_repo
+
+=== Par le public ===
+
+Si vous avez [[#rendre_un_depot_public|rendu un dépôt public]], n'importe qui pourra //cloner// ce dépôt avec :
+
+  git clone git://server/my_repo
+
+=== Par l'administrateur ===
+
+Dans le cas où l'utilisateur **''admin''** veut développer sur **''server''**, il doit //cloner// un dépôt avec :
+
+  git clone gitolite:my_repo
+
+<note>
+Si votre version de Git de **''server''**  est inférieure à ''1.6.2'', vous obtiendrez une erreur au //clone// d'un dépôt **vide**. Pour contourner ce problème, vous pouvez mettre à jour votre la version de Git de **''server''**, ou contourner le problème chez le client en //clonant// le dépôt de cette manière :
+
+  mkdir repo1
+  cd repo1
+  git init
+  git commit --allow-empty -m "initial repository"
+  git remote add origin git@server:repo1
+  git push origin master
+  git config push.default matching
+</note>
+
+===== Désinstallation =====
+
+Pour désinstaller Gitolite, il faut supprimer des fichiers de **''server''** et **''admin''**.
+
+Dossier à supprimer du dossier personnel de **''admin''** :
+
+  * ''~/gitolite-admin''
+
+Fichiers ou dossiers à supprimer du dossier personnel de **''git''** sur **''server''** :
+
+  * ''~/.gitolite''
+  * ''~/.gitolite.rc''
+  * ''~/gitolite-install''
+  * ''~/repositories/gitolite-admin.git''
+
+Il ne reste plus qu'à supprimer les accès SSH des utilisateurs sur **''server''** :
+
+dans le fichiers ''~/.ssh/authorized_keys'' de l'utilisateur **''git''**, supprimez les clés des utilisateurs, ou supprimez la partie ''"command=..."''.
+
+===== Voir aussi =====
+
+  * **(en)** [[http://github.com/sitaramc/gitolite|page de Gitolite]] sur Github ;
+  * **(fr)** documentation de [[:git|Git]] du wiki ;
+
+----
+
+//Contributeurs : [[:utilisateurs/v0n]].//

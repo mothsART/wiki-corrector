@@ -1,0 +1,375 @@
+
+{{tag>Xenial télécommande multimédia matériel media_center}}
+----
+
+====== Paramétrer sa télécommande avec LIRC ======
+De nombreuses télécommandes infrarouges sont compatibles sous Linux (mais pas toutes). Les fonctionnalités de  l'infrarouge (ir-core) sont désormais intégrées par défaut au [[:kernel|noyau]].\\
+LIRC (Linux Infrared Remote Control) est un ensemble d'outils permettant de reconnaître et configurer les récepteurs et télécommandes infrarouge. Il existe depuis longtemps, bien avant que le noyau ne reconnaissent nativement les télécommandes IR.
+Par défaut, Les scripts d'initialisation de LIRC sont correctement configurés pour la gestion d'un seul appareil, mais en réalité les scripts du pilote peuvent en gérer plusieurs. Si vous cherchez à configurer un transmetteur infrarouge et un récepteur, plusieurs transmetteurs, ou plusieurs récepteurs, commencez d'abord par configurer un seul appareil et vérifiez son bon fonctionnement. Après cela seulement, vous pourrez vous intéresser à la section traitant la configuration de multiples appareils.
+
+Essayer d'abord l'utilisation d'[[:irkeytable|IR-Keytable]]. Si l'utilisation de IR-Keytable n'a rien donnée, alors suivez les instructions de cette page.
+
+===== Prérequis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>lirc]]**.
+
+===== Configuration =====
+
+==== Configuration des modules ====
+
+Durant la configuration des modules LIRC vous devrez sélectionner le type de récepteur infrarouge que vous allez utiliser avec la commande : <code>sudo dpkg-reconfigure lirc</code>
+
+|Sélectionnez le (les) module(s) que vous souhaitez utiliser et configurer. Pour certains modules, consultez cette  [[#pilotes_demandant_un_effort_supplementaire|partie de la page]].\\ (Utilisez les flèches haut et bas pour naviguer et la barre d'espace pour sélectionner ; tabulation pour aller sur le bouton <OK>)|{{ :utilisateurs:zarmu:lirc_uxenial_01.png?direct&320 |}}|
+|Choisissez ensuite le transmetteur correspondant à votre matériel.|{{ :utilisateurs:zarmu:lirc_uxenial_02.png?direct&320 |}}|
+
+=== Modification du fichier /etc/lirc/hardware.conf ===
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] ''/etc/lirc/hardware.conf'' avec les droits administrateurs. S'il n'existe pas, créez-le. Ensuite, faites les modifications suivantes :
+  * Modifiez ''LOAD_MODULES=false'' en ''LOAD_MODULES=true''.
+  * Remplissez la section « ''MODULES'' » avec le nom de votre module entre guillemets, préfixé de l'acronyme « ''lirc_'' » (par exemple pour le pilote ''mceusb'', mettez « ''lirc_mceusb'' »).
+
+<note tip>Sur le site du projet LIRC, [[http://www.lirc.org/html/table.html|une page]] recense les matériels supportés avec les modules appropriés (colonne « //Required LIRC kernel modules// »). Suivant le récepteur utilisé, on utilise soit un module, comme indiqué précédemment, soit un pilote. Dans ce dernier cas, il faut laisser le paramètre ''MODULES'' vierge.</note>
+
+La page [[:lirc - exemples "hardware.conf"]] de la documentation donne des exemples de fichiers ''hardware.conf''.
+
+==== Le fichier lircd.conf ====
+
+Le fichier ''lircd.conf'' liste les correspondances entre le signal IR et la fonction de la touche. Il existe deux façons de l'obtenir :
+  * trouver un fichier existant (sur le site [[http://www.lirc.org/remotes/|lirc.org]] ; le plus simple) ;
+  * le créer à partir d'un utilitaire de LIRC (''irrecord'').
+
+=== Utiliser un fichier lircd.conf existant ===
+
+Vous pouvez chercher le fichier de configuration pour votre télécommande [[http://lirc.sourceforge.net/remotes/|ici]].
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] ''/etc/lirc/lircd.conf'' et remplacez son contenu par celui trouvé précédemment.
+
+=== Créer un fichier lircd.conf avec irrecord ===
+
+Si vous souhaitez créer votre propre fichier ou que vous n'avez pas trouvé de fichier déjà fait pour votre télécommande. Vous pouvez utilisez ''irrecord''.
+Reportez-vous au [[:tutoriel:creer_fichier_lircd.conf|tutoriel]] existant sur le sujet.
+
+==== Démarrage de LIRC et essai ====
+
+Les modules seront chargés au démarrage de LIRC. Démarrez LIRC puis ''irw'' (l'utilitaire de test) :
+  sudo service lirc start
+  irw
+
+Le terminal doit se mettre en « attente » (on ne peut plus taper de commande). Appuyez sur les touches de votre télécommande. Elles devraient s'afficher dans le terminal. Pour quitter, pressez <ctrl> + 'C'.
+
+Si ''irw'' se termine immédiatement (vous pouvez taper une commande après le lancement de celui-ci), c'est que le module ne s'est pas chargé correctement. Essayez de redémarrer votre ordinateur. Si ça ne fonctionne toujours pas, regardez si le module s'est bien chargé grâce à la commande <code>dmesg | grep lirc</code>
+
+Si au lancement de LIRC vous avez ceci :
+<code>
+$ sudo service lirc start
+##################################################
+## LIRC IS NOT CONFIGURED ##
+## ##
+## read /usr/share/doc/lirc/html/configure.html ##
+##################################################
+</code>
+c'est que vous n'avez pas bien créé votre fichier ''lircd.conf''. Retournez à la section   "[[#Le fichier lircd.conf]]".
+
+==== Création des fichiers lircrc ====
+
+Pour la création des fichiers lircrc, il faut se reporter à [[:tutoriel:lircrc|ce tutoriel]].
+
+===== Pilotes demandant un effort supplémentaire =====
+
+==== Récepteur ou émetteur infrarouge ====
+
+Une boîte de dialogue supplémentaire s'affichera au moment de la configuration des modules.
+
+==== Télécommande Apple ====
+
+Il faut trouver le périphérique d'événement dans ''/dev/'' et le renseigner dans le paramètre ''DEVICE'' dans le fichier ''/etc/lirc/hardware.conf''.
+
+===== Installation et configuration pour plusieurs télécommandes =====
+
+Une fois que LIRC fonctionne avec une télécommande, vous pouvez modifier la configuration pour supporter des télécommandes supplémentaires. 
+
+==== Modification des scripts d'initialisation ====
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] '/etc/lirc/hardware.conf' :
+  * Assurez-vous que tous vos modules figurent sur la ligne MODULES="", séparés par des espaces. Prenez garde à l'ordre dans lequel vous les mentionnez. Ce sera l'ordre dans lequel LIRC reconnaîtra les appareils. C'est donc important si vous voulez faire une différence entre ceux-ci.
+  * Modifiez les lignes du côté de LIRCD_ARGS="" pour faire correspondre le tout à
+<file>
+LIRCD_ARGS="--device=/dev/lirc0 --output=/dev/lircd1 --pidfile=/var/run/lircd1.pid --listen"
+LIRCD2_ARGS="--device=/dev/lirc1 --output=/dev/lircd --pidfile=/var/run/lircd.pid --connect=localhost:8765"
+</file>
+
+<note>Il faut adapter les paramètres ''device'' à votre configuration.</note>
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] ''/etc/init.d/lirc'' :
+  * Changez :
+<file>
+      LIRCD_ARGS=`build_args $LIRCD_ARGS`
+      start-stop-daemon --start --quiet --exec /usr/sbin/lircd -- $LIRCD_ARGS 
+                < /dev/null
+</file>
+en :
+<file>
+      LIRCD_ARGS=`build_args $LIRCD_ARGS`
+      LIRCD2_ARGS=`build_args $LIRCD2_ARGS`
+      start-stop-daemon --start --quiet --exec /usr/sbin/lircd -- $LIRCD_ARGS 
+                < /dev/null
+      /usr/sbin/lircd $LIRCD2_ARGS 
+               < /dev/null
+</file>
+
+Faites les manipulations sur ''/etc/lirc/hardware.conf'' et ''/etc/init.d/lirc'' pour chaque nouvel appareil.
+
+==== Essai ====
+
+Démarrez LIRC :
+  sudo /etc/init.d/lirc start
+
+Vous devriez avoir deux lircd actifs. Tout processus lirc qui tentera d'interagir avec lircd devra se faire spécifier un paramètre lui indiquant à quelle instance il s'adresse.
+
+===== Transmission infrarouge =====
+
+Les périphériques suivants ont un support pour la transmission infrarouge :
+  * transmetteur infrarouge série (avec le module lirc_serial) ;
+  * récepteur infrarouge et quadruple-transmetteur CommandIR (avec le module lirc_cmdir) ;
+  * Media Center Remote 2 (avec le module lirc_mceusb2) ;
+  * Hauppauge PVR-150 (avec le module lirc_pvr150) ;
+  * USB-UIRT (avec le module lircd natif).
+
+Les émetteurs utilisant i2c ont une configuration spécifique car n'utilisant plus LIRC (Voir ir-keytable)
+
+Cette partie va donc décrire les configurations spécifiques à différents types d'émetteurs infrarouge. Après avoir préparé les configurations spécifiques à un matériel, il faut passer à la partie sur la configuration générale de la transmission infrarouge.
+
+==== Configuration de différents types d'émetteurs ====
+
+=== Transmetteur infrarouge série ===
+
+Les paquets de Hardy vont vous poser des questions relatives au port série que vous utilisez. Suivez les boîtes de dialogues et le port série sera configuré correctement.
+
+=== Récepteur infrarouge et quadruple-transmetteur CommandIR ===
+
+Le [[http://www.commandir.com/content/view/37/54/|site de CommandIR]] (en anglais) indique comment installer ce matériel. Il suffit de lancer ''gnome-lirc-properties'' (dans un bureau Gnome) et de sélectionner le bon matériel.
+
+=== Transmetteur infrarouge MCEUSB2 ===
+
+Les paquets de Hardy possèdent le support pour les transmetteur MCEUSB2.
+
+=== Transmetteur infrarouge de la carte PVR-150====
+
+Sous la version 8.04 d'Ubuntu, il faut faire les manipulations suivantes décrites dans les paragraphes suivants.
+
+== Copie du micrologiciel PVR-150 ==
+
+Téléchargez le micrologiciel Hauppauge et ajoutez le jeu de codes approprié à votre fichier lircd.conf pour le périphérique que vous voulez contrôler.
+
+Le micrologiciel peut être trouvé [[http://www.blushingpenguin.com/mark/lmilk/haup-ir-blaster.bin|ici]]. Téléchargez-le et placez-le dans le répertoire ''/lib/firmware/''.
+
+Les jeux de codes sont  [[http://www.blushingpenguin.com/mark/lmilk/lircd.conf|ici]].  Ce fichier contient les jeux de codes de tous les périphériques de la base de données. Extrayez-en l'information de votre périphérique et insérez-la dans le fichier ''/etc/lirc/lircd.conf'' -- en prenant soin de sauvegarder l'original dans un lieu sûr.
+
+Une fois ces deux étapes effectuées, redémarrez l'ordinateur avant de continuer.
+
+== Ajout du jeu de codes pour le transmetteur ==
+
+Il vous faut déterminer le code de votre appareil. Pour le trouver, consultez la liste [[http://www.blushingpenguin.com/mark/lmilk/IRcodesets.html|ici]]. Il n'est pas toujours aisé de trouver le bon code pour votre appareil. Cependant, la liste principale permet généralement de le trouver par élimination.
+
+Une fois que vous avez déterminé votre code, il faut extraire le jeu de codes correspondant dans le fichier principal. Il faut ensuite les ajouter au fichier ''/etc/lirc/lircd.conf'' comme pour une autre télécommande.
+
+À titre d'exemple, pour //blaster// un bouton de marche pour un récepteur de câble Motorola DCT6200, il faut utiliser le code pour le bouton correspondant avec le code 85 (correspondant au récepteur). Dans ce cas, on obtient le code 0_85_KEY_POWER où :
+  * 0 désigne le fait que c'est un récepteur pour le câble (1 pour le satellite) ;
+  * 85 correspond au code trouvépour le récepteur ;
+  * KEY_POWER désigne la fonction.
+Si vous voulez le lier à un bouton de votre télécommande, il faut changer ''KEY_POWER'' (correspondant au bouton de marche) par le nom de la clé donnée par ''irw''.
+
+Pour commencer la partie du fichier ''/etc/lircd.conf'' pour l'émetteur, il faut utiliser cet en-tête :
+<file>
+begin remote
+
+  name          blaster
+  bits          32
+  flags         RAW_CODES
+  eps           0
+  aeps          0
+  plead         0
+  gap           333333
+  repeat_bit    0
+  begin raw_codes
+</file>
+
+Il faut ensuite trouver le bouton de marche dans le jeu de codes 85. Comme on regarde pour un récepteur de câble, il faut utiliser le préfixe 0. On trouve donc la partie suivante dans le fichier principal :
+<file>    name 0_85_KEY_POWER
+    5570570</file>
+Ensuite, rendez le conforme à ce que renvoie ''irw'' quand vous appuyer sur le bouton. Dans ce cas, ''irw'' renvoie ''POWER''. Il faut donc modifier le nom de la manière suivante :
+<file>   name POWER
+   5570570</file>
+
+Il faut faire de même pour les autres boutons voulus.
+
+Quand vous avez terminé de renseigner les boutons, ajouter ce qui suit :
+<file>end raw_codes
+end remote</file>
+Cela permet de terminer la définition de la télécommande. Dans cet exemple, la définition entière de la télécommande (avec un seul bouton) est la suivante :
+<file>begin remote
+
+  name          blaster
+  bits          32
+  flags         RAW_CODES
+  eps           0
+  aeps          0
+  plead         0
+  gap           333333
+  repeat_bit    0
+  begin raw_codes
+  name 0_85_KEY_POWER
+  5570570
+ end raw_codes
+end remote</file>
+
+Après avoir sauvegardé le nouveau fichier ''lircd.conf'', redémarrez LIRC :
+  sudo /etc/init.d/lirc restart
+
+Ensuite, essayez-le. Vous pouvez, par exemple, utiliser la commande suivante :
+  irsend SEND_ONCE blaster POWEROFF
+
+Elle allume et éteint le récepteur DCT6200. Même si elle ne contrôle pas l'appareil comme prévu, vous devriez voir l'émetteur émettre des signaux lumineux.
+
+Les problèmes avec la sélection des codes, le positionnement de l'émetteur et autres vont au-delà de l'objectif de cette page. Vous pouvez faire de plus amples recherches sur Internet qui possède des informations sur ces sujets.
+
+==== Configuration générale et utilisation ====
+
+=== Création d'un fichier lircd.conf ===
+
+Il faut trouver ou bien créer un fichier ''lircd.conf'' représentant la télécommande à la place de laquelle le transmetteur va être utilisé. Pour créer ce fichier, vous pouvez vous reporter à la partie [[#le_fichier_lircd.conf|Le fichier lircd.conf]] en prenant en compte les précisions qui suivent. Vous pouvez enregistrer le fichier lircd.conf où bon vous semble. Il faut cependant ajouter une ligne ''include'' à votre fichier principal ''/etc/lirc/lircd.conf''. Par exemple, si le fichier lircd.conf de votre émetteur est ''~/émetteur/lircd.conf'', il faut ajouter la ligne suivante :
+<file>include ~/émetteur/lircd.conf</file>
+
+=== Redémarrage de LIRC ===
+
+Pour prendre en compte les modifications sur les fichiers lircd.conf, il faut redémarrer LIRC avec la commande suivante :
+<code>sudo /etc/init.d/lirc restart</code>
+
+=== Essai de transmission ===
+
+La syntaxe pour la transmission est la suivante :
+<code>irsend -d $LIRCDPROCESS SEND_ONCE $REMOTE $BUTTON</code>
+où :
+  * $LIRCDPROCESS représente l'appareil lircd de ''/dev/'' utilisé pour la transmission ;
+  * $REMOTE représente le nom de la télécommande, comme écrit dans le fichier ''/etc/lirc/lircd.conf'' ;
+  * $BUTTON représente le bouton que vous essayez de transmettre.
+Voici un exemple :
+<code>irsend -d /dev/lircd SEND_ONCE my_favorite_remote power</code>
+Ceci va transmettre le bouton de marche pour la télécommande « my_favourite_remote » en utilisant le processus lircd primaire.
+
+Si la transmission de fonctionne pas immédiatement, la meilleure méthode pour commencer un diagnostic est d'utiliser un appareil photo numérique. Allumez l'appareil photo et regardez la [[http://fr.wikipedia.org/wiki/Diode_électroluminescente|DÉL]] infrarouge de laquelle vous essayez de transmettre à travers l'objectif. Vous devriez voir des flashs violets venant de la DÉL infrarouge quand vous essayez de transmettre. Si vous ne voyez rien, votre appareil ne transmet rien.
+
+
+==== InputLirc ====
+''InputLirc'' est un daemon léger qui permet de ré-envoyer les KeyCodes générés par ''/dev/input/eventX'' aux clients Lirc.\\ 
+Il faut donc installer **[[apt>inputlirc]]**.
+
+<note warning>ImputLirc est incompatible avec Lirc. Pour que cette méthode fonctionne, il faut impérativement désinstaller Lirc ou s'assurer que le daemon Lircd n'est pas lancé. Pour cela, lors de l'installation de Lirc ou de sa re-configuration : <code>sudo dpkg-reconfigure lirc</code> il faut bien avoir répondu none aux questions posée. Assurez vous également que le paramètre START_LIRCD est bien configuré sur ''false'' dans **etc/lirc/hardware.conf**.</note>
+
+Pour le configurer, il faut connaître le numéro du EventX correspondant à votre récepteur IR :
+
+<code>cat /proc/bus/input/devices </code>
+
+Par exemple, sur une Zbox nano, vous pourrez obtenir :
+<code>I: Bus=0019 Vendor=1050 Product=00c5 Version=0062
+N: Name="Nuvoton w836x7hg Infrared Remote Transceiver"
+P: Phys=nuvoton/cir0
+S: Sysfs=/devices/pnp0/00:02/rc/rc0/input7
+U: Uniq=
+H: Handlers=kbd event7 
+B: PROP=0
+B: EV=100013
+B: KEY=fff 0 108fc010 4004900000000 0 40000a000 1080c4000801 9e168000000000 2
+B: MSC=10</code>
+ 
+Donc, ici les signaux de la télécommande sont transmis à travers ''/dev/input/event7'', ce qu'il faut indiquer à ''inputLirc'' en ajoutant au fichier ''/etc/default/inputlirc'' :
+<file>EVENTS="/dev/input/event7"
+OPTIONS="-g -m 0 -c"</file>
+
+<note>[cas particulier ?]  Lorsque vous débranchez et rebrancher votre récepteur IR, le numero eventX  peut changer. Voir plus bas comment s'affranchir de cet inconvénient</note>
+
+Il ne reste plus qu'à redémarrer inputLirc :
+<code>/etc/init.d/inputlirc stop
+/etc/init.d/inputlirc start</code>
+
+Et tester que maintenant, votre télécommande est bien reconnue et que l'appui de touche renvoie le bon code lirc :
+<code>irw</code>
+
+<note tip>Maintenant que InputLirc fonctionne, les scancodes générés par votre télécommande ne sont plus transformés en événements clavier KeyCode mais en événements télécommande. La commande <code>ir-keytable -t --sysdev rc2</code> ne ferait plus rien apparaître lors de l'appui des touches. C'est pour cela qu'il faut désormais utiliser la commande <code>irw</code> pour tester votre télécommande.</note>
+<note warning>la commande irw fait partie du paquet Lirc qu'il faut donc installer pour l'utiliser. Rappelons que InputLirc et Lirc sont incompatibles. Assurez vous bien que le daemon Lircd n'est pas lancé !</note>
+==== Cas où le numero EventX change de temps en temps ====
+Il arrive que le numero EventX change parfois. Lors d'un redémarrage ou lorsque l'on débranche puis rebranche son récepteur IR USB. Il faut alors créer une règle permanente avec Udev.\\
+Commençons par rechercher un peu plus d'information sur votre récepteur IR en tapant (remplacer event8 par le numéro d'eventX correspondant dans cette cession à votre récepteur IR) :
+<code> udevadm info -a -p $(udevadm info -q path -n /dev/input/event8) </code>
+
+On obtient alors par exemple :
+<code>Udevadm info starts with the device specified by the devpath and then walks up the chain of parent devices. It prints for every devicefound, 
+all possible attributes in the udev rules key format. A rule to match, can be composed by the attributes of the device and the attributes from one single parent device.
+
+  looking at device '/devices/pnp0/00:01/rc/rc0/input8/event8':
+    KERNEL=="event8"
+    SUBSYSTEM=="input"
+    DRIVER==""
+
+  looking at parent device '/devices/pnp0/00:01/rc/rc0/input8':
+    KERNELS=="input8"
+    SUBSYSTEMS=="input"
+    DRIVERS==""
+    ATTRS{name}=="Nuvoton w836x7hg Infrared Remote Transceiver"
+    ATTRS{phys}=="nuvoton/cir0"
+    ATTRS{properties}=="0"
+    ATTRS{uniq}==""
+
+  looking at parent device '/devices/pnp0/00:01/rc/rc0':
+    KERNELS=="rc0"
+    SUBSYSTEMS=="rc"
+    DRIVERS==""
+    ATTRS{protocols}=="[other] [unknown] [rc-5] [nec] [rc-6] [jvc] [sony] [rc-5-sz] [sanyo] [sharp] [mce_kbd] [xmp] [lirc]"
+
+  looking at parent device '/devices/pnp0/00:01':
+    KERNELS=="00:01"
+    SUBSYSTEMS=="pnp"
+    DRIVERS=="nuvoton-cir"
+    ATTRS{id}=="NTN0530"
+
+  looking at parent device '/devices/pnp0':
+    KERNELS=="pnp0"
+    SUBSYSTEMS==""
+    DRIVERS==""
+</code>
+
+Il faut alors rechercher l'''ATTRS{id}'' correspondant à votre matériel (dans mon cas ''ATTRS{id}=="NTN0530"'') pour créer le lien symbolique ''MaTelecommande'' pointant toujours sur le bon ''EventX'':
+
+<code>sudo echo 'KERNEL=="event*",ATTRS{id}=="NTN0530",SYMLINK="input/MaTelecommande"' > /etc/udev/rules.d/10-persistent-ir.rules </code>
+
+(vous pouver aussi modifier directement le fichier ''/etc/udev/rules.d/10-persistent-ir.rules''  en ajoutant la ligne : <file>''KERNEL=="event*",ATTRS{id}=="NTN0530",SYMLINK="input/MaTelecommande"''</file>
+\\
+Redemarrez Udev pour que les changements prennent effet :
+<code>sudo /etc/init.d/udev reload
+sudo udevadm trigger</code>
+
+Vous devriez voir désormais apparaître le fichier spécial  ''/dev/input/MaTelecommande''\\
+N'oubliez pas pour terminer de reconfigurer InputLirc :
+
+<file>EVENTS="/dev/input/MaTelecommande"
+OPTIONS="-g -m 0 -c"</file>
+
+Et redemarrer inputLirc :
+<code>sudo /etc/init.d/inputlirc stop
+sudo /etc/init.d/inputlirc start</code>
+
+
+
+===== Liens =====
+
+  * [[http://www.lirc.org/|Site officiel de lirc]]
+  * [[http://lirc.sourceforge.net/remotes/|Fichiers de configuration pour télécommandes]]
+  * [[http://www.lirc.org/receivers.html|Faire son récepteur pour quelques euros]]
+  * [[https://help.ubuntu.com/community/InstallLirc/Hardy|Documentation anglophone]]
+
+------
+//Contributeurs : [[utilisateurs:Jonas]], [[utilisateurs:Ju]], [[utilisateurs:zetotof]], [[utilisateurs:Julius22]],  [[utilisateurs:zarmu]]//

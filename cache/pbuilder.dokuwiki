@@ -1,0 +1,129 @@
+
+{{tag>Xenial paquet}}
+
+----
+
+====== P-Builder, ou comment bien construire des paquets ======
+
+Ce document décrit les étapes nécessaires pour mettre en place un environnement de construction sain pour construire des paquets Ubuntu. Cet outil est recommandé pour les mainteneurs Ubuntu comme pour toute personne utilisant Ubuntu et intéressée par la construction des paquets.
+
+Il est possible de construire les paquets sans utiliser P-Builder, mais cela nécessite d'avoir installé au préalable sur votre système toutes les dépendances pour le compiler.
+
+=====Installation=====
+
+[[:tutoriel:comment_installer_un_paquet|Installez]] le paquet **pbuilder** puis générez l'environnement pbuilder avec la commande :
+  sudo pbuilder --create
+
+<note help>
+Cette commande aura pour effet de créer un environnement isolé de votre système, appelé « chroot ». Cet environnement est en fait l'image du système tout frais après installation. En utilisant pbuilder pour construire vos paquets, vous serez alors sûr que le paquet s'installe bien sur tous les systèmes, même une Ubuntu venant d'être installée et sur laquelle l'utilisateur n'a installé aucun paquet supplémentaire.
+</note>
+
+=====(Re)Construction d'un paquet=====
+
+Construire le paquet « mon-paquet » se fait avec la commande suivante :
+  sudo pbuilder --build mon-paquet_1.0.dsc
+
+<note help>
+Le fichier .dsc est une partie du paquet source - que pbuilder va utiliser pour construire le paquet binaire - est généré avec la commande **debuild**. Ceci est expliqué en détails dans la page de tutoriel traitant de la [[tutoriel:creer_un_paquet|création de paquets]]
+</note>
+
+Le ou les paquets seront disponibles dans le dossier **/var/cache/pbuilder/result/**
+
+<note tip>
+Si vous obtenez l'erreur //"debootstrap does not exist"//, installez **debootstrap** ou exécutez pbuilder avec l'option //--debootstrap cdebootstrap// (vous avez probablement cdebootstrap installé).
+</note>
+
+=====Mise à jour du chroot=====
+
+Il est recommandé de mettre à jour votre chroot avant chaque construction. Pour ce faire, utilisez la commande :
+  sudo pbuilder update
+
+=====Support des dépôts Universe et Multiverse=====
+
+[[:tutoriel:comment_editer_un_fichier|éditez le fichier]] **/etc/pbuilderrc** et décommentez la ligne
+<file>
+COMPONENTS="main restricted universe multiverse"
+</file>
+
+À chaque modification de votre pbuilder, il faut le mettre à jour en prenant en compte la nouvelle configuration :
+  sudo pbuilder update --override-config
+
+
+=====Mise à niveau vers la dernière version en développement=====
+
+Si vous êtes désireux de participer au cycle actuel de développement, vous allez vouloir un chroot **gutsy**. Quelquefois, il se peut que la version en développement ne soit pas installable directement. Dans ce cas, il vous faut d'abord installer la dernière version stable, puis mettre à niveau vers la version en développement.
+
+C'est le cas (actuellement pour Gutsy Gibbon). Voici donc la procédure :
+  * Créez un pbuilder Feisty : //sudo pbuilder create//
+  * Changez toutes les occurrences de **feisty** en **gutsy** dans **/etc/pbuilderrc**
+  * Mettez à jour le chroot : //sudo pbuilder update --override-config//
+  * Utilisez l'option //--override-config// à chaque mise à jour (tant que la version n'est pas prise en compte par pbuilder)
+
+=====Pbuilders multiples=====
+
+Quand on travaille sur des paquets, il est souvent nécessaire de disposer de plusieurs pbuilders sur sa machine. Par exemple pour rétro-porter vers Dapper et Edgy alors que l'on développe sous Feisty, ou encore pour tester les paquets sur Debian Sid à la recherche de bogues.
+
+Pour ce faire, le fichier **/usr/share/doc/pbuilder/examples/pbuilder-distribution.sh** va vous aider. Il contient par défaut :
+<file>
+#!/bin/sh
+# script from Jamin W. Collins  BTS: #255165
+# name this script 'pbuilder-woody', 'pbuilder-sid', 'pbuilder-sarge', 'pbuilder-experimental' etc.
+
+OPERATION=$1
+DISTRIBUTION=`basename $0 | cut -f2 -d '-'`
+PROCEED=false
+BASE_DIR="$HOME/pbuilder"
+case $OPERATION in
+   create|update|build|clean|login|execute )
+      PROCEED=true
+      ;;
+esac
+if ( $PROCEED == true ) then
+   shift 
+   sudo pbuilder $OPERATION \
+      --basetgz $BASE_DIR/$DISTRIBUTION-base.tgz \
+      --distribution $DISTRIBUTION \
+      --buildresult $BASE_DIR/result $@
+else
+   echo "Invalid command..."
+   echo "Valid commands are:"
+   echo "   create"
+   echo "   update"
+   echo "   build"
+   echo "   clean"
+   echo "   login"
+   echo "   execute"
+   exit 1
+fi
+</file>
+
+Copiez ce fichier dans **/usr/local/bin** en remplaçant //distribution// par le nom de la version d'Ubuntu voulue.\\
+Par exemple pour créer un pbuilder Dapper, vous le nommerez **pbuilder-dapper** :
+  sudo cp /usr/share/doc/pbuilder/examples/pbuilder-distribution.sh /usr/local/bin/pbuilder-dapper
+
+<note tip>
+Ce même script renommé en pbuilder-edgy par exemple, créerai un pbuilder edgy. En effet, le script récupère le nom de distribution que vous avez mis après le tiret dans le nom de fichier.
+</note>
+
+**Répertoire de base des pbuilders**
+
+Le dossier utilisé par défaut pour les pbuilders est **/var/cache/pbuilder/**. Nous allons donc modifier le script et remplacer la ligne
+<file>BASE_DIR="$HOME/pbuilder"</file>
+par
+<file>BASE_DIR="/var/cache/pbuilder"</file>
+
+Enfin, n'oubliez pas de rendre votre script exécutable :
+  sudo chmod +x /usr/local/bin/pbuilder-dapper
+
+Enfin créez le chroot du pbuilder :
+  sudo pbuilder-dapper create
+
+===== Ressources =====
+
+  * [[http://www.netfort.gr.jp/~dancer/software/pbuilder-doc/pbuilder-doc.html|Le manuel de l'utilisateur de pbuilder]]
+  * [[https://wiki.ubuntu.com/PbuilderHowto|Wiki officiel ubuntu sur pbuilder]]
+
+----
+inspirée de [[https://wiki.ubuntu.com/PbuilderHowto]]
+
+//Contributeurs :  [[utilisateurs:mr_pouit]], [[:utilisateurs:_Enchained]]//

@@ -1,0 +1,152 @@
+
+====== Teamspeak et Wine ======
+
+Vous aimez utiliser Teamspeak pour parler avec vos amis, votre team, etc, mais impossible de jouer à vos jeux sans avoir des problèmes de micro ou de son ? Vous êtes sur la bonne page !
+
+<note important>
+Cette page ne porte pas sur l'installation de [[teamspeak]] ou de [[wine]], pour cela référez-vous à leurs pages respectives.
+</note>
+<note>
+Cette page n'est plus a jour, Pulse audio n'étant pas cité.
+</note>
+
+
+
+
+===== Un problème, une explication =====
+
+Ce paragraphe va me servir pour vous expliquer quel est le problème, et pourquoi cela ne fonctionne pas, vous pouvez le sauter si vous le souhaitez.
+
+__Qui de Teamspeak ou de Wine provoque le problème ?__
+
+Les deux en fait : Teamspeak (pour la version 2) utilise OSS comme système audio. Wine fait de même lorsque son pilote audio est réglé sur OSS (par défaut car le plus stable et rapide a ce jour).
+
+Le problème avec OSS c'est qu'il ne gère qu'un seul flux audio a la fois. Par exemple, vous ne pourriez entendre qu'une musique si vous en lanciez deux à la fois ! Ici, Teamspeak primera sur Wine si vous lancez Teamspeak en premier et inversement.
+
+
+===== Carte son =====
+
+Vous avez sûrement une carte son déjà incluse dans votre PC, mais si vous avez un tel problème avec Teamspeak et Wine, c'est qu'elle ne supporte pas le mixage matériel (qui résoudrait ce problème). Vous pouvez donc en acheter une qui le supporte ou essayer les solutions ci-dessous si votre budget ne le permet pas (et même s'il le permet :-P).
+
+===== Alsa =====
+
+OSS est maintenant dépassé (non, ne dites pas ouf! ^_^), car un nouveau système audio a fait son apparition : Alsa. Alsa permet de mixer les flux audio: vous pouvez lancer deux musiques en même temps et les entendre toutes les deux. Cependant, Teamspeak ne supporte pas Alsa par défaut, et le pilote Alsa de Wine reste lent (du moins sur les petites configs).
+
+<note tip>
+La version 3 de Teamspeak utilisera Alsa comme système audio, et d'ici là  de nouvelles versions de Wine supportant mieux le pilote Alsa devraient sortir.
+</note>
+
+Si votre config le permet, activez le pilote Alsa pour Wine et lancez Teamspeak grâce à aoss, cela devrait régler le problème. Si aoss n'est pas installé, lisez la prochaine section.
+
+Pour lancer Teamspeak avec aoss :
+<code>aoss teamspeak</code>
+
+===== Aoss =====
+
+Aoss (ou alsa-oss) est un logiciel qui fait passer un programme OSS en Alsa
+et avec quelques modifications permet de régler la plupart des problèmes. C'est la seule alternative possible à OSS qui fonctionne pour Teamspeak et Wine.
+
+
+
+
+
+==== Installer aoss ====
+
+[[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt://alsa-oss|alsa-oss]]** (aoss)
+
+===== Plugin dmixer =====
+
+Dmixer est un plugin Alsa qui lui permet de mixer le son en logiciel (à moins d'avoir une carte son qui le supporte en matériel [voir [[wine_teamspeak#Carte son|Carte son]]].
+
+Commencez par [[:tutoriel:comment_editer_un_fichier|éditer le fichier]] **/etc/asound.conf** (s'il n'existe pas, il faut le créer). Dedans mettez ceci (adaptez-le à votre configuration si nécessaire) :
+
+<code>pcm.card0 {
+    type hw
+    card 0
+  }
+  
+  pcm.dmixer {
+    type dmix
+    ipc_key 1025
+    slave {
+      pcm "hw:0,0"
+      period_time 0
+      period_size 2048
+      buffer_size 32768
+      rate 48000
+    }
+    bindings {
+      0 0
+      1 1
+    }
+  }
+  
+  pcm.skype {
+    type asym
+  
+    playback.pcm "dmixer"
+    capture.pcm "card0"
+  }
+  
+  pcm.!default {
+    type plug
+    slave.pcm "skype"
+  } 
+  
+  pcm.css {
+    type asym
+    playback.pcm "hw:0"
+  }</code>
+
+==== Configuration de ESD ====
+ESD est le système audio intégré à Gnome, il fait la liaison entre Alsa et les sons du système.
+
+Pour le configurer, [[:tutoriel:comment_editer_un_fichier|éditez le fichier]] **/etc/esound/esd.conf**.
+
+Une fois le fichier ouvert, trouvez la ligne qui commence par :
+  spawn_options=
+Puis rajoutez à la fin de la ligne : -d mixer
+  ex : spawn_options=-terminate -nobeeps -as 1 -d dmixer
+
+
+
+
+
+
+
+
+
+
+
+===== Configuration de Wine =====
+
+Pour configurer Wine, vous devez vous assurer qu'il est installé (logique ;-)). Ensuite, ouvrez un terminal et tapez :
+<code>winecfg</code>
+Allez dans l'onglet audio et vérifiez que seul le pilote OSS est coché (sinon décochez tous les autres et cochez OSS).
+
+
+
+
+===== Configuration de Teamspeak =====
+
+Laissez la configuration par défaut :-D.
+
+===== Lancer les applications en aoss =====
+Rien de difficile, il faut juste ajouter aoss devant wine et teamspeak :
+
+Lancement de Teamspeak :
+<code>aoss teamspeak</code>
+
+Lancement de Wine :
+<code>aoss wine monjeu.exe</code>
+
+
+===== C'est terminé =====
+
+Voilà vous devriez être capable de parler sous Teamspeak, d'entendre les autres parler et de jouer à vos jeux Wine favoris en même temps.
+
+N'hésitez pas à apporter vos problèmes, solutions, ou ajouts à ce tutoriel.
+
+----
+
+Page corrigée par [[utilisateurs:mattux]].

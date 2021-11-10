@@ -1,0 +1,110 @@
+
+{{tag>sauvegarde partitions}}
+
+----
+
+====== Partclone ======
+
+**Partclone** est une application qui sert à faire la sauvegarde d'une partition. Elle est en quelque sorte l'équivalent de Norton Ghost.
+
+Formats reconnus: btrfs, ext2, ext3, ext4, reiserfs, reiser4, xfs et jfs pour Linux, ainsi que NTFS, FAT (12/16/32) et EXFAT (pour Windows), HFS plus (Apple Mac OS), UFS2 (FreeBSD), VMFS (VMWare Vsphere). 
+
+Il comprend en particulier les utilitaires suivants: partclone.ext2, partclone.ext3, partclone.ext4, partclone.extfs, partclone.fat32/16/12, partclone.ntfs, partclone.exfat, partclone.hfsp, partclone.jfs, partclone.reiserfs, partclone.reiser4, partclone.ufs, partclone.vmfs, partclone.xfs
+
+Ce tutoriel vous expliquera comment faire pour installer partclone, le configurer, sauvegarder votre partition (en interne ou en externe) et à restaurer votre partition.
+
+===== Pré-requis =====
+Nécessaire:
+  * Disposer des droits d'administration 
+  * Disposer d'une connexion internet configurée et activée (pour récupérer les paquets)
+  * Avoir activé l'accès aux [[:depots#universe|dépôts Universe]]
+
+
+===== Installation =====
+Tout d'abord, il vous faut [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt://partclone|partclone]]**.
+
+===== Sauvegarde =====
+Partclone est une application en ligne de commande. Pour plus de détail, vous pouvez consulter le man de partclone.
+
+**Conseil** La sauvegarde d'une partition doit se faire sur un autre disque (disque interne ou support externe) que celui de la partition à sauvegarder.
+
+==== Sauvegarde sans compression ====
+  * Pour cloner la partition Linux /dev/sda1 directement sur une deuxième partition /dev/sdb3  et afficher les informations de debug (option -d):
+<file>sudo partclone.extfs -b -d -s /dev/sda1 -o /dev/sdb3  # ici sdb3 doit être démontée</file>
+<note important>
+  * Les partitions origine sda1 et destination sdb3 doivent être **démontées**
+  * La partition de destination doit être de taille égale ou supérieure à l'origine. Si elle est plus grande, on aura en finale une partie vide.
+  * Si besoin, pour remplir la partition de destination, lancer Gparted, sélectionnez la partition, démontez-la, cliquez sur **Partition-->Vérifier**.
+  * Toutes les données sur la partition de destination seront **écrasées**.
+</note>
+<note>Le fichier de log se trouve sous :  **/var/log/partclone.log**  par default (option -l sinon)</note>
+
+  * Pour cloner la partition dans un fichier image: (ici clonage une partition ext4, en enregistrant sous forme de fichier:
+<file>sudo partclone.ext4 -c -d -s /dev/sda1 -o /media/sdb3/image.sda1.pcl  # ici, sda1 est démontée et sdb3 est montée en /media/sdb3</file>
+
+<note>Pour cette syntaxe, la sdb3 doit être montée au préalable</note>
+
+Exemple, sauvegarde de l'image de sda1 sur /media/sdb3:
+<code>sudo partclone.extfs -c -d -s /dev/sda1 -o /media/sdb3/image.sda1.pcl 
+Partclone v0.2.51 http://partclone.org
+Démarrage clonage périphérique (/dev/sda1) vers image (/media/sdb3/image.sda1.pcl)
+Reading Super Block
+Elapsed: 00:00:03, Remaining: 00:00:00, Completed: 100.00%                      
+Durée totale: 00:00:03, 100.00% completed!
+done!
+Système de fichiers:  EXTFS
+Device size:   19,1 GB = 4662783 Blocks
+Space in use:   1,9 GB = 458209 Blocks
+Free Space:    17,2 GB = 4204574 Blocks
+Taille de bloc:  4096 octets
+Elapsed: 00:01:01, Remaining: 00:00:00, Completed: 100.00%, Rate:   1,85GB/min, 
+current block:    4662783, total block:    4662783, Complete: 100.00%           
+Durée totale: 00:01:01, Débit moyen:    1,8GB/mn, 100.00% completed!
+Syncing... OK!
+Partclone a réussi à cloner le périphérique (/dev/sda1) vers l'image (/media/sdb3/image.sda1.pcl)
+Cloned successfully.</code>
+
+==== Sauvegarde avec compression ====
+
+  * Pour faire un Ghost avec compression:
+<file>sudo partclone.ext4 -c -d -s /dev/sda1 | gzip -c > /dev/sdb3/image.sda1.gz</file>
+<note important>Ici, la partition de destination sdb3 doit être démontée.
+
+Toutes les données sur la partition de destination seront écrasées.
+</note>
+  * On peut aussi utiliser la syntaxe suivante avec la destination sdb3 montée. Les données existantes seront conservées:
+<code bash>sudo mkdir /media/sdb3
+sudo mount -v /dev/sdb3 /media/sdb3
+sudo partclone.extfs -c -d -s /dev/sda1 | gzip -c >  /media/sdb3/image.sda1.gz</code>
+
+===== Restauration =====
+
+La restauration se fait avec les composants **partclone.restore** ou avec **partclone.extfs** ou **partclone.ext4**. 
+
+==== Restauration image sans compression ====
+Lancez l'une des  commandes
+<file>sudo partclone.restore -d -s /media/sdb3/image.sda1 -o /dev/sda1</file>
+ou
+<file>sudo partclone.ext4 -r -d -s /media/sdb3/image.sda1.pcl -o /dev/sda1</file>
+
+==== Restauration image avec compression ====
+Si la sauvegarde est comprimée, lancez la commande:
+=== Versions antérieures à 19.10 ===
+<code bash>sudo gzip -d /media/sdb3/image.sda1.gz |sudo partclone.ext4 -d -r -o /dev/sda1</code>
+=== versions 19.10  ou  20.04 === 
+<code bash>sudo gzip -c -d /media/sdb3/image.sda1.gz |sudo partclone.ext4 -d -r -o /dev/sda1</code>
+
+===== Liens =====
+
+
+  * Site officiel: [[http://partclone.org]]
+  * Tutoriel Archlinux https://wiki.archlinux.org/index.php/Partclone
+
+  * Fiche-mémo Ghost sous Linux http://www.commentcamarche.net/faq/28886-fiche-memo-ghost-sous-linux#partclone
+
+
+
+
+//**Contributeurs**//:
+
+ sinbad83,  //[[:utilisateurs:fnx|fnx]]//

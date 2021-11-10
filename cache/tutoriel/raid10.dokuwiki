@@ -1,0 +1,237 @@
+
+{{tag>Xenial administration système tutoriel BROUILLON}}
+----
+
+====== Comment créer un RAID 10? ======
+<note warning>Cette page à besoin de clarification, merci de votre aide.</note>
+Ce tutoriel décrit les démarches pour créer un volume RAID 10.
+Il ne s'agit pas réellement d' un niveau de RAID, mais d'une combinaison de 2 systèmes.
+RAID 1 et LVM sur 2 * N disques.
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Avoir [[:tutoriel:comment_installer_un_paquet|installé le paquet]] **[[apt>mdadm]]**, et  **[[apt>lvm2]]**.
+  * Avoir un minimum de 2 disques
+
+===== Explication =====
+
+Le RAID 10 est en faite appelée RAID-1+0.Un mélange de RAID-1 et de RAID-0, qui ce dernier est de plus en plus remplacé par le LVM, qui est plus souple pour manipuler les partitions. Le RAID 10 tolère la panne de disques multiples, jusqu'à N dans le cas d'un groupe de 2*N, à condition qu'au moins un disque reste fonctionnel dans chaque paire associée en RAID-1.
+Voici les différentes étapes de la mise en place d'un RAID 10
+         1° mise en place du volume RAID niveau 1
+         2° création des volumes logique LVM
+         3° formatage des partitions
+         4° montage auto des partitions
+ 
+Je vais prendre l'exemple simple d'un serveur tout neuf, tout beau, qui va nous servir à stocker des données pour une famille ou autre et dont le volume de donnée va croître de façon régulière.
+Voici donc mes 2 disques, sda1 de 2500Go et sdb1 de 2500Go, il est préférable pour des raisons de performance que les 2 disques soit exactement les mêmes en tout point.
+
+===== Mise en place du RAID-1 =====
+
+Dans un premier temps je vous conseille de prendre connaissance de cette page [[:tutoriel:raid1_software|Comment installer Ubuntu sur un RAID-1 logiciel ?]] qui vous explique l’installation d'un RAID-1.
+
+Vous avez donc lu la page.
+On va pouvoir mettre en place notre RAID-1.
+
+             sudo -i
+             apt-get install mdadm ////si c est pas déjà fait//
+             mdadm -- create /dev/md1 --level=1 --raid-devices=2 /dev/sda1 /dev/sdb1
+             [....]
+             Continue creating array? y
+
+on regarde le résultat:
+
+             mdadm --detail /dev/md1
+             
+            /dev/md1:
+        Version : 1.2
+  Creation Time : Sat May 12 08:53:01 2012
+     Raid Level : raid1
+     Array Size : 2441887608 (2328.77 GiB 2500.49 GB)
+  Used Dev Size : 2441887608 (2328.77 GiB 2500.49 GB)
+   Raid Devices : 2
+  Total Devices : 2
+    Persistence : Superblock is persistent
+
+    Update Time : Mon May 21 17:16:48 2012
+          State : clean 
+  Active Devices : 2
+  Working Devices : 2
+  Failed Devices : 0
+   Spare Devices : 0
+
+           Name : serveur:1  (local to host serveur)
+           UUID : d94b1ade:07a484a0:90db2fc2:66f467e7
+         Events : 76
+
+    Number   Major   Minor   RaidDevice State
+       0       8        1        0      active sync   /dev/sda1
+       1       8       17        1      active sync   /dev/sdb1
+
+<note important>Faites une pause.  
+Le temps que la syncro se fasse entre les 2 disques. 
+Allez au café.</note>
+
+<note tip>Plus les disque sont gros, plus c'est long. 
+Moi je l'ai fait avec 2 disques de 2.5To. Il a fallu environ 6 heures pour finir la syncronisation.</note>
+
+La syncronisation est finie, et avec elle la première partie.
+
+===== Mise en place du LVM =====
+
+Dans un premier temps, je vous conseille de prendre connaissance de cette page [[:lvm|LVM, une autre manière de partitionner]] qui vous explique l’installation d'un LVM.
+
+Vous avez donc lu la page. On va pouvoir mettre en place nos volume LVM.
+
+le but est de créer 4 volumes logiques de taille différente accessibles par toutes les membres de la famille.
+le premier va servir a stocker les souvenir de famille.
+le deuxième pour sauvegarder les sessions de chaque ordinateur .
+le troisième la médiathèque musicale de la famille.
+le dernier une vidéothèque.
+
+      pvcreate /dev/md1
+      pvdisplay
+              
+  --- Physical volume ---
+  PV Name               /dev/md1
+  VG Name               serveur
+  PV Size               2,27 TiB / not usable 3,87 MiB
+  Allocatable           yes 
+  PE Size               4,00 MiB
+  Total PE              596163
+  Free PE               14420
+  Allocated PE          581743
+  PV UUID               JZZNgH-ebSM-NmX4-EVv2-yMGs-cXJm-k4v36Q
+              
+Comme vous avez pu le remarque je ne travail plus sur les disques mais sur le volume RAID 1 /dev/md1
+
+        vgcreate serveur /dev/md1
+               
+        vgdisplay
+  --- Volume group ---
+  VG Name               serveur
+  System ID             
+  Format                lvm2
+  Metadata Areas        1
+  Metadata Sequence No  5
+  VG Access             read/write
+  VG Status             resizable
+  MAX LV                0
+  Cur LV                4
+  Open LV               4
+  Max PV                0
+  Cur PV                1
+  Act PV                1
+  VG Size               2,27 TiB
+  PE Size               4,00 MiB
+  Total PE              596163
+  Alloc PE / Size       581743 / 2,22 TiB
+  Free  PE / Size       14420 / 56,33 GiB
+  VG UUID               EtDat7-3IIi-Cksu-8z2N-l4On-IWxC-H9KbBk
+
+on passe au volume logique
+
+      lvcreate -n musique -L 40G serveur
+      lvcreate -n famille -L 250G serveur
+      lvcreate -n sauvegarde -L 250G serveur
+      lvcreate -n video -L 1.9T serveur
+               
+      lvdisplay
+  --- Logical volume ---
+  LV Name                /dev/serveur/musique
+  VG Name                serveur
+  LV UUID                UpHWMM-Z1Kp-A2cj-9KlJ-YjdE-rLfO-NTZX1M
+  LV Write Access        read/write
+  LV Status              available
+  # open                 1
+  LV Size                37,25 GiB
+  Current LE             9537
+  Segments               1
+  Allocation             inherit
+  Read ahead sectors     auto
+  - currently set to     256
+  Block device           252:0
+   
+  --- Logical volume ---
+  LV Name                /dev/serveur/famille
+  VG Name                serveur
+  LV UUID                Uaer4T-W6EX-0P8E-e5MN-fSPv-WBQA-0qjSxs
+  LV Write Access        read/write
+  LV Status              available
+  # open                 1
+  LV Size                232,83 GiB
+  Current LE             59605
+  Segments               1
+  Allocation             inherit
+  Read ahead sectors     auto
+  - currently set to     256
+  Block device           252:1
+   
+  --- Logical volume ---
+  LV Name                /dev/serveur/sauvegarde
+  VG Name                serveur
+  LV UUID                4hVBoS-rAXc-NzgL-HV57-2pJi-PBOz-E2cBfI
+  LV Write Access        read/write
+  LV Status              available
+  # open                 1
+  LV Size                232,83 GiB
+  Current LE             59605
+  Segments               1
+  Allocation             inherit
+  Read ahead sectors     auto
+  - currently set to     256
+  Block device           252:2
+   
+  --- Logical volume ---
+  LV Name                /dev/serveur/video
+  VG Name                serveur
+  LV UUID                5aw1LX-d0yz-VAD5-ssrf-Fg9u-CpKm-EI1MTf
+  LV Write Access        read/write
+  LV Status              available
+  # open                 1
+  LV Size                1,73 TiB
+  Current LE             452996
+  Segments               1
+  Allocation             inherit
+  Read ahead sectors     auto
+  - currently set to     256
+  Block device           252:3
+               
+<note tip>Si vous comptez bien il reste de l'espace de disque non affecté. C'est normale. Je fais ainsi au cas ou j aurrai besoin de place sur un volume ou sur un autre</note>
+===== Formatage et montage des partitions=====
+
+Cela reste du classique, on fait comme pour du lvm normal.
+
+Formatage des partition lvm en ext4
+         mkfs -t ext4 /dev/serveur/musique
+         mkfs -t ext4 /dev/serveur/famille
+         mkfs -t ext4 /dev/serveur/sauvegarde
+         mkfs -t ext4 /dev/serveur/video
+
+
+         mkdir /media/musique
+         mkdir /media/famille
+         mkdir /media/sauvegarde
+         mkdir /media/video
+
+On monte nos partitions dans les fichiers crée juste avant         
+         mount /dev/serveur/musique /media/musique
+         mount /dev/serveur/famille /media/famille
+         mount /dev/serveur/sauvegarde /media/sauvegarde
+         mount /dev/serveur/video /media/video
+ 
+on regarde le resultat
+        df -h
+===== Rajouter des disques=====
+
+<note>A venir</note>
+
+===== Voir aussi =====
+
+  * [[installation:raid1_software|Comment installer Ubuntu sur un RAID-1 logiciel ?]]
+  * [[:lvm|LVM, une autre manière de partitionner]]
+
+
+----
+//Contributeurs principaux : [[:utilisateurs:syl_l_ancien]].//

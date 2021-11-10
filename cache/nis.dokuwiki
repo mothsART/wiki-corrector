@@ -1,0 +1,171 @@
+
+{{tag>serveur réseau authentification vétuste}}
+----
+
+
+====== Configuration d'un serveur NIS ======
+
+<note warning>FIXME Cette page n'a pas été vérifiée pour les dernières versions supportées d'ubuntu. Si vous pouvez valider ces informations ou les compléter, merci d'éditer cette page et de rajouter le tag de la version d'Ubuntu sur laquelle cela fonctionne.</note>
+
+D'après [[http://fr.wikipedia.org/wiki/NIS|Wikipedia]] NIS a pour but //« de distribuer les informations contenues dans des fichiers de configuration contenant par exemple les noms d'hôte (/etc/hosts), les comptes utilisateurs (/etc/passwd), etc. sur un réseau »//. Un serveur NIS stocke et distribue donc les informations administratives du réseau et qui se comporte ainsi comme un ensemble cohérent de comptes utilisateurs, groupes, machines, etc.
+
+A l'origine, NIS est sorti sous le nom de « Yellow Pages » (YP) ou Pages jaunes mais le nom étant déposé par la compagnie anglaise British Telecom, Sun a renommé son protocole NIS. Cet héritage transparaît dans les commandes NIS commencent toutes par "yp".
+
+De nos jours, NIS est réputé pour être faible en termes de sécurité. C'est pourquoi il est recommandé de se tourner vers des solutions alternatives, comme par exemple  :
+  * [[:slapd|LDAP]]
+  * Kerberos
+  * RADIUS
+===== Installation du serveur NIS =====
+
+  * [[:tutoriel:comment_modifier_sources_maj|Activer le dépôt universe]].
+  * [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>nis]]**.
+  * Il sera demandé le nom de votre domaine NIS. C'est un choix arbitraire, il faut juste que ce soit le même pour le serveur et les clients. 
+
+===== Configuration du serveur NIS =====
+
+Nous partirons du principe que votre serveur et les clients disposent d'adresses IP statiques.
+<note important>NIS en adresses IP dynamiques présente un sérieux risque en terme de sécurité. [[:nis#securite|Lire la  section "Sécurité"]] pour comprendre problèmes inhérents de sécurité liés à NIS et comment les éviter.</note>
+ 
+  * Si vous utilisez Ubuntu Warty, [[:tutoriel:comment_editer_un_fichier|éditer le fichier]] **/etc/hosts** et y ajouter pour chaque nom de client les adresses IP correspondantes. L'adresse IP du serveur devrait déjà être présente. On ne parle pas ici de 127.0.0.1, mais de l'adresse IP assignée au serveur NIS dans son réseau local. Ce faisant, NIS pourra fonctionner même si le serveur DNS est hors-service. Vous pouvez si vous le souhaitez également relayer vers le DNS. Exemple :
+<file>
+192.168.1.1 hostname_client1
+192.168.1.2 hostname_client2
+</file>
+  * [[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] le fichier de configuration du serveur NIS **/etc/hosts.allow** et ajouter la ligne :
+<file>
+portmap ypserv ypbind : "liste d'adresses IP"
+</file>
+... où "liste d'adresses IP" sera la liste de toutes les adresses IP des clients ainsi que celle du serveur. Il faut mettre uniquement des adresses IP. Ceci a devenu obligatoire suite à une limitation de portmap qui ne supporte pas les noms d'hôtes. 
+  * [[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/default/portmap** et commenter la ligne :
+<file>
+ARGS="-i 127.0.0.2"
+</file> 
+  * [[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/default/nis** et définir la ligne NISSERVER à :
+<file>
+NISSERVER=master
+</file> 
+  * [[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/yp.conf** et ajouter une ligne de serveur sur la forme : 
+<file>
+ypserver 127.0.0.1
+</file>
+  * [[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/var/yp/Makefile** et lire les instructions. Il n'y aura probablement pas besoin de faire beaucoup de modifications. La seule chose que j'ai changé a été la ligne MINGID qui définit si l'appartenance au groupe doit être propagée à travers le domaine. Je l'ai définie à 1. 
+<note warning>MINxID définit la plus petite valeur (MIN) de UID ou GID à propager au travers de NIS. Définir ce dernier à 1 est une aberration : les groupes et utilisateurs dont l'ID est inférieur à 1000 sont généralement utilisateurs ou groupes systèmes. Il est bien plus rationnel de laissé MINxID à 1000. </note>
+  * [[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/ypserv.securenets** et ajouter les lignes qui restreindront l'accès aux membres du domaine. Exemple : 
+<file>
+host 192.168.1.1
+host 192.168.1.2
+etc.
+</file>
+<note important>Commenter la ligne 0.0.0.0, sinon tout le monde aura accès ! [[:nis#securite|Lire la  section "Sécurité"]] pour comprendre les risques.</note> 
+<note> "One can use the word "host" instead of a netmask of 255.255.255.255. Only IP addresses are allowed in this file, not hostnames."
+C'est-à-dire, chez Molière, On peut utiliser le mot "host" pour remplacer 255.255.255.255 (ou 32) comme masque de sous-réseau.
+Pour les profanes, généralement, on utilise le masque 255.255.255.0 (ou 24) avec nos petites "box internet".
+Et de même que pour portmap, ne donner que des adresses IP, pas de noms d'hôtes.
+</note>
+  * Construire la base de données pour la première fois. Pour cela, saisir dans un [[:terminal]] la [[:commande_shell|commande]] suivante :
+<code>
+sudo /usr/lib/yp/ypinit -m
+</code>
+et suivre les instructions. Cela engendrera certainement des messages d'erreurs disant que le programme n'est pas en mesure de contacter certaines choses. Ce n'est pas grave. (Les autres erreurs le sont probablement). 
+  * Redémarrer les services appropriés : 
+<code>
+sudo service portmap restart
+sudo service nis restart
+</code>
+<note>En cas de problème avec l'arrêt de portmap le tuer avec la commande : <code>sudo kill -9 $(pidof portmap)</code></note> 
+  * Par la suite, en cas de changement de configuration (par exemple, ajouter un utilisateur, etc.), ne pas oublier de lancer : 
+<code>
+sudo make -C /var/yp
+</code>
+
+===== Sécurité =====
+
+NIS est un service qui comporte des risques en terme de sécurité. Tout utilisateur malveillant ayant accès a serveur peut récupérer les listes de mots de passe. Qu'ils soient stockés en clair ou chiffrés, cette information reste exploitable. Il suffit d'écrire une application qui présente correctement la version chiffrée du mot de passe au système d'authentification pour qu'elle soit authentifiée.
+
+Pour éviter ce genre d'attaque, il est primordial de contrôler qui a accès à cette information :
+  * [[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/hosts.allow** et référencer les clients légitimes pour chaque service. [[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/hosts.deny** avec **ALL** afin que cela fonctionne.
+  * [[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/securenets** afin de limiter à quels clients membre du domaine le serveur répondra.
+
+Ceci ne suffit cependant pas à prévenir le cas où une machine ennemie prend l'adresse IP d'un client légitime. Pour prévenir ce genre de situation, il faut s'appuyer sur [[http://www.ipsec-howto.org/t1.html|IPSec]]. L'idéal est de paramétrer tous les membres du domaine de sorte à ce qu'ils ne communiquent que par IPSec. Ceci permet de s'assurer que chaque client est légitime. En effet, le client crypte le trafic à destination du serveur avec la clé du serveur, et le serveur répond à chaque demande en cryptant avec la clé du client. Le trafic est décrypté avec les clés respectives. Ainsi, un client ne disposant pas des clés qu'il est supposé avoir ne pourra ni envoyer ni recevoir de données. Le fichier contenant les clés est raisonnablement protégé (il n'est lisible qu'avec des droits [[:root|root]]). Les clés peuvent être obtenues sans compromettre le client.
+
+Toutefois, si un client légitime est compromis, l'attaquant peut obtenir la liste de mots de passe (ce qui est une faille dans la plupart des systèmes d'authentification de domaine). 
+
+
+
+
+
+===== Installation du client NIS =====
+
+  * [[:tutoriel:comment_modifier_sources_maj|Activer le dépôt universe]].
+  * [[:tutoriel:comment_installer_un_paquet|installer les paquets]] **[[apt>nis]]** **[[apt>portmap]]**.
+  * Il sera demandé le nom de votre domaine NIS. C'est un choix arbitraire, il faut juste que ce soit le même pour le serveur et les clients. 
+
+===== Configuration du client NIS =====
+
+<note>Étant donné que sous ubuntu, le compte [[root|root]] est désactivé par défaut, assurez-vous que le profil administrateur de la machine est présent dans le fichier **/etc/sudoers** du client. C'est également une bonne idée de définir ces utilisateurs en tant qu'utilisateurs locaux avec **les mêmes  UIDs** que dans la liste de mot de passe du domaine. Cela permet de garder les choses propres et cohérentes, et s'il venait à y avoir un problème, vous pourriez avoir besoin d'un compte local afin d'accéder à la machine.</note>
+ 
+  * [[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/hosts** et y ajouter le serveur, afin de rendre le client robuste aux pannes de serveur DNS.
+  * [[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/hosts.allow** une ligne pour portmap
+<file>
+portmap : adresse_du_serveur_nis
+</file>
+... où adresse_du_serveur_nis correspond à l'adresse du serveur NIS.
+  * [[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/passwd** et ajouter la ligne suivante en fin de fichier. Elle indique au système que d'autres utilisateurs (réels, ou associés à des services) que ceux indiqués dans le fichier sont authentifiés grâce au serveur NIS :
+<file>
++::::::
+</file>
+  * [[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/group** et ajouter à la fin de celui-ci la ligne suivante :
+<file>
++:::
+</file>
+  * [[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/shadow** et ajouter à la fin de celui-ci :
+<file>
++::::::::
+</file>
+  * [[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/nsswitch.conf** Cela définit les services qui doivent inclure des entrées NIS si une correspondance n'est pas trouvée dans le fichier. Vous pourriez changer d'autres services de nom, mais ceux-ci sont les plus importants.
+<file>
+passwd: files nis
+group: files nis
+shadow: files nis
+</file>
+  * [[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/yp.conf** et ajouter la ligne: 
+<file>
+domain domain_name server hostname_serveur
+</file>
+... où domain_name est le nom de votre domaine NIS, et hostname_serveur est le nom de votre serveur NIS.
+<note warning>Il se peut que cela ne fonctionne pas en mettant le nom du serveur NIS, car ce sera transposé avec la correspondance contenue dans **/etc/hosts** donc par 127.0.01.
+Dans ce cas, il faut mettre l'adresse IP du serveur (192.168.9.2 par exemple)</note>
+<note tip>Une solution pratique :
+[[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/hosts** du serveur NIS :
+<file>
+   127.0.0.1 localhost
+   <adresse_du_serveur> <nom_du_serveur>
+   <adresse_d'un_client> <nom_d'un_client>
+   ...
+</file>
+Ce fichier sera retransmis aux clients tel quel, et pourra donc être utilisable quoiqu'il advienne.
+</note>
+  * Redémarrer NIS:
+<code>
+service nis restart
+</code>
+<note warning>[[ssh|sshd]] doit être redémarré afin d'utiliser le nouveau système d'authentification.</note>
+<note warning>Sur certaines machines sous ubuntu 8.04, ypbind refuse de démarrer correctement car dbus n'est pas encore lancé. Il suffit de le relancer à la main (sudo /etc/init.d/nis restart). Une solution plus pérenne est de rajouter "-no-dbus" à YPBINDARGS dans **/etc/default/nis**. </note>
+
+===== Cohabitation SuSe et Ubuntu =====
+
+Sous SuSE Linux, l'algorithme d'encryptage des mots de passe (mots de passe "blowfish") a été amélioré par rapport à l'encryptage UNIX standard, tout en restant compatible avec celui-ci. Cette évolution se traduit par le remplacement de la bibliothèque pam_unix.so par pam_unix2.so.
+
+Cela signifie concrètement qu'une machine fonctionnant sous SuSE peut s'authentifier sans problème auprès d'un serveur qui utilise pam_unix2.so. Cependant, l'inverse n'est pas vrai : une machine utilisant les algorithmes standard (comme c'est le cas sous Ubuntu) ne peut pas s'authentifier auprès d'un serveur NIS fonctionnant utilisant pam_unix.so. Pour contourner ce problème, il suffit d'installer sur les machines Ubuntu concernées les mêmes bibliothèques que celles utilisées sous SuSE et configurer PAM pour les utiliser.
+  * [[:tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt> libpam-unix2]]**.
+  * [[:tutoriel:comment_editer_un_fichier|Éditer les fichiers]] **/etc/pam.d/common-auth**  et **/etc/pam.d/common-password**, puis y remplacer "pam_unix.so" par "pam_unix2.so".
+
+===== Voir aussi =====
+
+  * [[http://tldp.org/HOWTO/NIS-HOWTO/index.html|HOWTO du paquetage]]
+  * [[https://wiki.ubuntu.com/SettingUpNISHowTo|Setting up NIS Howto]] (article original)
+
+----
+
+// Contributeurs : [[utilisateurs:fredb | FredB]], [[utilisateurs:mamiemando|MaMieMando]] //
+

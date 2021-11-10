@@ -1,0 +1,178 @@
+
+
+
+===== Installation des paquets =====
+
+==== Présentation de la configuration ====
+
+Pour une installation par défaut des serveurs mail d'Ubuntu  on utilise les paquets **dovecot-imapd**, **dovecot-pop3d**, **postfix** .
+
+Mais il existe un paquet qui installe les serveurs comme un MDA (mail delivery agent), **dovecot-postfix**. Il installe les serveurs POP3, IMAP, SMTP. Ce qui ici nous arrange bien ici, car un **apt-get install dovecot-postfix** nous installe **dovecot-imapd**, **dovecot-pop3d** avec **postfix** et en plus il est déjà configurer. 
+
+<note>Le paquet **dovecot-postfix** est aussi préconfiguré pour le support du chiffrement TLS et de l'authentification SASL pour les protocoles SMTP, POP3 et IMAP. Ainsi que l'on peux facilement y inclure un Filtre SIEVE.</note>
+
+Nous aurons aussi besoin des paquets : **mysql-client** et **mysql-serveur** en version 5.1, **sasl**, **ntp**, **apache2**, et enfin **php5** pour mysql.
+
+<note important>Il faut impérativement la version 5.1 de mysql afin de partitionner les groupe d'utilisateur.</note>
+
+==== Installation de la configuration ====
+
+Paquets principaux [[:tutoriel:comment_installer_un_paquet|à installer]] :**[[apt>dovecot-postfix,postfix-mysql,openssl,mysql-client-5.1,mysql-server-5.1,libsasl2-2,libsasl2-modules,sasl2-bin,openssl,ntp,libapache2-mod-php5,php5-mysql,telnet,mailutils | dovecot-postfix postfix-mysql openssl mysql-client-5.1 mysql-server-5.1 libsasl2-2 libsasl2-modules sasl2-bin openssl ntp libapache2-mod-php php5-mysq telnet mailutils]]**
+
+
+
+ ==== Certification d'authenticité. ====
+<note>
+Sur un plan théorique on utilise une certification auto-signé. Cela veux dire que aucune autorité assure vos certificats. Pour un serveur de production il faudra utilisé des certification payante.
+</note>
+
+<note>
+Pour éviter toute confusions. Je vous recommande fortement de bien lire et de personnaliser toute c'est commande dans un bloc-note, ainsi que de vérifier les concordances. Avant de vous lancer.
+</note>
+
+Donc nous allons éditer le fichier __/etc/ssl/openssl.cnf__
+
+Il faut modifiez la ligne default_day  pour pouvoir l'éditer sur 10ans.
+<code>
+default_days    = 3650
+</code>
+
+Maintenant il faut généré un certificat :
+
+<code>
+cd ~
+/usr/lib/ssl/misc/CA.pl -newca
+</code>
+
+^  Paramétre  ^  Explication  ^
+|  Enter PEM pass phrase  |  Mot de passe du certificat  |
+|  Country Name (2 letter code) [AU]  |  FR  |
+|  State or Province Name (full name) [Some-State]:  |  Entrer ici votre département département  |
+|  Locality Name (eg, city) :  |  Entrer ici votre ville  |
+|  Organization Name (eg, company) [Internet Widgits Pty Ltd]  |  Ici le nom de votre compagnie  |
+|  Organizational Unit Name (eg, section)  |  VIDE (Optionnel)  |
+|  Common Name (eg, YOUR name) :  |  Ici votre nom de domaine  |
+|  Email Address :  |  Votre adresse email  |
+|  A challenge password :  |  VIDE  |
+|  Enter pass phrase for  |  Mot de passe du certificat  |
+
+Ce **certificat racine** sert à protéger les autres certificats. Il se situe dans le répertoire __/demoCA__.
+
+On crée maintenant une clé privée pour le serveur ainsi qu’un __certificat public__ non signé.
+
+<code>
+mkdir ~/CERT
+cd ~/CERT
+openssl req -new -nodes -keyout "nomdesociété"-key.pem -out "nomdesociété"-req.pem -days 3650
+</code>
+
+et on entre les paramètres comme ci dessous :
+
+^  Paramétre  ^  Explication  ^
+|  Enter PEM pass phrase  |  Mot de passe du certificat  |
+|  Country Name (2 letter code) [AU]  |  FR  |
+|  State or Province Name (full name) [Some-State]:  |  Entrer ici votre département département  |
+|  Locality Name (eg, city) :  |  Entrer ici votre ville  |
+|  Organization Name (eg, company) [Internet Widgits Pty Ltd]  |  Ici le nom de votre compagnie  |
+|  Organizational Unit Name (eg, section)  |  VIDE (Optionnel)  |
+|  Common Name (eg, YOUR name) :  |  Ici votre nom de domaine  |
+|  Email Address :  |  Votre adresse email  |
+|  A challenge password   |  VIDE  |
+
+
+On signe maintenant ce __certificat public__ avec __le certificat racine__ :
+
+<code>
+cd ~
+openssl ca -out CERT/"nomdesociété"-cert.pem -infiles CERT/"nomdesociété"-req.pem
+</code>
+
+Voici la sortie de la signature :
+
+<file>
+Using configuration from /usr/lib/ssl/openssl.cnf
+Enter pass phrase for ./demoCA/private/cakey.pem:
+Check that the request matches the signature
+Signature ok
+Certificate Details:
+        Serial Number:
+            84:7c:ce:d2:f7:cf:df:6d
+        Validity
+            Not Before: Nov 13 16:51:32 2011 GMT
+            Not After : Nov 10 16:51:32 2021 GMT
+        Subject:
+            countryName               = FR
+
+
+            stateOrProvinceName       = "Votre département"
+            organizationName          = "Votre société Internet"
+            commonName                = "Votre nom de domaine"
+            emailAddress              = "Votre Adresse Email"
+        X509v3 extensions:
+            X509v3 Basic Constraints: 
+                CA:FALSE
+            Netscape Comment: 
+                OpenSSL Generated Certificate
+            X509v3 Subject Key Identifier: 
+                05:2A:A9:90:6F:2A:80:F7:E3:EF:2B:F9:44:9D:8E:CF:C3:16:18:EF
+            X509v3 Authority Key Identifier: 
+                keyid:B9:04:A3:81:E5:5D:D6:82:72:F4:6E:0C:FB:3F:E2:62:1B:EF:B9:57
+
+Certificate is to be certified until Nov 10 16:51:32 2021 GMT (3650 days)
+Sign the certificate? [y/n]:y ### Oui
+
+
+1 out of 1 certificate requests certified, commit? [y/n]y ### Oui
+Write out database with 1 new entries
+Data Base Updated
+</file>
+
+On copie maintenant le certificat (cert.pem) et la clé (key.pem) dans postfix :
+
+<code>
+mkdir /etc/postfix/tls
+cp demoCA/cacert.pem CERT/"nomdesociété"-key.pem CERT/"nomdesociété"-cert.pem /etc/postfix/tls/
+chmod 644 /etc/postfix/tls/"nomdesociété"-cert.pem /etc/postfix/tls/cacert.pem
+chmod 400 /etc/postfix/tls/"nomdesociété"-key.pem
+chmod 400 ~/CERT/*
+</code>
+
+On ajoute maintenant la configuration **tls** et **smtp** protégé par **ssl**. Comme ceci dans le fichier __/etc/postfix/main.cf__ :
+
+<code>
+smtp_tls_CAfile = /etc/postfix/tls/cacert.pem
+smtp_tls_security_level = may
+smtp_tls_session_cache_database = btree:${data_directory}/smtp_tls_session_cache
+smtpd_tls_security_level = may
+smtpd_tls_auth_only = yes
+smtpd_tls_key_file = /etc/postfix/tls/"nomdesociété"-key.pem
+smtpd_tls_cert_file = /etc/postfix/tls/"nomdesociété"-cert.pem
+smtpd_tls_CAfile = /etc/postfix/tls/cacert.pem
+smtpd_tls_loglevel = 1
+smtpd_tls_received_header = yes
+smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_tls_session_cache
+tls_random_source = dev:/dev/urandom
+</code>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

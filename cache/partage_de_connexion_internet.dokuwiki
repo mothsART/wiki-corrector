@@ -1,0 +1,416 @@
+
+{{tag>partage réseau serveur vétuste}}
+----
+
+====== Comment partager une connexion internet ? ======
+
+Vous pouvez paramétrer votre carte réseau (wifi ou non) pour qu'elle serve de pont entre plusieurs réseaux. Le plus fréquemment, on rencontre cette configuration lorsque votre ordinateur sous Ubuntu est relié directement au modem de votre fournisseur d'accès à Internet, et que vous désirez partager votre accès à Internet avec un autre ordinateur supplémentaire.
+
+Si vous avez un réseau avec un modem qui ne peut pas dupliquer la connexion lui même, ou, si vous voulez faire un sous réseau, avoir plus d'emprise sur le filtrage en transformant un ordinateur en routeur, ou n'importe quoi d'autre, il vous faudra partager votre connexion internet avec les autres ordinateurs.
+
+Si le contenu de cette page vous dépasse, vous pouvez opter pour l'achat d'un routeur ou 
+modem-routeur. [[http://forum.ubuntu-fr.org/viewtopic.php?pid=3041586#p3041586|Son utilisation est décrite dans le forum]].
+
+<note>Si vous souhaitez simplement partager un réseau en wifi depuis un pc portable lui même connecté en filaire, rendez-vous sur la page [[:Hotspot]] ou [[https://guide.ubuntu-fr.org/desktop/net-wireless-adhoc.html|ce guide]]</note>
+
+=== Un peu de vocabulaire ===
+
+  * L'ordinateur qui met en place le partage de connexion sera nommé **Serveur ICS** [[http://en.wikipedia.org/wiki/Internet_Connection_Sharing|Internet Connection Sharing]]
+  * Un ordinateur relié au serveur ICS sera appelé **Client**
+  * Une carte réseau ou Wi-Fi est une **interface réseau**
+  * Une **adresse IP** ou une **IP** est l'identifiant d'un ordinateur sur le réseau
+
+{{ applications:config_rl2.png }}
+
+<note>Petite note sur l'illustration, le switch (sorte de multi-prises réseau) n'est indispensable que si vous voulez relier plus d'un ordinateur au serveur ICS.</note>
+
+
+Il y a plusieurs façons de faire, ici trois seront présentées. La première est très simple et efficace techniquement, la seconde est disponible si la première ne marche pas et la dernière est une ancienne technique très personnalisable et parfaitement opérationnelle, même si elle ne convient pas vraiment aux besoins des utilisateurs standard.
+
+===== Configuration côté serveur =====
+
+==== Avec Network-Manager ====
+Reportez-vous à ce [[:network-manager#modifier_les_parametres_ip_pour_le_partage_d_une_connexion_internet|paragraphe]] de la page Network-Manager.
+
+==== Avec un pont réseau ====
+
+Cette astuce est tirée du blog Only Ubuntu, et permet de partager une connexion avec le paquet bridge-utils, qui permet de gérer les ponts réseaux sous Ubuntu.
+
+=== Pré-Requis ===
+
+  * [[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt://bridge-utils|bridge utils]]** :
+
+  sudo apt-get install bridge-utils
+
+  * Il faut connaître le nom de l'interface réseau reliée à Internet et le nom de la carte qui servira au partage. Entrez, dans un [[:terminal]] :
+
+   ifconfig
+
+ Vous devriez avoir un résultat semblable à celui-ci (si ce n'est pas le cas, tentez "''ifconfig -a''"):
+
+<file>
+eth0      Lien encap:Ethernet  HWaddr 00:11:22:33:44:55  
+          UP BROADCAST MULTICAST  MTU:1500  Metric:1
+          (...) 
+
+eth1      Lien encap:Ethernet  HWaddr 00:AA:BB:CC:DD:EE  
+          inet adr:192.168.0.0  Bcast:192.168.0.255  Masque:255.255.255.0
+          adr inet6: fe80::219:d2ff:fed6:e69/64 Scope:Lien
+          UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+          (...)
+</file>
+Dans ce cas, on voit clairement que l'interface réseau possédant une connexion Internet est l'interface eth1, grâce à la seconde ligne :
+  inet adr:192.168.0.0  Bcast:192.168.0.255  Masque:255.255.255.0
+L'autre, eth0, sera donc celle de partage.
+
+<note> Si vous avez des interfaces finissant par __avah__, n'en tenez pas compte, ce sont des duplications. L'interface de partage ne pourra pas commencer par **ppp** ou **lo**</note>
+
+
+=== Création du pont ===
+Stoppez le service des réseaux :
+  sudo /etc/init.d/networking stop
+Modifier le fichier /etc/network/interfaces :
+  sudo gedit /etc/network/interfaces
+
+Et remplacez son contenu par celui-ci, en modifiant bien entendu eth0 par l'interface internet, et eth1 par l'interface de partage : (Attention, cet exemple est à l'inverse du précédent : eth0 devient eth1)
+
+<file>
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet manual
+
+auto eth1
+iface eth1 inet manual
+
+auto br0
+iface br0 inet dhcp
+bridge_ports eth0 eth1
+</file>
+Relancez les services : 
+  sudo /etc/init.d/networking start
+ ou (Si start ne fonctionne pas):
+  sudo /etc/init.d/networking restart
+ ou (si networking ne fonctionne pas)
+  sudo ifdown --exclude=lo -a && sudo ifup --exclude=lo -a
+Et le partage est fait ! Les PC client peuvent se connecter au PC qui partage sa connexion de façon similaire à un routeur.
+==== Ancienne méthode ====
+
+=== Quelques précisions ===
+
+  * Sur Intrepid, avec la disparition de **gnome-network-admin** (que vous pouvez tout de même [[:tutoriel:comment_installer_un_paquet|installer]] grâce au paquet du même nom), il est sûrement possible que ça ne marche sans rien faire, où en utilisant le programme de configuration de network manager, si vous en avez constaté la véracité, veuillez mettre une note ici même dans le wiki.
+
+  * Sur Hardy, il est possible qu'il faille laisser l'interface par laquelle on partage la connexion en itinérant, à tester si après avoir fait tout le nécessaire ça ne marche pas ...
+<note>Sur Hardy Heron (8.04) si l'interface réseau reliée à Internet est une connexion Wi-Fi il faut la laisser en itinérant </note>
+
+  * Cette documentation a été testée sur Ubuntu 7.10 "Gutsy", avec une carte Wi-Fi et une carte "câble".
+
+Pour une adaptation pour Kubuntu/Xubuntu et/ou si vous avez des problèmes, avec votre configuration : contactez-moi -> [[:utilisateurs:Fabien26]]
+
+Cette documentation est une simplification/actualisation/remise en forme de cette page : [[:tutoriel:comment_configurer_son_reseau_local#methode_avancee_configuration_dynamique_et_centralisee|Configurer son réseau local]]
+
+=== Pré-requis ===
+
+<note important>Firestarter n'est plus compatible avec dnsmasq, utiliser ICS DHCP à la place.
+Il serait bien de changer le tuto pour pouvoir utiliser dnsmasq quand même ou mettre un tuto pour installer ICS DHCP à la place</note>
+
+
+  * Vous devez avoir deux interfaces réseau (une Wi-Fi et une câble, deux câbles, ou un modem et un câble)
+  * L'interface réseau avec laquelle vous allez faire le partage doit être une interface câblée !
+  * Le câble doit être pour le moment débranché !
+  * [[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt://dnsmasq|dnsmasq]]** 
+  * Ouvrez la configuration du réseau (**Système->Administration->Réseau**)
+    * Cliquez sur la carte réseau avec laquelle vous voulez partager et changez les cases, dans l'ordre :
+      * __Configuration__ : Adresse IP statique
+      * __Adresse IP__ : 192.168.10.1
+      * __Masque de sous-réseau__ : 255.255.255.0
+      * __Passerelle__ : Vide...
+    * Faites **Valider** puis **Fermer**
+  * Ensuite, pour trouver le nom de l'interface réseau reliée à Internet et le nom de la carte qui servira au partage, entrez, dans un [[:terminal]]:
+
+  ifconfig
+
+Vous devez retrouver quelque chose qui ressemble à ça :
+
+<file>
+eth0      Lien encap:Ethernet  HWaddr 00:15:C5:79:59:B5  
+          UP BROADCAST MULTICAST  MTU:1500  Metric:1
+          Packets reçus:0 erreurs:0 :0 overruns:0 frame:0
+          TX packets:0 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 lg file transmission:1000 
+          Octets reçus:0 (0.0 b) Octets transmis:0 (0.0 b)
+          Interruption:17 
+
+eth1      Lien encap:Ethernet  HWaddr 00:19:D2:D6:0E:69  
+          inet adr:192.168.0.75  Bcast:192.168.0.255  Masque:255.255.255.0
+          adr inet6: fe80::219:d2ff:fed6:e69/64 Scope:Lien
+          UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+          Packets reçus:767 erreurs:4 :39 overruns:0 frame:0
+          TX packets:825 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 lg file transmission:1000 
+          Octets reçus:687753 (671.6 KB) Octets transmis:107141 (104.6 KB)
+          Interruption:17 Adresse de base:0xe000 Mémoire:efdff000-efdfffff 
+
+lo        Lien encap:Boucle locale  
+          inet adr:127.0.0.1  Masque:255.0.0.0
+          adr inet6: ::1/128 Scope:Hôte
+          UP LOOPBACK RUNNING  MTU:16436  Metric:1
+          Packets reçus:60 erreurs:0 :0 overruns:0 frame:0
+          TX packets:60 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 lg file transmission:0 
+          Octets reçus:3947 (3.8 KB) Octets transmis:3947 (3.8 KB)
+</file>
+
+<note help>**Si vous trouvez des interfaces "__quelques chose:avah__" ignorez-les, ce ne sont que des duplications des interfaces déjà présentes, qui ne servent pas pour notre configuration**.</note>
+
+Dans mon cas, nous voyons clairement que l'interface réseau qui va partager la connexion est **eth0**, car elle n'a pas de ligne de ce genre : 
+
+  inet adr:192.168.0.75  Bcast:192.168.0.255  Masque:255.255.255.0
+  adr inet6: fe80::219:d2ff:fed6:e69/64 Scope:Lien
+
+Ce qui signifie qu'elle n'est pour l'instant reliée à aucun réseau.
+
+Par déduction, car je n'ai que deux cartes réseau, **eth1** est l'interface réseau reliée à Internet. (de plus elle a les lignes ci-dessus, ce qui veux dire qu'un réseau y est branché, en l'occurrence une freebox).
+
+<note idee>Si vous utilisez un modem branché en USB, ou en port série, l'interface réseau connectée à Internet est dans 99% des cas **ppp0**</note>
+
+<note important>L'interface avec laquelle vous ferez le partage sera obligatoirement une **eth** ''un numéro'', elle ne peut pas être une ppp, ni autre chose.</note>
+
+<note help>**lo** est l'interface que l'on appelle loopback, elle permet à l'ordinateur de communiquer avec lui même via les protocoles réseau...Cette interface ne sera pas évoquée dans cette documentation</note>
+
+**Retenez bien les valeurs que vous avez trouvées !**
+
+  * **__Attention !!!__: Dans la suite nous présumerons que vous avez une configuration comme la mienne, si ce n'est pas le cas, effectuez les changements comme indiqué !**
+
+
+=== Configuration de dnsmasq ===
+
+  * Tous d'abord sauvegardons le fichier de configuration originel ailleurs, en tapant dans un [[terminal]], ceci:
+
+  sudo cp /etc/dnsmasq.conf /etc/dnsmasq.conf.orig
+
+  * [[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/dnsmasq.conf** pour y mettre ça :
+
+<code>
+# Fichier de Configuration pour dnsmasq.
+#
+# pour éviter de fournir du trafic DHCP/DNS inutile du coté internet
+##domain-needed
+bogus-priv
+# (Optionnel) Si vous avez une ip fixe,
+# décommentez cette ligne.
+# no-poll
+# pour limiter l'écoute de requêtes DHCP du coté réseau local
+interface=eth0
+# nom de votre domaine pour dnsmasq
+domain=inet
+# activez le serveur DHCP:
+dhcp-range=192.168.10.100,192.168.10.150,255.255.255.0,12h
+</code>
+
+  * Adaptez la ligne 10 selon ce que vous avez trouvé précedemment.
+
+  * Enregistrez le fichier.
+
+
+=== Faire un script d'exécution automatique du partage de connexion ===
+
+  * [[:tutoriel:comment_editer_un_fichier|Créez le fichier]] **/etc/init.d/iptables** pour y mettre ça :
+
+<code bash>
+#!/bin/sh
+#
+# Script de démarrage qui lance l'interface réseau internet,
+# met en place un firewall basique et un partage de connexion
+#
+# Inspiré du script de Mjules_at_ifrance.com
+#
+
+interface=eth1
+
+start() {
+# init du la périphérique internet (ici derriere un modem ADSL ethernet, DHCP client)
+
+/sbin/ifup $interface
+
+# Dans cette partie, on met en place le firewall
+#vidage des chaines
+iptables -F
+#destruction des chaines personnelles
+iptables -X
+
+#stratégies par défaut
+iptables -P INPUT DROP
+iptables -P FORWARD DROP
+iptables -P OUTPUT ACCEPT
+
+#init des tables NAT et MANGLE (pas forcément nécessaire)
+iptables -t nat -F
+iptables -t nat -X
+iptables -t nat -P PREROUTING ACCEPT
+iptables -t nat -P POSTROUTING ACCEPT
+iptables -t nat -P OUTPUT ACCEPT
+
+iptables -t mangle -F
+iptables -t mangle -X
+iptables -t mangle -P PREROUTING ACCEPT
+iptables -t mangle -P OUTPUT ACCEPT
+
+
+# Acceptation de toutes les connexions en local (un process avec l'autre)
+iptables -A INPUT -i lo -j ACCEPT
+iptables -A OUTPUT -o lo -j ACCEPT
+
+# PORT FORWARDING:
+# attention : on ne peut malheureusement pas mettre un nom de machine en destination, il faut mettre l'adresse IP.
+# exemple : on veut qu'un serveur HTTP installé sur une machine du réseau local soit visible depuis l'extérieur.
+###iptables -t nat -A PREROUTING -i $interface -p tcp --dport 80 -j DNAT --to-destination 192.168.10.121:80
+###iptables -A FORWARD -p tcp -i $interface --dport 80 -j ACCEPT
+
+
+#création d'une nouvelle règle
+iptables -N MAregle
+
+#définition de la règle : accepter les nouvelles connexions ne venant pas de l'interface internet
+# et accepter toutes les connexions établies et reliées (ex: une demande de page HTML provoque l'ouverture
+# d'une connexion reliée pour acheminer cette page vers l'ordinateur)
+
+iptables -A MAregle -m state --state NEW ! -i $interface -j ACCEPT
+iptables -A MAregle -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+#application de la règle au partage de connexion
+iptables -A INPUT -j MAregle
+iptables -A FORWARD -j MAregle
+
+# activation du forwarding dans le noyau
+# mise en place du partage de connexion sur le réseau local
+
+echo 1 >/proc/sys/net/ipv4/ip_forward
+iptables -t nat -A POSTROUTING -s 192.168.10.0/24 -o $interface -j MASQUERADE
+
+}
+
+stop() {
+        echo 0 >/proc/sys/net/ipv4/ip_forward
+        ifdown $interface
+}
+
+case "$1" in
+ start)
+        start
+        ;;
+
+stop)
+        stop
+        ;;
+restart)
+        stop && start
+        ;;
+*)
+        echo "Usage $0 {start|stop|restart}"
+        exit 1
+esac
+
+exit 0
+</code>
+
+  * Si vous avez comme __interface réseau avec internet__: **eth0** ou **ppp0**, ou autre, et non pas **eth1**, changez la ligne 9 (**interface=eth1**), par **interface=** ce que vous avez.
+
+  * Enregistrez le fichier
+
+  * Exécutez ensuite dans un [[terminal]] :
+
+  sudo chmod +x /etc/init.d/iptables
+
+puis :
+
+  sudo update-rc.d iptables start 99 2 . stop 00 2 0 1 6 .
+
+
+=== Optionnel - Configuration du client DHCP pour permettre l'affichage des noms des machines locales ===
+
+  * [[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/dhcp3/dhclient.conf**
+
+  * Enlevez le **#** devant la ligne **prepend domain-name-servers 127.0.0.1;** (ligne 18 ~)
+  * Enregistrez le fichier
+
+
+=== Optionnel - Nom d'hôte du serveur ICS ===
+
+  * [[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/hosts**
+
+  * Ajoutez dans ce fichier, **192.168.10.1   serveurICS** après la ligne : **127.0.0.1	localhost**
+
+  * Enregistrez le fichier
+
+
+
+
+
+=== Optionnel (si besoin) - Configurer le pare-feu ===
+
+<note important>Etape à ne réaliser que si les ordinateurs clients n'arrivent pas à se connecter à Internet</note>
+
+  * Si ce n'est déjà fait, [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt://firestarter|firestarter]]**
+  * lancer Système/Administration/Firestarter ;
+  * cliquer sur Préférences/configuration du réseau ;
+  * cocher "Autoriser le partage de la connexion internet" ;
+  * Accepter la modification des Préférences ;
+  * Arrêter puis redémarrer le pare-feu ;
+  * Quitter Firestarter.
+
+=== C'est fini, comment ça marche ? ===
+
+Et voila, branchez enfin les câbles, redémarrer votre serveur ICS, puis redémarrer les autres machines de votre réseau local.
+
+Quand une machine du réseau local démarre, voici ce qu'elle fait :
+
+  * recherche d'un serveur DHCP –> le serveur ICS répond.
+  * le serveur ICS fourni une adresse DHCP dans la plage 192.168.10.100 à 192.168.10.150.
+  * le serveur ICS renseigne le fichier /etc/resolv.conf de votre machine automatiquement : il se met lui-même (192.168.10.1), car il est serveur relais DNS.
+  * le serveur ICS renseigne la route par défaut. Il se donne lui-même en route par défaut car c'est lui qui effectue le partage de la connexion internet.
+
+===== Configuration coté client =====
+
+==== En DHCP ====
+
+Sous linux mettre l'interface réseau du client en mode dhcp (c'est la configuration par défaut).
+
+Sur une machine Windows laissez le paramétrage TCP/IP et les DNS sur "obtenir automatiquement", elle sera reconnue automatiquement.
+
+Tous les ordinateurs reliés devraient marcher, qu'ils soient sous windows, linux, BSD ou autre.
+
+==== En IP Fixe ====
+
+Logiquement, nous pouvons assigner une ip statique (du moment qu'elle est comprise entre 192.168.10.100 et 192.168.10.150 pour l'ancienne méthode).
+
+  * Ouvrez la configuration du réseau (**Système->Administration->Réseau**)
+  * Ouvrez la carte réseau du client et changer les cases, dans l'ordre:
+    * __Configuration__: Adresse IP statique
+    * __Adresse IP:__ 192.168.10.*  \\ //remplacer * par un numéro entre 100 et 150, en tous cas vous ne devez surtout pas mettre le même sur deux pc différents !!!//
+    * __Masque de sous-réseau:__ 255.255.255.0
+    * __Passerelle:__ 192.168.10.1
+  * Faites **Valider** puis **Fermer**
+
+^ Action         ^ ? Avant Jaunty ?         ^ Jaunty Jackalope 9.04                             ^
+| Ouvrez la configuration du réseau |**Système -> Administration -> Réseau**   | **Système -> Préférences -> Connexions Réseau**     |
+|Ouvrez la carte réseau du client| Sélectionner la carte concernée puis **Propriétés** \\ remplir comme suit :   | Dans l'onglet **Filaire**\\ Choisir la carte réseau concernée\\ Puis Modifier|
+|Remplissez les paramètres| __Configuration__: Adresse IP statique\\ IP statique : 192.168.1.20\\ Masque : 255.255.255.0\\ Passerelle :\\ passerelle du modem pour avoir Internet\\ (avec alice : 192.168.1.1) (avec freebox : 192.168.0.254)   |Dans l'onglet IPv4\\ Choisir Méthode: Mannuel\\ Puis remplir comme ci-contre|
+|Validez \\ Puis fermez|||
+
+===== Problèmes rencontrés =====
+==== Les DNS ne fonctionnent pas ====
+La solution est d'installer un serveur DNS sur son ordinateur, pour résoudre soi-même les noms de domaine, et ne pas dépendre d'autrui (typiquement, de son FAI). Pour cela, il faut installer le paquet [[apt://bind9]].
+
+Les 2 commandes suivantes sont a exécuter après chaque redémarrage, dès que les deux interfaces sont connectées :
+  sudo su
+  echo 'nameserver 127.0.0.1' > /etc/resolv.conf
+
+
+
+===== Liens =====
+
+  * http://blog.creaone.fr/post/2008/05/29/Partager-sa-connexion-3G-entre-Linux-et-Windows Partage de connexion avec firestarter
+----
+//Contributeurs: [[utilisateurs:sksbir]], [[utilisateurs:BorisLeHachoir]], [[utilisateurs:Fabien26]].//

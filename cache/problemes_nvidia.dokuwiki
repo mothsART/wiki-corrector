@@ -1,0 +1,285 @@
+
+{{tag>matériel carte_graphique nvidia}}
+
+======Problèmes liés aux cartes Nvidia ======
+Cette page à pour but de rassembler les problèmes connus qui sont lié aux cartes graphique Nvidia.
+
+===== Problème de rafraîchissement de l'écran =====
+
+Avec certaines cartes graphiques (les séries **GeForce 8 et 9** notamment), et les pilotes **177.80**, l'écran ne se rafraîchit pas correctement, notamment dans **Firefox** qui devient quasiment inutilisable (voir le [[https://bugs.launchpad.net/ubuntu/+source/compiz/+bug/269904|rapport de bogue]]).
+
+Ce problème de rafraîchissement se produit également, mais dans une bien moindre mesure (juste quelques petites zones, assez rarement) avec d'autres versions du pilote.
+
+Si vous rencontrez ce problème, il y a plusieurs solutions de contournement.
+
+==== Contournement compiz (la solution à essayer en priorité) ====
+
+Depuis Ubuntu 9.04, ''compiz'' possède une option qui résout le problème.
+
+  * Il faut lancer le gestionnaire de configuration ''CompizConfig'' (ccsm) ([[apt://compizconfig-settings-manager]] doit être installé), cliquer sur « Solutions », et activer la case "Force synchronization between X and GLX".
+  * Si le problème persiste, toujours dans'' CompizConfig'' (ccsm) ((http://iwebdevel.com/trans/fr/2009/11/22/ubuntu-nvidia-card-slow-monitor-flickers-try-this-fix-and-boost-graphic-card-performance-nvidia-drivers-configure-switch-ati-nvidia-karmic/)) -> Options générales -> Onglet Paramètre d'affichage :
+    * Décocher « Détecter la fréquence de rafraîchissement ».
+    * Augmenter la fréquence de rafraîchissement à une valeur supérieure à celle de votre écran ((exemple 100 Hz. Cette option n'affecte que le logiciel ''compiz'' et son rafraîchissement : elle ne forcera pas une fréquence différente sur votre écran matériel.))
+    * Cocher « Sync vers Vblank ».
+
+Si possible, « Sync to Vblank » doit aussi être coché dans les pilotes propriétaires NVIDIA.
+
+==== Rétrograder les pilotes ====
+
+La première solution est de repasser à des pilotes plus anciens (**173**, par exemple). Ceci est faisable directement dans le gestionnaire de pilotes de périphériques.
+
+==== Désactiver --loose-binding ====
+
+''compiz'' est démarré avec l'option ''%%--loose-binding%%'' par défaut. C'est une fonctionnalité développée pour combler certaines lacunes des pilotes **NVIDIA**, notamment au niveau des performances, en évitant de rafraîchir l'écran inutilement trop souvent.
+
+Cependant, avec les pilotes **177.80**, c'est inutilisable.
+
+Pour désactiver cette option, [[tutoriel/comment_editer_un_fichier|éditez le fichier]] ''/usr/bin/compiz'' et commentez les lignes 340 à 344 :
+<file>	if check_nvidia; then
+		if [ "x$INDIRECT" != "xyes" ]; then
+			COMPIZ_OPTIONS="$COMPIZ_OPTIONS --loose-binding"
+		fi
+	fi</file>
+ce qui donne :
+<file>#	if check_nvidia; then
+#		if [ "x$INDIRECT" != "xyes" ]; then
+#			COMPIZ_OPTIONS="$COMPIZ_OPTIONS --loose-binding"
+#		fi
+#	fi</file>
+
+Pour tester :
+  compiz &
+
+
+//(ça peut planter, dans ce cas, réexécutez la commande)//
+
+Maintenant, à chaque redémarrage, cette option ne sera plus activée.
+
+=====Réglage de nvidia-settings non pris en compte au redémarrage =====
+
+Lors de chaque redémarrage vous constatez que la taille de l'écran revient en 640×480 ou 800×600 et que sous ''nvidia-settings'' vous avez réglé la taille en 1024×768 ou supérieur, [[:tutoriel:comment_editer_un_fichier|éditez le fichier]] ''/home/user/.config/monitors.xml''
+
+<code><monitors version="1">
+  <configuration>
+      <clone>no</clone>
+      <output name="default">
+          <vendor>???</vendor>
+          <product>0x0000</product>
+          <serial>0x00000000</serial>
+          <width>800</width>                    #<=à modifier par 1024
+          <height>600</height>                  #<=à modifier par 768
+          <rate>108</rate>                      #<=taux de rafraîchissement
+          <x>0</x>
+          <y>0</y>
+          <rotation>normal</rotation>
+          <reflect_x>no</reflect_x>
+          <reflect_y>no</reflect_y>
+      </output>
+  </configuration>
+</monitors></code>
+
+Redémarrer et tester.
+<note tip>Le fichier /home/user/.config/monitors.xml peut être modifié directement depuis Préférences -> Ecrans. Sa présence n'est pas indispensable si vous n'utilisez que **nvidia-setting**</note>
+
+===== L'enregistrement des réglages de nvidia-settings provoque un plantage =====
+
+Un moyen de contourner ce problème est expliqué [[https://bugs.launchpad.net/ubuntu/+source/nvidia-settings/+bug/286424/comments/80|sur son rapport de bogue]] : Le plantage est lié au fait que ''nvidia-settings'' essaie de modifier un fichier qui, pour une raison ou une autre, ne correspond plus à votre configuration actuelle sans que cela vous ait empêché de charger une session graphique. En clair, ce bogue arrive surtout aux gens qui se lancent dans le multi-écran ou qui changent de moniteur.
+
+La solution consiste à lancer ''nvidia-xconfig'' (en ''sudo'') pour qu'un fichier de configuration correct soit recréé. Après quoi ''nvidia-settings'' devrait fonctionner de manière normale.
+
+===== Mode sans échec systématique =====
+
+Si l'installation des pilotes propriétaires NVIDIA vous renvoie systématiquement vers le //mode sans échec// de l'affichage, une solution consiste à //exclure// certains modules.
+
+Pour cela, [[tutoriel/comment_editer_un_fichier|éditez le fichier]] ''/etc/default/linux-restricted-modules-common'' en ''root'' et remplacez :
+<file>DISABLED_MODULES=""</file>
+par :
+<file>DISABLED_MODULES="nvidia nvidia_legacy"</file>
+(voir [[http://forum.ubuntu-fr.org/viewtopic.php?pid=1276656#p1276656|ce billet]])
+
+===== Multi-écran et extension Xinerama =====
+
+Xinerama est la méthode utilisée par le serveur X pour informer le gestionnaire de fenêtres (tel que ''compiz'') du nombre et de la taille des différents écrans. Le pilote propriétaire NVIDIA n'utilise pas l'implémentation native de X mais sa propre implémentation de l'extension ''Xinerama''.
+
+Pour pouvoir utiliser ''Xinerama'', il faut démarrer le serveur X avec les différents écrans branchés, sinon le pilote NVIDIA le désactive. Il faut activer l'option ''TwinView'' dans le fichier ''xorg.conf'' :
+<file>
+Option "TwinView" "true"
+</file>
+
+//[[http://wiki.compiz-fusion.org/Hardware/NVIDIA|source]] (en) : voir le dernier paragraphe de la page.//
+(ne pas confondre ''twinview'' et ''xinerama''. Dans bien des cas, ''xinerama'' est autorisé mais pas ''twinview''.
+
+[[http://forum.ubuntu-fr.org/viewtopic.php?pid=2412737#p2412737|Voir le forum]]
+
+===== Multi-écran, TwinView et PAS Xinerama =====
+
+Il est possible d'avoir un écran multiple ''twinview'' sans que les barres de menus et les fenêtres maximisées ne remplissent les deux écrans. Il faut pour cela activer ''twinview'' et désactiver ''xinerama'' en indiquant l'écran principal (c'est celui où seront centrées les fenêtres, où il y aura la barre des tâches, etc.). Pour déplacer une fenêtre sur l'écran d'à côté, il suffira juste de la faire glisser avec la souris. Elle se maximisera (ou se mettra en plein-écran) sur cet écran uniquement. Pour cela :
+
+Dans la section Screen, déclarez :
+    Section "Screen"
+        Identifier "Screen0"
+        Device "Device0"
+        Monitor "Monitor0"
+        DefaultDepth 24
+        
+        Subsection "Display"
+            Depth 24
+        EndSubsection
+        Option "TwinViewXineramaInfoOrder" "DFP-0"
+        Option "TwinView" "1"
+        Option "metamodes" "CRT: 1280x1024 +0+0, DFP: nvidia-auto-select +1280+0"
+    EndSection
+
+Là on déclare un seul écran virtuel ''twinview'', en ayant l'écran « DFP-0 » en principal et décalé de 1280 px à droite de l'écran « CRT » fixé à la résolution 1280×1024.
+
+Puis il faut rajouter la section :
+    Section "ServerFlags"
+        Option "Xinerama" "0"
+    EndSection
+
+Qui désactive ''xinerama''.
+
+<note important>
+Le support de la rotation d'écrans indépendants en twinview devient possible avec les derniers drivers propriétaires 302.xx chez NVIDIA actuellement en Beta au 13/05/12 mais fonctionnels [[http://www.nvidia.com/object/linux-display-amd64-302.07-driver.html]]. Ainsi on peut opérer cette rotation depuis le menu d'affichage d'ubuntu. Testé personnellement sous Precise. Depuis le temps qu'on l'attendait...
+</note>
+===== Multi-écran et les jeux =====
+
+Le mode multi-écran pose [[http://www.nvnews.net/vbulletin/showthread.php?t=94076|problème]] avec les jeux. Parmi les problèmes possibles :
+  * affichage plein écran à cheval sur les deux écrans
+  * résolution mal détectée dans le jeu
+
+Pour contourner ce problème, le plus facile est de désactiver un écran pendant l'utilisation du jeu. Par défaut avec [[#Multi-écran et extension Xinerama|l'extension ''xinerema'']] ça n'est pas possible car une seule définition apparait dans l'outil de [[configurer_son_ecran|résolution d'écran]]. Pour changer ce comportement, il faut ajouter des modes vidéos dans le fichier de configuration du serveur X.
+
+L'exemple ci-dessous permet d'utiliser 3 options (séparées par des points-virgules) :
+  - Affichage étendu sur 2 écrans (le deuxième étant l'écran externe décalé de 1440 pixels à droite)
+  - Affichage sur l'écran plat du portable
+  - Affichage sur l'écran externe
+<file>
+   Option  "metamodes" "CRT: nvidia-auto-select +1440+0, DFP: nvidia-auto-select +0+0; 
+   CRT: NULL, DFP: nvidia-auto-select +0+0; CRT: nvidia-auto-select +0+0, DFP: NULL"
+</file>
+
+Après un redémarrage du serveur X, vous pourrez utiliser les 3 « résolutions » d'écran.
+
+Ensuite il ne vous reste plus qu'à utiliser l'outil [[multi-ecran#xrandr_double_ecrans|''xrandr'']] dans des scripts pour lancer vos jeux afin de faire les changements de résolution avant le démarrage du jeu et après sa terminaison.
+
+//[[http://apprendrelinux.blogspot.com/2008/06/jouer-en-plein-cran-avec-un-dual-screen.html|source]] : (jouer en plein écran à Urban Terror (ou autres jeux) avec un double écran)//
+
+===== Conflit avec le pilote "nouveau" =====
+Il peut arriver que le module "nvidia" rentre en conflit avec le driver "nouveau". (un lsmod confirme que nouveau est chargé). Au lancement de X, on obtient un message du type
+    FATAL: Error inserting nvidia (/lib/modules/3.0.0-22-generic/kernel/drivers/video/nvidia.ko): No such device
+Idem en passant par la commande modprobe.
+Pour éviter cela, il suffit de dire au noyau de ne pas charger le pilote nouveau. Pour cela, on crée un fichier nommé blacklist-nouveau.conf dans **/etc/modprobe.d**. Son contenu sera : 
+    #diseable nouveau driver. Use nvidia instead of
+    blacklist nouveau
+Après un redémarrage, dans la condition où le champ driver est spécifié à "nvidia" dans /etc/xorg.conf, le module "nvidia" devrait être fonctionnel.
+===== Redémarrage en basse qualité suite à une mise à jour =====
+
+==== Message "Failed to load the NVIDIA kernel module" ====
+
+Parfois, il n'y a pas de message.
+Si les linux-headers ne sont pas installés, les pilotes NVidia ne seront pas fonctionnels.
+
+Démarrez en basse résolution et tapez dans le terminal
+
+  sudo apt-get install --reinstall linux-headers-`uname -r`
+
+==== Réinstaller le pilote ====
+
+Suite à une mise à jour (du noyau) qui se serait mal passée, au moment de redémarrer, vous vous retrouvez en graphiques de basse qualité ou êtes bloqué en 800×600, votre pilote étant cassé.
+
+Premièrement, essayez de le réinstaller normalement :
+
+  sudo apt-get purge 'nvidia-*'
+  sudo apt-get autoclean
+  sudo apt-get install nvidia-glx-180
+
+(ou autre version selon le matériel)
+
+Si tout se passe bien, félicitations, vous avez réinstallé votre pilote.
+
+==== Could not locate nvidia.ko ====
+
+Si vous rencontrez cette erreur :
+
+> Error! Could not locate nvidia.ko for module nvidia in the DKMS tree.
+
+La mise à jour du noyau s'est mal passée, les entêtes n'ont pas été bien installés, ce que l'on va résoudre ici :
+
+On répare les éventuels problèmes dans la gestion des paquets (dépendances, paquets mal installés, etc.) :
+
+  sudo apt-get install -f
+
+On réinstalle les entêtes du noyau actuel qui sont mal installés et ne permettent pas la compilation du pilote (ce qui bloque au-dessus) :
+
+  sudo apt-get install --reinstall linux-headers-`uname -r`
+
+Normalement, pendant la réinstallation des entêtes, le pilote (plus précisément le module DKMS lié au pilote) sera recompilé automatiquement. Si jamais ce n'est pas le cas et que le problème persiste, vous pouvez [[#Réinstaller le pilote|réinstaller le pilote]] maintenant que le noyau est propre.
+===== Ubuntu 12.04 et GeForce 7025 et [GeForce 7000M / nForce 610M]=====
+Sur certaines installation l'accéleration 3D ne fonctionne pas.
+
+Visiblement le driver installé par défaut avec Ubuntu 12.04 est bogué. Il s'agit de la version 295.40. 
+
+Une solution est de revenir à la version 295.33 du driver, La manipulation à faire : 
+  sudo add-apt-repository ppa:ubuntu-x-swat/x-updates
+  sudo aptitude update
+  sudo apt-get install nvidia-current=295.33-0ubuntu1~precise~xup1
+  
+ 
+<note important>La version 295.53 est disponible dans le ppa et va donc s'installer automatiquement... 
+Penser à désinstaller les paquets nvidia-current-update et nvidia-settings-update car si en temps normal ils ont une version d'avance sur le dépôt officiel, là ils auront une version de retard sur le ppa.</note> 
+
+===== Problème de résolution au démarrage et à l'arrêt =====
+
+Avec les pilotes propriétaires il peut arriver que la résolution au démarrage et à l'arrêt soit très faible. La solution au problème se trouve sur la page [[:plymouth#plymouth_n_apparait_plus_suite_a_l_installation_d_une_carte_graphique_nvidia|Plymouth]].
+
+
+=====Touches pour régler la luminosité de l'écran ne marchent pas =====
+
+Si, après l'installation du driver NVidia, vous n'avez plus accès au réglage de la luminosité de l'écran  :
+  * Créez le fichier 10-nvidia-brightness.conf
+<code>sudo nano /usr/share/X11/xorg.conf.d/10-nvidia-brightness.conf</code>
+  * Puis copiez ce code dans le fichier
+<code>Section "Device"
+    Identifier     "Device0"
+    Driver         "nvidia"
+    Option         "RegistryDwords" "EnableBrightnessControl=1"
+EndSection</code>
+  * Lorsque vous relancerez votre session, les touches seront de nouveau fonctionnelles.
+
+Si cette méthode ne fonctionne toujours pas, éditez le fichier de configuration de grub afin d'ajouter un paramètre au kernel
+<code>sudo nano /etc/default/grub</code>
+  *À la ligne GRUB_CMDLINE_LINUX_DEFAULT ajoutez  nvidia.NVreg_RegistryDwords=EnableBrightnessControl=1
+  *Mettez ensuite à jour le fichier de configuration grub
+<code>sudo update-grub</code>
+  * Après un redémarrage, la luminosité pourra être réglée
+
+
+
+
+=====En mode multi-écran, les tableaux de bord ne sont pas sur le bon écran=====
+
+Taper Alt-F2 puis : 
+  gconf-editor
+
+Déployer ''/apps/panel/toplevels/bottom_panel_screen0'' et changer la valeur de ''monitor'' (la faire passer de 0 à 1).
+Idem pour ''/apps/panel/toplevels/top_panel_screen0''.
+
+Les changements sont instantanés.
+
+=====Session graphique qui reste noire sous Ubuntu 17.10/18.04/18.10=====
+
+Sous Ubuntu 17.10, Wayland (remplaçant de X11) semble poser problème avec certaines cartes graphiques Nvidia, si l'invite de login ou l'interface graphique ne charge pas, la solution peut-être de décommenter la ligne 
+
+  #WaylandEnable=false  
+(dans /etc/gdm3/custom.conf)
+
+qui deviendra donc :
+  WaylandEnable=false 
+https://askubuntu.com/questions/968365/ubuntu-17-10-nvidia-drivers-black-screen-loop/968679#968679
+=====Multi-écran et Avant-Window-Navigator (AWN)=====
+
+Voir astuce sur le page : [[avant-window-navigator#ecrans_multiples | Avant-Window-Navigator]].
+----
+
+//Contributeurs : [[:contributeurs|Les contributeurs d'Ubuntu-fr

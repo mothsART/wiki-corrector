@@ -1,0 +1,231 @@
+
+{{tag>tutoriel système matériel}}
+----
+
+====== Les modules Linux ======
+
+===== Présentation =====
+
+Un module est un morceau de code permettant d'ajouter des fonctionnalités au noyau : pilotes de périphériques matériels, protocoles réseaux, etc...
+
+Il peut être chargé dynamiquement sans avoir besoin de recompiler le noyau (avec la commande ''insmod'' ou ''modprobe'') ou de redémarrer le système.
+
+Les modules sont exécutés dans l'espace mémoire du noyau :
+  * Ils possèdent le contrôle total de la machine
+  * Ils peuvent détourner ou créer un appel système
+
+Un petit schéma pour mieux comprendre :
+
+{{materiel:modules_linux.png|}}
+
+===== Gestion des modules =====
+
+==== Lister les modules actifs ====
+
+On peut connaître tous les modules actifs en tapant ''lsmod'' dans un terminal (ajouter "| more" pour afficher page par page) :
+
+<code>
+$ lsmod | more
+Module                  Size  Used by
+rt2500                176612  1
+ppdev                   9220  0
+speedstep_lib           4484  0
+cpufreq_userspace       4696  0
+cpufreq_stats           5636  0
+freq_table              4740  1 cpufreq_stats
+....more...(Taper ESPACE)
+</code>
+
+On voit que le module "freq_table" est utilisé par "cpufreq_stats". Il y a des dépendances entre les modules. Il faut en tenir compte lorsque l'on veut décharger des modules.
+
+==== Information sur un module ====
+
+La commande ''modinfo'' peut rendre de bons services :
+
+<code>
+$ modinfo rt2500
+filename: /lib/modules/2.6.15-28-386/kernel/drivers/net/wireless/rt2500/rt2500.ko
+author:         http://rt2x00.serialmonkey.com
+description:    Ralink RT2500 802.11g WLAN driver 1.1.0 CVS 2005/07/10
+license:        GPL
+vermagic:       2.6.15-28-386 preempt 486 gcc-4.0
+depends:
+alias:          pci:v00001814d00000201sv*sd*bc*sc*i*
+srcversion:     87483C74300BD5B978A24E4
+parm:           ifname:Network device name (default ra%d) (charp)\\
+parm:           debug:Enable level: accepted values: 1 to switch debug on, 0 to switch debug off. (int)
+</code>
+
+On voit que rt2500 s'occupe de la gestion d'une interface wlan chipset Ralink rt2500 et on est bien content qu'elle fonctionne. (cette interface s'appelle ra*)\\
+
+Si l'on ne désire qu'une information précise, on peut spécifier le champ (field) à afficher avec l'option -F.
+Par exemple, si nous ne voulons voir que la description du module rt2500 :
+
+  $ modinfo rt2500 -F description
+  Ralink RT2500 802.11g WLAN driver 1.1.0 CVS 2005/07/10
+
+Sachez cependant que tous les modules ne fournissent pas les même informations, et qu'il se peut que ce type de commande ne renvoie rien. Par exemple, le module //rt2500// n'a pas de champ "version", alors que le module //8139too// en a un.
+Il y a cependant des champs standards que tous les modules devraient avoir, comme **author**, **description**, **license**, **parm**, **depends**, et **alias**.
+
+==== Chargement/Déchargement d'un module ====
+
+Pour ce qui est du chargement et du déchargement d'un module, il faut utiliser la commande ''modprobe'' :
+
+=== Charger ===
+
+Pour charger manuellement le module "3c59x" (il y a de grandes chances qu'il soit chargé si vous en avez besoin...) :
+
+  $ sudo modprobe -a 3c59x
+
+=== Décharger ===
+
+Pour décharger le module "3c59x" (imaginons que l'interface eth0 soit inutile et que celle-ci soit gérée par "3c59x"...) :
+
+  $ sudo modprobe -r 3c59x
+
+=== Lister ===
+
+Voir la liste des modules (on peut aussi utiliser l'utilitaire "modconf" - cf plus bas) :
+
+  lsmod
+  
+A utiliser avec "| grep" !!
+
+\\
+
+==== Options d'un module ====
+
+FIXME
+
+Comme nous l'avons vu plus haut, certains modules possèdent des options ("parm"). Ces options permettent un plus grand contrôle sur le module en lui-même.
+
+Ces options se chargent de plusieurs manières. Exemple :
+
+  modprobe snd_ens1371 joystick_port=1
+
+les "parm" vous indique quoi mettre :
+
+  * int = entier
+  * bool = booléen (0 ou 1)
+  * array of int = plusieurs entier
+  * array of bool = plusieurs bits
+
+FIXME
+
+Pour que cela soit pris en compte directement au lancement il faut éditer le fichier ''/etc/modprobe.d/option'' et y ajouter une ligne.
+
+Exemple :
+
+  options snd_ens1371 joystick_port=1
+
+==== Modules au démarrage ====
+
+Il est possible de spécifier des modules à charger au démarrage, même si le périphérique à piloter par un module n'a pas été trouvé.
+
+Cela peut être utile pour les périphériques ne permettant pas d'auto-détection, comme les périphériques reliés au port parallèle.
+
+La liste des modules à charger explicitement au démarrage est dressée dans le fichier ''/etc/modules''. Chaque ligne de ce fichier représente un module à charger, sauf les lignes vides ou commençant par un #.
+Vous pouvez ajouter un module en [[tutoriel:comment_editer_un_fichier|éditant le fichier]] ''/etc/modules'' avec les droits d'administration.
+
+Par exemple, si vous avez un lecteur Zip en parallèle, il vous sera sans doutes utile d'ajouter le module **ppa** dans cette liste. Chez moi, le fichier ''/etc/modules'' ressemble à ça :
+<file># /etc/modules: kernel modules to load at boot time.
+#
+# This file contains the names of kernel modules that should be loaded
+# at boot time, one per line. Lines beginning with "#" are ignored.
+
+ppa
+lp
+
+</file>
+
+<note important>
+Les modules sont chargés **dans l'ordre dans lequel ils sont listés**. Faites bien attention à cela, car l'ordre peut être important dans certains cas.
+</note>
+
+==== Empêcher le chargement d'un module ====
+
+Il peut parfois être utile d'empêcher le noyau de charger un module automatiquement, par exemple si celui-ci pose des problèmes de stabilité. Un module prohibé ne sera pas chargé au démarrage ou au branchement à chaud du périphérique, mais pourra quand-même être chargé à la main, par exemple à l'aide de **modprobe**.
+
+La liste des modules que le noyau n'a pas le droit de charger se trouve principalement dans le fichier ''/etc/modprobe.d/blacklist.conf''.
+
+La structure de ce fichier est simple ; une ligne est construite comme suit :
+<code>
+blacklist nom-du-module
+</code>
+
+
+\\ Pour prohiber un module, [[tutoriel:comment_editer_un_fichier|éditez le fichier]] **/etc/modprobe.d/blacklist.conf** avec les droits administrateur (root), et ajoutez en fin de fichier une ligne structurée comme ci-dessus.
+
+Par exemple, si le module **r818x** vous pose problème, il faut ajouter au fichier /etc/modprobe.d/blacklist.conf la ligne suivante :
+<code>blacklist r818x</code>
+
+puis il faut exécuter :
+<code>sudo update-initramfs -u -k all</code>
+<note tip>Facultatif : pour s'y retrouver plus tard, il est intéressant de préciser la date et le motif
+<code># 
+# suite au problème de...
+blacklist r818x    # ajout en date du...
+#</code>
+ Tout ce qui est à droite d'un "#" sera ignoré par le système.</note>
+==== Lier un module à un périphérique ====
+
+Il est possible de lier un module à un périphérique de façon à ce que le noyau puisse charger automatiquement ce module lors de la détection du périphérique, tout en respectant les deux règles présentées ci-dessus.
+
+Il suffit d'ajouter la ligne suivante dans /etc/modprobe.conf :
+
+<file>
+alias périphérique module
+</file>
+
+Par exemple pour indiquer que le périphérique eth0 utilise le module tg3 :
+
+<file>
+alias eth0 tg3
+</file>
+
+===== Utilitaires pour les modules =====
+
+==== module-assistant ====
+
+Module-assistant est un outil simplifiant la création de paquets contenant des modules. Il aide les utilisateurs et contributeurs en s'occupant des modules externes du kernel empaquetés pour Debian. Il peut :
+
+* Préparer automatiquement l'environnement de compilation (ex : détection et installation automatiques des sources et les headers du kernel requis)
+
+* Téléchargements automatiques des codes sources des modules
+
+* Configuration et maintien des paquets des modules externes et compilés localement
+
+* Compilations multiples pour versions du kernel multiples semi-automatiques
+
+Il contient également des Frameworks utilisés par les scripts de compilation qui accompagnent les paquets modules-source dans Debian.
+
+module-assistant :
+
+Pour installer module-assistant, [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>module-assistant|module-assistant]]**
+
+<code>
+$ sudo module-assistant
+</code>
+
+==== Hardinfo ====
+
+**[[:hardinfo|Hardinfo]]** n'est pas vraiment un programme spécifique pour les modules, mais il propose un grand nombres d'informations sur votre ordinateur, dont les modules utilisés par les périphériques.
+
+Pour vous le procurer, il vous suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>hardinfo]]**
+
+Vous le trouverez ensuite dans //**Applications -> Outils système -> System Profiler and Benchmark**//
+
+\\
+{{:hardinfo.png}}
+
+Plus d'infos sur :
+  * [[:hardinfo|la page dédiée au logiciel]]
+  * [[http://hardinfo.berlios.de/|le site officiel]] **(en)**
+  * [[http://macsim.labolinux.net/index.php/post/2007/05/14/90-hardinfo-des-informations-sur-le-hardware-de-votre-puic-puic|un billet qui présente hardinfo]]
+
+===== Liens =====
+
+http://www.lea-linux.org/documentations/index.php/Kernel-modules
+
+-----
+//Contributeurs : [[:utilisateurs:kmeleon|Kmeleon]], [[:utilisateurs/adam0509]], [[:utilisateurs:Ban]]//

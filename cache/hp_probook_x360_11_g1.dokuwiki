@@ -1,0 +1,145 @@
+
+{{tag>matériel tutoriel}}
+----
+
+====== Ubuntu sur HP ProBook x360 11 G1  ======
+
+<note important>Cette page traitera uniquement le cas d'un only boot.</note>
+
+===== Comment l'installer ? =====
+
+<note tip>Pour réussi à installer linux sur cet ordinateur, il suffit de suivre tout ce qui sera cité ci-dessous étape par étape, rien ne sert d'aller trop vite ! :)</note>
+
+==== Pré-Requis ====
+  * Un Live usb
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Un disque dur propre
+
+----
+
+==== Prise en main ====
+1.2.1 Le démarrage
+
+Commencez par démarrer votre ordinateur, il vous faut accéder au bios (f10 dans le cas du probook).
+
+Désactivez le secure boot dans les paramètres avancés, il vous faudra également changer l'ordre d'amorçage.
+
+Placez le lecteur usb en première place, faites attention a ne pas avoir plusieurs périphériques usb brancher sur votre ordinateur.
+
+----
+
+==== Installation ====
+  - On commence par booter sur le live USB
+  - On sélectionne installer ubuntu
+  - Dans le programme d'installation on veille bien a une installation automatique
+
+l'installation va donc se lancer automatiquement, jusqu'au moment ou grub2 va finir par planter, a ce moment la il faut donc quitter le programme.
+
+Une session ubuntu live va s'initaliser, tout va se passer sur cette session.
+
+on ouvre maintenant le terminal.
+
+----
+
+==== Le Terminal ====
+
+A) On va booter en technique CHROOT
+
+1) Mettre le clavier en français  avec cette commande  
+
+  setxkbmap fr
+  
+2) Se  mettre en mode administrateur pour  simplifier la frappe des commandes
+  sudo -i 
+  
+3) Monter la partition système à cibler  en frappant la commande suivante
+  
+  mount   /dev/sda2 /mnt
+4) Monter les  répertoires  avec ces commandes (copier/coller).
+
+  mount -t proc  /proc              /mnt/proc
+  mount -t sysfs /sys               /mnt/sys
+  mount --bind   /dev               /mnt/dev
+  mount --bind   /run               /mnt/run
+  mount --bind   /sys               /mnt/sys
+  mount --bind   /etc/resolv.conf   /mnt/etc/resolv.conf
+  modprobe efivars 
+
+
+5) Le changement d'environnement se fera avec cette commande
+
+  chroot /mnt
+
+6) Quelques contrôles seront à faire par exemple
+
+  mount -t devpts devpts /dev/pts 
+  ping -c4 8.8.8.8  && ping -c4 google.fr
+  ls   -ls /home 
+
+<note warning>Cette commande doit donner le nom de l'utilisateur créé.
+
+Si cette commande donne comme nom ubuntu, il ne faut pas continuer car le support d'installation deviendrait inutilisable et devrait être refait.</note>
+
+B) Procéder à la réparation
+
+1) On va invalider les modules liés au secure boot
+
+    apt-mark  hold   secureboot-db
+    apt-mark  hold   fwupdate   
+    apt-mark  hold   fwupdate-signed
+    apt-mark  hold   grub-efi-amd64
+    apt-mark  hold   grub-efi
+
+
+2) On va finir l'installation (c'est par précaution) avec ces commandes
+
+  dpkg --configure -a
+  apt-get install -f
+  apt update
+  apt upgrade
+
+3) Monter la partition destinée à recevoir la structure de boot  avec ces commandes
+
+  mkdir -pv /mnt/boot/efi
+  mount -v /dev/sda1 /mnt/boot/efi
+  
+4) Installer le logiciel de boot de la partie 64 bits qui est absent. Seule la partie 32 bits a été installée. On met un logiciel NON-SECURE boot.
+
+  apt install grub2-common
+  apt install grub-pc
+  apt install grub-pc-bin 
+
+5) Générer les fichiers de boot en précisant  de ne pas toucher à la RAM avec ces commandes
+
+  grub-install   -v    --no-nvram       --efi-directory=/mnt/boot/efi 
+  update-grub
+
+6) Rétablir le boot de windows.
+
+La structure de boot de windows a été éliminée,  Elle est à recréer
+
+  mkdir  -pv  /mnt/boot/efi/EFI/Microsoft/Boot
+
+7) Dupliquer le logiciel de boot de ubuntu  dans la structure windows
+
+  cp -Rv /mnt/boot/efi/EFI/ubuntu/* /mnt/boot/efi/EFI/Microsoft/Boot
+
+8) Dire que le boot  ubuntu remplace le boot windows
+
+  cp -v /mnt/boot/efi/EFI/Microsoft/Boot/grubx64.efi  /mnt/boot/efi/EFI/Microsoft/Boot/bootmgfw.efi
+
+C) C'est fini
+
+1) Quitter  le Ubuntu installé et revenir dans l'installateur en quittant le mode chroot
+
+  exit
+
+2) Arrêter  l'ordinateur, Débrancher la clé et booter puis profiter.
+
+
+<note tip>//Si vous cherchez un dual boot sur cette ordinateur ? voilà peut être la solution//
+https://forum.ubuntu-fr.org/viewtopic.php?id=2037363 ou encore https://desvigne.org/2019/09/22/install/</note>
+<note tip>Une autre solution avec Refind comme bootloader est disponible ici : [[https://antt0n.github.io/papers/lordi-linux.pdf]]</note>
+
+Je tiens à remercier tout les users de ce thread de m'avoir aider : https://forum.ubuntu-fr.org/viewtopic.php?id=2045803
+

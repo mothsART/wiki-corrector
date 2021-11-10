@@ -1,0 +1,314 @@
+
+{{tag>Xenial serveur courriel BROUILLON}}
+
+----
+
+Voir [[:Comment configurer sa distribution de courriels systèmes MTA|Comment configurer sa distribution de courriels systèmes MTA ?]] qui se propose de reprendre cette partie pour postfix…
+
+====== Postfix : agent de transfert de courriel (SMTP) ======
+
+**Postfix** est l'agent de transfert de courriel (MTA) par défaut d'Ubuntu.
+
+Il est dans les dépôts //main//, donc il reçoit les mises à jour de sécurité.
+
+Cette page décrit son installation et sa configuration pour en faire un serveur SMTP utilisant une connexion sécurisée.
+
+<note warning>La commande ''sudo'' ne prend pas en charge l'intégralité des variables d'environnement et est donc fortement déconseillée sur les machines. "root" en revanche vous accorde tous les droits systèmes mais une faute de frappe peut engendrer la perte du système. Si vous êtes novice, je vous conseille d'utiliser root avec grande prudence, le forum est là en cas de problème.</note>
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+
+===== Installation =====
+
+Nous allons configurer Postfix pour être utilisé avec SASL, qui va assurer l'authentification SMTP (pour éviter que des spammeurs utilisent votre serveur pour envoyer du spam), ainsi qu'un chiffrement via SSL/TLS.
+
+Pour installer Postfix avec SMTP-AUTH et TLS  :
+
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>libdb5.1,postfix,procmail,sasl2-bin|libdb5.1 postfix procmail sasl2-bin]]**.
+
+===== Configuration =====
+
+postfix doit être membre du groupe sasl. Pour ajouter l'utilisateur postfix au groupe sasl, tapez dans un [[terminal]] :
+
+  sudo adduser postfix sasl
+
+Pour configurer postfix, tapez :
+
+  sudo dpkg-reconfigure postfix
+
+Lorsqu'on vous les demande, entrez les détails suivants (remplacez server1.exemple.com par votre nom de domaine) :
+
+   Internet Site
+   NONE
+   server1.exemple.com
+   server1.exemple.com, localhost.exemple.com, localhost
+   No
+   127.0.0.0/8
+   0
+   +
+
+Ensuite entrez les commandes suivantes :
+
+  sudo postconf -e 'smtpd_sasl_local_domain ='
+  sudo  postconf -e 'smtpd_sasl_auth_enable = yes'
+  sudo  postconf -e 'smtpd_sasl_security_options = noanonymous'
+  sudo  postconf -e 'broken_sasl_auth_clients = yes'
+  sudo   postconf -e 'smtpd_recipient_restrictions = permit_sasl_authenticated,permit_mynetworks,reject_unauth_destination'
+  sudo  postconf -e 'inet_interfaces = all'
+
+  sudo  touch /etc/postfix/sasl/smtpd.conf
+  sudo su
+  echo 'pwcheck_method: saslauthd' >> /etc/postfix/sasl/smtpd.conf
+  echo 'mech_list: plain login' >> /etc/postfix/sasl/smtpd.conf 
+  exit
+  sudo mkdir /etc/postfix/ssl
+  cd /etc/postfix/ssl/
+  sudo openssl genrsa -des3 -rand /dev/urandom -out smtpd.key 2048
+  sudo openssl req -new -key smtpd.key -out smtpd.csr
+  sudo  openssl x509 -req -days 3650 -in smtpd.csr -signkey smtpd.key -out smtpd.crt
+  sudo openssl rsa -in smtpd.key -out smtpd.key.unencrypted
+  sudo mv -f smtpd.key.unencrypted smtpd.key
+  sudo chmod 600 smtpd.key
+  sudo openssl req -new -x509 -extensions v3_ca -keyout cakey.pem -out cacert.pem -days 3650 
+  
+  sudo postconf -e 'smtpd_tls_auth_only = no'
+  sudo postconf -e 'smtp_use_tls = yes'
+  sudo postconf -e 'smtpd_use_tls = yes'
+  sudo postconf -e 'smtp_tls_note_starttls_offer = yes'
+  sudo postconf -e 'smtpd_tls_key_file = /etc/postfix/ssl/smtpd.key'
+  sudo postconf -e 'smtpd_tls_cert_file = /etc/postfix/ssl/smtpd.crt'
+  sudo postconf -e 'smtpd_tls_CAfile = /etc/postfix/ssl/cacert.pem'
+  sudo postconf -e 'smtpd_tls_loglevel = 1'
+  sudo postconf -e 'smtpd_tls_received_header = yes'
+  sudo postconf -e 'smtpd_tls_session_cache_timeout = 3600s'
+  sudo postconf -e 'tls_random_source = dev:/dev/urandom'
+  sudo postconf -e 'myhostname = server1.example.com' 
+  
+[[:tutoriel:comment_modifier_un_fichier|Éditez le fichier]] __/etc/postfix/main.cf__ qui doit ressembler à ceci :
+
+<file>
+# See /usr/share/postfix/main.cf.dist for a commented, more complete version
+
+smtpd_banner = $myhostname ESMTP $mail_name (Ubuntu)
+biff = no
+
+# appending .domain is the MUA's job.
+append_dot_mydomain = no
+
+# Uncomment the next line to generate "delayed mail" warnings
+#delay_warning_time = 4h
+
+myhostname = server1.example.com
+alias_maps = hash:/etc/aliases
+alias_database = hash:/etc/aliases
+myorigin = /etc/mailname
+mydestination = server1.example.com, localhost.example.com, localhost
+relayhost =
+mynetworks = 127.0.0.0/8
+mailbox_size_limit = 0
+recipient_delimiter = +
+inet_interfaces = all
+smtpd_sasl_local_domain =
+smtpd_sasl_auth_enable = yes
+smtpd_sasl_security_options = noanonymous
+broken_sasl_auth_clients = yes
+smtpd_recipient_restrictions = permit_sasl_authenticated,permit_mynetworks,reject_unauth_destination
+smtpd_tls_auth_only = no
+smtp_use_tls = yes
+smtpd_use_tls = yes
+smtp_tls_note_starttls_offer = yes
+smtpd_tls_key_file = /etc/postfix/ssl/smtpd.key
+smtpd_tls_cert_file = /etc/postfix/ssl/smtpd.crt
+smtpd_tls_CAfile = /etc/postfix/ssl/cacert.pem
+smtpd_tls_loglevel = 1
+smtpd_tls_received_header = yes
+smtpd_tls_session_cache_timeout = 3600s
+tls_random_source = dev:/dev/urandom
+</file>
+
+N'oubliez pas de donner un mydestination correct. Les serveurs destinataires vont en effet tester ce paramètre. Ils vérifieront dans les serveurs DNS si cette adresse existe bien !
+
+D'autre part, vérifiez aussi que votre ligne internet accepte les connexions smtp sortantes !
+
+Puis redémarrez le serveur Postfix :
+
+  sudo /etc/init.d/postfix restart
+  
+ou 
+  sudo service postfix restart
+
+===== Authentification =====
+
+L'authentification utilise **saslauthd**.
+
+NB: Pour installer **saslauthd** utiliser la commande suivante :        
+<code>sudo apt-get install libsasl2-modules libsasl2-modules-sql libgsasl7 libauthen-sasl-cyrus-perl sasl2-bin libpam-mysql</code>
+
+
+Il est possible de changer quelques détails pour le faire fonctionner proprement. Postfix exécutant "chroot" dans __/var/spool/postfix__ nous devons faire :
+
+  mkdir -p /var/spool/postfix/var/run/saslauthd
+  rm -fr /var/run/saslauthd
+  ln -s /var/spool/postfix/var/run/saslauthd /var/run/saslauthd
+  chown -R root:sasl /var/spool/postfix/var/
+  chmod 710 /var/spool/postfix/var/run/saslauthd
+  adduser postfix sasl
+  
+(problème de syntaxe sur l'instruction précédente)
+Maintenant [[:tutoriel:comment_modifier_un_fichier|éditez le fichier]]  __/etc/default/saslauthd__ pour y activer saslauthd.
+
+Pour ce faire décommentez la ligne <code>START=yes</code> et modifiez la derniere ligne <code>OPTIONS="-c -m /var/run/saslauthd"</code> comme cela: <code>OPTIONS="-m /var/spool/postfix/var/run/saslauthd"</code>
+
+
+
+Ce qui donne :
+<file>
+# This needs to be uncommented before saslauthd will be run automatically
+START=yes
+
+[...]
+
+# You must specify the authentication mechanisms you wish to use.
+# This defaults to "pam" for PAM support, but may also include
+# "shadow" or "sasldb", like this:
+# MECHANISMS="pam shadow"
+
+MECHANISMS="pam"
+
+[...]
+
+# Example for postfix users: "-c -m /var/spool/postfix/var/run/saslauthd"
+OPTIONS="-m /var/spool/postfix/var/run/saslauthd"
+</file>
+
+
+<note tip>Si vous préférez, vous pouvez utiliser **shadow** au lieu de **pam**.
+Ceci utilisera **MD5** au lieu de **password** et le rendra parfaitement sécurisé. Le nom d'utilisateur et le mot de passe requis pour l'authentification sera le même que pour les utilisateurs de votre système. Dans ce cas, vous pourrez ajouter votre utilisateur avec la commande adduser</note>
+
+===== Les tests =====
+
+Démarrez //saslauthd// :\\
+  sudo /etc/init.d/saslauthd start
+ou
+  sudo service saslauthd start
+
+Afin de vérifier que SMTP-AUTH et TLS fonctionnent correctement, tapez :\\
+  telnet localhost 25
+
+Ensuite après avoir établi la connexion avec postfix tapez :
+  EHLO somename.tld
+ 
+Si vous voyez ces lignes
+  250-STARTTLS
+  250-AUTH
+Ça fonctionne !
+
+Pour retourner à l'invite de commande, tapez :
+  quit
+
+
+Vous pouvez également tester l'auhtentification sasl avec la commande testsalsauthd
+  testsaslauthd -u utilisateur -p password
+  
+En cas de bon fonctionnement, vous obtiendrez 
+  0: OK "Success."
+Sinon :
+ 0: NO "authentication failed"
+
+<note>Sur Ubuntu 18.04, l'erreur //connect() : Permission denied// a ete resolu en tapant la commande:
+//sudo dpkg-statoverride --force --update --add root sasl 755 /var/spool/postfix/var/run/saslauthd//
+Puis un restart du service</note>
+
+==== Envoi d'un email ====
+En ligne de commande sur le serveur:\\
+Il faut évidemment remplacer //listes.mon_domaine.fr// par votre //nom de domaine//, //mon_email_expediteur@mon_fai.fr// et //email_destinataire@fai.fr//.\\
+Pour plus de clarté, j'ai laissé les retours que j'ai fait précéder de //>//
+<code>
+telnet localhost 25
+> Trying ::1...
+> Connected to localhost.
+> Escape character is '^]'.
+> 220 listes.mon_domaine.fr ESMTP Postfix (Debian/GNU)
+EHLO
+> 501 Syntax: EHLO hostname
+MAIL FROM: mon_email_expediteur@mon_fai.fr
+> 250 2.1.0 Ok
+RCPT TO: email_destinataire@fai.fr
+> 250 2.1.5 Ok
+DATA
+> 354 End data with <CR><LF>.<CR><LF>
+test envoi email
+.
+> 250 2.0.0 Ok: queued as 941E5440B91
+quit
+> 221 2.0.0 Bye
+> Connection closed by foreign host.
+</code>
+Il ne reste plus qu'à relever votre boîte de messagerie //email_destinataire@fai.fr// afin de vérifier si le mail a été renvoyé.
+===== Pour aller plus loin =====
+
+Si vous avez envie d'installer un serveur IMAP, la configuration avec **procmail** est un peu ardue. Vous pouvez [[:tutoriel:comment_installer_un_paquet|installer]] et utiliser **[[apt>maildrop|maildrop]]** à la place.
+
+Dans ''main.cf'', il faudra alors modifier la ligne
+  mailbox_command = procmail -a "$EXTENSION"
+en
+  mailbox_command = maildrop
+
+N'oubliez pas de créer un dossier Maildir pour chaque utilisateur :
+  maildirmake.courier = ~/Maildir
+Et d'activer l'option dans __/etc/maildroprc__
+
+===== Bridage SMTP =====
+
+Pour lutter contre le SPAM engendré par les machines zombies (machines infectées par des virus servant de relais aux spammeurs), la plupart des FAI ont décidé de bloquer le port 25 en sortie (dans le sens "Abonné -> Internet"), utilisé par défaut par le protocole SMTP. Dans ce cas, le port 25 n'est ouvert que pour le serveur SMTP de votre FAI ( du type smtp.monprovider.com).
+Ceci empêche la mise en place d'un serveur SMTP chez soi (en tous cas pour l'envoi vers Internet sans passer par le relais SMTP du provider).
+Ceci empêche également l'envoi depuis votre ligne ADSL vers votre serveur hébergé sur Internet (de type Dedibox, OVH, etc.)
+
+Si vous êtes abonnés Free avec une Freebox, vous pouvez débloquer l'envoi par le port 25 dans l'interface de gestion :
+//Fonctionnalités optionnelles de la Freebox → Autres fonctions → Blocage SMTP sortant//.
+
+Chez Neuf, ce filtrage est aussi actif. Pour changer les paramètres, allez dans l'interface de gestion de votre Neuf Box, Puis dans //Réseau → Filtrage//, décochez la case //Autoriser l'envoi de courriels uniquement par l'intermédiaire des serveurs mail du groupe SFR//.
+
+D'une manière générale, regardez les options de votre Box pour désactiver ce filtrage. Chez certains fournisseurs d'accès à internet, la fonctionnalité n'est pas « débridable ». Une solution autre que de passer par le smtp de votre provider, est de ne pas passer par le port 25 pour contourner le filtrage mais ceci vous oblige donc a passer par un relais sous votre controle…
+
+Pour modifier le port d'Émission de votre serveur, dans /etc/postfix/main.cf, modifier RELAYHOST comme ceci:
+''relayhost = [serveursmtp]:port'' 
+( EX : ''relayhost = [smtp.orange-business.com]:587'')
+
+Il est également possible d'utiliser le port 587 en lieu et place du port 25, pour cela, éditer le fichier /etc/postfix/master.cf et ajoutez 
+
+  587     inet    n       -       y       -       -       smtpd
+        -o smtpd_proxy_ehlo=no
+        -o content_filter=dksign:[127.0.0.1]:12028
+
+juste en dessous de votre ligne smtp
+
+  smtp      inet  n       -       -       -       -       smtpd
+        -o smtpd_proxy_ehlo=no
+        -o content_filter=dksign:[127.0.0.1]:12028
+===== État de la queue des messages =====
+
+La commande suivante permet de connaître le status des messages :
+<code>/usr/bin/mailq</code>
+
+Pour plus de détails, on peut également consulter le fichier **/var/log/mail.log**
+
+Pour supprimer un message de la queue :
+<code>postsuper -d queue_id</code>
+où queue_id doit être remplacé par l'identifiant correspondant au message.
+
+Pour supprimer tous les messages de la queue :
+<code>postsuper -d ALL</code>
+
+=====Voir aussi=====
+
+  * [[http://www.postfix.org/|Site officiel]].
+  * [[http://postfix.traduc.org/|Documentation de Postfix en français (non maintenue!)]].
+  * Basé sur [[http://wiki.ubuntu.com/Postfix]].
+  * [[tutoriel:comment_soumettre_un_probleme_postfix_sur_le_forum|Comment soumettre un problème Postfix sur le forum]].
+  * [[:postfix_systeme_satellite| Système satellite pour Postfix]]
+----
+
+//Contributeurs principaux : [[utilisateurs:Phetu]], [[utilisateurs:stephaneguedon|Stéphane Guedon]].//

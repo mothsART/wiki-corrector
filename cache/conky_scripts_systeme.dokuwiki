@@ -1,0 +1,219 @@
+
+{{tag>personnalisation}}
+
+----
+
+====== Conky : Scripts Système ======
+
+
+Compléments à la documentation [[/conky|Conky]]\\
+Les codes donnés ci dessous sont à placer __après__ la section **TEXT** de votre //conkyrc//\\
+Références des [[http://doc.ubuntu-fr-secours.org/astuces/conky_variables.html|Variables]]
+
+
+Dans les scripts donnés ci-dessous, on ne vous donne que les codes //__génériques__//.\\
+Vous pouvez retrouver les scripts qui ont permit la réalisation des images sur les liens suivants :\\
+  * [[http://download.ubuntu-fr-secours.org/conky/conky_TEXT|Avant TEXT]]
+  * [[http://download.ubuntu-fr-secours.org/conky/conky-ordinateur|Informations sur l'ordinateur]]
+  * [[http://download.ubuntu-fr-secours.org/conky/conky-informations_systeme|Informations système]]
+  * [[http://download.ubuntu-fr-secours.org/conky/conky-disque-dur|Disque dur]]
+  * [[http://download.ubuntu-fr-secours.org/conky/conky-reseau|Informations réseaux]]
+  * [[:conky_scripts_systeme#mails|Mails]]
+  * [[http://download.ubuntu-fr-secours.org/conky/conky-divers|Divers]]
+
+IL vous suffira d'ouvrir un unique fichier texte, d'y coller 'Avant TEXT' et toutes les parties désirées qui suivent à la suite.\\
+
+----
+
+{{  :conky:conky-ordinateur.png|Ordinateur}}
+
+===== Ordinateur ===== 
+
+
+{{ :conky:conky-ordinateur-infos.png|Informations sur l'ordinateur}}\\ \\
+Afficher des informations sur l'ordinateur. Dans l'ordre : la version de la distribution, le numéro de version, le nom de version, le kernel, l'architecure, la vitesse du processeur, le temps d'activité.
+<file>
+${execi 86400 lsb_release -si} : ${execi 86400 lsb_release -sr} ${execi 86400 lsb_release -sc}
+$sysname : $kernel $machine $freq_dyn_g GHz
+Uptime : $uptime
+</file>
+
+
+{{  :conky:conky-informations_systeme.png|Informations Système}}
+
+===== CPU / Carte mère =====
+
+==== Utilisation processeur ====
+{{ :conky:conky-CPU.png|Utilisation du processeur}}\\
+Afficher un graphique de l'utilisation processeur, avec indication en % dans ce graphique.\\ 
+Ici on va utiliser la variable //voffset// (vertical offset) pour positionner l'utilisation du processeur en % __sur__ le graphique de celui-ci.\\ 
+<file>
+${cpugraph 5e7b7b d8deeb}
+${voffset -24}${alignc}${cpu cpu1}%
+</file>
+
+==== Mémoire / Swap ====
+{{ :conky:conky-consommation.png|Utilisation de la ram et de la swap et divers}}\\ \\
+Afficher l'utilisation (restant / totalité / graphique ) de la mémoire RAM et SWAP.\\ \\
+
+<file>
+${color2}RAM     : ${color1}$memperc% $mem /$memmax $membar
+${color2}Swap    : ${color1}$swapperc% $swap /$swapmax $swapbar
+${color2}Process : ${color1}$processes Running : $running_processes
+</file>
+Ici **${color}** est utilisé afin de redonner la couleur du texte par défaut définit dans la section __précédent__ **TEXT**
+
+==== Température ====
+Après avoir installé [[lm-sensors]] - [[apt://lm-sensors|lm-sensors]] et lancé la détection des capteurs, vous pouvez accéder à différentes températures qui sont visibles via la commande **sensors**\\
+Les résultats des capteurs sont dans : /sys/class/hwmon/hwmon**[n]**/device/temp**[n]**_input (**[n]** est un chiffre).\\
+<note>Pour Ubuntu 16.04, les résultats sont dans : /sys/class/hwmon/hwmon**[n]**/temp**[n]**_input</note>
+Vous pouvez les visualiser via :
+<code>
+$ cat /sys/class/hwmon/hwmon1/device/temp1_input 
+34000
+$ cat /sys/class/hwmon/hwmon1/device/temp2_input 
+44000
+</code>
+{{ :conky:conky-cpu_cm-temperature.png|Température du CPU et de la carte mère}}\\ \\
+Ici on voit le chiffre 34000 et 44000, dans votre conkyrc il suffit d'ajouter :
+<file>
+CPU : ${hwmon 1 temp 2}C° M/B : ${hwmon 1 temp 1}C°
+</file>
+Et on obtient :\\
+CPU : 44.0 C° M/B : 34.0 C°
+<note>Dans mon cas, la température du **CPU** est en **hwmon1**, **temp2_input** et ma **carte mère** en **hwmon1**, **temp1_input**. A vous de vérifier les valeurs en parallèle de la commande **sensors**.
+Après une mise à jour du système, il peut arriver que votre conky ne fonctionne plus. Vous trouverez un message d’erreur dans le fichier ~/.xsession.error, indiquant que le fichier /sys/class/... n'existe pas. En fait, ce fichier a été déplacé lors de la mise à jour. Essayez alors {hwmon 0 temp 1} </note>
+
+
+{{  :conky:conky-disque_dur-0.png|Disque dur}}
+===== Disque dur =====
+
+==== Taille / Espace ====
+{{ :conky:conky-disque_dur-local.png|Taille des disques locaux}}
+=== Local ===
+Afficher différentes informations sur des partitions (dans ce cas : Taille des disques durs sda et sdb). La variable 'fs_bar' (file system bar) reçoit 2 valeurs, la hauteur (ici 5 pixels) et la largeur (ici 120 pixels). Ces valeurs peuvent être omises.
+<file>
+${fs_used_perc /point/de/montage/}% ${fs_free /point/de/montage/} ${fs_bar 5,120 /point/de/montage/}
+</file>
+A noter que pour votre partition par défaut, l'indication du point de montage n'est pas obligatoire. Vous pouvez donc simplement écrire :
+<file>
+Utilisé : $fs_used_perc% - Libre : $fs_free ${fs_bar 5,120}
+</file>
+
+{{ :conky:conky-disque_dur-distant.png|Taille des disques distants}}
+=== Distant ===
+Notez la variable '//if_mounted//' qui permet de vérifier que les disques sont montés, avant de lancer l'affichage. Même si vos disques sont montés après le lancement de conky, ceux-ci seront automatiquement affichés.
+<file>
+${if_mounted /point/de/montage/}Intitulé : ${fs_used_perc /point/de/montage/}% ${fs_free /point/de/montage/} ${fs_bar 5,120 /point/de/montage/}${endif}
+</file>
+
+
+==== Température ====
+=== Local ===
+{{ :conky:conky-disque_dur-local_teta.png|Température des disques locaux}}\\
+Après avoir installé [[apt://hddtemp|hddtemp]], il suffit d'ajouter les lignes :
+<file>
+Local   : sda ${hddtemp /dev/sda}°
+</file>
+
+Et on obtient :
+  sda : 35C°
+  sdb : 42C°
+<note tip>Par défaut hddtemp ne peut être utilisé que par le superutlisateur ; pour permettre à tous les utilisateurs non privilégiés de l'exécuter, entrez dans un terminal : ''sudo dpkg-reconfigure hddtemp'' et répondez Oui à la question "//Faut-il exécuter hddtemp avec les privilèges du superutilisateur ?//".</note>
+=== Distant ===
+{{ :conky:conky-disque_dur-distant_teta.png|Température des disques distants}}\\
+Récupérer la température d'un disque distant (pratique dans le cas d'un NFS)
+
+Voir les valeurs en //vrac// (exemple)
+<code>nick@hostname:~$ nc 192.168.xxx.xxx 7634
+|/dev/sg0|Maxtor 6Y160P0|42|C||/dev/s</code>
+
+**Première variante** 
+<file>
+${exec nc <ip> <port> | cut -d'|' -f4}°C
+</file>
+|**Légende**||
+|**<ip>** |Ip de la machine contenant les disques à contrôler|
+|**<port>** |port de la machine distante (pensez à ouvrir ce port dans le pare-feu) par défaut : 7634|
+|**cut -d'''|'''** |on découpe tous les **'''|'''** (pipe), ça crée un tableau|
+|**-f4** |on récupère la valeur à la position 4 (ce qui se trouve juste avant le 4ème **'''|'''** donc)|
+
+**Seconde variante**
+<file>
+${exec nc <ip> <port> | awk -F'|' '{ print $4 }'}°C
+</file>
+
+On récupère ainsi la valeur '**42°C**' dans les deux cas
+
+{{  :conky:conky-reseau-0.png|Réseau}}
+
+===== Réseau =====
+
+{{  :conky:conky-reseau-utilisation.png|Utilisation du réseau}}\\ \\
+Affichage graphique de l'utilisation réseau. Ici on affiche la vitesse des réceptions/émissions dans le graphique en utilisant conjointement '//offset//' et '//voffset//'.\\
+<file>
+Down ${offset 45}${totaldown eth1} ${offset 8}Up ${alignr}${totalup eth1}
+${downspeedgraph eth0 22,150 5e7b7b d8deeb} ${upspeedgraph eth0 22,150 99c8e8 618094}
+${offset 40}${voffset -21}${downspeedf eth1}k/s
+${offset 190}${voffset -14}${upspeedf eth1}k/s
+</file>
+
+{{  :conky:conky-reseau-information.png|Informations sur le réseau}}\\ \\
+Ici dans le cas de deux cartes réseau. L'une en réseau vers l'extérieure, l'autre en local.
+<file>
+eth1 : ${addr eth1}
+</file>
+Afficher l'ip publique.
+<file>
+${texeci 3600 wget http://checkip.dyndns.org -O - -o /dev/null | cut -d : -f 2 | cut -d \< -f 1}
+</file>
+Affichage simple et complet.
+<file>
+eth0 : ${addr eth0} | ${totaldown eth0} | ${totalup eth0}
+</file>
+Dans le cas d'une seconde carte, non configurée et non connectée, conky affiche 'No Address' en place de l'adresse ip de la carte.
+
+{{  :conky:conky-divers-0.png|Divers}}
+
+===== Mails =====
+
+<note important>Attention, votre mot de passe sera stocké en clair dans le fichier. Ceci est problème de sécurité!</note>
+
+Il est possible de récupérer nativement le nombre de mails non lus en précisant les adresses des serveurs POP et/ou IMAP, le nom d'utilisateur et le mot de passe.
+
+Pour un serveur IMAP
+<file>
+#L'option -i est utilisée pour effectuer cette vérification toute les x secondes (ici toutes les 60 secondes, donc toute les minutes :) )
+${imap_unseen Adresse_serveur_IMAP Utilisateur Mot_de_passe -i 60} 
+</file>
+Pour un serveur POP
+<file>
+#L'option -i est utilisée pour effectuer cette vérification toute les x secondes (ici toutes les 60 secondes, donc toute les minutes :) )
+${pop3_unseen Adresse_serveur_POP3 Utilisateur Mot_de_passe -i 60}
+</file>
+
+Il est à noter que j'ai essayé de récupérer les mails non lus via le POP3 de Free et que cela n'a pas fonctionné.
+Cela fonctionne très bien en adoptant le mode IMAP (imap_unseen).
+
+===== Divers =====
+
+{{  :conky:conky-divers-processus.png|processus}}\\ \\ \\ \\
+Afficher les résultats d'un '//top//'
+
+<file>
+PROCESS ${hr 2}
+
+Name                             ${alignr}CPU      ${alignr}RAM
+${color #e09495} ${top name 1}   ${alignr}${top cpu 1}  ${alignr}${top mem 1}
+${color #e0d094} ${top name 2}   ${alignr}${top cpu 2}  ${alignr}${top mem 2}
+${color1} ${top name 3}    ${alignr}${top cpu 3}  ${alignr}${top mem 3}
+${color1} ${top name 4}    ${alignr}${top cpu 4}  ${alignr}${top mem 4}
+${color1} ${top name 5}    ${alignr}${top cpu 5}  ${alignr}${top mem 5}
+</file>
+
+
+
+----
+
+//Contributeur : [[utilisateurs:mcpeter|McPeter]], [[utilisateurs:ljere|ljere]]
+

@@ -1,0 +1,551 @@
+
+{{tag>matériel jeu VÉTUSTE}}
+
+----
+
+====== Manette de jeu : généralités ======
+
+===== Pré-requis =====
+
+  * Une manette de jeu pour port jeu ou USB.
+  * Une carte son SoundBlaster ou compatible (port jeu uniquement).
+  * Savoir démarrer et utiliser un [[terminal]] (une console).
+
+===== Préambule =====
+
+Cette page vous permet de faire fonctionner une manette de jeu sous Ubuntu.
+
+Pour commencer, branchez votre manette. **Dans 50 % des cas, la manette est auto-détectée, surtout si elle est en USB** (si c'est une manette à port jeu, un redémarrage de l'ordinateur avec la manette branchée sera nécessaire pour le savoir). Vous allez donc déjà tester cela. Si cela ne marche pas, reportez-vous à la suite.
+
+Sachez aussi que **la plupart des applications utilisent leur propre algorithme pour la détection des manettes** (même s'il y a tout de même 2 API dominantes : **Linux** et **SDL**). Ce n'est pas tout à fait comme MS Windows où il y a un seul outil centralisé qui gère la manette et ses propriétés (et où les jeux utilisent ces données-là). 
+
+===== Retour de Force (ou Force Feedback) =====
+
+Depuis Ubuntu 9.04 (noyau 2.6.28), le retour de force est supporté en standard. Cela concerne un nombre limité de joysticks et volants. La liste est la suivante (d'après le source Linux/drivers/HID/KConfig 2.6.30 ainsi que [[http://sourceforge.net/apps/mediawiki/libff/index.php?title=SupportedDevices]]) :
+
+  * DRAGONRISE
+  * GREENASIA/PANTHERLORD
+  * LOGITECH (protocole HID non standard)
+  * LOGITECH
+    * Wingman Cordless RumblePad
+    * Wingman Cordless RumblePad 2
+    * Wingman Force 3D
+    * Wingman Force EX
+    * Formula Force EX wheel
+    * G25 Racing Wheel
+    * MOMO force wheel
+    * RumblePad 2
+  * MICROSOFT (protocole HID non standard)
+    * Sidewinder Force Feedback 2
+    * Sidewinder Force Feedback Wheel
+  * THRUSTMASTER 
+    * FireStorm Dual Power 2
+    * Ferrari GT 2-in-1 Force Feedback wheel
+    * Ferrari GT 2-in-1 Rumble Force wheel
+  * ZEROPLUS
+  * Périphériques utilisants le pilote I-Force (iforce.ko)
+    * ACT Labs Force RS
+    * AVB Mag Turbo Force
+    * AVB Top Shot Pegasus
+    * AVB Top Shot FFB Racing Wheel
+    * Guillemot Force Feedback Racing Wheel
+    * Guillemot Jet Leader 3d
+    * Guillemot Race Leader Force Feedback
+    * Logitech Wingman Force
+    * Logitech Wingman Formula Force
+    * Thrustmaster Motor Sport GT
+
+Pour tester le retour de force sur un joystick, il faut utiliser les outils [[http://sourceforge.net/apps/mediawiki/libff/index.php?title=CheckForceFeedback|ff-utils]] (nécessite le paquet **[[apt>libsdl1.2-dev]]**).
+
+===== Calibration, test ====
+
+Nous allons vous présenter ici les différentes méthodes pour calibrer (mais surtout tester) votre manette de jeu.
+
+=== Avec jstest-gtk ===
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt://jstest-gtk|jstest-gtk]]** puis calibrez la manette de jeu avec la commande :
+
+  jstest-gtk
+
+=== Par le mode console ===
+
+Pour tester votre manette tapez :
+
+  sudo cat /dev/input/js0
+
+Si vous voyez des signes bizarre qui bougent selon les boutons appuyé, c'est que ça doit marcher !
+
+Vous pouvez également calibrer et tester votre manette grâce aux programmes jscal/jstest. Joystick est un programme pour calibrer la manette en mode console.
+
+∴ [[jscal-jstest|Plus d'informations sur jsCal et jsTest…]] ∴
+
+
+===== Méthode manuelle =====
+
+La manette n'est pas détectée ? Vous venez de brancher votre manette et ne voulez pas redémarrer votre ordinateur ? OK !
+
+==== Créer les port jeux dans Linux ====
+
+<note>Cela semble être facultatif.</note>
+
+Dans un terminal (une console) : 
+
+  * il faut se placer dans le bon répertoire avec la commande : <code>cd /dev/input</code>
+  * Créez le port jeux avec la commande :<code>sudo MAKEDEV js</code>
+  * Fermer le terminal.
+
+==== Chargement des modules ====
+
+Les manettes demandent un certains nombre de "Pilotes". Sous Ubuntu, ce sont des modules qui doivent être chargé avec le noyau linux.
+
+Dans un premier temps, nous allons le faire manuellement. Si tout marche, on va modifier certains fichiers afin que tout soit fait au démarrage de l'ordinateur.
+
+
+=== Tester la solution avant de modifier les fichiers ====
+
+Dans un terminal (une console) charger en mémoire les pilotes requis selon votre manette.
+
+Par exemple, pour une SideWinder GamePad (**/!\** cf plus bas pour connaître les bons modules !! **/!\**) :
+
+<code>
+sudo modprobe joydev ## Pilote pour les manettes de jeu
+sudo modprobe 'module correspondant à votre port jeu'          ## voir en bas pour connaître le bon module (pour les cartes son non listées il est possible que ce soit ns558
+sudo modprobe 'le module de votre manette' ## voir en bas pour connaître le bon module
+</code>
+
+À tout moment vous pouvez voir les modules chargés avec la commande :
+
+<code>
+lsmod
+lsmod | grep gameport ## pour n'afficher que les lignes contenant "gameport"
+</code>
+
+Pour tester si le tout fonctionne essayez donc de calibrer votre manette :
+
+[[#Calibration_-_test|Calibration]] (Ancre)
+
+**Si vous avez réussi** la calibration de la manette c'est que vous avez chargé les bons pilotes. Passez à la section suivante.
+
+**Si vous avez eu un message d'erreur** et n'avez pas réussi la calibration de la manette  vous devez regarder le reste du présent document pour y trouver les bons pilotes.
+
+**Rappel :** Pour décharger un module, il faut utiliser la commande modprobe -r (remove) :
+
+<code>
+sudo modprobe -r 'le module de votre manette'
+</code>
+
+=== Charger les modules automatiquement au démarrage ===
+
+Pour cela, il faut  [[:tutoriel:comment_modifier_un_fichier|éditer le fichier de configuration]] "/etc/modules". Ce fichier « modules » regroupe une partie des pilotes à charger avec votre noyau Linux.
+
+Ajoutez à la fin du fichier, le texte suivant :
+
+<code>
+## Pilotes de manette de jeu (joystick)
+joydev         ## Pilote pour les manettes de jeu
+'module correspondant à votre port jeu'          ## voir en bas pour connaître le bon module (pour les cartes son non listées il est possible que ce soit ns558
+'le module de votre manette' ## voir en bas pour connaître le bon module
+</code>
+
+Cela donne un fichier ''/etc/modules'' qui devrait ressembler à ceci :
+
+<code>
+# /etc/modules: kernel modules to load at boot time.
+#
+# This file contains the names of kernel modules that should be loaded
+# at boot time, one per line. Lines beginning with "#" are ignored.
+
+lp
+
+## Pilotes de souris
+psmouse
+mousedev
+
+## Pilotes de carte de son ALSA Ensoniq ES1371 AudioPCI-97
+alias snd-card-0 snd-ens1371
+below snd-es1371
+snd-seq-device ## Optionnel, pour les séquenceur MIDI
+snd-seq-midi   ## Optionnel, pour les séquenceur MIDI
+
+## Pilotes de manette de jeu (joystick)
+joydev         ## Pilote pour les manettes de jeu
+ns558          ## Pilote pour le port jeu
+sidewinder     ## Pilote spécifique pour les manette MS-SideWinder
+</code>
+
+En plus de cela, vous devez [[:tutoriel:comment_modifier_un_fichier|créer ou modifier le fichier]] /etc/modules.conf, pour y ajouter les lignes suivantes :
+
+<code>
+alias js0 input
+above input joydev 'module correspondant à votre port jeu' 'le module de votre manette'
+</code>
+
+Enregistrez les modifications puis redémarrez votre ordinateur.
+
+===== Liste des modules =====
+
+<note>
+Il semblerait qu'il faille en fait nommer le fichier "options" en "options.conf". Ce sera obligatoire pour la prochaine version a priori (10.10).
+Voilà le warning console au chargement du module "joydev" :
+WARNING: All config files need .conf: /etc/modprobe.d/options, it will be ignored in a future release.
+</note>
+
+==== Port jeu (port MIDI) ====
+
+=== Cas particuliers ===
+
+== Pour une carte son à base de ens1371 ==
+
+Si vous avez une carte son à base de chipset ens1371 (Ex. : Sounblaster 64 et 128), une petite manipulation préliminaire s'impose.
+
+Tout d'abord, vérifier le modèle de votre carte son : dans une console tapez
+
+<code>
+lsmod | grep snd_ens1371
+</code>
+
+Si vous avez quelque chose, c'est bon, continuez, sinon, vous avez une autre carte son. (Mais vous pouvez tout de même tenter de continuer en remplaçant dans ce qui suit « joystick_port=1 » par « joystick=1 » ou « joystick » et en adaptant le nom du pilote de votre carte son.)
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/modprobe.d/options** et rajoutez-y la ligne :
+
+<code>
+options snd_ens1371 joystick_port=1
+</code>
+
+
+Redémarrez, et refaites le tuto depuis le début.
+
+(Merci [[http://forum.ubuntu-fr.org/viewtopic.php?id=45966|PierreR]])
+
+== Pour une carte son intégrée de marque via ==
+
+Si vous avez une carte son intégrée à un chipset Via (ex. : Via-PT800 ou n'importe quel autre chipset de cette marque ), et que vous n'avez pas réussi à faire marcher votre joystick, une petite manipulation préliminaire s'impose.
+
+Tout d'abord, vérifier le modèle de votre carte son : dans une console tapez
+
+<code>
+lsmod | grep snd_via82xx
+</code>
+
+Si vous obtenez quelque chose en retour, c'est bon continuez, vous avez bien une carte son Via.
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/modprobe.d/options** et rajoutez-y la ligne :
+
+<file>
+options snd_via82xx joystick=1
+</file>
+
+
+Redémarrez, et refaites le tuto depuis le début.
+
+== Pour une carte son Aztech ==
+
+(récupéré de l'ancienne page)
+
+Apparemment, là aussi il faut activer le port son.
+
+Donc, dans **/etc/modules.conf** [[:tutoriel:comment_editer_un_fichier|ajoutez]] :
+
+<file>
+above snd-trident snd-pcm-oss
+alias sound-slot-0 trident
+alias js0 input
+above input joydev pcigame analog adi
+</file>
+
+=== Cas généraux ===
+
+== Classic ISA/PnP gameports ==
+
+<code>
+sudo modprobe ns558
+</code>
+
+== Crystal SoundFusion gameports ==
+
+<code>
+sudo modprobe cs461x
+</code>
+
+== Aureal Vortex and Trident 4DWave gameports ==
+
+<code>
+sudo modprobe pcigame
+</code>
+
+== SoundBlaster Live! gameports ==
+
+<code>
+sudo modprobe emu10k1-gp
+</code>
+
+== Autres ==
+
+<code>
+sudo modprobe gameport
+</code>
+
+==== Manettes/Joysticks ====
+
+=== Pour une manette analogique ===
+
+Ce pilote marche bien avec les manettes bas de gamme :
+
+<code>
+sudo modprobe analog
+</code>
+
+=== Pour une manette de jeu Microsoft SideWinder ===
+
+<code>
+sudo modprobe sidewinder
+sudo modprobe analog ## A réserver à la gamme joystick
+</code>
+
+=== Pour une manette MS SideWinder ForceFeedBack Pro ===
+
+<code>
+sudo modprobe analog 
+sudo modprobe sidewinder
+sudo modprobe iforce ## Pilote pour le retour de force
+sudo modprobe evdev ## Pilote pour "Input driver event char devices"
+</code>
+
+=== Pour une manette de jeu Logitech WingMan ADI digital ===
+
+<code>
+sudo modprobe adi
+</code>
+
+=== Pour "Assassin 3D and MadCatz Panther" ===
+
+<code>
+sudo modprobe a3d
+</code>
+
+=== Pour "Genius Flight2000 Digital joysticks and gamepads" ===
+
+<code>
+sudo modprobe gf2k
+</code>
+
+=== Pour "Gravis GrIP joysticks and gamepads" ===
+
+<code>
+sudo modprobe grip
+</code>
+
+=== Pour "InterAct digital joysticks and gamepads" ===
+
+<code>
+sudo modprobe interact
+</code>
+
+=== Pour "ThrustMaster DirectConnect joysticks and gamepads" ===
+
+<code>
+sudo modprobe tmdc
+</code>
+
+=== Pour une manette Guillemot dual analog gamepad (port jeu) ===
+
+<code>
+sudo modprobe guillemot
+sudo modprobe analog ## A verifier
+sudo modprobe iforce ## A verifier
+</code>
+
+Pensez aussi au bouton qui active/désactive les mini-sticks de cette manette.
+
+=== Pour une manette Microsoft Xbox 360 ===
+
+À partir de Ubuntu 8.04 "Hardy Heron", la manette fonctionne nativement et directement dès qu'on la branche (la led supérieure gauche devrait clignoter), complètement plug & play =)
+
+Pour les distributions antérieures, voir [[:paddle_x360_for_windows_sur_ubuntu|la documentation pour installer la manette]]
+
+=== Pour une manette de jeux pour port USB ===
+
+
+(Inspiré par [[http://www.linux-usb.org/USB-guide/x194.html|cet article]])
+
+Si l'auto détection ne fonctionne pas (//cas très rare !//)...
+
+<code>
+sudo modprobe usbhid
+sudo modprobe joydev
+</code>
+
+Maintenant, si vous branchez votre manette (au cas ou vous ne l'auriez pas déjà fait) et testez-la.
+
+Il ne vous restera plus qu'à mettre ''usbhid'' et ''joydev'' dans /etc/modules comme indiqué plus haut.
+
+
+=== Autres manettes ===
+
+Pour obtenir une liste complète des modules, vous pouvez taper ''modprobe -l''
+
+Vous pouvez aussi [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **modconf**.
+
+Lancez ensuite modconf en sudo (en ayant préalablement agrandi la fenêtre) :
+
+<code>
+sudo modconf
+</code>
+
+Vous atterrirez sur une liste COMPLÈTE de tous les modules disponibles. Rendez-vous dans le dossier joystick, et vous verrez tous les modules joystick possibles et inimaginables ! :-)
+
+
+===== Problèmes =====
+
+
+==== On me détecte un bouton qui n'existe pas ====
+
+Que ce soit avec kcontrol ou jscal, on vous détecte un bouton qui n'existe pas et qui est enfoncé par défaut ? Suivez ceci:
+
+**[[jscal-jstest#le_programme_detecte_un_bouton_qui_n_existe_pas_et_qui_est_presse_par_defaut|Voir aussi cette page pour des informations à jour]].**
+
+  - D'abord, il faut avoir le paquet build-essential installé pour pouvoir compiler.
+  - Téléchargez une version patché du programme jscal qui permet de calibrer un manette en ligne de commande. Voici le prog http://www.mediafire.com/?msitbdej0ad
+  - extraire le contenu.
+  - ouvrir un terminal dans le dossier.
+  - Tapez  'make clean' et puis 'make' (le prog est déjà compilé pour du amd64, donc à ne faire que si votre architecture est du i386)
+  - Téléchargez ce fichier [[http://bugs.debian.org/cgi-bin/bugreport.cgi?msg=5;filename=joystick.diff;att=1;bug=444142]] et placez-le dans le dossier. Il rajoute les commande qu'on a besoin au programme.
+  - Lancez le programme jscal du dossier en tappant le chemin complet vers le prog dans un terminal ('~/jscal-patched-amd4-ubuntu7.10/jscal' /dev/input/js0)
+  - Tapez '~/jscal-patched-amd4-ubuntu7.10/jscal' /dev/input/js0 -c pour calibrer le volant.
+  - Et enfin '~/jscal-patched-amd4-ubuntu7.10/jscal' /dev/input/js0 -u 3,0,1,5,9,288,289,290,291,292,293,294,295,511
+pour désactiver le 9ème bouton par exemple.
+
+La dernière commande donne la valeur maximum 511 au bouton 9 pour le désactiver (256 étant le minimum).
+
+Concernant la signification des nombres, le 3 correspond aux nombres d'axes, donc 3 pour accélération, frein et gauche/droite. Le 9 correspond au nombre de boutons et les nombres qui suivent à leurs valeurs par défaut.
+
+
+==== Le module analog se charge automatiquement ====
+
+Il peut arriver qu'un module non-désiré se charge automatiquement au démarrage de l'ordinateur. L'exemple le plus fréquent est le module ''"analog"'', qui n'est pas nécessaire pour toutes les manettes. Il faut donc le "black-lister" :
+
+Pour les versions avant Lucid: [[:tutoriel:comment_modifier_un_fichier|modifiez le fichier]] /etc/modprobe.d/blacklist
+Depuis Ubuntu Lucid: [[:tutoriel:comment_modifier_un_fichier|modifiez le fichier]] /etc/modprobe.d/blacklist.conf
+
+Et ajouter une ligne :
+
+<code>
+# analog module
+blacklist analog
+</code>
+
+Enregistrez et quittez.
+
+==== Mes directions ne fonctionnent pas ====
+
+Vous devez surement être sur Ubuntu ou Xubuntu :)
+
+Le fait est que la plupart des développeurs se basent sur des Axes de -32000 +32000, et ce, quel que soit votre manette.
+
+== Que faire ? ==
+
+Il n'y a alors pas d'autres choix que d'installer le centre de contrôle KDE :
+
+<code>
+sudo apt-get install kcontrol
+</code>
+
+Rendez-vous dans la catégorie joystick et calibrer tout cela !!
+
+== Autre méthode ==
+
+Ca marche aussi avec **joystick** via [[jscal-jstest|jscal et jstest]] (si vous savez utiliser le mode console) :
+
+<code>
+jscal -c /dev/input/js0
+</code>
+
+
+=== Autres solutions ===
+Pour les jeux et également les émulateurs type GFCE, il existe une solution permettant de programmer votre manette de jeux en lui assignant certaines touches du clavier, voir les logiciels ci-dessous.
+
+===== Configuration des touches =====
+==== qJoypad ==== 
+[[qjoypad|QJoyPad]] permet d'assigner des touches du clavier à votre manette. 
+
+<note warning>
+QJoyPad n'est plus maintenu depuis février 2010, nous vous conseillons désormais l'utilisation de AntiMicro.
+</note>
+
+==== AntiMicro ====
+[[antimicro|AntiMicro]] Un peu plus évolué que Qjoypad car il permet les combinaisons de touches complexes et n'a pas le souci de la limite des identifiants des touches.
+
+==== Rejoystick ====
+<note warning>
+__Jojsticken__ n'est plus maintenu depuis septembre 2008, nous vous conseillons désormais l'utilisation de AntiMicro.
+
+FIXME Erreur de paragraphe ou de nom...
+</note>
+
+Pour cela téléchargez le paquet rejoystick (une recherche google vous permettra de le trouver sans problème)ou télécharger le paquet à cette adresse : 
+http://sourceforge.net/projects/rejoystick/
+Le paquet ne nécessite aucune dépendance, mais n'est pas présent dans les dépôts d'Ubuntu. 
+
+Une fois installé, utilisez votre console :
+
+<code>
+rejoystick
+</code>
+
+le programme est en anglais et s'utilise en mode ligne de commande. Pour débuter choisissez une touche du clavier qui une fois pressée indiquera au programme que l'assignation des touches est terminée (ex : echap). Ensuite, le programme vous demande de choisir une touche du clavier. Pressez une touche au choix. Ensuite, le programme vous demande de choisir une touche de la mannette de jeu. Par exemple : la touche du clavier A correspond au bouton 1 de ma manette de jeu. Répetez l'opération pour toutes les touches de la manette et les directions. Puis quitter le programme (echap dans l'exemple).
+
+Dans la console, tapez ensuite rejoystick -d. Le programme se lance, fermez la console, démarrez votre jeu, et configurer l'interface de jeu avec le choix de touches du clavier auparavant effectué...et...une fois dans le jeu, votre joystick fonctionne.
+
+Attention : ce programme ne fonctionne que si votre manette est reconnue initialement par le système. Avantage, le programme rejoystick permet de savoir si le système reconnaît votre manette !
+
+Pour  éventuellement reprogrammer la manette utiliser la commande :
+
+<code>
+rejoystick -readkeys
+</code>
+
+la commande :
+
+<code>
+rejoystick --help
+</code>
+ vous donnera toutes les indications pour créer et sauvegarder des profils de programmation pour vos jeux favoris !
+
+==== Jojsticken ====
+Jojsticken est le successeur de rejoystick puisqu'il est développé par le même auteur que ce dernier.
+
+Site officiel : http://jojsticken.sourceforge.net/
+
+L'application est en java et est par conséquent multi-plateforme.
+
+==== jstest-gtk====
+Probablement obsolète, mais utile éventuellement pour des vielles version d'ubuntu (comme la 12.04).
+[[https://apps.ubuntu.com/cat/applications/jstest-gtk/|Lien officiel]]
+
+
+
+===== Reconnaissance du matériel  =====
+
+^ Modèle         ^ Fonctionne ou pas           ^ Version ubuntu                    ^ Info/Liens        ^
+| Logitech Gamepad F310   | Fonctionne, juste un axe et une gâchette à inverser avec jstest-gtk    | Ubuntu 12.10                      | http://forum.ubuntu-fr.org/viewtopic.php?pid=4655791 |
+| Logitech Precision   | Out-of-the-box!  | Ubuntu 12.04 | 8 boutons réglables + 1 axe avec jstest-gtk |
+| Speedlink Strike (SL-6535-SSV-01)   | Out-of-the-box!  | Ubuntu 11.04 | http://www.speedlink.com/?p=2&cat=4132&pid=23398&paus=1 |
+
+
+
+===== Liens =====
+
+  * Voir dans la documentation du noyau ici : [[http://www.freelink.cx/joystick.html]].
+  * Un HOWTO sympatique : http://ubuntuforums.org/showthread.php?t=330607
+  * Concernant les volants : http://www.wingmanteam.com/linux.htm
+  * Piloter Xorg avec une manette : http://forum.ubuntu-fr.org/viewtopic.php?pid=947925
+  * http://www.trustonme.net/didactels/160.html#joyson
+  * **English version** : http://ubuntuforums.org/showthread.php?p=2685180
+
+===== Autres pages en lien avec les sujets =====
+
+{{backlinks>.}}
+{{topic>Manette joystick}}
+
+----
+
+//Contributeurs : [[utilisateurs:YoBoY]], [[utilisateurs:Ner0lph]], [[utilisateurs:smon]], [[utilisateurs:lami|L'ami René]] (Mise en page)+(Autres pages en lien avec les sujets), [[utilisateurs:Antonin_Morel]], [[utilisateurs:sacrediou]], [[utilisateurs:jeanf]], [[utilisateurs:adam0509]], [[utilisateurs:Fabien26]], [[utilisateurs:d10g3n]],  [[utilisateurs:alexisj]] //

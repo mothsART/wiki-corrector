@@ -1,0 +1,185 @@
+
+{{tag>xenial serveur réseau}}
+----
+
+====== Automatiser la gestion des adresses IP dynamiques ======
+
+**ddclient** permet d'automatiser la mise à jour d'une [[dns_dynamique|adresse IP dynamique]] reliée à un nom de domaine (de 213.95.41.11 à %%www.ubuntu-fr.org%% par exemple). Ce système est extrêmement pratique quand il s'agit de créer un serveur web personnel accessible rapidement //via// un nom de domaine, alors que votre adresse IP change régulièrement.
+
+===== Pré-requis =====
+
+  * S'être inscrit sur l'un des services pris en charge. Pour les connaître, saisissez dans un [[:terminal]] la [[:commande_shell|commande]] suivante : <code>ddclient --help | grep "o '"</code>
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Avoir activé l'accès aux [[:depots#universe_et_multiverse|dépôts Universe et Multiverse]].
+
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>ddclient]]**.
+
+La touche espace sert à sélectionner la redirection "[] Nomduhost.dyndns.com"
+
+
+===== Configuration =====
+
+Commencez par générer le fichier de configuration en tapant :
+<code>sudo dpkg-reconfigure ddclient</code>
+
+Tout d'abord, vous devrez spécifier le service à utiliser. Le ou les noms de domaines qui pointeront vers l'adresse IP dynamique. L'identifiant et le mot de passe avec lesquels vous vous êtes inscrit au service.
+
+ddclient peut prendre connaissance de l'adresse IP dynamique de diverses manières :
+
+^ Paramètre ^ Signification                                 ^
+| web       | à partir d'une page web                       |
+| if        | par une interface réseau (ex : ppp0, eth0...) |
+| fw        | en interrogeant le routeur                    |
+| cmd       | en exécutant une commande                     |
+
+<note important>
+Si vous avez choisi une autre option que « web », il sera nécessaire de [[:tutoriel:comment_modifier_un_fichier|modifier le fichier]] « /etc/ddclient.conf » par la suite afin de spécifier l'interface, l'adresse IP du routeur ou la commande à employer.
+</note>
+
+Si vous êtes derrière un routeur, ce n'est pas l'ordinateur qui initiera la connexion. Par conséquent, répondez « Non » à la question « Faut-il lancer ddclient lors de la connexion PPP ? ».
+
+L'avant-dernière question vous propose de faire tourner ddclient en tâche de fond (daemon). Puisque le but est d'automatiser la mise à jour de l'adresse IP, répondez « Oui ».
+
+Enfin, vous pouvez définir un délai entre les vérifications. Par défaut, celles-ci s'effectueront toutes les 300 secondes (5 minutes).
+
+
+==== ddclient.conf ====
+
+Maintenant que vous avez répondu aux questions, nous pouvons [[:tutoriel:comment_modifier_un_fichier|modifier le fichier]] « /etc/ddclient.conf » afin d'affiner les réglages.
+
+Celui-ci se présente sous cette forme :
+
+<file ddclient.conf>
+pid=/var/run/ddclient.pid 
+ssl=yes
+protocol=dyndns2            #ou zoneedit1 si vous utilisez zoneedit
+use=web
+server=members.dyndns.org   #ou dynamic.zoneedit.com si vous utilisez zoneedit
+login=identifiant
+password='motdepasse'
+nom.de.domaine              #si plusieurs nom de domaine, separez par ','
+</file>
+
+<note important>
+Si vous utilisez l'option « ''ssl=yes'' », veillez à ce que le paquet [[apt://libio-socket-ssl-perl|libio-socket-ssl-perl]] soit installé. Votre version de ddclient doit être supérieure à 3.7.0 (cf. [[http://www.dyndns.com/support/kb/using_ddclient_with_dyndns_services.html#secure|le site de DynDNS]]).</note>
+
+^ Option   ^ Signification ^       
+| ssl      | connexion sécurisé lors de l'échange avec DynDNS |
+| protocol | service utilisé pour effectuer la liaison |
+| use      | comment identifier l'adresse IP |
+| server   | serveur utilisé pour effectuer la mise à jour |
+| login    | l'identifiant pour le service |
+| password | le mot de passe pour le service |
+| wildcard | Définit si les adresses du type *.nom.de.domaine fonctionnerons |
+
+Intéressons nous à l'option **use**. Celle-ci accepte plusieurs paramètres :
+
+^ Paramètre ^ Signification ^
+| web | donne l'adresse IP à partir d'une page web (par défaut) |
+| cmd | donne l'adresse IP en exécutant une commande |
+| fw  | donne l'adresse IP en interrogeant un routeur |
+| if  | donne l'adresse IP à partir d'une interface réseau (ex. : ppp0, eth0, etc.) |
+| ip  | donne l'adresse IP à partir d'une adresse IP |
+
+Pour utiliser la plupart de ces paramètres, il vous faudra rajouter quelques lignes au fichier de configuration.
+
+Exemple d'obtention à partir d'une interface réseau :
+
+<file>
+use=if
+if=ppp0
+</file>
+
+Exemple d'interrogation d'un routeur :
+
+<file>
+use=fw
+fw=ip_du_routeur
+fw-login=identifiant_du_routeur
+fw-password=motdepasse_du_routeur
+</file>
+
+<note tip>
+Par défaut, ddclient récupère la première adresse IP qu'il trouve. Lorsque l'option **fw** est utilisée, il est possible que votre routeur ne fournisse pas la bonne. Pour palier ce problème, vous avez la possibilité de spécifier directement le modèle du routeur. Pour obtenir la liste des routeurs pris en charge par la version de ddclient installée, saisissez la commande suivante :
+
+  ddclient --help | grep use=
+
+</note>
+
+Pour vérifier que la configuration fonctionne:
+<file>
+sudo ddclient -daemon=0 -debug -verbose -noquiet
+</file>
+
+<note help>
+ddclient utilise un fichier cache en local afin d'éviter de trop solliciter le serveur (certains serveurs limitent la périodicité des mises à jour). On peut alors voir apparaître le message **skipped: IP address was already set to xxx.xxx.xxx.xxx**
+
+Il est alors nécessaire de supprimer le cache local, afin de forcer ddclient à mettre à jour le serveur :
+<file>
+sudo rm /var/cache/ddclient/ddclient.cache
+</file>
+</note>
+
+Exemple de configuration pour le service noip (fichier ddclient.conf) :
+
+<file>
+ssl=yes
+protocol=noip
+use=web, web=checkip.dyndns.com/, web-skip='Current IP Address'
+server=dynupdate.no-ip.com
+login=votrelogin
+password='motdepasse'
+votreserveur.no-ip.biz
+</file>
+==== Ajout d'un enregistrement MX à votredomaine.dyndns.org ====
+
+→ Voir l'[[wpfr>Domain_Name_System#MX_record|article Wikipédia]] pour la définition et son utilité.
+
+L'astuce ici est de créer un second enregistrement sur votre compte //dyndns.org// du style **mxvotredomaine.dyndns.org** et qui sera également mis à jour par le démon.
+
+Après avoir créé **mxvotredomaine.dyndns.org**, il vous faut [[:tutoriel:comment_modifier_un_fichier|modifier le fichier]] **/etc/ddclient.conf** de la sorte :
+
+<file>
+pid=/var/run/ddclient.pid
+protocol=dyndns2
+use=web
+#use=if; if=web
+server=members.dyndns.org
+login=votre_login
+password='votre_password'
+mx=mxvotredomaine.dyndns.org    ← Adresse de l'enregistrement MX
+backupmx=no                     ← Votre enregistrement MX est prioritaire
+votredomaine.dyndns.org,mxvotredomaine.dyndns.org    ← Mise à jour de l'adresse MX
+</file>
+
+Rechargez ensuite **ddclient** :
+
+  sudo /etc/init.d/ddclient force-reload
+
+==== Réglage complémentaire avec FreeDNS ===
+
+Si vous utilisez un sous-domaine fourni par FreeDNS, il se peut que vous soyez confronté à ce message d'erreur :
+
+> FATAL:    Error loading the Perl module Digest::SHA1 needed for freedns update.
+> FATAL:     On Debian, the package libdigest-sha1-perl must be installed.
+
+En attendant que le problème soit corrigé, il est possible de [[:tutoriel:comment_modifier_un_fichier|modifier le fichier]] **/usr/sbin/ddclient** et de remplacer « ''require Digest::SHA1'' » par « ''require Digest::SHA'' » et « ''import Digest::SHA1'' » par « ''import Digest::SHA'' ».
+
+Source : //[[http://askubuntu.com/questions/211173/how-can-i-get-ddclient-to-work-with-freedns|Ask Ubuntu : How can I get ddclient to work with FreeDNS?]]//
+
+===== Désinstallation =====
+
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. La configuration de l'application sera conservée ou supprimée selon la méthode de désinstallation que vous choisirez.
+
+===== Voir aussi =====
+
+  * [[tutoriel:comment_avoir_un_nom_de_domaine_sur_ip_dynamique_avec_no_ip|Comment avoir un nom de domaine sur une IP dynamique avec No-IP ?]]
+  * [[dns_dynamique|Les DNS Dynamiques]]
+  * [[https://sourceforge.net/p/ddclient/wiki/|Site officiel de ddclient]] **(en)**
+
+----
+
+//Contributeur principal : [[:utilisateurs:calaereb|Calaereb]].//

@@ -1,0 +1,201 @@
+
+{{tag> Virtualisation qemu dexter74 vfio}}
+----
+====== -=[ VFIO PASSTHROUGHT ]=- ======
+
+Le VFIO ((Virtual Function I/O)) PASSTHROUGH  consiste à décharger le pilote d'un matériel (Carte graphique , usb , souris ...) pour ensuite l'assigner à une machine virtuelle par exemple. \\
+Cette technique demande des pré-requis, et nécessite du matériel plus ou moins facile à réaliser. FIXME mettre en place ou il faut le fabriquer?\\
+\\
+L'intérêt du passthrough est par exemple de pouvoir bénéficier de l'accélération 3D d'une carte graphique sur la machine virtuelle, ou encore la meilleur gestion d'une souris ou un clavier spécifique sur cette machine virtuelle
+
+FIXME:
+<note> Article en cours de modification </note>
+
+
+
+
+
+===== Pré-Requis =====
+
+  * Avoir activé la Fonction **IOMMU** du Bios. (Activer le 64 bits si vous avez dans le bios)
+  * Avoir activé la Prise en compte du IOMMU par linux.
+  * Le processeur doit prendre en charge la virtualisation.
+  * Avoir deux Carte-graphiques ou 1 [[Wpfr>Accelerated_processing_unit|Apu]] et une Carte-graphique 
+  * Avoir 2 Entrées vidéo sur l'écran (1 pour le linux (host) et 1 pour la Machine virtuelle (Guest)
+  * Connaitre son matériel . (Référence des 2 GPU serait bien par exemple)
+
+===== Obtentions des Informations Matériels  =====
+ 
+Il existe 2 Types d'adresse :
+  * L'adresse de l'emplacement du matériel sur la carte-mère.
+  * L'adresse ** VendorID**:**DeviceID ** ou plus souvent appelée ** vendeur**:**périphérique ** . Celle-ci est composée de deux parties séparées par deux points **:**
+
+==== Étape 1: Vérification de la prise en charge de IOMMU / Virtualisation processeur  ====
+
+<note important>En cas d'erreur IOAPIC ou  IVRS table, il y a un Fix à appliquer dans [[:grub-pc|GRUB]].\\
+Cette page ne propose pour le moment que celui pour les processeurs **AMD**. \\
+En effet, au moment de l'écriture de cette page, son rédacteur [[:utilisateurs:dexter74]] possède uniquement cette marque</note>
+
+===  Prise en Charge de IOMMU===
+Saisissez dans un [[:terminal]] la [[:commande_bash|commande]] suivante:
+<code bash>dmesg | grep "AMD-Vi\|Intel VT-d" </code>
+
+Vous devriez obtenir 
+<code>AMD-Vi: Found IOMMU at 0000:00:00.2 cap 0x40 </code>
+Qui indique que le module IOMMU a bien été trouvé
+
+<code>AMD-Vi: Interrupt remapping enabled</code>
+L'interruption de l'assignement du matériel est activée (Enable), sans ce paramètre on ne pourra pas faire le VFIO.
+
+=== Prise en Charge de la Virtualisation === 
+Saisissez dans un [[:terminal]] la [[:commande_shell|commande]] suivante:
+<code bash>lscpu | grep "Virtualisation" </code>
+
+Devrait répondre
+<code>Virtualisation :      AMD-V</code>
+
+Tous les Pré-Requis sont donc bons.
+
+==== Étape 2: Obtentions des informations  ====
+
+<note important>Vérifier que les cartes graphiques soient installées dans le bon ordre sur la carte-mère.
+  * **Port PCI Express 1:** Carte graphique réservée au système d'exploitation Linux. (**__HOST__**)
+  * **Port PCI Express 2:** Carte graphique pour le système d'exploitation invité . (**__GUEST__** / Windows) 
+</note>
+
+Lister tout, en saisissant dans un [[:terminal]] la [[:commande_shell|commande]] suivante:
+
+<code bash>lspci -nnv | grep "VGA\|Audio\|Kernel driver in use: snd_hda_intel\|Kernel driver in use: nouveau\|Kernel driver in use: nouveaufb\|Kernel driver in use: radeon"</code>
+
+Nvidia inclus: FIXME: Autant ne proposer que cette ligne, non?
+<code bash>lspci -nnv | grep "VGA\|Audio\|Kernel driver in use: snd_hda_intel\|Kernel driver in use: nouveau\|Kernel driver in use: nvidia\|Kernel driver in use: nouveaufb\|Kernel driver in use: radeon"</code>
+
+:!: La Sortie HDMI à une seconde adresse VendorID:DeviceID :!:
+
+^   Slots	^  Type		^	Désignation	  ^ VendorID:DeviceID     ^ Kernel Driver	        ^ Notes		   |
+|  00:14.2	| Audio device	| AMD/ATI Intel HDA |	1002:4383	 	| snd_hda_intel	| Carte-mère	   |
+|  01:00.0	| VGA (GPU)	| GTX-260		  | 	10de:05e2		| nouveau		        | Linux (HOTE)	   |
+|  02:00.0	| VGA (GPU	| R9-270x (Video)	  | 	1002:6810		| radeon		        | VFIO (GUEST) |
+|  02:00.1	| Audio HDMI1	| R9-270x (HDMI)	  |	1002:aab0		| snd_hda_intel	| VFIO (GUEST) |
+|  02:00.1	| Audio HDMI2	| R9-270x (HDMI)	  |	1043:aab0       	| snd_hda_intel	| VFIO (GUEST) |
+
+Ici la carte graphique est branchée en HDMI et donc les signaux Vidéo / Son ont été séparés.\\
+On ne pourra pas interdire le pilote ** " snd_hda_intel" ** car il est présent sur la carte son lié à la fois à la carte-mère et à la sortie son inclus dans le HDMI. (Sortie HDMI) 
+
+==== Étape 3: Activation des Modules  ====
+
+  - Connaitre la marque de son processeur: <code>
+lscpu | grep name</code>
+  - [[:tutoriel:comment_modifier_un_fichier|Éditer]] avec les droits d'administration le fichier **/etc/modules** pour y supprimer le module kvm_XXX qui ne correspond pas à votre processeur.<file>pci_stub
+vfio
+vfio_iommu_type1
+vfio_pci
+kvm
+kvm_amd 
+kvm_intel  <-- effacer cette ligne par exemple si vous avez un processeur AMD
+</file>  
+  - Mettre à jour le chargement des modules: <code>sudo update-initramfs -u </code>  
+
+==== Étape 4: Redémarrage et vérification ====
+
+Après avoir redémarré votre machine, vérifiez la bonne mise en place du vfio en saisissant dans un [[:terminal]]:
+<code bash>
+lspci -v | grep "VGA\|Audio\|Kernel driver in use: snd_hda_intel\|Kernel driver in use: nouveau\|Kernel driver in use: nouveaufb\|Kernel driver in use: radeon\|Kernel driver in use: vfio-pci"
+</code>
+Vous devriez obtenir un tableau proche de:
+
+^   Slots	^  Type		^	Désignation	  ^ VendorID:DeviceID     ^ Kernel Driver	        ^ Notes		  |
+|  00:14.2	| Audio device	| AMD/ATI Intel HDA |	1002:4383	 	| snd_hda_intel	| Carte-mère	   |
+|  01:00.0	| VGA (GPU)	| GTX-260		  | 	10de:05e2		| nouveau		        | Linux (HOTE)	   |
+|  02:00.0	| VGA (GPU	| R9-270x (Video)	  | 	1002:6810		| vfio-pci		        | VFIO (GUEST) |
+|  02:00.1	| Audio HDMI1	| R9-270x (HDMI)	  |	1002:aab0		| vfio-pci		        | VFIO (GUEST) |
+|  02:00.1	| Audio HDMI2	| R9-270x (HDMI)	  |	1043:aab0       	| snd_hda_intel	| VFIO (GUEST) |
+
+Ici on peut voir que le "**Kernel __Driver__**" est "**vfio-pci**". 
+
+:!: Ignorer le "**Kernel __Modules__** :!:
+
+===== VFIO =====
+
+^   Slots	^  Type		^	Désignation	  ^ VendorID:DeviceID     ^ Kernel Driver	        ^ Notes		   |
+|  00:14.2	| Audio device	| AMD/ATI Intel HDA |	1002:4383	 	| snd_hda_intel	| Carte-mère	   |
+|  01:00.0	| VGA (GPU)	| GTX-260		  | 	10de:05e2		| nouveau		        | Linux (HOTE)	   |
+|  02:00.0	| VGA (GPU	| R9-270x (Video)	  | 	1002:6810		| vfio-pci		        | VFIO (GUEST) |
+|  02:00.1	| Audio HDMI1	| R9-270x (HDMI)	  |	1002:aab0		| vfio-pci		        | VFIO (GUEST) |
+|  02:00.1	| Audio HDMI2	| R9-270x (HDMI)	  |	1043:aab0       	| Encoursderedaction	| VFIO (GUEST) |
+
+FIXME Mise en forme
+<note help>#################### **/etc/modprobe.d/vfio.conf** #################### 
+   Exemple 
+<file>options vfio-pci ids=1002:6810,1002:aab0 ,1043:aab0
+  #vfio-pci ids=<ADRESSE VendorID:DeviceID><Virgule><ADRESSE VendorID:DeviceID> 
+  #Aucune Guillemet 
+  #Exemple: 1002:6810 (R9-270x - GPU ) , 1002:aab0 (R9-270x - HDMI1) , 1043:aab0 (R9-270x - HDMI2)
+  options vfio-pci ids=1002:6810,1002:aab0,1043:aab0
+</file>
+</note>
+
+<note help>#################### **/etc/vfio-pci.cfg** ####################
+  Exemple
+ <file> DEVICES="0000:02:00.0 0000:02:00.1"
+#Attention au Guillemet (Début et fin de toutes les adresse)
+#Chaque début d'adresse commence par __**0000:**__ (Attention au : après les 0000)
+#Un espace entre chaque adresse (sauf la première collé à la guillemet)
+ </file>
+</note>
+
+===== FIX IOMMU =====
+
+==== AMD ====
+<code bash >dmesg | grep AMD-Vi</code>
+<code>
+[0.251399] [Firmware Bug]: AMD-Vi: IOAPIC[9] not in IVRS table          <= SouthBridge Inconnus (Erreur 9) \\
+[0.251403] [Firmware Bug]: AMD-Vi: IOAPIC[10] not in IVRS table         <= Northbridge Inconnus (Erreur 10) \\
+</code>
+L'erreur 9 correspond au SMBus et l'erreur 10 au IOMMU.
+
+<code bash>lspci | grep "SMBus\|IOMMU"</code>
+
+^ Slot    ^ Type     ^ Désignation     ^ Code Erreur   ^Base           ^Erreur     ^ Slot |
+|00:00.2 | IOMMU | Advanced Micro Devices, Inc. [AMD/ATI] RD990 I/O Memory Management Unit | 10 | ivrs_ioapic  |  [10]=      |  00:00.2    | 
+|00:14.0 | SMBus  | Advanced Micro Devices, Inc. [AMD/ATI] SBx00 SMBus Controller (rev 42)        | 9 | ivrs_ioapic  |  [9]=        |  00:14.0    | 
+
+<code>ivrs_ioapic[9]=00:14.0 ivrs_ioapic[10]=00:00.2</code>
+
+**Éditer /etc/default/grub** (Modifier la ligne selon votre cas) pour remplacer la ligne
+<file>GRUB_CMDLINE_LINUX_DEFAULT="quiet splash" </file>
+par
+<file>GRUB_CMDLINE_LINUX_DEFAULT="quiet splash ivrs_ioapic[9]=00:14.0 ivrs_ioapic[10]=00:00.2"</file>
+en adaptant selon le résultat obtenu précédemment
+
+Ensuite faire un :
+ <code>update-grub</code>
+Redémarrer
+
+==== Intel ====
+FIXME 
+  
+===== Vérification Finale =====
+<code bash>dmesg | grep "Found IOMMU\|remapping\|vfio"</code>
+<code>
+[    1.597597] AMD-Vi: Found IOMMU at 0000:00:00.2 cap 0x40
+[    1.597598] AMD-Vi: Interrupt remapping enabled   
+[    1.597712] AMD-Vi: Lazy IO/TLB flushing enabled
+</code>    
+
+FIXME Manque quelques infos. En cours
+
+===== Script VFIO avec Qemu (Samba & Synergy) =====
+
+[[http://pastebin.com/1uxiBfx6|Script qemu (Samba / Synergy)]]
+
+Fix Synergy: (Bouton Suivant / Précédent / touch alt+gr)
+
+Éditer le fichier **synergy.conf** FIXME Chemin exact
+  * Dans la section "screens" de la machine virtuelle ajouter en bas.<file>altgr = alt</file>
+  * Dans la section "options" de la machine virtuelle ajouter en bas.<file>
+mousebutton(6) = keystroke(WWWBack)
+mousebutton(7) = keystroke(WWWForward) </file>
+
+----
+//Contributeurs: [[:utilisateurs:dexter74]] //

@@ -1,0 +1,156 @@
+
+{{tag>lecteur_audio}}
+
+----
+
+====== MPD, Music Player Daemon ======
+
+**MPD** est un lecteur de musique utilisant une architecture client-serveur. Le serveur va agir en tant que daemon (ou service) et s'occuper de lire la musique sur l'ordinateur sur lequel il est installé et garder en mémoire la liste de lecture. Le [[:mpd_client|client mpd]] permet de construire sa playlist, de la contrôler et de voir les morceaux joués. Il n'est pas obligatoire que le client soit lancé pour que mpd puisse continuer à fonctionner normalement. Il est aussi possible d'ouvrir plusieurs clients simultanément sur autant de machines qu'on le souhaite. Les avantages liés a un tel fonctionnement sont entre autre la légèreté du programme puisque seul le serveur doit être actif pour jouer la musique et la modularité des clients puisqu'ils sont indépendants. Il existe des dizaines de clients différents et ceci sur des plate-formes extrêmement variées; des outils en ligne de commande aux interfaces graphiques plus ou moins complètes en passant par les librairies permettant de piloter mpd via une page web ou les applications pour téléphone portable.
+
+===== Installation & Configuration =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt://mpd|mpd]]**.
+
+Il vous faut maintenant [[:tutoriel:comment_editer_un_fichier|éditer le fichier]] de configuration **/etc/mpd.conf** :
+
+Si vous souhaitez que votre serveur mpd ne soit pas limité a la machine hôte, commentez la ligne 
+
+  bind_to_address                 "localhost"
+
+Pour contrôler le volume de mpd indépendamment des autres applications utilisant le son, dé-commentez la ligne :
+
+  mixer_type			"software"
+
+Il vous faut maintenant redémarrer mpd pour que les modifications prennent effets.
+
+  sudo /etc/init.d/mpd restart
+
+Ou pour créer ou mettre a jour votre bibliothèque musicale, si votre client ne le permet pas :
+
+  sudo /etc/init.d/mpd force-restart
+
+Vous pouvez suivre la progression de la création de la bibliothèque dans le log grâce à cette commande :
+
+  tail -f /var/log/mpd/mpd.log
+
+
+Allez jeter un coup d'oeil à la page "[[:mpd_client|Les principaux clients]]" ou sur le [[http://www.musicpd.org/clients/|site officiel]] pour vous choisir un client :-)
+
+== Astuce ==
+
+Pour utiliser [[http://www.last.fm|Audioscrobbler]] avec mpd, il existe plusieurs solutions : [[http://www.frob.nl/scribble.html|mpdscribble]] (disponible dans les dépôts), [[http://codingteam.net/project/scrobd|scrobd]], et enfin [[http://unkart.ovh.org/scrobby|scrobby]] par l'auteur du client mpd [[http://unkart.ovh.org/ncmpcpp/|ncmpcpp]].
+
+==== Utiliser mpd avec un compte utilisateur sans privilèges  ====
+
+Si la configuration par défaut de mpd ne vous convient pas et que vous souhaitez lancer le serveur mpd avec votre compte habituel, cette méthode vous expliquera comment procéder.
+
+Il est d'abord nécessaire de désactiver le service mpd qui est configuré lors de l'installation :
+
+  sudo update-rc.d -f mpd remove
+
+Puis arrétez le service qui est actuellement lancé.
+
+  sudo /etc/init.d/mpd stop
+
+Effectuez une copie du fichier de configuration dans votre dossier personnel et affectez lui les droits pour votre utilisateur:  
+
+  sudo cp /etc/mpd.conf ~/.mpdconf
+  sudo chown utilisateur:utilisateur ~/.mpdconf
+
+Créez les dossiers et fichiers nécessaires pour permettre a mpd de fonctionner :
+
+  mkdir -p ~/.mpd/playlists
+  cd ~/.mpd
+  touch mpd.log mpd.db mpd.error state
+
+Modifiez les paramètres suivants dans le fichier ~/.mpdconf (pensez à adapter le chemin vers la racine de votre dossier de musiques) : 
+
+  port			  "6600"
+  music_directory         "/dossier/contenant/votre/musique"
+  playlist_directory      "~/.mpd/playlists"
+  db_file                        "~/.mpd/mpd.db"
+  log_file                       "~/.mpd/mpd.log"
+  error_file                    "~/.mpd/mpd.error"
+  pid_file                       "~/.mpd/pid"
+  state_file                    "~/.mpd/state"
+
+
+Trouvez la ligne ci dessous et commentez la (en faisant cela, mpd va se lancer avec le compte utilisateur courant)
+  user                            "mpd"
+
+Le serveur est ensuite lancé avec la commande 
+  mpd
+  
+Il est arrêté avec :
+  mpd --kill 
+
+Vous pouvez ensuite construire votre bibliothèque musicale avec un client qui possède cette fonctionnalité ou avec la commande (uniquement pour les version 0.15.x, à partir des versions 0.16.x, cette commande n'existe plus, la base de donnée est créée au premier démarrage de mpd) :
+  mpd --create-db
+
+Si vous ne souhaitez plus utiliser cette méthode et que vous voulez revenir a un service système, vous pouvez le réactiver avec la commande suivante :
+
+  sudo update-rc.d mpd start 30 2 3 4 5 . stop 14 0 1 6 .
+
+Pour passer immédiatement de la méthode par utilisateur au service système lancez :
+
+  mpd --kill
+  sudo /etc/init.d/mpd start
+  
+==== Connexion en SSH : MPD + Client(s) ====
+
+Je ne parlerai pas de la configuration de votre Tunnel SSH, vous trouverez toutes
+les informations nécessaires et plus encore [[:ssh |ici]].
+
+La situation est celle-ci : une machine serveur faisant fonctionner MPD et une machine
+cliente. Par défaut, MPD écoute les connexions sur le port 6600.
+Il suffit donc d'établir une connexion SSH avec la machine cliente :
+
+     ssh -L 6600:localhost:6600 utilisateur@hote
+
+et de connecter vos clients MPD en localhost.
+
+==== Configurer le serveur de streaming audio HTTP de MPD ====
+
+MPD inclut depuis Karmic un serveur de streaming qui permet d'écouter sa musique sur un autre ordinateur ou un smartphone, en déplacement ou sous sa douche.
+voir la page dédiée :
+
+[[tutoriel:configurer le serveur de streaming audio http de mpd]]
+
+==== Lire de la musique présente sur la Freebox Révolution depuis son ordinateur via MPD ====
+
+__Prérequis__ : MPD fonctionnel et avoir monté le disque dur de la Freebox Révolution ([[:freeboxv6|Installation du disque réseau de la Freebox Server à chaque démarrage]]).
+
+Créer un nouveau profil en indiquant  
+  * l'adresse IP de l'ordi (penser à lui attribuer une IP fixe)
+  * Indiquer l'adresse du répertoire de musique sur la Freebox.
+__Exemple__ : avec l'interface graphique GMPC 
+{{:mpd:mpd.png?400|}}
+
+Redémarrer MPD et mettez la base de données à jour.
+===== Résolution de problèmes =====
+==== Pas de son avec pulse ====
+Dans le cas où vous utilisez le serveur de son [[pulseaudio|pulse audio]] et un démon lancé avec l'user "mpd", il arrive que mpd fonctionne mais que vous n'entendiez rien. Aucun son ne sort. C'est parfois un comportement aléatoire.
+La solution réside dans les droits d'accès à pulse par mpd. L'user mpd doit appartenir aux groupes audio, pulse, pulse-acess.
+Entrez alors dans une console :
+<code>$ sudo gpasswd -a mpd pulse-access
+$ sudo gpasswd -a mpd pulse
+$ sudo gpasswd -a mpd audio
+</code>
+puis redémarrer mpd <code>sudo /etc/init.d/mpd restart</code>
+(il se peut qu'il faille redémarrer l'ordinateur pour recharger le profile de mpd et ses nouveaux groupes)
+
+sur ce sujet voir ces topics sur [[http://www.ubuntugeek.com/how-to-setup-mpd-with-pulseaudio-independent-on-x.html|ubuntugeek]] et [[http://mpd.wikia.com/wiki/PulseAudio#An_alternate_solution_for_fixing_access_rights|mpd community wiki ]]
+===== Voir aussi =====
+
+  * [[:tutoriel:configurer_le_serveur_de_streaming_audio_http_de_mpd|Tutoriel : Configurer MPD]]
+  * [[:mpd_client|Clients MPD]]
+  * [[:mpd:hardy| Manipulations spéciales a effectuer sur Ubuntu 8.04]] FIXME
+  * [[:mpd_client| Liste des principaux clients mpd]]
+  * [[http://mpd.wikia.com/wiki/Getting_Started|Getting Started sur le Wiki officiel]]
+  * [[https://help.ubuntu.com/community/MPD|Wiki Ubuntu Anglais]]
+  * [[http://sorrodje.alter-it.org/index.php?article36/serveur-de-musique-ubuntu-mpd-alsa| Exemple d'installation de MPD sur Ubuntu server 12.04]]
+  * [[http://fluoblog.wordpress.com/2008/02/13/mpd-music-player-daemon-conf/| Billet expliquant comment utiliser mpd avec un compte utilisateur normal]]
+----
+
+//Contributeurs principaux : [[:utilisateurs:Elerosse]], [[:utilisateurs:goebi2k]], [[:utilisateurs:TMS]], [[:utilisateurs:Ethanfel]], [[:utilisateurs:banana.boy]], [[:utilisateurs:Mathieu Comandon]] .//
+

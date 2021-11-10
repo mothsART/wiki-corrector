@@ -1,0 +1,665 @@
+
+{{tag>Trusty Xenial réseau serveur sécurité sauvegarde }}
+----
+{{ :image:backuppc-logo.gif?80|}}
+====== Serveur de sauvegarde automatique : BackupPC ======
+**BackupPC** est un logiciel libre de [[:sauvegarde|sauvegardes]] de données informatiques, publié sous licence GPL.\\
+Il permet d'assurer une politique de sauvegardes "versionnées" pour des clients de différents types (Unix, GNU/Linux, Windows, Mac)
+
+**BackupPC** est utilisé pour sauvegarder un ensemble de postes. Il possède une interface Web pour configurer, lancer des sauvegardes ou restaurer des fichiers. Il est également possible de sauvegarder des bases de données.
+
+BackupPC permet de sauvegarder automatiquement à des intervalles de temps réguliers des répertoires situés sur des machines du réseau.
+
+[[http://backuppc.sourceforge.net/faq/BackupPC.html#overview|Il peut également faire beaucoup plus…]] même s'il a quelques [[http://backuppc.sourceforge.net/faq/limitations.html|limites]]. 
+
+BackupPC peut utiliser plusieurs protocoles pour les sauvegardes :
+  * [[:Samba]] : Utilise le logiciel //SmbClient// pour le transfert des données. C'est un bon choix pour sauvegarder des machines sous Windows.
+  * [[:rSync]] : Utilise le logiciel //RSync// pour le transfert des données. C'est un bon choix pour sauvegarder des machines sous Linux, sous Mac ou sous windows.
+  * [[http://www.samba.org/ftp/rsync/rsyncd.conf.html|rSyncd]] : Utilise le //daemon// « rsyncd » installé sur chaque client. C'est un bon choix pour sauvegarder des machines sous Linux et sous Windows.
+  * [[:Tar]] : Utilise le logiciel Tar. C'est un bon choix pour sauvegarder des machines sous Linux.
+
+Sauf pour [[:Samba]], Backuppc utilise [[:SSH]] pour faire les transferts.
+
+==== Politique de sauvegarde par défaut ====
+=== Sur le serveur ===
+Le logiciel se réveille toutes les heures pour sonder l'ensemble des machines spécifiées dans le fichier **/etc/backuppc/hosts**.\\
+Puis, pour chaque poste allumé, il fonctionne ainsi :
+  * Interrogation de la période du Blackout: si l'hôte est dans sa période d'exctinction, le serveur passe à la machine suivante. Ce qui peut être bien pratique pour des machines nomades.
+  * Sinon, il étudie la machine hôte.
+
+=== Pour chaque machine cliente===
+BackupPC examine les dates des dernières sauvegardes effectuées:
+  * Si la date de dernière sauvegarde complète a plus de trente jours, il en fait une nouvelle.
+  * Sinon il regarde la date de la dernière sauvegarde incrémentielle. Si celle-ci a plus d'un jour, il lance une sauvegarde incrémentielle.
+
+S'il y a plus de dix-neuf sauvegardes incrémentielles, il supprime les plus anciennes de manière à ce qu'il n'en reste que dix-neuf (limitation de l'espace disque consommé).
+
+===== Installation =====
+Backuppc est [[http://sourceforge.net/apps/mediawiki/backuppc/index.php?title=Supporting_distros|supporté]] par un bon nombre de [[wpfr>Linux#Distributions|distributions linux]].\\
+Étant disponible dans les [[:dépôts]] de chaque [[:versions|versions d'Ubuntu]], il suffira d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>backuppc|backuppc]]** [[http://packages.ubuntu.com/search?keywords=backuppc&searchon=names&suite=all&section=all|correspondant]] sur votre serveur de sauvegarde, puis de vous laissez guider.
+
+=== Backuppc sous Ubuntu utilisera par défaut: === 
+  * [[:postfix]] pour envoyer des mails.\\ Le [[:postfix_systeme_satellite|mode satellite]] peut vous convenir.
+  * [[:Apache2]] pour fournir l'interface Web.\\ L'utilisation de ce dernier permet une configuration automatique.
+
+=== Une fenêtre debconf doit apparaître durant l'installation :===
+
+{{:utilisateurs:capture-debconf-backuppc.png?500}}
+
+  * soit vous notez soigneusement le mot de passe attribué automatiquement à l'utilisateur backupPC
+  * soit vous préférez le modifier à l'aide de cette commande: <code>sudo htpasswd /etc/backuppc/htpasswd backuppc</code>
+
+<note>
+Pour générer le mot de passe et le stocker vous pouvez utilisez par exemple [[:KeepassX]].
+</note>
+
+=== Ajout de l'utilisateur dans le groupe backuppc :===
+Pour démarrer backuppc, il faut ajouter l'utilisateur de la session dans le groupe backuppc. Pour cela, il faut exécuter la ligne de commande suivante : <code>sudo adduser [MON_USER] backuppc</code>
+
+=== Ajout du fichier apache.conf ===
+Comme l'installation ne copie pas le **/etc/backuppc/apache.conf** sur le serveur apache2, il faut le faire soi-même en copiant le fichier dans le répertoire **/etc/apache2/sites-available/** avant de rendre actif le site, pour cela utilisez la commande suivante : <code>sudo cp /etc/backuppc/apache.conf /etc/apache2/sites-available/backuppc.conf</code>
+Puis activez le site : <code>sudo a2ensite backuppc.conf</code>
+  
+<note>
+Le fichier de configuration a été renommé en backuppc.conf, ce qui permet de l'identifier plus facilement parmi les autres fichiers.
+</note>
+  * Un redémarrage du serveur web est nécessaire pour prendre en compte les modifications.
+<code>sudo /etc/init.d/apache2 restart</code>
+
+===== Utilisation =====
+=== Connexion à l'interface Web ===
+
+Les versions récentes (>=3) de BackupPC permettent notamment de modifier la plupart des options de configuration directement depuis l'interface Web. Il suffit à l'aide d'un [[:navigateur]] internet d'aller à l'adresse  **%%http://<serveur>/backuppc/%%**((<serveur> sera à remplacer par l'adresse IP de la machine faisant office de serveur de sauvegarde)). \\
+Ensuite, il faut entrer « backuppc » en nom d'utilisateur et le mot de passe correspondant.\\
+
+===== Configuration générale =====
+Backuppc fonctionne avec la notion de [[wpfr>Client-serveur|Client/Serveur]]. La machine serveur pouvant bien entendu être aussi un client.\\
+
+La configuration peut se faire en modifiant les options dans le fichier **/etc/backuppc/config.pl**.\\
+Néanmoins ici, il sera principalement fait usage de [[#connexion à l'interface web|l'interface web]]
+
+<note important>
+Il vous faudra adapter les termes <client> et <serveur> à votre architecture en les remplaçant par les adresses IP, les [[wpfr>FQDN]] ou les noms hosts correspondants.
+</note>
+
+==== Mettre l'interface en français ====
+=== Par l'interface web ===
+Depuis le menu //Serveur -> Modifier la configuration -> CGI -> Language //\\
+Depuis le menu //Server -> Edit config -> CGI -> Language //
+
+=== En ligne de commandes ===
+[[:tutoriel:comment_modifier_un_fichier|Modifier avec les droits d'administration]] l'option dans le fichier 
+<file perl  /etc/backuppc/config.pl>
+ $Conf{Language} = 'en'; 
+</file>
+pour obtenir
+<file perl  /etc/backuppc/config.pl>
+ $Conf{Language} = 'fr'; 
+</file>
+
+=== Modifier la configuration pour toutes vos machines ===
+Depuis le menu //Serveur -> Modifier la configuration //
+
+=== Puis affiner pour chacune d'entre elle ===
+Depuis //Hôtes -> //
+
+==== Où sont sauvegardées les données ? ====
+=== Par défaut ===
+Les données sont sauvegardées dans des sous-répertoires de **/var/lib/backuppc** 
+
+=== Changer le lieu de stockage ===
+Cela n'est bien sûr pas obligatoire, mais cela peut-être pratique de ne pas laisser vos données dans le dossier **/var**.
+
+== Avec un lien symbolique == 
+<note tips>
+En utilisant un [[wpfr>lien_symbolique|un lien symbolique]] vous ne risquerez pas de problème lié à l'écrasement du fichier de configuration lors d'une mise à jour.
+</note>
+  * stopper le [[:services|service]] backuppc: <code>sudo service backuppc stop</code>
+  * créer votre répertoire de destination au préalable: <code>sudo mkdir /<le_chemin/repertoire_destination>/backuppc/</code>
+  * copiez-y ce qui se trouve dans **/var/lib/backuppc**:<code>sudo rsync -va /var/lib/backuppc /<le_chemin/repertoire_destination>/</code>
+  * assurer vous que les [[:droits]] sur les fichiers et répertoires sont les mêmes.
+  * supprimer ou déplacer (au cas où) le répertoire **/var/lib/backuppc**
+  * créer votre [[wpfr>lien_symbolique|lien symbolique]]: <code>sudo ln -s /<le_chemin/repertoire_destination>/backuppc /var/lib/backuppc</code>
+  * corriger le propriétaire du lien: <code>sudo chown -h backuppc:backuppc /var/lib/backuppc</code>
+  * Il ne reste plus qu'a relancer backuppc: <code>sudo service backuppc start</code>
+
+===== Configurer les sauvegardes =====
+Vous trouverez dans cette section les différents types de sauvegardes testés par les contributeurs. N'hésitez pas à y ajouter votre méthode s'il n'y est pas déjà listé.
+  * [[#Sauvegarder un répertoire local via tar]]
+  * [[#Sauvegarde du poste local sur un disque dur externe USB]]
+  * [[#Sauvegarder un poste Linux distant via rsync (ssh)]]
+  * [[#Sauvegarder un poste Mac OS distant via ssh]]
+  * [[#Sauvegarder des postes Windows via « rsyncd »]]
+  * [[#Sauvegarder des PC éteints]]
+
+===== Sauvegarder un répertoire local via tar =====
+
+[[#Connexion à l'interface Web|Se connecter à l'interface web]] et depuis les menus :
+  - //Serveur -> Modifier la configuration -> Machine// : vérifier que la machine (host) "localhost" existe bien, avec "backuppc" comme user((utilisateur))
+  - //Hôtes// -> choisir //Localhost// dans la liste déroulante
+  - //localhost -> Modifier la configuration -> xfer -> XferMethod -> choisir "tar", "TarShareName" //: indiquer le chemin à sauvegarder et cliquer sur //insérer -> Sauvegarder //(apparaît en rouge)
+  - //localhost -> localhost Accueil -> Démarrer la sauvegarde complète//
+  - //localhost -> Explorer les sauvegardes//: vérifiez ici que ça a fonctionné.
+
+Par défaut cette sauvegarde sera dans **/var/lib/backuppc/pc/localhost**
+<note important>En faisant comme ça, je n'ai obtenu qu'une erreur Tar 512. Je crois qu'elle est due aux droits d'accès. Pour y remédier, j'ai donc ajouté<code>backuppc ALL=NOPASSWD: /bin/tar</code> au fichier /etc/sudoers et mis /usr/bin/sudo devant la commande Tar de backuppc (Modifier la configuration -> Xfer -> TarClientCmd. Ma commande complète est : <code>/usr/bin/sudo LC_ALL=C $tarPath -c -v -f - -C $shareName+ --totals</code></note>
+
+===== Sauvegarde du poste local sur un disque dur externe USB =====
+
+  * Formater le disque dur USB  par exemple en EXT3 ou [[:EXT4]]. \\ Vous pouvez effectuer cette manipulation depuis le menu //Système -> Administration -> Éditeur de partitions// ou par exemple avec [[:Gparted]].
+  * Changer le lieu de stockage avec un lien symbolique comme indiqué au paragraphe [[backuppc#ou_sont_sauvegardees_les_donnees|Où sont sauvegardées les données ?]], le répertoire de destination étant sur le disque dur externe (par exemple /media/disk/sauvegardes/backuppc/).
+  * Modifier les horaires de sauvegarde pour éviter qu'il ne sauvegarde automatiquement quand le disque est débranché\\ //localhost -> Modifier la configuration -> Horaires//
+
+===== Sauvegarder un poste Linux distant via rsync (ssh) =====
+
+La sauvegarde se faisant au travers de [[:ssh]], il faut [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>openssh-server|openssh-server]]** sur le poste à sauvegarder.
+
+De plus, il est nécessaire que l'utilisateur Backuppc puisse se connecter en SSH sur les postes clients.\\
+Pour se faire, vous avez le choix entre 2 méthodes:
+  - La [[#methode_standard|méthode standard]] qui utilise le compte [[:root]] désactivé par défaut sur Ubuntu.\\ 
+  - Une [[#methode_avec_sudo|méthode alternative]], basé sur le compte backup et l'usage de sudo, utilisable avec toute distribution ayant [[:sudo|sudo]].
+
+<note>
+Si vous avez plusieurs clients vous pouvez utiliser le très pratique [[:cssh]]
+</note>
+
+==== Méthode standard ====
+Plus simple à mettre en place. (([[http://backuppc.sourceforge.net/faq/ssh.html|la page ssh de la FAQ backuppc]]))
+
+{{:image:backuppc:backuppc-rsync-root.png?nolink&400|}}
+
+=== Manipulations sur le serveur de sauvegarde.===
+  * Passer en utilisateur "backuppc" <code>sudo -i -u backuppc</code>
+  * Mettez en place un système de [[:ssh#authentification_par_un_systeme_de_cles_publiqueprivee|clé publique/clé privée]] à savoir:
+    * Générer le couple clef publique et clef privée sans mettre de mot de passe <code>ssh-keygen -t rsa -b 2048</code>
+    * Vérifier que la clé est bien générée <code>cat ~/.ssh/id_rsa.pub</code>
+    * et que ses droits sont corrects <code>ls -la ~/.ssh/</code><code>drwxr-xr-x 2 backuppc backuppc 4096 2011-07-17 17:19 .
+drwxr-x--- 8 backuppc backuppc 4096 2011-07-21 13:57 ..
+-rw------- 1 backuppc backuppc 1671 2011-07-17 17:10 id_rsa
+-rw-r--r-- 1 backuppc backuppc  397 2011-07-17 17:10 id_rsa.pub
+-rw-r--r-- 1 backuppc backuppc 4862 2011-07-17 19:58 known_hosts</code> Si les [[:droits]] ne sont pas corrects, utiliser la commande **chmod** pour [[:permissions#en_ligne_de_commande|modifier les permissions]]
+
+
+=== Manipulations sur les postes clients.===
+== Placer la clef publique==
+  * Créer le répertoire **/root/.ssh** si il n'existe pas encore.
+  sudo mkdir /root/.ssh
+  * [[:tutoriel:comment_modifier_un_fichier|Editer le fichier]] **/root/.ssh/authorized_keys** avec les droits d'administration <code> sudo vim /root/.ssh/authorized_keys </code>
+  * Ajouter dans le fichier, la clef publique de l'utilisateur "backuppc" [[#Manipulations sur le serveur de sauvegarde|précédemment générée]] ((donc visible dans le fichier **id_rsa.pub** du [[:fichier_caché|répertoire caché]] **.ssh** dans le __Dossier Personnel du **serveur** de backup__)). //(Vous pouvez par exemple éditer les deux fichiers et  faire un simple copier/coller.)//
+  * Pour plus de sécurité, rajouter au début du fichier la directive <file>from="serveur"</file>
+  * Vous devriez désormais avoir: 
+  * Sous le compte root
+<code>
+sudo -i
+cat ~/.ssh/authorized_keys
+from="serveur" ssh-rsa AAAAB3N123456789xyz.......== backuppc@serveur
+</code>
+
+== Configuration de sshd==
+[[:tutoriel:comment_modifier_un_fichier|Modifier avec les droits d'administration]] le fichier **/etc/ssh/sshd_config**
+<file bash **/etc/ssh/sshd_config**>
+PermitRootLogin without-password
+</file>
+Avec cette directive les connexions SSH de **root** ne seront pas possible avec un mot de passe (qui par défaut  n'est pas utilisé sous Ubuntu)
+
+Seul les connexions utilisant une authentification par clef seront possible, et uniquement de l'adresse du serveur si la directive ''from='' est utilisée dans le fichier ** authorized_keys**.
+
+Il sera donc possible de paramétrer indépendamment les possibilités d'authentification via SSH des autres utilisateurs. Il ne faudra cependant pas oublier d'ajouter **root** en cas d'usage des directives ''AllowUsers'' ou ''AllowGroups''.
+
+=== Test de connexion SSH===
+Depuis le __serveur__ de sauvegarde, tenter une première connexion ssh vers le poste à sauvegarder pour l'utilisateur "backuppc".
+<code>
+sudo -i -u backuppc
+ssh root@client</code>
+Répondre "yes", ce qui ajoutera votre client à la liste des //known hosts//((hôtes connus)).
+
+==== Méthode avec sudo ====
+
+{{:image:backuppc_rsync.png?400nolink|}}
+
+=== Manipulations sur le serveur de sauvegarde===
+Cette partie est commune  à la [[#Manipulations_sur_le_serveur_de_sauvegarde.|méthode standard]]
+=== Manipulations sur les postes clients===
+Nous allons utiliser le compte "backup". Ce compte est pré-existant sous Ubuntu selon la norme [[wpfr>Filesystem_Hierarchy_Standard|FHS ]]. Comme on peut le voir dans ** /etc/passwd **, le répertoire personnel de cet "utilisateur" est /var/backups.
+
+
+== Placer la clef publique.==
+Pour chacun des clients:
+  * Créer le répertoire **.ssh** dans le Dossier Personnel <code>sudo mkdir /var/backups/.ssh</code>
+  * [[:tutoriel:comment_modifier_un_fichier|Editer le fichier]] **/var/backups/.ssh/authorized_keys** avec les droits d'administration <code> sudo vim /var/backups/.ssh/authorized_keys </code>
+  * Ajouter dans le fichier, la clef publique de l'utilisateur "backuppc" [[#Manipulations sur le serveur de sauvegarde|précédemment générée]] ((donc visible dans le fichier **id_rsa.pub** du [[:fichier_caché|répertoire caché]] **.ssh** dans le __Dossier Personnel du **serveur**__)). //(Vous pouvez par exemple éditer les deux fichiers et  faire un simple copier/coller.)//
+  * Pour plus de sécurité, rajouter au début du fichier la directive <file>from="serveur"</file>
+  * Vous devriez désormais avoir: 
+  * Sous le compte backup
+<code>
+sudo -i -u backup 
+cat ~/.ssh/authorized_keys
+from="serveur" ssh-rsa AAAAB3N123456789xyz.......== backuppc@<serveur>
+</code>
+
+== Configuration de sshd.==
+
+[[:tutoriel:comment_modifier_un_fichier|Modifier avec les droits d'administration]] le fichier **/etc/ssh/sshd_config** pour indiquer qu'il n'y pas besoin d'autoriser root, ni des connexions par mot de passe pour vos sauvegardes.
+<file bash /etc/ssh/sshd_config>
+PermitRootLogin no
+</file>
+
+== Configuration de sudo.==
+
+À l'aide de [[:sudoers|visudo]] mettez dans le fichier sudoers :
+<file bash>
+backup ALL=NOPASSWD: /usr/bin/rsync
+</file>
+
+
+Ceci donnera à l'utilisateur "backup" le droit [[:sudo]] pour lancer [[:rsync]] sans demande de mot de passe.
+
+Pour pouvoir mener à bien cette opération, il faut revenir à un utilisateur qui ait les droits sudo, en fait à l'utilisateur que vous étiez avant de passer à l'utilisateur backup.
+Pour cela :
+<code>exit</code>
+puis simplement :
+<code>sudo visudo</code>
+
+
+=== Test de connexion SSH===
+
+Depuis le __serveur__ de sauvegarde, tenter une première connexion ssh vers le poste à sauvegarder pour l'utilisateur "backuppc".
+<code>
+sudo -i -u backuppc
+ssh backup@<client></code>
+Répondre "yes", ce qui ajoutera votre client à la liste des //known hosts//((hôtes connus)).
+
+<note>
+En cas d'erreur SSH vous pouvez rendre la commande plus volubile avec l'option -v de **ssh**.
+Regarder aussi ** /var/log/syslog ** sur le poste à sauvegarder.
+Dans tous les cas jeter un œil sur la page consacrée à [[:ssh]].
+En cas de blocage suite à la réinstallation du poste à sauvegarder, la partie traitant de la [[:ssh#Gestion_des_clés|gestion des clefs]] vous sera sûrement d'une grande aide.
+</note>
+<note>
+Si l'erreur ssh est "This account is currently not available.", sur le client, éditer /etc/passwd, et pour le compte "backup" remplacer "/usr/sbin/nologin" par "/bin/sh" (rencontré sur ubuntu 14.10)
+</note>
+=== Paramétrer l'usage de ce compte par backuppc ===
+
+==  Par l'interface Web==
+//onglet **Xfert** -> pour **rsync** -> chapitre **Chemins/Commandes/Args Rsync** // indiquer pour:
+  * ** RsyncClientCmd ** <file>$sshPath -q -x -l backup $hostIP /usr/bin/sudo $rsyncPath $argList+</file>
+  * ** RsyncClientRestoreCmd ** <file>$sshPath -q -x -l backup $hostIP /usr/bin/sudo $rsyncPath $argList+</file>
+
+== Depuis le fichier « /etc/backuppc/config.pl » ==
+[[:tutoriel:comment_modifier_un_fichier|Modifier avec les droits d'administration]] le fichier ** /etc/backuppc/config.pl/** comme suit :
+<file perl  /etc/backuppc/config.pl>
+# $Conf{RsyncClientCmd} = '$sshPath -q -x -l root $hostIP $rsyncPath $argList+';
+$Conf{RsyncClientCmd} = '$sshPath -q -x -l backup $hostIP /usr/bin/sudo $rsyncPath $argList+';
+# $Conf{RsyncClientRestoreCmd} = '$sshPath -q -x -l root $hostIP $rsyncPath $argList+';
+$Conf{RsyncClientRestoreCmd} = '$sshPath -q -x -l backup $hostIP /usr/bin/sudo $rsyncPath $argList+';
+</file>
+
+==== Ajouter la machine à sauvegarder à la liste.====
+Il ne reste plus qu'à  ajouter la machine à sauvegarder à la liste.\\
+||#Connexion à l'interface Web|Se connecter à l'interface web]] et depuis les menus:
+  - //Serveur -> Modifier les machines -> Machines// : ajouter <client> avec "backuppc" comme user((utilisateur))
+  - //Hôtes // : choisir <client> dans la liste déroulante
+  - //Modifier la configuration -> xfer -> XferMethod// : choisir "rsync" -> //Sauvegarder //(apparaît en rouge)
+  - //<client> Accueil -> Démarrer la sauvegarde complète//
+  - //Explorer les sauvegardes //: vérifier ici que ça a bien fonctionné.
+
+===== Sauvegarder un poste Mac OS distant via ssh =====
+//Testé sur Mac OS 10.6 & 10.7. //
+
+<note tip>__**Pré-requis:**__\\
+  * La sauvegarde se faisant au travers de [[:ssh]], activer le serveur ssh en cochant "session a distance" depuis le menu //Preferences -> Système -> Partage//.\\
+  * Afin de sauvegarder un poste GNU/linux distant, il est nécessaire que l'utilisateur "backuppc" du serveur se connecte au poste distant.
+</note>
+
+La procédure est identique en tout point à la méthode [[#Sauvegarder un poste Linux distant via rsync (ssh)]] à celà près qu'il vous faudra commencer par vous connecter en tant qu'administrateur avant de continuer.
+  - Se connecter à la machine Mac à sauvegarder en ssh avec un compte administrateur du Mac qui a un mot de passe. <code>ssh admin@ip du mac</code>
+  - Passez en utilisateur root <code>sudo -su root</code>
+  - Suivre la procédure telle qu'expliquée [[#Manipulations sur le serveur de sauvegarde|ici]]
+
+===== Sauvegarder des postes Windows via « rsyncd » =====
+
+==== Configuration des postes Windows ====
+
+Sans s'étendre sur la configuration des postes Windows, sachez qu'il existe un paquet tout fait sur le site de BackupPC, qui, en moins de 1 Mio comprend une version de CygWin et le binaire de //Rsync//.\\
+Ce paquet s'appelle « cygwin-rsyncd » et est disponible [[http://sourceforge.net/project/showfiles.php?group_id=34854|ici]].\\
+Il suffira ensuite de suivre les instructions du fichier « README.TXT » de ce paquet.
+
+Il sera donc considéré pour la suite de cet article que vous avez : 
+  * un module « docs » partagé par //rsyncd// ;
+  * ce module doit permettre l'accès en écriture à l'utilisateur « UUU » avec le mot de passe « PPP » ;
+  * le service //rsyncd// lancé sur ce PC.
+
+==== Configuration du fichier « config.pl » ====
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] ** /etc/backuppc/config.pl** avec les [[:sudo|droits d'administration]] et modifiez les options de la façon suivante :
+
+<file perl /etc/backuppc/config.pl>
+$Conf{XferMethod} = 'rsyncd';
+$Conf{RsyncdUserName}  = "UUU";
+$Conf{RsyncdPasswd}    = "PPP";
+$Conf{RsyncShareName}  = "docs";
+</file>
+Sauvegarder le fichier et recharger la configuration depuis [[#Connexion à l'interface Web|l'interface Web]]. 
+
+===== Sauvegarder des postes Windows via « smb » =====
+
+=== Configuration des postes Windows ===
+
+  - Créez un utilisateur avec un mot de passe.
+  - Créez un partage sur la ressource à sauvegarder avec les droits modifiés en lecture pour l'utilisateur créé précédemment.
+  - Effectuez les changements depuis [[#Connexion à l'interface Web|l'interface Web]] ou en modifiants les fichiers **config.pl** et **hosts** comme indiqué ci-dessous.
+
+Pour l'exemple ici: 
+  * nom d'utilisateur créé sera -> //backup// 
+  * mot de pase -> //mdpbupc//
+  * dossier de partage -> //docs$//
+  * adresse IP de la machine windows -> //192.168.1.10//
+
+== Configuration du fichier « config.pl » ==
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] ** /etc/backuppc/config.pl** avec les [[:sudo|droits d'administration]] et modifiez les options ainsi :
+<file perl /etc/backuppc/config.pl>
+$Conf{XferMethod} = 'smb';
+$Conf{SmbShareUserName} = 'backup';
+$Conf{SmbSharePasswd} = 'mdpbupc';
+$Conf{SmbShareName} = 'docs$';
+ </file>
+Sauvegarder le fichier et recharger la configuration depuis [[#Connexion à l'interface Web|l'interface Web]]. 
+
+== Configuration du fichier « hosts » ==
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/backuppc/hosts** avec les droits d'administration pour y ajouter cette ligne en fin de fichier 
+<file> 192.168.1.10	0	utilisateur	UUU </file>
+Sauvegarder le fichier et recharger la configuration depuis [[#Connexion à l'interface Web|l'interface Web]]. 
+
+===== Sauvegarder des PC éteints =====
+
+Il est intéressant de pouvoir effectuer la sauvegarde des machines lorsqu'elles ne sont pas en production, par exemple la nuit. Par défaut, backuppc ne permet pas de gérer le [[:wakeonlan|wake on lan]], mais avec quelques astuces, c'est possible !
+
+==== Configuration du WOL sur le serveur ====
+
+L'outil [[:wakeonlan|etherwake]] est parfait pour démarrer une machine à distance. Pour pouvoir utiliser ce dernier avec le nom de la machine au lieu de son adresse MAC, il faut compléter le fichier **/etc/ethers** :
+<file> adresse:MAC	nom_machine </file>
+Il va sans dire que le nom de la machine doit être déclaré comme dans le fichier ** /etc/backuppc/hosts**.
+
+Pour que le fichier ethers soit pris en compte par etherwake modifier le fichier **/etc/nsswitch.conf**, à la ligne ethers :
+<file> ethers:         files </file>
+
+Par defaut, la commande etherwake n'est exécutable que par root, pour remédier à cela :
+<file> ln /usr/sbin/etherwake /usr/bin/
+chmod +s /usr/sbin/etherwake </file>
+
+==== Script de réveil et d'arrêt des machines ====
+
+Créez dans le dossier **/etc/backuppc/** deux petits scripts qui doivent pouvoir être améliorés :
+  * **wol.sh** pour l'envoi d'un [[wpfr>Wake-on-LAN#Paquet_magique|paquet magique]] 
+  * **shutdown.sh** pour l'arrêt de la machine.
+
+== le fichier **wol.sh** ==
+
+<file bash wol.sh>
+#!/bin/bash
+
+declare -i z
+z=0
+i=0
+/usr/sbin/etherwake $1
+sleep 1m
+while [ $i = 0 -a $z -lt 15 ]
+do
+        if smbclient -L $1 -U backup%mdpbupc>/dev/null
+                then
+                        i=1
+        fi
+sleep 10s
+z=z+1
+done </file>
+
+__**Explication:**__ Une fois la commande etherwake exécutée:
+  * il y a une pause d'une minute pour laisser le temps au pc de démarrer.
+  * Puis, la boucle while teste si le partage est actif. 
+  * Après 15 essais sans résultat la boucle s'arrête.
+
+== le fichier **shutdown.sh** ==
+
+<file bash shutdown.sh> #!/bin/bash
+if [ $(date +%k) -lt 07 -o $(date +%k ) -gt 20 ]
+then
+	/usr/bin/net rpc SHUTDOWN -f -I $1 -U administrateur%mdpadministrateur -t 30
+else
+        if [ $2 = 1 ]
+        then
+            echo sauvegarde terminé avec succès. | smbclient -M $1 --user="backuppc"
+        fi
+fi </file>
+
+__**Explication:**__  entre 20h00 et 07h00 est exécutée la commande d'extinction du pc sauvegardé. En dehors de cette plage horaire, au lieu d'arrêter la machine, un message est envoyé.
+
+<note important>N'oubliez pas de rendre les scripts [[:permissions#execution|exécutables]] pour l'utilisateur backuppc !</note>
+
+<note>Cette commande :<file>net rpc SHUTDOWN -f -I $1 -U administrateur%mdpadministrateur -t 30</file>peut ne pas fonctionner si le pc sous Windows n'accepte pas l'exécution de la commande d'extinction à distance.\\
+Pour parer à cela, vous êtes invité à lire le dernier message de [[http://forum.ubuntu-fr.org/viewtopic.php?pid=2988204#p2988204|cette discussion]]</note>
+
+== autre exemple de fichiers **wol.sh** et **shutdown.sh** améliorés qui conservent l'état précédent ==
+
+Pour utiliser ces scripts, veuillez mettre le paramètre **UserCmdCheckStatus** à **1** dans la configuration, ou ajoutez cette ligne au fichier **/etc/backuppc/config.pl**:
+<file>$Conf{UserCmdCheckStatus} = '1';</file>
+ceci permet de dire à Backuppc de prendre en compte le code d'erreur des scripts de réveil/extinction.
+<file bash wol.sh>
+#!/bin/bash
+
+declare -i z
+z=0
+i=0
+filename=/var/lib/backuppc/$1.laststate
+echo "Starting wake on lan script"
+echo "Filename=$filename"
+cnt=$(ping -c 1 $1 | awk -F, '/received/{print $2*1}')
+
+echo "Count ping to host $1 = $cnt"
+
+if [ $cnt -eq 0 ]; then
+    echo $cnt > $filename
+
+    # Time to wait for machine to boot in minutes
+    # Use value given as argument
+    if [ -n "$2" ] && [ "$2" -eq "$2" ] 2>/dev/null; then
+      min=$2
+    else
+      echo "	Second argument given is not a valid number! : $2"
+      echo "	Using default value: 2 minutes"
+      min=2
+    fi
+    m=$min"m"
+
+    echo "Send WOL to $1 and wait $min minutes"
+    sudo /usr/sbin/etherwake -i enp5s0 $1
+    sleep $m
+    while [ $i = 0 -a $z -lt 18 ]
+    do
+	count=$(ping -c 5 $1 | awk -F, '/received/{print $2*1}')
+	if [ $count -eq 0 ]; then
+    	    echo "$1 is down"
+	    if [ $z -eq 17 ]; then
+		echo "$1 not up after `expr $min + 3` minutes... exiting"
+		exit 1
+	    fi
+	else
+	    i=1
+	    echo "$1 is up"
+	    exit 0
+        fi
+	sleep 10s
+	z=z+1
+    done
+else
+    echo $cnt > $filename
+    exit 0
+fi</file>
+__**Explication:**__ Ce script prend deux arguments: le nom d'hôte de la machine en premier et un nombre en deuxième (correspondant au nombre de minutes à attendre une fois que la commande etherwake est executée).
+  * le script exécute la commande etherwake sur la machine spécifiée
+  * puis, la boucle while teste si la machine répond au ping
+  * après le nombre de minutes spécifiées en second argument, si la machine est en ligne, la sauvegarde est effectuée. Si la machine ne répond pas, le script attend encore 3 minutes supplémentaires
+  * si après les 3 minutes supplémentaires la machine ne répond toujours pas, le script s'arrête et renvoi un code d'erreur, qui est ensuite interprêté par backuppc 
+
+<note>Cette commande :<file>sudo /usr/sbin/etherwake -i enp5s0 $1</file>peut varier selon les machines. Vous devrez peut-être l'adapter à votre configuration.\\
+Ici 'enp5s0' est l'interface par laquelle est envoyée le paquet magique via ethernet. $1 est la variable du nom d'hôte (ne doit pas être modifiée).
+</note>
+
+Ainsi pour utiliser ce script il faut ajouter ce paramètre à la configuration:
+<file>$Conf{DumpPreUserCmd}     = '/etc/backuppc/wol.sh $host 3';</file>
+Cette commande envoi le paquet magique et attend ensuite 3 minutes (à adapter selon vos besoins) le réveil de la machine (si rien n'est donné en second argument, le script utilise la valeur de 2 minutes par défaut).
+
+<file bash shutdown.sh>
+#!/bin/bash
+# Backuppc user script
+
+if [ "$#" != 2 ]; then
+    echo
+    echo "The BackupPC user script takes two arguments:"
+    echo " First: a host name ( with a corresponding /etc/hosts entry )"
+    echo " Second: - either a number corresponding to the output of the backup process (0 = failed / 1 = success)"
+    echo "         - OR -f to force shutdown a host"
+    echo
+    exit 1
+fi
+
+# Array of computers, in the form: [hostname]='Username%Password'
+# these must be Administrator's accounts
+# Modify these according to your needs
+declare -A names
+names=(
+    [hostname1]='adminuser1%password1'
+    [hostname2]='adminuser2%password2'
+    [hostname3]='adminuser3%password3'
+)
+
+for i in "${!names[@]}"
+do
+    if [ $i = $1 ]; then
+	    host_name=$i
+	    upwd=${names[$i]}
+    fi
+done
+
+# Exit if no corresponding host name found
+[ "$host_name" = "" ] && echo "Host unknown!" && exit 1
+
+# To stop a pc, if -f argument given ( wol script wasn't used and there is no host file )
+if [ "$2" = "-f" ]
+then
+    /usr/bin/net rpc SHUTDOWN -f -I $host_name -U "$upwd" -t 1
+    exit 0
+fi
+
+# File to record the host status
+filename=/var/lib/backuppc/$host_name.laststate
+if [ -f $filename ]
+then
+    echo "Filename=$filename"
+    declare -i laststate
+    read laststate < $filename
+    echo "Last State Host $host_name = $laststate"
+else
+    echo "Missing host file!"
+    exit 1
+fi
+
+# Actions after backup
+if [ $2 = 1 ] # Successfull backup
+then
+    echo "Backup of $host_name OK"
+    if [ $laststate = 0 ]
+    then
+	# Last state off, send shutdown
+	echo "Sent SHUTDOWN to host $host_name"
+	/usr/bin/net rpc SHUTDOWN -f -I $host_name -U "$upwd" -t 30
+    else
+        # Last state : up
+        echo "SHUTDOWN not sent to $host_name cause Host already UP before"
+    fi
+elif [ $2 = 0 ] # backup error
+then
+    echo "Problem during backup of $host_name"
+    # Only shutdown after unsuccesfull backup during out of office hours
+    #if [ $(date +%k) -lt 07 -o $(date +%k ) -gt 22 ]
+    #then
+    #/usr/bin/net rpc SHUTDOWN -f -I $host_name -U "$upwd" -t 30
+    #fi
+fi
+
+if [ -f $filename ]
+then
+    echo "Delete $filename"
+    unlink $filename
+fi</file>
+
+__**Explication:**__ Ce script prend deux arguments: le nom d'hôte de la machine en premier et le code de résultat du backup en deuxième (0 = échec / 1 = succès).
+  * si le backup est réussi: si la machine était précédemment éteinte, le script exécute la commande d'arrêt avec les paramètres nom d'utilisateur/ mot de passe tels qu'enregistrés dans le script
+  * si la machine était allumée avant, la commande d'arrêt, n'est pas envoyée
+  * si le second argument est '-f' (pour forcer), la machine correspondante est arrêtée quel que soit l'état précédent
+
+Ainsi pour utiliser ce script il faut ajouter ce paramètre à la configuration:
+<file>$Conf{DumpPostUserCmd}    = '/etc/backuppc/shutdown.sh $host $xferOK';</file>
+
+<note>Cette commande :<file>/etc/backuppc/shutdown.sh $host -f</file>peut être utilisé en ligne de commande directement pour éteindre une machine en dehors de backuppc.</note>
+
+==== Configuration de backuppc pour utiliser les scripts ====
+
+Backuppc contrôle la présence du pc sur le réseau avec ping, sans quoi il n'effectue pas de sauvegarde. Pour remédier à cela, dans le fichier **/etc/backuppc/config.pl**, avec les droits d'administration remplacer
+<file>$Conf{PingPath} = '/bin/ping';</file>
+par
+<file>$Conf{PingPath} = '/bin/echo';</file>
+FIXME dans ce cas le backup pourrait essayer de se lancer alors que la machine n'est pas accessible.
+<note>**Pour faire encore mieux**, vous pouvez aussi réaliser un ping a travers le démon ssh en executant simplement la commande **cat** sur le fichier **/dev/null**. Ceci permettra de tester que le démon ssh est bien démarré et donc de tester que le serveur est accessible. Pour faire ceci, remplassez la configuration précédente par la ligne ci-contre: **$Conf{PingPath} = '/usr/bin/ssh $host cat /dev/null';** </note>
+et ajouter les chemins des scripts comme suit :
+
+<file>$Conf{DumpPreUserCmd}     = '/etc/backuppc/wol.sh $host';
+$Conf{DumpPostUserCmd}    = '/etc/backuppc/shutdown.sh $host $xferOK';</file>
+
+Sauvegardez le fichier et recharger la configuration via l'interface web. 
+
+Il ne vous reste plus qu'à activer le [[:wakeonlan|wol]] sur les postes clients...
+
+===== Faire une copie des sauvegardes sur un support externe avec RSYNC =====
+
+**Backuppc** gère **la déduplication des données**. C'est à dire qu'après la copie des fichiers, si un fichier apparaît plusieurs fois, il n'en gardera qu'un seul exemplaire, en  créant des **liens matériels** (**hardlinks**) vers le fichier d'origine.
+
+Lorsqu'on sauvegarde avec un **rsync "traditionnel"** les sauvegardes de **Backuppc**, **rsync** ne gère pas les liens matériels, et recopie le fichier autant de fois qu'il y a de liens matériels. **Ce qui a pour effet de gonfler considérablement le volume des données**.
+
+Pour éviter cela, on indique à **rsync** qu'il doit gérer les liens matériels avec l'option **-H**. Ce qui donne  :
+
+<file>rsync -rlptDvzH --delete-after /chemin/sauvegardes/backuppc/ /chemin/vers/support/externe/sauvegardes/backuppc</file>
+
+**ATTENTION !!! : cette opération entraîne une forte consommation en CPU et en RAM !!!**
+
+===== Erreurs =====
+
+==== No files dumped for share ... ====
+
+Cliquez sur "Last bad XferLOG". Si vous obtenez un message ressemblant à :
+<file>/bin/tar: --totals: Cannot chdir: No such file or directory</file>
+Sauvez votre configuration backuppc, puis effectuez ces commandes avec la console :
+<code>sudo mv /etc/backuppc/localhost.pl /etc/backuppc/fileserver.pl
+sudo chown backuppc:www-data /etc/backuppc/fileserver.pl</code>
+
+Reparamétrez votre configuration dans "xfer".
+
+==== Erreur NT_STATUS... ====
+
+Pour se connecter aux partages SMB, backuppc utilise smbclient et lui passe par défaut l'argument -N qui siginifie "no password"((pas de mot de passe)).\\
+Apparament dans une version antérieure de smbclient, même si -N était spécifié, le mot de passe était quand même demandé. Ainsi même si le partage avait un mot de passe, smbclient pouvait s'y connecter.\\
+Toutefois, ceci a été corrigé dans la nouvelle version de smbclient mais backuppc utilise toujours le -N. C'est pourquoi, cette option empêche de prendre en compte votre mot de passe et provoquera une erreur.
+
+Pour corriger ceci, sur [[#Connexion à l'interface Web|l'interface Web]] de backuppc, depuis le menu //Edit Config du Server ->onglet Xfer//,  supprimer le -N dans les 3 commandes pour la sauvegarde (smblient... -N ...).  
+
+===== Liens utiles =====
+  *  [[http://backuppc.sourceforge.net/faq/BackupPC.html|la documentation de BackupPC]].
+  * [[http://backuppc.sourceforge.net/| Le site officiel]] **[en]**
+  * [[http://www.klipz.fr/tutoriel_backuppc.html]] **[fr]**
+  * [[http://www.aboutmyip.com/AboutMyXApp/DeltaCopy.jsp|deltacopy]]
+  * [[http://www.generation-linux.fr/index.php?post/2008/08/09/119-backuppc-un-logiciel-de-sauvegarde-automatique]] **[fr]**
+  * [[http://www.projet-plume.org/fiche/backuppc|la fiche plume]]
+
+-----
+// Contributeurs : [[:utilisateurs:Cyprien]],wouldsmina, [[:utilisateurs:naoli]], snoopysnoopy [[:utilisateurs:Ool]], gg [[:utilisateurs:gfontaniere]], mathieuc  //

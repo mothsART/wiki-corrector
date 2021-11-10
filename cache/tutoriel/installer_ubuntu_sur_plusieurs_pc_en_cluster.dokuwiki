@@ -1,0 +1,206 @@
+
+{{tag>tutoriel serveur installation vétuste}}
+
+----
+====== Installer Ubuntu sur plusieurs PC en cluster ======
+
+traduit de [[https://help.ubuntu.com/community/UbuntuOnCluster | UbuntuOnCluster]] par Zed
+
+Cette page à pour but de présenter l'installation d'Ubuntu sur un groupe important de machines( [[wpfr>Grappe_de_serveurs|cluster]]). Il faudra installer une première machine manuellement (le serveur d'installation), et toutes les autres machines seront installées lorsqu'elles démarreront. Nous utiliserons Ubuntu Dapper. Le programme d'installation par défaut (debian-installer) fonctionne très bien. Ce n'est pas la peine d'utiliser Kickstart ou FAI
+
+Prérequis pour le serveur:
+  * Ubuntu-base install (ubuntu-server va très bien)
+  * Une image [[http://releases.ubuntu.com/dapper| .iso]]
+  * Soit il faut avoir le NAT activé sur le serveur [[http://kaarsemaker.net/files/ubuntu-cluster/enable_nat |exemple]] ou bien toutes les machines doivent recevoir une IP publique.
+  * Quelques paquets détaillés ci-dessous
+
+=== Etape 1: Configuration du serveur DHCP & du démarrage par PXE ===
+
+Premièrement, il vous faut connaitre l'adresse MAC de toutes vos machines, ceci afin qu'elles récupèrent toujours la même adresse IP et nom d'hôte.
+
+Procédez maintenant à l'installation de **dhcp3-server** et **tftpd-hpa**
+
+Une fois les deux paquets installés, éditez le fichier /etc/dhcp3/dhcpd.conf, un exemple est disponible [[http://kaarsemaker.net/files/ubuntu-cluster]]; les commentaires sont assez clair.
+
+Le démarrage par PXE demande à ce que l'image .iso soit montée localement, je l'ai donc monté sous /var/lib/tftpboot/ubuntu/
+
+  mkdir /var/lib/tftpboot/ubuntu
+  echo '/data/ubuntu-5.04-install-i386.iso /var/lib/tftpboot/ubuntu/ auto defaults,loop 0 0' >> /etc/fstab
+  mount -a
+
+La prochaine étape est de configurer le PXE. J'ai donc créé deux fichiers: un pour l'installation et un second pour le démarrage local (cad: démarrer le système localement). Créez un dossier /var/lib/tftpboot/pxelinux.cfg et mettez y les fichiers suivants: [[http://kaarsemaker.net/files/ubuntu-cluster/default | default]]
+[[http://kaarsemaker.net/files/ubuntu-cluster/localboot | localboot]]
+
+Comme vous pouvez le voir l'action par défaut est l'installation. Il est possible de passer quelques options ici (la ligne kernel). Pour récupérer de la place pour les options (la place est limitée), créez des liens symboliques vers les fichiers suivants:
+
+  cd /var/lib/tftpboot
+  ln -s ubuntu/install/netboot/ubuntu-installer/i386/initrd.gz 
+  ubuntu/install/netboot/ubuntu-installer/i386/linux
+  ubuntu/install/netboot/pxelinux.0 
+  ubuntu/install/netboot/ubuntu-installer/
+ 
+
+Vous pouvez voir dans la configuration que nous utilisons ces liens
+
+=== Etape 2: Configuration du nis et du nfs ===
+
+Pour les machines en cluster, nis et nfs sont habituellement utilisées pour partager les informations sur les utilisateurs et des parties du système de fichiers. Il faudra donc installer les deux paquets suivants sur le serveur : ''nis nfs-kernel-server''.
+
+Note: le paquet nis (pas nis en lui-même) est un buggé, il essayera de lancer ypbind même si on ne lui demande pas. Il ignore également le preseed, plus loin nous créerons une nouvelle version du package, pour l'instant il faut juste laisser ypbind partir en time out.
+
+Lorsque l'installation de nis demande un domaine, prenez un nom de votre choix. Dès que ypbind est mort, arrêtez nis avec la commande suivante :
+
+
+  invoke-rc.d nis stop
+
+Il faut maintenant éditer /etc/default/nis et activer le serveur nis [[http://kaarsemaker.net/files/ubuntu-cluster/nis | (exemple)]]. Il vous faudra également initialiser la base nis avec :
+
+
+  /usr/lib/yp/ypinit -m
+
+Vous pouvez maintenant démarrer le service nis :
+
+  invoke-rc.d nis start
+
+Pour le NFS, il faut éditer /etc/exports pour exporter les parties du système de fichiers utiles. Sur mon cluster, j'ai exporté /home et /data, voici un exemple de fichier de configuration pour NFS
+
+
+  # /etc/exports: the access control list for filesystems which may be exported
+  #               to NFS clients.  See exports(5).
+   /home   192.168.0.0/255.255.0.0(rw,async)
+  /data   192.168.0.0/255.255.0.0(rw,async)}}}
+
+Redémarrez le serveurs NFS
+
+
+  invoke-rc.d nfs-kernel-server restart
+
+=== Etape 3: Configuration du miroir local et du proxy ===
+
+L'installation depuis un miroir local et en utilisant un proxy httpd pour le reste augmente de manière significative la vitesse des installations. Comme apt-proxy ne fonctionne pas trop bien, nous allons utiliser squid. Pour la récupération apres l'installation il faut également php, on l'a donc installé. (Un script CGI aurait très bien fait l'affaire, c'est une histoire de gout)
+
+Il vous faut donc les paquets suivants : ''apache2 libapache2-mod-php4 squid''
+
+Mon cluster a seulement une IP publique, donc seul le maitre est connecté à Internet. Les autres noeuds sont simplement connectés au maitre (et via le NAT ils peuvent accéder à Internet). Comme je ne veux pas faire office de proxy public, J'ai configuré squid pour qu'il écoute seulement sur eth1 (l'interface interne). On peut faire pareil avec apache en éditant le fichier /etc/apache2/ports.conf.
+
+  invoke-rc.d apache2 stop
+  echo 'Listen 192.168.0.1:80' > /etc/apache2/ports.conf
+  echo 'Listen 127.0.0.1:80' >> /etc/apache2/ports.conf
+  invoke-rc.d apache start
+
+Il faut également éditer la configuration de squid. Un [[http://kaarsemaker.net/files/ubuntu-cluster/squid.conf | exemple]] est accessible.
+
+Faites un lien symbolique de l'iso vers apache pour la servir.
+
+  ln -s /var/lib/tftpboot/ubuntu/ubuntu /var/www/ubuntu
+
+=== Etape 4: preseed ===
+
+Tout est maintenant configuré sur le serveur, nous pouvons maintenant passer à la configuration des clients. Tftpboot va lancer l'installeur Ubuntu. L'installeur pose des questions, mais les réponses peuvent être "enregistrées" dans un fichier appelé preseed. 
+
+Un fichier preseed qui répond avec la valeur par défaut a toutes les questions et qui installe ubuntu-base et openssh-server est disponible [[http://kaarsemaker.net/files/ubuntu-cluster/preseed | ici]].
+
+Ce que l'on peut changer: langue, les paquets à installer (qui sont des chaines aptitude), le premier utilisateur ainsi que le partitionnement. Configurez ceci à votre convenance, puis enregistrez le à la racine d'apache.
+
+=== Etape 5: Après le redémarrage ===
+
+L'installeur redémarre après l'installation classique, ce qui signifie qu'il sera relancé. Bien sur nous ne voulons pas ça, c'est pourquoi il est nécessaire de créer un système d'enregistrement. Comme vous pouvez le voir dans le fichier pressed, la ligne preseed/late-command correspond à 
+  wget http://192.168.0.1/register.php
+ Ceci ne fait rien sur le client, mais le script PHP créé un fichier de boot PXE pour cette machine, qui force le démarrage depuis le disque dur local. Si vous désirez réinstaller une machine, il vous suffit de supprimer le fichier de boot PXE associé, et l'installation se relancera.
+
+Pour que ceci fonctionne, l'utilisateur ''www-data'' doit pouvoir écrire dans /var/lib/tftpboot/pxelinux.cfg
+
+   chown :www-data /var/lib/tftpboot/pxelinux.cfg
+   chmod g+w $_
+
+Voici le contenu du script register.php à enregistrer dans  
+  /var/www/register.php 
+
+ 
+<code php>
+<?php
+  function _dechex($x) { return sprintf("%02s",dechex($x)); }
+  $host = strtoupper(implode('',array_map(_dechex,explode('.',$_SERVER['REMOTE_ADDR']))));
+  copy("/var/lib/tftpboot/pxelinux.cfg/localboot", "/var/lib/tftpboot/pxelinux.cfg/$host");
+?>
+</code>
+
+=== Etape 6: Après l'installation ===
+
+Le script exécuté après l'installation (appelé postinstall) peut être utilisé pour tout faire. Je l'ai utilisé pour installer un nis correct et faire une bonne configuration, et quelques trucs en raport avec le démarrage.
+
+Pour créer un paquet NIS correct, voici comment faire (depuis breezy ce n'est plus nécessaire: le paquet a été corrigé).
+
+<code>
+mkdir nispackage
+cd nispackage
+apt-get source nis
+cd nis-3.12/debian
+</code>
+
+  * Ouvrir le fichier ''postinst''
+  * Commenter la ligne 61 (celle avec ''db_input'')
+  * Juste avant la ligne 64 (celle avec ''if [ "$RET '' ajouter une ligne contenant ''RET=domaine'' ou domaine est le domaine NIS que vous avez choisi).
+  * Commenter la ligne 106 (celle avec ''db_text'') 
+
+Tapez ensuite les commandes suivantes:
+<code>
+cd ..
+apt-get build-dep nis
+dpkg-buildpackage</code>
+
+Copiez le .deb (qui se trouve dans le dossier nispackage) a un endroit ou les clients peuvent y accéder (soit par wget ou via un montage nfs)
+
+Le script post-install doit être placé dans /var/www
+Le mien ressemble à:
+
+<code>
+#!/bin/bash
+
+# Etape 1: Montage initial
+mkdir /data
+mount -t nfs 192.168.0.1:/data /data -o rw,soft,bg,rsize=32768,wsize=32768,tcp,timeo=600,intr
+
+# Etape 2: Installation et configuration du NIS
+aptitude -y install portmap libslp1
+dpkg -i /data/nis_3.12-3_i386.deb
+cp /data/nsswitch.conf /etc/nsswitch.conf
+echo '+::::::' >> /etc/passwd
+echo '+::::::::' >> /etc/shadow
+echo '+:::' >> /etc/group
+
+# Réparer le démarrage (nis avec une erreur nfs )
+DIR=`pwd`
+cd /etc/rc2.d
+ln -s ../init.d/mountnfs.sh S20mountnfs.sh
+cd $DIR
+
+# Etape 2: Montage correct
+umount /data
+echo 'enterprise:/home  /home   nfs     rw,soft,bg,rsize=32768,wsize=32768,tcp,timeo=600,intr' >> /etc/fstab
+echo 'enterprise:/data  /data   nfs     rw,soft,bg,rsize=32768,wsize=32768,tcp,timeo=600,intr' >> /etc/fstab
+mount -a
+
+# Etape 3: Corriger le sources.list et faire un update
+cp /data/sources.list /etc/apt/sources.list
+aptitude update
+aptitude -y upgrade
+
+# Etape 4: Installer d'autres paquets utiles et supprimer le log d'instalaltion qui contient le mot de passe en clair
+aptitude -y install linux-686-smp manpages-dev
+rm /var/log/installer/debconf-seed
+rm /var/log/installer/cdebconf/questions.dat
+
+# Etape 5: Activer les crontab utiles
+echo '0 *    * * *  root   test -x /data/upgrade && /data/upgrade' >> /etc/crontab
+
+# Etape 6: Redémarrer, nous avons mis un nouveau kernel
+reboot
+</code>
+ 
+Téléchargements: [[http://kaarsemaker.net/files/ubuntu-cluster/nsswitch.conf example | nsswitch.conf]]
+[[http://kaarsemaker.net/files/ubuntu-cluster/sources.list | sources.list avec miroir local]]
+[[http://kaarsemaker.net/files/ubuntu-cluster/post-install | le script post-install]]
+
+===== Pages en rapport =====
+{{topic>cluster}}

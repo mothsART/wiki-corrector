@@ -1,0 +1,396 @@
+
+{{tag>serveur réseau dns}}
+
+====== Configurer un  Serveur DNS Bind9 pour son poste de travail ======
+===== Installer une interface réseau virtuelle =====
+==== Avec systemd ====
+
+Éditer **/etc/systemd/network/10-virtualeth0.netdev**
+<file>
+[NetDev]
+Name = virtualeth0
+Kind = dummy
+</file>
+
+Éditer **/etc/systemd/network/10-virtualeth0.network**
+<file>
+[Match]
+Name = virtualeth0
+
+[Network]
+Address = 10.10.10.1/24
+Address = fd00::/8
+</file>
+
+Relancer le réseau systemd
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo systemctl start systemd-networkd
+utilisateur@MachineUbuntu:~$ sudo systemctl enable systemd-networkd
+</code>
+
+Vérifier la présence de l'interface réseau virtuelle
+<code bash>
+utilisateur@MachineUbuntu:~$ ip a
+…
+3: virtualeth0: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/ether 9a:3c:56:42:f5:c9 brd ff:ff:ff:ff:ff:ff
+    inet 10.10.10.1/24 brd 10.10.10.255 scope global virtualeth0
+       valid_lft forever preferred_lft forever
+    inet6 fd00::/8 scope global
+       valid_lft forever preferred_lft forever
+…
+</code>
+
+==== Avec netplan ====
+<note tip>À faire</note>
+
+===== Configuration du client dhcp adaptée au DNS local =====
+Pour pouvoir ajouter le serveur DNS local à **/etc/resolv.conf**, il faut renseigner l’option prepend qui permet l’ajout du serveur DNS local en début de la liste des serveurs DNS fournit automatiquement par DHCP.
+Éditer **/etc/dhcp/dhclient.conf**
+<file>
+prepend domaine-perso.fr 10.10.10.1 fd00::
+</file>
+
+===== Vérifier les DNS présents =====
+<code bash>
+utilisateur@MachineUbuntu:~$ nmcli dev show | grep DNS
+IP4.DNS[1]:                    yyy.yyy.yyy.yyy
+IP4.DNS[1]:                    yyy.yyy.yyy.yyy
+IP6.DNS[1]:                    yyyy:yyyy:yyyy::yyyy
+IP6.DNS[2]:                    yyyy:yyyy:yyyy::yyyy
+IP6.DNS[3]:                    yyyy:yyyy:yyyy::yyyy
+utilisateur@MachineUbuntu:~$ resolvectl dns
+Global:
+Link 2 (enp0sxx):
+Link 3 (wlx803xxxxx): yyyy:yyyy:yyyy::yyyy yyyy:yyyy:yyyy::yyyy yyyy:yyyy:yyyy::yyyy yyy.yyy.yyy.yyy
+Link 4 (wlo1): yyy.yyy.yyy.yyy
+Link 6 (virtualeth0):
+</code>
+
+===== Définir le domaine local de la machine Ubuntu =====
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo hostnamectl set-hostname MachineUbuntu.domaine-perso.fr --static
+utilisateur@MachineUbuntu:~$ hostname -d
+domaine-perso.fr
+</code>
+
+===== Installer les applications de base =====
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo apt install bind9 bind9utils bind9-dnsutils bind9-doc bind9-host net-tools
+</code>
+
+Tester l'état de Bind9
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo systemctl status named
+</code>
+
+Activer le serveur Bind9 au redémarrage
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo systemctl enable named
+</code>
+===== Configuration du DNS local =====
+Éditer **/etc/bind/named.conf.options**
+<file>
+options {
+    directory "/var/cache/bind";
+
+    // Pour des raisons de sécurité.
+    // Cache la version du serveur DNS pour les clients.
+    version "Pas pour les crackers";
+
+    listen-on { 127.0.0.1; 10.10.10.1; };
+    listen-on-v6 { ::1; fd00::; };
+
+    allow-query { 127.0.0.1; 10.10.10.1; ::1; fd00::; };
+
+    // Optionnel - Comportement par défaut de BIND en récursions.
+    recursion yes;
+
+    // Récursions autorisées seulement pour les interfaces clients
+    allow-recursion { 127.0.0.1; 10.10.10.0/24; ::1; fd00::/8; };
+
+    dnssec-validation auto;
+
+    // Activer la journalisation des requêtes DNS
+    querylog yes;
+};
+</file>
+
+Vérifier la validité de la configuration
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo named-checkconf
+</code>
+
+Redémarrer le serveur DNS si la configuration est OK.
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo systemctl restart named
+</code>
+
+===== Ajout du server DNS local à la liste des serveurs DNS de systemd-resolved. =====
+Éditer **/etc/systemd/resolved.conf**
+<file>
+DNS=10.10.10.1 fd00::
+</file>
+
+Relancer le réseau
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo systemctl restart systemd-resolved
+utilisateur@MachineUbuntu:~$ nmcli general reload
+</code>
+
+===== Tests du serveur DNS =====
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo rndc status
+version: BIND 9.16.8-Ubuntu (Stable Release) <id:539f9f0> (Pas pour les crackers)
+running on MachineUbuntu.domaine-perso.fr: Linux x86_64 5.11.0-31-generic #33-Ubuntu SMP Wed Aug 11 13:19:04 UTC 2021
+boot time: Thu, 26 Aug 2021 06:13:19 GMT
+last configured: Thu, 26 Aug 2021 06:13:19 GMT
+configuration file: /etc/bind/named.conf
+CPUs found: 4
+worker threads: 4
+UDP listeners per interface: 4
+number of zones: 102 (97 automatic)
+debug level: 0
+xfers running: 0
+xfers deferred: 0
+soa queries in progress: 0
+query logging is ON
+recursive clients: 0/900/1000
+tcp clients: 0/150
+TCP high-water: 0
+server is up and running
+</code>
+
+===== Vérifier le fonctionnement DNS =====
+
+==== Vérifier le fonctionnement de Bind9 ====
+Vérification de l'exécution de Bind9 sur le port 53
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo lsof -i:53
+COMMAND     PID            USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+named      5624            bind   37u  IPv4  54315      0t0  UDP localhost:domain
+named      5624            bind   38u  IPv4  54316      0t0  UDP localhost:domain
+named      5624            bind   39u  IPv4  54317      0t0  UDP localhost:domain
+named      5624            bind   40u  IPv4  54318      0t0  UDP localhost:domain
+named      5624            bind   42u  IPv4  51987      0t0  TCP localhost:domain (LISTEN)
+named      5624            bind   43u  IPv4  54319      0t0  UDP MachineUbuntu.domaine-perso.fr:domain
+named      5624            bind   44u  IPv4  54320      0t0  UDP MachineUbuntu.domaine-perso.fr:domain
+named      5624            bind   45u  IPv4  54321      0t0  UDP MachineUbuntu.domaine-perso.fr:domain
+named      5624            bind   46u  IPv4  54322      0t0  UDP MachineUbuntu.domaine-perso.fr:domain
+named      5624            bind   47u  IPv4  51988      0t0  TCP MachineUbuntu.domaine-perso.fr:domain (LISTEN)
+named      5624            bind   48u  IPv6  54323      0t0  UDP ip6-localhost:domain
+named      5624            bind   49u  IPv6  54324      0t0  UDP ip6-localhost:domain
+named      5624            bind   50u  IPv6  54325      0t0  UDP ip6-localhost:domain
+named      5624            bind   51u  IPv6  54326      0t0  UDP ip6-localhost:domain
+named      5624            bind   52u  IPv6  51989      0t0  TCP ip6-localhost:domain (LISTEN)
+named      5624            bind   53u  IPv6  54327      0t0  UDP MachineUbuntu.domaine-perso.fr:domain
+named      5624            bind   54u  IPv6  54328      0t0  UDP MachineUbuntu.domaine-perso.fr:domain
+named      5624            bind   55u  IPv6  54329      0t0  UDP MachineUbuntu.domaine-perso.fr:domain
+named      5624            bind   56u  IPv6  54330      0t0  UDP MachineUbuntu.domaine-perso.fr:domain
+named      5624            bind   58u  IPv6  54331      0t0  TCP MachineUbuntu.domaine-perso.fr:domain (LISTEN)
+systemd-r  5799 systemd-resolve   12u  IPv4  52844      0t0  UDP localhost:domain
+systemd-r  5799 systemd-resolve   13u  IPv4  52845      0t0  TCP localhost:domain (LISTEN)
+</code>
+
+Vérifier l’écoute réseau sur le port 53
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo netstat -alnp | grep -i :53
+tcp        0      0 127.0.0.53:53           0.0.0.0:*               LISTEN      5799/systemd-resol
+tcp        0      0 127.0.0.1:53            0.0.0.0:*               LISTEN      5624/named
+tcp        0      0 10.10.10.1:53           0.0.0.0:*               LISTEN      5624/named
+tcp6       0      0 fd00:::53               :::*                    LISTEN      5624/named
+tcp6       0      0 ::1:53                  :::*                    LISTEN      5624/named
+udp        0      0 127.0.0.53:53           0.0.0.0:*                           5799/systemd-resol
+udp        0      0 127.0.0.1:53            0.0.0.0:*                           5624/named
+udp        0      0 10.10.10.1:53           0.0.0.0:*                           5624/named
+udp        0      0 0.0.0.0:5353            0.0.0.0:*                           771/avahi-daemon: r
+udp6       0      0 fd00:::53               :::*                                5624/named
+udp6       0      0 ::1:53                  :::*                                5624/named
+udp6       0      0 :::5353                 :::*                                771/avahi-daemon: r
+</code>
+
+Vérifier que le système Ubuntu écoute le serveur DNS
+<code bash>
+utilisateur@MachineUbuntu:~$ resolvectl dns
+Global: 10.10.10.1 fd00::
+Link 2 (enp0sxx): yyyy:yyyy:yyyy::yyyy yyy.yyy.yyy.yyy
+Link 3 (virtualeth0):
+Link 4 (wlx803xxxxx): yyyy:yyyy:yyyy::yyyy yyyy:yyyy:yyyy::yyyy yyyy:yyyy:yyyy::yyyy yyy.yyy.yyy.yyy
+Link 5 (wlox): yyy.yyy.yyy.yyy
+</code>
+
+==== Tester la résolution DNS ====
+Vérifier la résolution de nom locale
+<code bash>
+utilisateur@MachineUbuntu:~$ dig MachineUbuntu +noall +answer
+MachineUbuntu.                  0       IN      A       127.0.1.1
+</code>
+
+Vérifier la résolution de nom Bind9
+<code bash>
+utilisateur@MachineUbuntu:~$ dig MachineUbuntu.domaine-perso.fr +noall +answer
+MachineUbuntu.domaine-perso.fr. 0       IN      A      10.10.10.1
+MachineUbuntu.domaine-perso.fr. 0       IN      A aaa.aaa.aaa.aaa
+MachineUbuntu.domaine-perso.fr. 0       IN      A bbb.bbb.bbb.bbb
+…
+</code>
+
+Vérifier la non résolution de nom de Bind9
+<code bash>
+utilisateur@MachineUbuntu:~$ dig bidon +noall +answer
+
+utilisateur@MachineUbuntu:~$ dig bidon.domaine-perso.fr +noall +answer
+
+</code>
+
+===== Le pare feu =====
+
+Ouvrir le port DNS sur UFW. si UFW est activé, ouvrez le port DNS 53, UDP.
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo ufw allow from 192.168.0.0/16 to any port 53 proto udp
+</code>
+
+===== Définir une zone DNS locale =====
+==== Configurer la zone locale ====
+
+Éditer **/etc/bind/named.conf.local** pour définir la zone DNS
+<file>
+zone "domaine-perso.fr" {
+    type master;
+    file "/etc/bind/db.domaine-perso.fr";
+};
+zone "10.10.10.in-addr.arpa" {
+    type master;
+    file "/etc/bind/db.10.10.10";
+};
+zone "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.d.f.ip6.arpa." {
+    type master;
+    file "/etc/bind/db.fd00";
+};
+</file>
+
+=== Tester la configuration ===
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo named-checkconf
+</code>
+
+==== Paramétrer la zone locale ====
+Éditer **/etc/bind/db.domaine-perso.fr** pour définir les alias DNS
+<file>
+$TTL 15m
+@             IN SOA     @ root (
+          2021082512     ; n° série
+                  1h     ; intervalle de rafraîchissement esclave
+                 15m     ; intervalle de réessaie pour l’esclave
+                  1w     ; temps d’expiration de la copie esclave
+                  1h )   ; temps de cache NXDOMAIN
+
+              IN NS      @
+              IN A       10.10.10.10
+              IN AAAA    fd00::a
+              IN MX      2 courriel
+; domaine vers adresse IP
+serveur       IN A       10.10.10.1
+serveur       IN AAAA    fd00::
+courriel      IN A       10.10.10.2
+courriel      IN AAAA    fd00::2
+documentation IN A       10.10.10.3
+documentation IN AAAA    fd00::3
+*             IN A       10.10.10.10
+*             IN AAAA    fd00::a
+</file>
+
+Éditer **/etc/bind/db.10.10.10** pour définir les alias inverse DNS
+<file>
+$TTL 15m
+@       IN SOA     serveur.domaine-perso.fr. root.domaine-perso.fr. (
+    2021082512     ; n° série
+            1h     ; intervalle de rafraîchissement esclave
+           15m     ; intervalle de réessaie pour l’esclave
+            1w     ; temps d’expiration de la copie esclave
+            1h )   ; temps de cache NXDOMAIN
+
+        IN NS      serveur.domaine-perso.fr.
+
+; IP vers nom de domaine DNS
+1   IN PTR     serveur.domaine-perso.fr.
+2   IN PTR     courriel.domaine-perso.fr.
+3   IN PTR     documentation.domaine-perso.fr.
+10  IN PTR     domaine-perso.fr.
+</file>
+
+Éditer **/etc/bind/db.fd00** pour définir les alias inverse DNS
+<file>
+$TTL 15m
+@       IN SOA     serveur.domaine-perso.fr. root.domaine-perso.fr.  (
+    2021082512     ; n° série
+            1h     ; intervalle de rafraîchissement esclave
+           15m     ; intervalle de réessaie pour l’esclave
+            1w     ; temps d’expiration de la copie esclave
+            1h )   ; temps de cache NXDOMAIN
+
+        IN NS      serveur.domaine-perso.fr.
+
+; IPv6 vers nom de domaine DNS
+0             IN PTR     serveur.domaine-perso.fr.
+2             IN PTR     courriel.domaine-perso.fr.
+3             IN PTR     documentation.domaine-perso.fr.
+a             IN PTR     domaine-perso.fr.
+</file>
+
+==== Valider la configuration de la zone ====
+Pour valider la configuration de la zone il faut relancer le seveur Bind9
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo systemctl restart named
+</code>
+
+==== Tester la zone locale ====
+Vérifier la résolution DNS :
+<code bash>
+utilisateur@MachineUbuntu:~$ dig ANY domaine-perso.fr +noall +answer
+domaine-perso.fr. 6444  IN  SOA  domaine-perso.fr. root.domaine-perso.fr. 2021082512 3600 900 604800 3600
+domaine-perso.fr. 6444  IN  NS   domaine-perso.fr.
+domaine-perso.fr. 6444  IN  A    10.10.10.10
+domaine-perso.fr. 6444  IN  AAAA fd00::a
+domaine-perso.fr. 6444  IN  MX   2 courriel.domaine-perso.fr.
+utilisateur@MachineUbuntu:~$ dig ANY serveur.domaine-perso.fr +noall +answer
+serveur.domaine-perso.fr. 6444  IN  A    10.10.10.1
+serveur.domaine-perso.fr. 6444  IN  AAAA fd00::
+utilisateur@MachineUbuntu:~$ dig ANY courriel.domaine-perso.fr +noall +answer
+courriel.domaine-perso.fr. 6444  IN  A    10.10.10.2
+courriel.domaine-perso.fr. 6444  IN  AAAA fd00::2
+utilisateur@MachineUbuntu:~$ dig ANY documentation.domaine-perso.fr +noall +answer
+documentation.domaine-perso.fr. 6444  IN  A    10.10.10.3
+documentation.domaine-perso.fr. 6444  IN  AAAA fd00::3
+utilisateur@MachineUbuntu:~$ dig ANY bidon.domaine-perso.fr +noall +answer
+bidon.domaine-perso.fr. 6444  IN  A    10.10.10.10
+bidon.domaine-perso.fr. 6444  IN  AAAA fd00::a
+Résolution DNS externe :
+utilisateur@MachineUbuntu:~$ dig google.com +noall +answer
+google.com.              16    IN     A     216.58.223.110
+google.com.              32    IN     AAAA  2a00:…::200e
+…
+</code>
+
+Vérifier la résolution inverse :
+Vous pouvez utiliser la commande «host» ou «dig -x»
+<code bash>
+utilisateur@MachineUbuntu:~$ host 10.10.10.1
+1.10.10.10.in-addr-arpa domain name pointer serveur.domaine-perso.fr.
+utilisateur@MachineUbuntu:~$ dig -x 10.10.10.1 +noall +answer
+1.10.10.10.in-addr.arpa. 900 IN PTR serveur.domaine-perso.fr.
+utilisateur@MachineUbuntu:~$ dig -x fd00:: +noall +answer
+a.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.d.f.ip6.arpa. 900 IN PTR serveur.domaine-perso.fr.
+utilisateur@MachineUbuntu:~$ dig -x 10.10.10.2 +noall +answer
+1.10.10.10.in-addr.arpa. 900 IN PTR courriel.domaine-perso.fr.
+utilisateur@MachineUbuntu:~$ dig -x fd00::2 +noall +answer
+2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.d.f.ip6.arpa. 900 IN PTR courriel.domaine-perso.fr.
+utilisateur@MachineUbuntu:~$ dig -x 10.10.10.3 +noall +answer
+1.10.10.10.in-addr.arpa. 900 IN PTR documentation.domaine-perso.fr.
+utilisateur@MachineUbuntu:~$ dig -x fd00::3 +noall +answer
+3.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.d.f.ip6.arpa. 900 IN PTR documentation.domaine-perso.fr.
+utilisateur@MachineUbuntu:~$ dig -x 10.10.10.10 +noall +answer
+1.10.10.10.in-addr.arpa. 900 IN PTR domaine-perso.fr.
+utilisateur@MachineUbuntu:~$ dig -x fd00::a +noall +answer
+a.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.d.f.ip6.arpa. 900 IN PTR domaine-perso.fr.
+</code>

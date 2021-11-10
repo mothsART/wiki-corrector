@@ -1,0 +1,246 @@
+
+{{tag>Xenial p2p}}
+
+----
+
+====== MLDonkey ======
+
+**MLDonkey** est un client [[P2P]] multiplate-forme, pour les réseaux [[wpfr>EDonkey2000|eDonkey]], [[wpfr>BitTorrent_(protocole)|BitTorrent]] mais aussi [[FTP]], les [[wpfr>Direct_download|téléchargement direct]] et bien d'autres encore.
+
+Il ne nécessite pas d'interface graphique pour continuer à télécharger. Accessible par [[wpfr>interface web]] ou [[wpfr>interfaces graphiques]] dédiées, MLDonkey est idéal à placer sur un serveur commandé à distance.
+
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>mldonkey-server]]**
+
+Lors de l'installation une question vous sera posée: **Faut-il lancer MLDonkey au démarrage du système?**\\
+Si vous découvrez MLDonkey, il est préférable de laisser décocher l'option. Vous pourrez l'activer plus tard lorsque vous aurez connaissances des différentes manière de l'utiliser.
+
+===== Utilisation =====
+
+Nous venons d'installer MLDonkey. Vous ne trouverez pas d'entrée dans le menu applications concernant MLDonkey puisque c'est un [[wpfr>Disk_and_execution_monitor|démon]]. Ensuite vous utiliserez un client graphique qui permettra de contrôler ce démon.
+
+====En mode standard====
+
+Pour démarrer ou arrêter MLDonkey copiez dans un terminal :
+
+__Pour le démarrer :__ <code>mlnet</code>
+
+__Pour le stopper :__<code>sudo killall mlnet</code> ou CTRL+C
+
+__Démarrer MLDonkey à l'ouverture de la session :__\\
+Ajouter la commande **mlnet** [[tutoriel:application_demarrage#lancer_le_gestionnaire_d_applications_au_demarrage|sur le gestionnaire d'applications au démarrage]].
+
+====En mode démon====
+
+Avec ce mode, même si vous changez ou quittez la session de l'ordinateur sur lequel est en fonction le démon, MLDonkey continuera d'être actif. 
+
+<note important>Si vous utilisez le mode démon, vous devrez manuellement paramétrer MLDonkey pour qu'il utilise entre autres vos répertoires pour enregistrer les téléchargements en court et finaux, et gérer les droits. Ce qui peut s’avérer difficile pour les néophytes.</note>
+
+__Pour le démarrer :__<code bash>sudo /etc/init.d/mldonkey-server start</code>
+
+__Pour le stopper :__<code bash>sudo /etc/init.d/mldonkey-server stop</code>
+  
+__Activer le démon MLDonkey au démarrage de l'ordinateur __(ce qui est proposé à l'installation) :\\
+Il vous faut [[:tutoriel:comment_editer_un_fichier|éditer le fichier]] ''/etc/default/mldonkey-server'' et mettre le paramètre **LAUNCH_AT_STARTUP** à **true**.
+
+===== Configuration du démon MLDonkey =====
+
+==== Configuration des répertoires ====
+
+Comme tout bon logiciel de P2P, MLDonkey a besoin de deux répertoires pour fonctionner :
+  * Un répertoire **temp** dans lequel il stockera les fichiers en cours de téléchargement.
+  * un répertoire **incoming** dans lequel il placera les fichiers téléchargés.
+
+Par défaut ces deux répertoires se situent dans ''/var/lib/mldonkey'', ce qui n'est pas très pratique. Nous allons donc modifier le démon afin qu'il place ces répertoires dans votre dossier personnel.
+
+Avant de toucher au fichier de configuration du démon nous devons éteindre celui ci : <code bash>sudo /etc/init.d/mldonkey-server stop</code>
+
+Maintenant nous allons [[:tutoriel:comment_editer_un_fichier|éditer le fichier]] **.mldonkey/downloads.ini**, qui se trouve dans votre **Dossier personnel**.\\
+Il faut trouver la ligne contenant les paramètres **incoming_directory**FIXME et **temp_directory**, puis les remplacer par les répertoires de votre choix, par exemple :
+<file>temp_directory = "$HOME/.mldonkey/temp"</file>
+Bien sûr nous devons créer ce répertoire.
+
+Trouvez la section pour les fichiers temporaires :
+
+Puis la section pour les répertoires de partage et de classement :
+<file>
+ shared_directories = [
+  {     dirname = "$HOME/.mldonkey/shared"    (* dossier partagé*)
+     strategy = only_directory
+     priority = 0
+};
+  {     dirname = shared
+     strategy = all_files
+     priority = 0
+};
+  {     dirname = "$HOME/.mldonkey/incoming"    (* dossier fichiers finis edonkey*)
+     strategy = incoming_files
+     priority = 0
+};
+  {     dirname = "$HOME.mldonkey/incoming"    (* dossier fichiers finis bittorrent*)
+     strategy = incoming_directories
+     priority = 0
+};]
+</file>
+
+
+==== En cas de problème : mode verbose ====
+
+Lorsque MLDonkey ne démarre plus et qu'il n'y a rien dans le log, il faut modifier le script de démarrage ''/etc/init.d/mldonkey-server'' pour afficher des informations supplémentaires. Pour cela, chercher les lignes : <file bash>
+start-stop-daemon --start $WRAPPER_OPTIONS \
+--pidfile $PIDFILE --background --no-close --exec $EXEC \
+-- -log_file $SERVERLOG -pid $PIDDIR >>$SERVERLOG 2>&1</file>
+
+et remplacer ''--background'' par ''--verbose''. 
+Au démarrage du service (''service mldonkey-server start''), des infos seront affichées, et probablement la cause du problème. Ensuite, rétablir la ligne modifiée.
+
+===== Installation d'un client graphique =====
+
+MLDonkey n'est que le cœur du système de téléchargement. Pour pouvoir le piloter facilement il vous faut un client graphique qui se connectera au démon et lui enverra des commandes. 
+
+L'avantage est que vous pouvez fermer le client graphique, le démon lui, continue à télécharger.
+
+Un autre avantage est que vous pouvez configurer un PC dédié uniquement au téléchargement sur lequel tourne le démon, et piloter le téléchargement depuis un autre PC, ou même du bureau. Donc en résumé par exemple, un PC dans le salon qui fait du bruit et qui télécharge, un pc dans la chambre depuis lequel on lance les téléchargements et qu'on peut éteindre la nuit.
+
+Par défaut vous utilisez MLDonkey en tant qu'utilisateur **admin**.
+
+Si vous voulez l'utilisez à l'extérieur, vous pouvez facilement définir un reverse proxy dans apache qui pointera par exemple sur le dossier : http://monsite/mldonkey.
+Comme ça, depuis internet, vous pouvez lancer des téléchargements.
+
+====WebUI====
+
+MLDonkey fourni nativement une interface web pour piloter le démon. Elle est accessible par défaut sur le port 4080 (vous pouvez le changer dans la configuration de MLDonkey) de la machine qui héberge le démon (vous pouvez donc accéder à votre interface web à l'adresse ''http://localhost:4080/''). Cette interface est en anglais uniquement.
+
+==== MLdonkeyGtkUi ====
+
+Le premier client graphique est le plus simple à installer. Il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>mldonkey-gui]]**.
+ 
+Lancez l'application comme indiqué [[:tutoriel:comment_lancer_application|ici]] ou via le [[:terminal]] (toutes [[:versions]] ou [[:variantes]] d'Ubuntu) avec la [[:commande_shell|commande]] suivante : <code>mlgui</code>
+
+==== KMLDonkey - Interface KDE ====
+
+Voir la page dédiée : [[KMLDonkey]]
+
+==== Sancho - Interface Gnome ====
+
+Il existe une autre interface graphique, [[http://sancho.awardspace.com|Sancho]]. C'est une interface gtk2 avec une icône dans le [[indicator-applications|systray]].
+
+=== Installation ===
+
+Récupérez l'archive de Sancho sur le site du projet, onglet **Linux**. Quand au choix de la version:
+  *Java GTK x86 binary: Si vous avez [[Java]] sur votre machine architecture [[architecture_materielle#mon_ubuntu_est-il_32_ou_64_bits|32 bits]];
+  *Java GTK x86_64 binary: Si vous avez Java sur votre machine architecture 64 bits;
+  *Native GTK x86 binary: Si vous n'avez pas Java sur votre machine, compatible 32 et 64 bits.
+
+Nous supposerons que l'archive est téléchargée dans votre dossier personnel.
+
+Créez le répertoire d'installation :
+  sudo mkdir /usr/local/sancho
+
+Maintenant exécutons le script d'installation (À adapter en fonction de la version obtenu) :
+  sudo sh ~/sancho-0.9.4-59-linux-gtk.sh
+
+Le script vous demande où le logiciel doit être installé :
+<code bash>Extract to directory [<sancho-0.9.4-59-linux-gtk>]:</code>
+
+Taper donc ''/usr/local/sancho''
+
+Sancho est installé. Vous pouvez [[:raccourci-lanceur|Créez un raccourci]] en utilisant « ''sancho'' » comme commande.
+
+Les fichiers de configuration de Sancho dans votre dossier personnel appartiennent à **root** (car vous avez lancé l'installation en tant qu'administrateur). Nous allons donc remettre le bon propriétaire (vous !) à ces fichiers :
+  sudo chown -R $USER:$USER ~/.sancho
+//(vous pouvez remplacer $USER par votre login bien sûr ;-)//
+
+
+=== Mettre Sancho en français ===
+
+Démarrez **Sancho**, allez dans **Tools => Preferences**. Dans la section **sancho:main**, dans l'onglet **General**, là où il y a écrit « Locale specific sancho*.properties file », choisissez **fr_FR** dans le menu déroulant puis redémarrez l'application.
+
+=== Dernière étape : se connecter à un serveur ===
+
+La dernière étape est de se connecter à un serveur pour pouvoir lancer une recherche.
+
+Cliquez sur l'onglet serveur.\\
+En haut a droite cliquez sur la planète avec une croix verte intitulé "ajouter un fichier serveur.met" entrez-y l'adresse d'un fichier de serveur .met que vous récupérerez sur des sites comme [[http://ed2k.2x4u.de]]\\
+Il devrait aussi récupérer une liste d'autre serveurs.
+
+<note tip>Il est plus sûr de désactiver les options de récupération automatique des serveurs afin d'éviter de recevoir des serveurs espions. Dans ce cas une liste de serveurs sûrs doit être récupérée en téléchargeant un des fichiers ".met" ci-dessus.</note>
+
+Une fois connecté lancez une recherche.
+
+=== Lancement du démon avec l'interface graphique Sancho ===
+
+Pour lancer le démon automatiquement au démarrage de Sancho et le couper à la fermeture de Sancho (à la manière de Amule) :
+  mlnet -start_gui true -mldonkey_gui /usr/local/sancho/sancho
+
+Puis vous pouvez simplement lancer mlnet, le serveur lancera toujours Sancho.
+
+**N'oubliez pas d’autoriser Sancho à couper le serveur mldonkey lorsque vous quittez :**
+ 
+ outils / préférences :
+  * optional core executable : mlnet
+  * cocher Kill spawned core when exiting sancho 
+
+Pour revenir à la configuration par défaut, [[:tutoriel/comment_editer_un_fichier|éditez le fichier]] /home/mondossierpersonnel/.mldonkey/download.ini et cherchez la ligne mldonkey_gui 
+
+===== Filtrage des IP ===== 
+
+Vous pouvez vous servir d'un ipfilter.dat en le placant dans le dossier **~/.mldonkey**
+
+Pour la compatibilité d'un fichier ipfilter.dat :
+
+  * récupérer un fichier :[[http://emulepawcio.sourceforge.net/nieuwe_site/Ipfilter_fakes/ipfilter.dat|Ipfilter.dat ]] ;
+  * [[:tutoriel/comment_editer_un_fichier|éditez ce fichier]] et supprimer toutes les lignes (avec les #) avant la série de chiffre .
+
+<note tip>Vous pouvez aussi utiliser [[recherche_ligne_commande#grep]] pour filtrer les lignes commentées (avec les #) : <code>grep -v ^# ipfilter.dat > ipfilter.p2p</code></note>
+
+===== Ports utilisés =====
+
+Avec l'interface web, cliquer sur les onglets **help+ => Sysinfo** et le troisième tableau affichera la liste des ports utilisés comme présenté ci dessous:
+<code>
+Network   |  Port|Type
+---------- ------ -------------------
+BitTorrent|  6882|client_port TCP
+BitTorrent|  6881|tracker_port TCP
+Core      |  4080|http_port
+Core      |  4000|telnet_port
+Core      |  4001|gui_port
+Donkey    | 4662|client_port TCP
+Donkey    | 4666|client_port UDP
+Donkey    | 14934|overnet_port TCP UDP
+Donkey    | 4672|kademlia_port UDP
+</code>
+
+En veillant que le démon ne soit pas lancé pendant l'édition, il est possible de modifier ces ports:
+
+[[:tutoriel:comment_editer_un_fichier|éditez le fichier]] **~/.mldonkey/nomduprotocole.ini**
+
+avec nomduprotocole :
+
+  * Pour Edonkey, Overnet, Kademlia : éditer le fichier /home/mondossierpersonnel/.mldonkey/donkey.ini.
+  * Pour Bittorrent : éditer le fichier /home/mondossierpersonnel/.mldonkey/bittorrent.ini.
+  * etc...
+
+===== Intégration à Firefox =====
+
+À l'aide d'une extension spécialement conçu pour MLDonkey, il est possible de charger des fichiers eDonkey et BitTorrent en un clic. Elle utilise l'interface web WebUI, et permet donc de le faire à distance.
+
+Disponible sur le site des [[https://addons.mozilla.org/fr/firefox/addon/mldonkeyfox-protocols-handl|extensions Mozilla]].\\
+**Pour l'installation aller voir [[firefox|Firefox]]** 
+
+===== Un système d'analyse anti-virus et d'alerte =====
+
+Dernier raffinement, vous pouvez vous créer un script (shell, php, perl, ...) qui sera lancé au démarrage et à la récupération d'un fichier.
+Cela permet d'avertir l'utilisateur, de scanner avec un anti-virus le fichier récupéré, et même de le sortir de l'incoming, pour éviter les problèmes d'upload.
+Allez voir dans downloads.ini, jusqu'à la commande file_completed.
+Si il y en a que ça intéresse, je peux joindre la copie de mon script (home made 100% pas propre).
+
+FIXME qui peut joindre la copie du script?
+
+=====Voir aussi=====
+  * [[http://mldonkey.sourceforge.net/|Site officiel]]
+
+----
+
+//Contributeur : [[utilisateurs:mathieu.vilaplana]], [[utilisateurs:Boris Le Hachoir]]//

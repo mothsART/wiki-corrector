@@ -1,0 +1,225 @@
+
+{{tag>Xenial serveur réseau dns}}
+
+----
+
+====== Serveur DNS : PowerDNS ======
+
+Cet article a pour but de vous présenter comment installer et configurer un serveur DNS en utilisant l'application **powerDNS**.
+
+PowerDNS est un serveur de nom qui peut utiliser de nombreux //backends// comme stockage des informations de noms : base de données ([[:mysql]] ou [[:postgresql]]), LDAP, fichiers de bind.
+
+Si vous utilisez des bases de données, il y a plusieurs avantages très importants :
+  * Qui dit "//bases de données//", dit "//administration facilitée par une interface web//".
+  * Vous n'avez pas besoin de recharger le serveur à l'ajout d'une information de nom. Le serveur ira chercher l'information quand vous l'interrogerez.
+  * En cas de crash système, et pour peu que vous ayez logé votre serveur de bases de données sur un point de montage séparé, vous ne perdrez pas vos données si vous réinstallez complètement votre système.
+
+<note tip>L'auteur a par exemple logé tous ses serveurs logiciels dans /home : apache, mysql, serveur de courriel dont les boîtes aux lettres sont dans le répertoire de chaque utilisateur...</note>
+
+===== Pré-requis =====
+
+  * Vous devez maîtriser les bases de TCP/IP.
+  * Vous devez avoir une connexion internet (ou intranet si vous voulez juste adresser votre [[wpfr>Réseau_local|lan]] sans connexion au reste du monde).
+
+===== Installation =====
+
+Pour installer //PowerDNS// sur Ubuntu, [[:tutoriel:comment_installer_un_paquet|installez les paquets]] **[[apt>pdns-server,pdns-recursor]]**.
+
+===== Configuration =====
+
+Considérons les aspects suivants :
+  * Le réseau local est ''192.168.251.*'' et se nomme ''bureau.lan''. L'utilisation du TLD fictif "lan" est voulue. Vous pouvez utiliser un autre nom e domaine, comme net, maison, home.lan...
+
+<note important>Il semble que powerdns refuse les noms de domaine en TLD (vous ne pouvez pas nommer vos pcs georges.lan, gertrude.lan, mais bien georges.bureau.lan, gertrude.bureau.lan)</note>
+
+  * La machine serveur DNS est aussi le serveur de mail et porte l'IP ''192.168.251.202''; elle se nomme ''mail2''.
+  * Il y a 3 autres machines sur le réseau : ''192.168.251.200'' (nommée ''twin1''), ''192.168.251.201'' (nommée ''twin2'') et ''192.168.251.205'' (nommée ''portable'').          
+
+Voyons comment configurer le serveur PowerDNS avec ce petit réseau.
+
+==== Configuration de base du serveur ====
+
+Le serveur comporte deux parties distinctes, le serveur de noms lui-même et le recurseur. Ces deux services sont séparés dans le système. Chacun a un démon. Lorsque vous contactez le serveur, celui-ci interroge le recurseur via une connection reseau sur une adresse localhost (ou autre à la limite !) et un port logiciel s'il ne peut trouver les informations dans ses backends.
+
+La syntaxe des données dans les backends est la même, que pour Bind.
+
+=== Le fichier de configuration générale ===
+
+La configuration principale de PowerDNS se fait dans le fichier ''/etc/powerdns/pdns.conf''. Dans ce fichier, vous indiquerez les backends utilisés, l'adresse et le port pour contacter le recurseur.
+
+<file /etc/powerdns/pdns.conf>
+allow-axfr-ips=217.70.177.40
+allow-recursion=127.0.0.1
+disable-axfr=no
+cache-ttl=300
+launch=gmysql
+logging-facility=0
+out-of-zone-additional-processing=yes
+query-cache-ttl=300
+recursive-cache-ttl=150
+recursor=127.0.0.1:54
+</file>
+
+Ces paramètres sont à adapter suivant votre cas.
+
+=== Le recurseur ===
+
+<file>
+allow-from=127.0.0.1
+local-address=127.0.0.1
+local-port=54
+logging-facility=1
+</file>
+
+=== Les backends ===
+
+== Mysql ==
+
+Si vous utilisez mysql, vous devez avoir un serveur [[:mysql]] fonctionnel et ajouter les paramètres dans ''/etc/powerdns/pdns.conf'' :
+
+<file>
+launch=gmysql
+gmysql-host=localhost
+gmysql-user=powerdns
+gmysql-password=##############
+gmysql-dbname=powerdns
+</file>
+
+Adaptez vos paramètres à ceux de votre base de données.
+
+<note warning>Il est vital que la base de données soit accessible ! Si vous utilisez un autre hôte que localhost dans **gmysql-host**, votre serveur PowerDNS devra pouvoir contacter ce serveur mysql, donc avoir une connexion réseau stable et une adresse (qui ne doit donc pas venir d'un serveur de nom !). Vous pouvez mettre ce nom dans ''/etc/hosts''. Ceci est toutefois risqué car il dépend de la stabilité du (des) réseaux traversés.</note>
+
+== Ldap ==
+FIXME
+== Postgresql ==
+FIXME
+=== Interfaces web ===
+
+Il existe de nombreuses interfaces web pour PowerDNS :
+[[http://pdnsadmin.iguanadons.net/|PDNSadmin]]
+
+Une liste non-exhaustive est disponible ici :
+[[http://www.the-scream.co.uk/forums/t27204.html]]
+
+<note important>Si vous installez une interface web, il peut être important de restreindre l'accès de cette interface. En effet, le serveur de nom de domaine est la clé de voute de tout réseau informatique organisé ! Toute personne qui pénétrerait sur cette interface pourrait gravement compromettre le fonctionnement de votre réseau.
+
+Vous pouvez mettre en place une restriction d'accès par un fichier .htaccess, ou directement dans la configuration du serveur web. Pour info, sur [[Apache2]], vous pouvez mettre :
+
+<file>
+
+<Directory /pdnsadmin>
+Order allow,deny
+Deny from all
+Allow from 192.168.0.0/24
+Allow from .*22decembre\.eu.*
+Allow from 2a01:e35C:8ABB:5A00::/64
+</Directory>
+
+</file>
+
+Ici, 192.168.0.0/24 pour indiquer mon réseau interne, 2a01:e35C:8ABB:5A00::/64 est ma racine ipv6, et 22decembre.eu mon nom de domaine. Ainsi, seuls ceux qui sont **//dans mon réseau//**, ou que j'ai **//volontairement//** inclus dans mon domaine peuvent intervenir sur mon serveur de noms, //en plus// du mot de passe de l'interface graphique elle-même ! (Un mot de passe se craque, deux sécurités valent mieux qu'une !)
+</note>
+
+=== Enregistrements ===
+
+Les **enregistrements**, ou //records//, du serveur de nom sont les même que pour [[Bind9]].
+
+=== Vérification de la configuration ===
+
+Pour vérifier le fonctionnement de notre serveur DNS, nous allons lui adresser des requêtes directement via l'utilitaire ''nslookup'', pour l'utiliser, il suffit de taper ''nslookup'' dans un terminal.
+
+<note tip>Cette méthode est valable pour tous les serveurs de noms puisqu'elle repose sur le protocole DNS lui-même  !</note>
+
+On doit lui indiquer le serveur DNS à vérifier via le mot clé ''server 127.0.0.1'' et ensuite, on lui donne un nom d'hôte et il doit nous répondre l'adresse IP. 
+
+**Voici la petite session de test que j'ai fait chez moi** :
+
+On commence par dire à nslookup quel serveur il doit interroger :
+<file>
+nslookup
+> server 127.0.0.1
+Default server: 127.0.0.1
+Address: 127.0.0.1#53
+</file>
+Puis on l'interroge :
+<file>
+> mail2.bureau.lan
+Server:         127.0.0.1
+Address:        127.0.0.1#53
+
+Name:   mail2.bureau.lan
+Address: 192.168.251.202
+> 192.168.251.201
+Server:         127.0.0.1
+Address:        127.0.0.1#53
+
+201.251.168.192.in-addr.arpa    name = twin2.bureau.lan.
+> set q=mx
+> bureau.lan
+Server:         127.0.0.1
+Address:        127.0.0.1#53
+bureau.lan    mail exchanger = 10 mail2.bureau.lan.
+> exit
+</file>
+
+Si tout se déroule normalement, vous pouvez configurer vos clients et utiliser votre serveur DNS.
+
+
+==== Erreurs possibles ====
+
+FIXME
+===== Configuration des clients =====
+
+<note tip>Ces méthodes de configuration, passant par DHCP ou les fichiers système sont valables pour tous les serveurs DNS, quels que soient leurs versions !</note>
+
+La configuration de la résolution de nom pour les machines Linux se fait dans le fichier ''/etc/resolv.conf''. Dans ce fichier, vous pouvez ajouter le domaine de recherche via la ligne suivante (en premier dans le fichier) :
+
+<code>
+search bureau.lan
+</code>
+
+Et ensuite, les adresses de vos serveurs de noms (primaire interne, autres internes, puis ceux de votre fournisseur d'accès par exemple) de la manière suivante :
+
+<file>
+nameserver 192.168.251.202
+</file>
+
+L'ordre dans lequel vous indiquez les lignes est important. Voici le fichier tel qu'il est chez moi :
+
+<file>
+search bureau.lan
+nameserver 192.168.251.202
+nameserver 192.168.251.212
+nameserver 193.121.171.135
+nameserver 193.74.208.65
+</file>
+
+Linux va essayer de résoudre un nom de la manière suivante (si une étape ne fonctionne pas, il essaye la suivante) :
+   * recherche du serveur de nom de ''bureau.lan'' et interrogation de ce serveur.
+   * interrogation du serveur DNS ''192.168.251.202'' qui est mon serveur DNS primaire (interne).
+   * interrogation du serveur DNS ''192.168.251.212'' qui est mon serveur DNS secondaire (interne).
+   * interrogation du serveur DNS ''193.121.171.135'' qui est le serveur DNS primaire de mon provider.
+   * interrogation du serveur DNS ''193.74.208.65'' qui est le serveur DNS secondaire de mon provider.
+
+==== Configuration DHCP équivalente ====
+
+Si le fichier /etc/resolv.conf est généré (écrasé) automatiquement par dhclient, voici les lignes correspondantes à ajouter au fichier /etc/dhcp3/dhclient.conf (Configuration testée sur Ubuntu "hardy" 8.04.3 LTS) :
+
+<file>
+prepend domain-name-servers 192.168.251.202, 192.168.251.212;
+append domain-name "bureau.lan.";
+</file>
+
+==== Configuration des clients Windows ====
+Sans entrer dans les détails (ce n'est pas le but du site), il vous suffit d'introduire l'adresse IP de vos serveurs DNS primaire et secondaire dans les propriétés du protocole TCP/IP (accessible dans les connexions réseaux du panneau de configuration). Rajouter le suffixe DNS correspondant à votre domaine dans les propriétés réseaux de votre carte.
+===== Voir aussi =====
+
+Site web : [[http://www.powerdns.com/|PowerDNS]]\\
+Documentation officielle : [[http://www.powerdns.com/en/documentation.aspx|Doc]]
+
+Cet article est inspiré, au moins partiellement, de :\\
+[[http://www.howtoforge.com/installing-powerdns-with-mysql-backend-and-poweradmin-on-debian-etch]]\\
+[[http://nyrodev.info/index.php/2009/03/22/245-serveur-dns-powerdns-serveur-web-sur-debian-lenny]]
+----
+
+//Contributeurs : [[:utilisateurs:stephaneguedon]].//

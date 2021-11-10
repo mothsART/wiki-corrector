@@ -1,0 +1,71 @@
+
+{{tag>matériel scanner brouillon VÉTUSTE}}
+----
+
+> FIXME Cette page est encore nécessaire à partir de Dapper ?
+
+====== Régler les problèmes avec un scanner SCSI ======
+
+===== Mon scanner SCSI n'est pas détecté par XSane : analyse du problème =====
+
+[[:xsane|Sane]] ne parvient pas à trouver votre scanner scsi ? Peut-être le pilote scsi ne convient-il pas (par exemple, il peut s'agir du pilote aic7xxx, qui ne détecte pas le scanner). Vous pouvez alors essayer d' ajouter le [[:tutoriel:tout_savoir_sur_les_modules_linux|pilote]] générique **sg** en saisissant dans un [[:terminal]] la [[:commande_shell|commande]] suivante :
+<code>sudo modprobe sg</code>
+
+Cela devrait suffire à débloquer la situation.
+
+Pour vérifier ensuite si le scanner est bien reconnu, taper :
+<code>sudo scanimage -L</code>
+
+qui doit retourner la valeur du scanner scsi détecté, par exemple, dans mon cas :
+<code>#device `epson:/dev/sg0' is a Epson GT-7000 flatbed scanner</code>
+
+===== Charger le périphérique sg au boot =====
+
+Pour rendre ceci permanent, [[:tutoriel:comment_modifier_un_fichier|ouvrez avec les droits d'administration]] le fichier **/etc/modules** et ajoutez  la ligne suivante à la fin du fichier :
+<file>sg</file>
+
+Au prochain boot, [[:udev]] crée le device sg0 correspondant au scanner (s'il est allumé). Sane, [[:XSane]] et [[:gimp|The Gimp]] utilisent tous le scanner sans problème.
+
+===== Rendre accessible ce périphérique à tous les utilisateurs =====
+
+Seulement voilà, seul [[:sudo|root]] peut utiliser le scanner ! \\
+Dans ce cas il faut modifier les permissions du matériel, dont le propriétaire est root et le groupe disk.
+
+==== Versions récentes (Ubuntu 8.04 et suivantes) ====
+
+S'il n'existe pas déjà, [[:tutoriel:comment_modifier_un_fichier|créez avec les droits d'administration]] le fichier **/etc/udev/rules.d/40-permissions.rules** où vous y ajouterez un une section scsi en insérant les lignes suivantes:
+<file>
+# SCSI devices
+SUBSYSTEMS=="scsi", ATTRS{type}=="1",                GROUP="tape"
+SUBSYSTEMS=="scsi", ATTRS{type}=="3", ATTRS{vendor}=="HP",    GROUP="scanner", MODE="0666"
+SUBSYSTEMS=="scsi", ATTRS{type}=="3", ATTRS{vendor}=="Epson",    GROUP="scanner", MODE="0666"
+SUBSYSTEMS=="scsi", ATTRS{type}=="3", ATTRS{vendor}=="EPSON",    GROUP="scanner", MODE="0666"
+SUBSYSTEMS=="scsi", ATTRS{type}=="4",                GROUP="cdrom"
+SUBSYSTEMS=="scsi", ATTRS{type}=="5",                GROUP="cdrom" 
+SUBSYSTEMS=="scsi", ATTRS{type}=="6",                GROUP="scanner", MODE="0666"
+SUBSYSTEMS=="scsi", ATTRS{type}=="8",                GROUP="tape" 
+</file>
+
+<note tip>
+[[:users-admin|Mettre l'utilisateur dans le groupe]] scanner, ensuite vérifier que les [[:droits]] et [[:permissions]] du fichier **/home/user/.sane** sont corrects pour l'user, les rétablir au besoin. FIXME ils doivent être à combien au mini ?</note>
+
+<note important>
+**Rebooter scanner allumé** et tester.\\
+[[#j_ai_oublie_d_allumer_le_scanner_au_demarrage_de_l_ordinateur|Une nouvelle détection de la chaîne SCSI]] suffira la plupart du temps.
+</note> 
+
+===== J'ai oublié d'allumer le scanner au démarrage de l'ordinateur ! =====
+
+Évidemment, le périphérique **/dev/sg0** n'existe pas, et pas moyen de scanner. On ne va tout de même pas rebooter à chaque fois ? La manipulation suivante devrait vous tirer de ce mauvais pas. Elle n'est pas parfaite, car seul [[:sudo|root]] peut l'accomplir. Elle consiste à décharger le [[:tutoriel:tout_savoir_sur_les_modules_linux|pilote]] SCSI (le vrai pas le générique) et à le recharger pour forcer le système à relire toute la chaine SCSI des périphériques :
+<code>sudo modprobe -r aic7xxx
+sudo modprobe aic7xxx</code>
+ 
+Vérifiez ensuite que les droits soient semblable à :
+<code>ls -l /dev/sg*
+crw-rw---- 1 root scanner 21, 0 2005-07-09 08:24 /dev/sg0''
+</code>
+
+Bon usage de votre scanner.
+
+----
+//Contributeurs:FIXME//

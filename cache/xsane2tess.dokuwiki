@@ -1,0 +1,142 @@
+
+{{tag>Xenial Trusty scanner graphisme ocr}}
+
+----
+
+====== xsane2tess : un adaptateur tesseract pour Xsane ======
+
+**xsane2tess** est un adaptateur permettant d'utiliser le moteur de reconnaissance optique de caractères [[:tesseract-ocr|tesseract]]  avec l'application de numérisation [[:Xsane]]. **Xsane2tess** a été proposé par MadMax sur le forum [[http://www.mandrivauser.de/viewtopic.php?pid=166894#p166894|MandrivaUser.de]].
+
+===== Pré-requis =====
+  * Disposer des [[:sudo|droits d'administration]];
+  * Disposer d'une connexion à Internet configurée et activée;
+  * Avoir installé les paquets:
+    * **[[:tesseract-ocr|tesseract]]** avec les modules de langue que l'on souhaite pouvoir utiliser;
+    * **[[:Xsane]]**
+    * et **[[:imagemagick]]**
+
+===== Installation =====
+Pour utiliser la reconnaissance optique de caractères [[:tesseract-ocr|tesseract]]  avec l'application de numérisation [[:Xsane]], il est nécessaire de créer un [[:script]]. Pour cela, il suffit de suivre la procédure suivante:
+  - [[:tutoriel:comment_modifier_un_fichier|Créez le fichier]] **xsane2tess** par exemple sur votre Bureau et copiez-y le contenu suivant: <file txt xsane2tess>#!/bin/bash
+  #
+  #
+  ##############################################################################
+  #
+  #                                   xsane2tess 1.0
+  #
+  #                          *** tesseract made simple ***
+  #
+  #
+  ##############################################################################
+  # 
+  # xsane2tess is a TesseractOCR wrapper to be able to use tesseract with xsane
+  #
+  #
+  #
+  TEMP_DIR=/tmp/      # folder for temporary files (TIFF & tesseract data)
+  ERRORLOG="xsane2tess.log"  # file where STDERR goes 
+  
+  if [[ -z "$1"  ]]
+    then
+    echo "Usage: $0 [OPTIONS]
+  
+    xsane2tess converts files to TIF, scans them with TesseractOCR
+    and outputs the text in a file.
+  
+    OPTIONS:
+      -i <file1>  define input file (any image-format supported)
+      -o <file2>  define output-file (*.txt)
+      -l <lang>  define language-data tesseract should use
+  
+    Progress- & error-messages will be stored in this logfile:
+       $TEMP_DIR$ERRORLOG
+  
+    xsane2tess depends on
+      - ImageMagick  http://www.imagemagick.org/
+      - TesseractOCR http://code.google.com/p/tesseract-ocr/
+  
+    Some coding was stolen from 'ocube'
+    http://www.geocities.com/thierryguy/ocube.html
+  "
+    exit
+  fi
+  
+  
+  # get options...
+  while getopts ":i:o:l:" OPTION
+    do
+    case $OPTION in 
+      i)  # input filename (with path)
+        FILE_PATH="$OPTARG"
+      ;;
+      o )  # output filename
+        FILE_OUT="$OPTARG"
+      ;;
+      l )  # Language-selection
+        TES_LANG="$OPTARG"
+      ;;
+    esac
+  done
+  
+  # redirect STDOUT to FILE_OUT
+  exec 1>>$FILE_OUT
+  
+  # redirect STDERR to ERRORLOG
+  exec 2>>$TEMP_DIR$ERRORLOG
+  
+  # strip path from FILE_PATH, use filename only
+  IN_FILE=${FILE_PATH##*/}
+  
+  TIF_FILE="$TEMP_DIR""${IN_FILE%.*}".tif
+  TXT_FILE="$TEMP_DIR""${IN_FILE%.*}"
+  
+  # converting image into TIFF (ImageMagick)
+  convert "$FILE_PATH" -compress none  "$TIF_FILE" 1>&2
+  
+  # start OCR (tesseract expands output with *.txt)
+  tesseract "$TIF_FILE" "$TXT_FILE" -l "$TES_LANG" 1>&2
+  
+  # STDOUT scanned text => FILE_OUT
+  cat "$TXT_FILE".txt
+  
+  # delete graphic file after use
+  rm "$TIF_FILE"
+  
+  # delete tesseract output
+  rm "$TXT_FILE".txt</file>
+  - [[:tutoriel:script_shell#methode_graphique|Rendez exécutable]] ce fichier //xsane2tess//,
+  - Depuis un [[:terminal]], copiez le fichier //xsane2tess// dans le dossier dans ///usr/bin//, en admettant que vous l'avez enregistré sur votre Bureau, sinon adapter le chemin:
+<code>sudo cp Bureau/xsane2tess /usr/bin</code>
+Vous pourrez ensuite consulter le fichier //xsane2tess.log// dans le dossier // /tmp// pour observer les éventuelles erreurs .
+
+===== Utilisation =====
+
+  - Lancer l'application [[:Xsane]] 
+  - Puis dans le menu: Préférences -> Configuration -> Onglet "OCR" entrez les informations suivantes en respectant bien la casse :
+    * **Commande OCR** : xsane2tess -l fra 
+    * **Option de fichier d'entrée** : -i
+    * **Option de fichier de sortie** : -o
+
+La langue du texte à numériser peut être modifiée quand on le veut dans le menu de configuration de XSane [[:tesseract-ocr#les_options_de_langues|(l'option-l)]], à condition d'avoir installé les fichiers de langues correspondants de tesseract, comme indiqué dans le paragraphe [[#Pré-requis]].\\
+[[:XSane]] présente le grand avantage de permettre la sélection des colonnes ou zones d'un texte l'une après l'autre grâce à la prévisualisation, et donc  avant traitement [[:OCR]] par tesseract.
+
+On obtient de bons résultats en numérisant à 300 ppi, noir et blanc (fichier  "type : TEXT").
+Pour plus de précisions, voir le paragraphe sur [[:ocr#xsane|la ROC avec XSane]].
+
+Il suffit ensuite de copier-coller les fichiers obtenus dans une application de traitement de texte comme LibreOffice Writer, et la reconnaissance orthographique fait le reste...
+
+=====Désinstallation====
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]], les paquets de langues installées et si ils ne sont plus nécessaires pour d'autres applications, supprimer les paquets **  [[:tesseract-ocr|tesseract]]** et  **[[:Imagemagick]]**. Le script créé plus haut ne sera plus utile, vous pouvez aussi le supprimer.\\
+Selon la méthode choisie, la configuration globale des applications sont conservées ou supprimées. Les journaux du système, et les fichiers de préférence des utilisateurs dans leurs dossiers personnels sont toujours conservés.
+
+===== Voir aussi =====
+
+  * [[https://web.archive.org/web/20090719052550/http://www.mandrivauser.de/viewtopic.php?pid=166894| Le post de MadMax concernant xsane2tess disponible sur Internet Archive]] (de)
+  * [[:tesseract-ocr]] (fr)
+  * [[:Xsane]] (fr)
+  * [[http://www.equinoxefr.org/post/2008/07/05/xsane-et-tesseract-locr-qui-marche-tres-bien-sous-linux/ | Une solution qui fonctionne : xsane2tess ...]] (fr)
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=78804| Le fil de discussion du forum Ubuntu-fr dédié à la Reconnaissance Optique de Caractères.]] (fr)
+ 
+------
+
+//Contributeurs : [[utilisateurs:Sorbus]], [[utilisateurs:l_Africain|L'Africain]] //

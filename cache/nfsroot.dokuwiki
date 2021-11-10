@@ -1,0 +1,223 @@
+
+====== Tuto NFS root avec démarrage depuis une clé USB ======
+===== Création du nfsroot avec debootstrap (dans /nfsroot) =====
+==== Le dossier ====
+<code>
+sudo mkdir /nfsroot
+</code>
+==== debootstrap ====
+<code>
+sudo apt-get install dchroot debootstrap 
+sudo debootstrap --arch i386 `lsb_release -c -s` /nfsroot http://archive.ubuntu.com/ubuntu/
+</code>
+==== Config ====
+<code>
+sudo cp /etc/resolv.conf /nfsroot/etc/resolv.conf 
+sudo cp /etc/apt/sources.list /nfsroot/etc/apt/ </code>
+==== Mount (/dev et /proc) ====
+<code>
+sudo mount --bind /dev /nfsroot/dev 
+sudo mount -t proc /proc /nfsroot/proc </code>
+==== chroot ====
+ <code>
+sudo chroot /nfsroot </code>
+==== install ====
+<code>
+apt-get update 
+apt-get install ubuntu-minimal ubuntu-standard ubuntu-desktop language-pack-fr language-pack-gnome-fr nfs-client # Installation d'Ubuntu
+apt-get dist-upgrade 
+dpkg-reconfigure locales 
+dpkg-reconfigure console-setup </code>
+==== Config pour boot avec nfs ====
+
+=== config : /etc/hostname ===
+ <code>
+echo "nfs-ub" > /etc/hostname 
+</code>
+=== config : /etc/hosts ===
+ <code>
+127.0.0.1	localhost 
+127.0.1.1	nfs-ub 
+
+# The following lines are desirable for IPv6 capable hosts 
+::1     localhost ip6-localhost ip6-loopback 
+fe00::0 ip6-localnet 
+ff00::0 ip6-mcastprefix 
+ff02::1 ip6-allnodes 
+ff02::2 ip6-allrouters 
+ff02::3 ip6-allhosts</code>
+=== config : user ===
+<code>
+adduser congelli501 
+usermod -G admin -a congelli501</code>
+=== sudo ===
+<code>
+visudo # Permet d'éditer le fichier sudoers</code>
+ => Ajouter:
+<code>
+# Members of the admin group may gain root privileges 
+%admin ALL=(ALL) ALL </code>
+=== config : /etc/fstab ===
+
+<code>
+# /etc/fstab: static file system information. 
+# 
+# Use 'blkid -o value -s UUID' to print the universally unique identifier 
+# for a device; this may be used with UUID= as a more robust way to name 
+# devices that works even if disks are added and removed. See fstab(5). 
+# 
+# <file system> <mount point>   <type>  <options>       <dump>  <pass> 
+proc            /proc           proc    defaults        0       0 
+/dev/nfs        /               nfs     defaults        1       1 
+none            /tmp            tmpfs   defaults        0       0 
+none            /var/run        tmpfs   defaults        0       0 
+none            /var/lock       tmpfs   defaults        0       0 
+none            /var/tmp        tmpfs   defaults        0       0 </code>
+=== config : /etc/initramfs-tools/initramfs.conf ===
+Il faut modifier l'initramfs pour pouvoir lancer le système depuis un server NFS.
+
+Transformer
+<code>
+BOOT=local
+</code>
+en
+<code>
+BOOT=nfs 
+</code>
+Et
+<code>
+MODULES=most
+</code>
+en
+<code>
+MODULES=netboot 
+</code>
+=== Reconstruction de l' initramfs ===
+<code>
+apt-get install linux-image-generic 
+#dpkg-reconfigure "linux-image-`uname -r`" 
+update-initramfs -u </code>
+=== config : /etc/network/interfaces ===
+La connexion sera déjà initialisée lors du boot, si on tente de la reconfigurer, le système ne pourra plus accéder au server NFS.
+ => Ajouter:
+<code>
+# eth0 ne doit pas être reconfigurée 
+iface eth0 inet manual </code>
+==== exit ====
+On quitte le chroot.
+ <code>
+exit</code>
+==== umount ====
+On démonte proc et dev.
+<code>
+sudo umount /nfsroot/proc 
+sudo umount /nfsroot/dev</code>
+===== Partage NFS =====
+ 
+==== Installation ====
+<code>
+sudo apt-get install nfs-kernel-server </code>
+==== Config ====
+
+Ajouter dans le fichier /etc/exports :
+<code>
+/nfsroot             192.168.0.*(rw,no_root_squash,async,subtree_check) 
+(Il peut être utile de changer "192.168.0.*") 
+</code>
+==== Reload ====
+<code>
+sudo service nfs-kernel-server reload 
+</code>
+===== Boot du client depuis une clé USB =====
+
+==== Création du script d'installation ====
+<code>
+touch install_usb-boot 
+chmod +x install_usb-boot 
+nano install_usb-boot
+</code>
+==== Copier ce script dans install_usb-boot ====
+<code>
+#!/bin/bash 
+# Script by Congelli501
+
+# Help 
+if [ -z "$1" ] || [ "$1" = '-h' ] || [ "$1" = '--help' ]; then 
+	echo "Install linux kernel and grub on partition <device>." 
+	echo "The partition should be formated in extX, fat32 or ntfs." 
+	echo "Usage: install_usb-boot <device>" 
+	exit 0 
+fi 
+
+# Config 
+set -u 
+set -e 
+
+# Vars 
+serverAdr='192.168.0.2' 
+mountDir='/media/usbboot_tmp_mount' 
+
+# Device 
+device="$1" 
+if [ ! -b "$device" ]; then 
+	echo "Erreur: '$device' n'est pas de type 'bloc'" 
+	exit 1 
+fi 
+
+#uuid=$(blkid -o udev "$device" | grep "ID_FS_UUID=" | cut -f2 -d'=') 
+uuid=$(blkid -o value -s UUID "$device") 
+device_vol=${device:0:8} 
+
+# Mount 
+umount "$device" | true 
+mkdir -p "$mountDir" 
+mount "$device" "$mountDir" 
+
+rm -rf "$mountDir/boot" 
+mkdir -p "$mountDir/boot/grub" 
+
+# Grub 
+echo "Installing grub2..." 
+grub-install --root-directory="$mountDir" "$device_vol" 
+
+# Copy kernel 
+echo "Installing kernel..." 
+cp "/boot/vmlinuz-$(uname -r)" "$mountDir/boot/vmlinuz" 
+cp "/boot/initrd.img-$(uname -r)" "$mountDir/boot/initrd.img" 
+
+# grub.cfg 
+echo "Installing grub.cfg..." 
+cfgFilename="$mountDir/boot/grub/grub.cfg" 
+echo -n "" > "$cfgFilename" 
+
+echo "echo '$(uname -rs)'" >> "$cfgFilename" 
+echo "echo 'Loading modules...'" >> "$cfgFilename" 
+echo "insmod ext2" >> "$cfgFilename" 
+echo "insmod fat" >> "$cfgFilename" 
+echo "insmod ntfs" >> "$cfgFilename" 
+echo "echo 'Searching file system...'" >> "$cfgFilename" 
+echo "search --no-floppy --fs-uuid --set $uuid" >> "$cfgFilename" 
+echo "echo 'Loading linux...'" >> "$cfgFilename" 
+echo "linux /boot/vmlinuz root=/dev/nfs nfsroot=$serverAdr:/nfsroot ip=dhcp rw quiet splash" >> "$cfgFilename" 
+echo "echo 'Loading initrd...'" >> "$cfgFilename" 
+echo "initrd /boot/initrd.img" >> "$cfgFilename" 
+echo "echo 'Booting...'" >> "$cfgFilename" 
+echo "boot" >> "$cfgFilename" 
+
+# Umount 
+umount "$device" 
+
+# Exit 
+exit 0</code>
+==== Connectez la clé usb ====
+
+Elle doit contenir une partition formatée en extX, ntfs ou fat32
+==== Installation ====
+<code>
+sudo ./install_usb-boot /dev/sdc1 /nfsroot</code>
+
+===== C'est fini =====
+
+Il ne vous reste plus qu'à booter sur la clé.
+
+--- //[[:utilisateurs:congelli501|congelli501]] Le 27/06/2010, 13:04//

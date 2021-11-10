@@ -1,0 +1,206 @@
+
+{{tag>Xenial serveur ftp sécurité}}
+
+====== Serveur SFTP : MySecureShell ======
+
+{{applications:mss_02.png}}
+
+===== À propos de MSS =====
+
+**MySecureShell** (MSS) est un logiciel s'appuyant sur le chiffrement de SSH et sur son FTP sécurisé "sftp-server". MySecureShell est un shell qui permet d'ajouter plusieurs fonctionnalités à sftp-server et qui se rapproche des grands serveurs FTP tel que ProFtpd.
+Les avantages de MySecureShell sont qu'il s'appuie sur le protocole sécurisé SSH et qu'il permet un chiffrement complet des données et des requêtes émises. Il est très simple à installer, à utiliser et hautement configurable.
+
+Site officiel : [[http://mysecureshell.sourceforge.net/]]\\
+Pour plus d'aide rendez-vous sur [[https://github.com/mysecureshell/mysecureshell|github]] directement.
+
+**Pourquoi installer MySecureShell (sftp - Secure File Transfert Protocol) au lieu d'un serveur FTPS (File Transfert Protocol over SSL) ?**
+
+Voici les différentes motivations d'un tel choix :
+  * Simplicité d'installation.
+  * Puissance de chiffrement d'OpenSSH qui est développé pour la protection des données (shell distant).
+  * Pas de problèmes de certificat non-certifié (car payant pour qu'il soit certifié authentique) ou de génération de certificat.
+  * Support des clefs privées et publiques pour une authentification sans mot de passe.
+  * Un unique port à ouvrir pour le SSH et SFTP (port 22 par défaut).
+  * Clients disponibles également sous Windows (Filezilla par exemple)
+  * C'est une question de choix qui ne coûte rien si l'on veut essayer.
+
+**Mais alors pourquoi ne pas utiliser un client SCP ?**
+
+Le problème vient du compte créé pour l'utilisateur qui doit utiliser un shell valide pour se connecter au serveur à l'aide d'un logiciel SCP.
+Ce choix implique l'existence d'une grande confiance en l'utilisateur.
+Avec MySecureShell, le client n'est pas obligé de posséder un shell valide qui pourrait nuire a la sécurité du serveur.
+
+===== Installation=====
+
+[[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>mysecureshell]]**.
+<note help>Pour en savoir plus sur SSH vous pouvez lire cette [[:ssh|documentation]].</note>
+
+
+===== Gestion des utilisateurs =====
+
+Créer maintenant les utilisateurs autorisés à faire du sftp et autorisés à ne faire que du sftp. Pour fixer les idées, je vais créer l'utilisateur toto et lui attribuer comme dossier personnel /home/toto :
+
+<code>sudo adduser --home /home/toto --shell /usr/bin/mysecureshell toto</code>
+
+Mais il y a plus simple, l'outil graphique vous permet désormais de gérer les clients ! :-)
+
+FIXME La boîte de dialogue de gestion des utilisateurs est vide dans MSS 1.6...Il faut se résigner à éditer à la main /etc/ssh/sftp_config.
+
+ou :
+
+Créer les groupes et utilisateurs que vous souhaitez pour une utilisation du serveur sftp. Une fois créé vous allez devoir [[:tutoriel:comment_modifier_un_fichier|éditer le fichier]] "/etc/passwd" en tant que root. Ensuite placez vous sur les "shells" des utilisateurs que vous voulez intégrer au serveur sftp et remplacez le "shell" existant (ex: /bin/sh) par "/bin/MySecureShell".
+Ceci:
+
+<code>msstest:x:1006:500:MMS Testing:/home/sftpusers/msstest:/bin/sh</code>
+
+
+est à remplacer par:
+
+<code>msstest:x:1006:500:MMS Testing:/home/sftpusers/msstest:/bin/MySecureShell</code>
+
+
+Enregistrez et quittez.
+
+===== Connexion au serveur sftp =====
+
+Les tests qui suivent sont fait avec le programme [[:lftp|lftp]]. Il est normalement présent par défaut dans les distributions Ubuntu.
+Dans le cas contraire, il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] [[apt://lftp|lftp]].
+
+D'autres clients comme [[filezilla|FileZilla]], [[http://www.mkssoftware.com/docs/man1/sftp.1.asp|sftp]] et [[:gftp|Gftp]] gèrent aussi le sftp.
+
+==== Tester en local ====
+
+  $ lftp sftp://toto@localhost
+
+Après avoir entré le mot de passe, vous devriez obtenir ceci :
+
+  $ lftp toto@localhost:~>
+
+En cas de problème vérifier que le fichier sftp-server_MSS se trouve bien dans le répertoire /usr/lib/openssh/ . Si ce n'est pas le cas vous pouvez le copier à partir de /usr/lib/
+
+
+==== Tester en réseau ====
+
+> Le port 22/TCP doit être ouvert.
+
+  $ lftp sftp://toto@IP_du_Serveur
+
+Si vous obtenez l'invite ci-dessous c'est que ça marche.
+
+ Code:
+
+  $ lftp toto@IP_du_Serveur:~>
+
+Pour plus de renseignements sur lftp
+
+  $ man lftp
+
+
+
+
+===== Paramétrage avec l'outil graphique java =====
+
+L'environnement [[:Java]] doit être installé dans votre système.
+
+Télécharger l'outil graphique sur [[http://sourceforge.net/projects/mysecureshell/files/MySecureShell%20Graphical%20Tools/|le site officiel]] et taper dans un terminal ce qui suit:
+
+Vous devez d'abord éditer le fichier /etc/ssh/sftp_config et y ajouter
+
+<code>
+<User toto>
+    IsAdmin    true
+</User>
+</code>
+
+en remplacant toto par votre nom d'utilisateur
+
+<code>unzip -d MSS_Frontend MSS_Frontend_v*.zip
+cd MSS_Frontend
+sudo java -jar sftp-mss.jar</code>
+
+et vous obtiendrez,
+
+{{applications:gajim:interface_graphique_v1.4_pour_mysecureshell_v0.8.png}}
+
+  * **Sftp-Who** : permet de savoir qui est connecté et de pouvoir déconnecter n'importe quel utilisateur.
+  * **Sftp-State** : permet d'activer ou de désactiver le serveur SFTP et de vérifier son état.
+  * **Config** : permet de faire la configuration du serveur.
+  * **Log** : vous pouvez voir tout ce qui se passe et s'est passé sur votre serveur.
+  * **Connexion distante** : c'est avec cet onglet que vous allez pouvoir administrer à distance votre serveur MySecureShell.
+  * ** Paramètres** : Cet onglet permet la localisation de certains fichiers et le choix du langage de l'interface graphique.
+
+
+
+===== Lanceur =====
+
+FIXME
+
+smeg est introuvable dans les dépôts depuis Feisty; indiquer la source
+
+Pour plus de convivialité vous pouvez créer un lanceur grâce à Smeg.
+<code>smeg</code>
+Et créer une entrée comme suit,
+
+{{applications:entry_editor.png}}
+
+
+
+
+===== Paramétrage manuel ======
+
+Vous souhaitez configurer et administrer votre serveur manuellement, c'est bien sûr possible.
+
+==== sftp_config ====
+
+MSS possède son propre fichier de paramétrage, sftp_config.
+
+  $ sudo nano /etc/ssh/sftp_config  
+
+Les modifications sont immédiates. Voici toutes les [[http://mysecureshell.sourceforge.net/fr/tags.html|directives]] que vous pourrez utiliser :-).
+
+Cette [[http://mysecureshell.sourceforge.net/fr/confman.html|documentation]] devrait grandement vous aider.
+
+//(en particulier, modifiez l'encodage ISO-8859-15 par UTF8)//
+
+==== sshd_config ====
+
+La configuration d'[[:ssh#le_fichier_de_configuration_du_serveur_ssh|Openssh-server]] se trouve dans le fichier sshd_config. 
+
+  $ sudo nano /etc/ssh/sshd_config
+
+Toute modification ne sera prise en compte qu'après un redémarrage du serveur.
+
+  $ sudo /etc/init.d/ssh restart
+
+
+
+===== Sécurité =====
+
+==== Utilisation des clefs SSH ====
+
+Dans le cas ou vous devez administrer de multiples serveurs, retaper à chaque fois son mot de passe est pénible surtout quand on est déjà logué sur une machine sûre.
+
+Le sujet a déjà été développé sur les pages suivantes que je vous invite à lire:
+
+  * [[http://mysecureshell.sourceforge.net/fr/securessh.html#question6|Comment utiliser l'authentification par clefs à la place des mots de passe ?]]
+  * [[:ssh#authentification_par_mot_de_passe|wiki SSH]]
+
+==== Se protéger contre le SSH Brute Force ====
+
+Généralement les mots de passe de la plupart des logiciels sont stockés chiffrés dans un fichier. Pour obtenir un mot de passe, il suffit de récupérer ce fichier et de lancer un logiciel de brute force cracking. Ce procédé consiste à tester de façon exhaustive toutes les combinaisons possibles de caractères (alphanumériques + symboles), de manière à trouver au moins un mot de passe valide.
+Cette attaque se base sur le fait que n'importe quel mot de passe est crackable. Ce n'est qu'une histoire de temps. Mais la puissance des machines double tous les deux ans. De plus, les crackers n'hésitent pas à fabriquer des cartes électroniques de cracking, ce qui améliore en conséquence la rapidité de la machine, et donc les chances de trouver un mot de passe valide.
+En général, cette méthode est empruntée lorsque la [[http://www.securiteinfo.com/attaques/cracking/dictionarycracking.shtml|méthode du dictionary cracking]] a échoué. 
+
+Pour se faire lire :
+
+  * [[http://mysecureshell.sourceforge.net/fr/securessh.html#question1|Peut-on bloquer des intrusions après un certain nombre de tentatives ? ]]
+  * [[http://blog.andrew.net.au/2005/02/16#psychologically_scarred|blog.andrew]]
+
+ --- //[[|]] 2006/03/04 16:55//
+
+P.S.: Ne gère pas les utilisateurs virtuels, ce qui est logique en SSH. Un utilisateur virtuel, c'est un utilisateur qui ne possède pas de dossier personnel dans le répertoire "/home". Un utilisateur virtuel peut être lié à un autre compte déjà existant et télécharger vers lui des données, mais ne pourra pas en envoyer sur le serveur sftp, peu importe les droits qu'on lui attribuera au moyen de la configuration de MySecureShell. Pour des droits d'accès complet, il faut absolument que l'utilisateur possède son répertoire dans "/home".
+
+**[[:fail2ban]]** permet de se protéger contre le brute-force du serveur SSH en bloquant les demandes en provenance d'une adresse IP qui a déjà émis trop de demandes. Les seuils (durée, nombre de requêtes) sont personnalisables.
+
+----
+//Contributeurs : [[utilisateurs:arvin]]//

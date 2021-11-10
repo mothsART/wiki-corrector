@@ -1,0 +1,569 @@
+
+{{tag>samba partage BROUILLON}}
+
+====== Le fichier de configuration de Samba : smb.conf ======
+
+La configuration de **[[Samba]]** n'est pas une mince affaire, c'est pourquoi cette page est assez longue, mais soyez tranquille, seule une partie s'appliquera à votre besoin, continuez de lire attentivement.\\
+**Cette page n'est pas exhaustive** et ne permettra pas à tout le monde d'y trouver son bonheur, toutefois vous y trouverez ce dont vous avez besoin pour une configuration simple. Des configurations nécessaires à un aboutissement suffisant y sont proposées. Comme c'est le cas pour bon nombre de logiciels (serveurs, en l'occurrence) des configurations différentes sont possibles, en fonction des habitudes…\\
+⇒ **Ce ne sont que des propositions.**
+
+<note warning>
+  - Un certain nombre de notions sont rapidement expliquées ici, cette page est destinée à documenter le fichier de configuration de **Samba**, pas toutes les notions à avoir pour tout comprendre en détail. Faites appel à votre curiosité pour en savoir plus (si vous estimez en avoir besoin).
+  - Dans cette page, le terme "serveur" sera souvent employé, car Samba est un service auquel se connectent des clients, il s'agit donc d'un serveur (au même titre qu' apache, par exemple), même si Samba tourne sur un PC domestique avec une version //non-server// de n'importe quelle distribution GNU/Linux.
+  - Cette page a été écrite par rapport à Samba 3 qui est utilisé par les versions d'Ubuntu jusqu'à Lucid (12.04). A partir de Trusty (14.04), c'est Samba 4 qui prend le relais avec de nombreuses différences et incompatibilités ! N'hésitez pas à éditer le manuel pour vérifier si le paramètre a encore lieu d'être : <code>man smb.conf</code>
+</note>
+
+===== Introduction =====
+
+Le fichier **/etc/samba/smb.conf** permet de configurer [[:samba|Samba]]. Ce fichier est composé de sections dont le nom est entre crochets(([exemple] de nom de section)) :
+  * ''[global]'' : contient les paramètres généraux et les paramètres par défaut des différents partages,
+  * ''[printers]'' et ''[print$]'' sont spécifiques au partage d'imprimantes,
+  * ''[homes]'' est spécifique au partage du répertoire personnel d'un utilisateur (son répertoire $HOME) il apparaîtra dans la liste des partages avec le nom d'utilisateur du client (s'il est identifié),
+  * ''[le_nom_d'un_partage]'' pour chaque partage
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/samba/smb.conf**\\ 
+Dans ce fichier de configuration par défaut il y a beaucoup de commentaires, afin de ne pas les perdre et d'avoir un fichier clair, il est conseillé de [[:tutoriel/console_commandes_de_base#cp|copier]] ce fichier sous un autre nom et de partir de zéro((oui : page blanche, mais soyez sans crainte, elle ne le restera pas)).
+
+Une fois terminé, pour vérifier que la configuration est sans faute de syntaxe, utiliser la commande suivante :
+<code>
+testparm -s
+</code>
+Vous verrez comment ''samba'' interprètera votre fichier de configuration et, en cas d'erreurs, vous serez averti.
+
+Après chaque modification, il faut redémarrer ''samba'' :
+
+ * ** Ubuntu 10.04 [[lucid|( Lucid Lynx )]] et versions supérieures : **
+<code>
+sudo service smbd restart
+</code>
+
+\\ Si un redémarrage complet n'est pas possible pour des raisons de continuité de service et/ou si les modifications ne touchent pas le service NetBios (nmbd), la commande suivante suffit :
+
+ * ** Ubuntu 10.04 [[lucid|(Lucid Lynx )]] et versions supérieures : **
+<code>
+sudo service smbd reload
+</code>
+
+===== Généralités =====
+
+Le fichier **/etc/samba/smb.conf** est construit de différentes sections dont la première est généralement : [global].\\
+Une section commence par une ligne contenant un mot entre crochets et finit lorsque la section suivante commence ;-).\\
+Toute ligne commençant par un # est un commentaire. Toute ligne commençant par un ; est aussi considérée comme un commentaire mais sert pour les paramètres ignorés.\\
+Dans une section, les valeurs sont affectées aux paramètres de cette manière :
+<file>paramètre = valeur</file>
+Dans certains cas, il est possible d'affecter une liste de valeurs à un même paramètre, la syntaxe à utiliser est alors :
+<file>paramètre = valeur1,valeur2,valeur3</file>
+ou séparées par des espaces
+<file>paramètre = valeur1 valeur2 valeur3</file>
+Il est coutumier d'indenter((ajouter des espaces en début de ligne)) les paramètres afin de les distinguer des sections et des commentaires.
+
+Une ligne se terminant par le caractère ''\'' se prolonge sur la ligne suivante comme le veut la mode Unix.
+
+Exemple illustratif :
+<file># Un commentaire très important puisqu'il est là…
+# Début de la section
+[section]
+# Un paramètre comme ceci
+    paramètre unaire = valeur
+# ou comme cela
+    liste de paramètres = toi,moi,eux
+# ...et tous ceux qui le veulent…
+# Celui-ci n'est pas pris en compte
+;    paramètre invalidé = essai infructueux
+# paramètre commenté en fin de ligne
+    paramètre spécial = Yes # Ah oui, on peut commenter en fin de ligne ;-) mais uniquement certains paramètres, évitez donc cette pratique</file>
+
+La liste des paramètres se trouve dans la page de [[tutoriel/console_commandes_de_base#man|man]] (ou manuel) de smb.conf :
+<code>man smb.conf</code>
+Pour chaque paramètre, une lettre est mise entre parenthèses :
+   * (G) pour les paramètres de la section ''[global]''
+   * (S) pour les paramètres spécifiques aux partages (//shares// en anglais). Ces paramètres peuvent être définis dans la section ''[global]'' et seront valables pour tous les partages, cela évitera de les refaire figurer dans chaque partage. On dira que les paramètres sont //hérités//.
+
+==== Paramètres généraux de [global] ====
+
+=== Identification du PC sur le réseau ===
+
+== Groupe de travail ou Domaine ==
+<file>workgroup = CHEZ_MOI</file>
+Le groupe de travail (ou nom de domaine pour les PC dans un domaine) est le nom du "réseau" dans lequel les PC "sont"((désolé pour les guillemets en rafale, mais je n'ai pas le choix pour garder un minimum de précision)). Bon, on ne commence pas par la notion la plus facile…\\
+Il ne faut pas créer un groupe de travail, il existe dès lors qu'un PC se définit comme faisant partie de ce groupe.\\
+En gros, pour ranger un peu les PC sur un même réseau, on les place dans des groupes appelés "groupes de travail". Si vous avez moins de 50 PC, vous pouvez les mettre dans le même groupe, ça ne dérangera personne !
+
+== Nom NetBios ==
+<file>netbios name = MON_ORDI_A_MOI</file>
+C'est le nom du PC sur le réseau.
+
+== Description ==
+<file>server string = serveur %h (Samba %v, Ubuntu)</file>
+C'est la description que vous voulez donner de votre PC.
+
+<note>Vous avez remarqué ces %h et %v ? Ils sont décrits dans le manuel de smb.conf, ici %h est le nom de l'hôte du serveur (//hostname//) et %v est la version de Samba.</note>
+
+=== Type de sécurité ===
+
+Voir le [[#securite|chapitre]] dédié à ce point particulier.
+
+=== Réseau ===
+
+== Interface ==
+
+Dans certains cas((comme par exemple celui où 2 paires de [[:samba#demons_de_samba|démons]] (//daemons//) Samba tournent sur le même serveur, avec une interface par instance)) on peut vouloir restreindre l'accès aux partages Samba à une partie des interfaces Ethernet disponibles sur le serveur ; limiter l'accès aux membres du réseau filaire et interdire l'accès à ceux qui sont sur le réseau WiFi par exemple.
+Il faut savoir que ce n'est pas ce qui est fait par défaut, puisque par défaut, Samba est accessible sur toutes les interfaces réseau, donc si ce fonctionnement vous convient, aucun besoin de préciser quoi que ce soit.
+<file>
+# On souhaite n'autoriser l'accès que via certaines interfaces réseau
+bind interfaces only = Yes
+# Liste des interfaces réseau en question
+interfaces = 127.0.0.1 eth0:0 192.168.1.20/24
+</file>
+
+=== Paramètres liés à la résolution de nom ===
+
+== WINS ==
+
+WINS est un service de résolution de nom, comparable au DNS.
+
+<note warning>Contrairement aux serveurs DNS, il ne peut y avoir qu'**UN SEUL** serveur WINS sur le réseau, attention donc à ne pas marcher sur les plates bandes d'un autre serveur !</note>
+
+Sa configuration peut être de 3 types :
+  * **La plupart du temps : Aucune.**
+Sur des réseaux simples (sans sous-réseaux) WINS n'est pas important. C'est d'ailleurs la configuration par défaut, c'est-à-dire celle qui est utilisée si rien n'est précisé.
+
+  * **Client WINS**
+Le réseau dans lequel se trouve le serveur Samba comporte un serveur WINS, il faut donc le signifier à Samba afin qu'il puisse en tenir compte.
+<file>
+# Si le serveur WINS a l'adresse 192.168.1.20
+wins server = 192.168.1.20
+</file>
+
+  * ** Serveur WINS**
+Le serveur WINS de votre réseau est votre serveur Samba.
+<file>
+# Activation de la fonction de serveur WINS
+wins support = Yes
+# Un paramètre historique dont d'anciennes versions de Windows ont besoin
+wins proxy = Yes
+# Si VOTRE serveur a l'adresse 192.168.1.20
+wins server = 192.168.1.20
+# S'il fallait en plus passer par un serveur DNS
+;dns proxy = Yes
+</file>
+
+== Local Master ==
+
+Pour les détails de fonctionnement voir [[http://www.comptechdoc.org/os/windows/ntwsguide/ntwsnfinding.html|cette page]].\\
+Afin de stabiliser le //local master browser// sur un réseau, il peut être intéressant de faire en sorte que Samba remplisse ce rôle, d'autant plus si Samba est contrôleur de domaine.
+
+Par défaut, cette valeur est à ''Yes''. On peut cependant le rappeler afin de faciliter la lecture et figer la paramètre ''os level'' à une valeur supérieure à 64 (et strictement inférieure à 255), afin de garantir la victoire de l'élection du //local master browser//.
+<file>
+# Samba participe à l'élection…
+local master = Yes
+# … et la gagnera !
+os level = 65
+</file>
+
+Si toutefois on ne souhaite pas activer cette fonctionnalité, on peut préciser :
+<file>
+# Le serveur Samba ne participera même pas à l'élection du local master browser
+local master = No
+</file>
+
+=== Exemple de section [global] ===
+
+Voici un exemple((sans commentaire, ce qui n'est pas top... Attention security= SHARE est obsolète avec Samba 4)) d'une section [global] telle qu'elle pourrait être pour une configuration sans authentification :
+<file>
+[global]
+    server string = %h server (Samba, Ubuntu)
+    security = SHARE
+    syslog = 0
+    log file = /var/log/samba/log.%m
+    max log size = 100
+    dns proxy = No
+    hide files = /lost+found/
+</file>
+Profitons-en pour parler des paramètres encore inconnus. Il suffit de dire que des notions d'anglais aident bien à la compréhension de leur rôle.
+
+Cas particulier pour ''hide files'', les noms de fichiers à cacher sont entre ''/'', exemple si on veut cacher les répertoires ''lost+found'', les corbeilles et les fichiers ''*.bak'' :
+<file>hide files = /lost+found/.Trash*/*.bak/</file>
+<note tip>Comme il s'agit d'un paramètre de partage, le fait de le mettre dans [global] permettra de ne pas le préciser pour chaque partage.</note>
+<note>Attention toutefois à ce paramètre car il affecte sensiblement les performances de Samba.</note>
+
+==== Paramètres généraux des partages ====
+
+=== Répertoire partagé ===
+
+Le chemin du répertoire partagé se renseigne de cette manière :
+<file>path = /data/Documents</file>
+
+=== Description ===
+
+Il est possible de renseigner une description de partage :
+<file>comment = Tous les documents utiles</file>
+
+=== Masques de création ===
+
+Le plus souvent, ce n'est pas la peine de se soucier de ce paramètre, par défaut, Samba fait les choses assez bien. Si toute fois vous souhaitez personnaliser les droits sur les fichiers lors de leur création, vous pouvez le faire avec ces paramètres :
+<file>
+create mask = 0700    # Fichiers : Tous les droits pour le propriétaire et rien pour les autres
+directory mask = 700  # Répertoires : idem
+</file>
+
+Pour plus de détails, je vous conseille de consulter la page de manuel et d'avoir des notions sur les droits et autorisations sur les fichiers dans le monde Linux.
+
+=== Accès aux données : Lecture et écriture ===
+
+Il est possible de déclarer un partage :
+   * en lecture/écriture pour tous,
+   * en lecture seule pour tous,
+   * en lecture seule pour certains utilisateurs et lecture/écriture pour d'autres utilisateurs.
+Et en plus ce n'est même pas compliqué à mettre en place !
+
+== En lecture/écriture pour tous ==
+
+Afin de rendre un partage accessible en lecture et en écriture pour tous, il faut préciser :
+<file>read only = No</file>
+<note important>Attention : ce n'est pas le mode par défaut, en effet, **le mode par défaut est la lecture seule**, pensez à préciser ce paramètre si vous souhaitez que la copie vers le serveur ou même l'enregistrement de documents modifiés soient possibles.</note>
+
+== En lecture seule pour tous ==
+
+C'est facile, c'est le mode par défaut, aucun paramètre à préciser, mais si vous ne voulez pas l'oublier, vous pouvez le préciser :
+<file>read only = Yes</file>
+
+== Le mixe des deux... ==
+
+Le fin du fin c'est de distinguer les droits en fonction des utilisateurs. Le principe est de déclarer le partage en lecture seule pour tous mais d'autoriser des exceptions :
+<file>
+read only = Yes
+write list = utilisateur1, utilisateur2, @groupe12000
+</file>
+Et bien pour cela, il faudra que Samba identifie les utilisateurs, il faudra une politique de sécurité différente de ''security = share''.
+
+<note>
+Il est possible d'inverser la philosophie, en déclarant le partage en écriture pour tous et préciser une liste d'utilisateurs ne pouvant que lire avec le paramètre ''read list''.\\
+Si un utilisateur apparait dans ''write list'' et dans ''read list'', il aura l'autorisation d'écrire.
+</note>
+
+=== Accès aux données : Autorisations ===
+
+Pour définir une liste d'utilisateurs qui ont le droit d'accéder au partage et donc d'en voir le contenu (indépendamment du droit d'écriture) il existe le paramètre ''valid users'' :
+<file>valid users = utilisateur1, utilisateur2, @groupe12000</file>
+Les autres utilisateurs n'auront pas accès à ce partage.
+
+Et bien pour cela aussi, il faudra que Samba identifie les utilisateurs, il faudra une politique de sécurité différente de ''security = share''.
+
+=== Accès aux données : propriétaire ===
+
+Il est possible de faire en sorte que tous les utilisateurs d'un partage soient reconnus par le système comme un seul utilisateur et/ou comme faisant partie d'un seul groupe, quel que soit l'identifiant de l'utilisateur.
+<file>
+    force user = nobody
+    force group = nogroup
+</file>
+Ceci peut vous éviter de vous préoccuper des droits sur les fichiers.\\
+Le compte utilisateur sur le client [[/adduser#addgroup|doit faire partie du groupe]] ainsi utilisé (nogroup ci-dessus), ajouter le compte utilisateur dans ce groupe sur le serveur ne suffit pas !
+
+==== Partage d'imprimantes ====
+
+<file>
+# quelques lignes dans la section [global]
+########## Printing ########## 
+   load printers = yes 
+   printing = cups 
+   printcap name = cups 
+
+[printers] 
+   comment = All Printers 
+   browseable = no 
+   path = /var/spool/samba 
+   printable = yes 
+   guest ok = no 
+   read only = yes 
+   create mask = 0700 
+
+[print$] 
+   comment = Printer Drivers 
+   path = /var/lib/samba/printers 
+   browseable = yes 
+   read only = yes 
+   guest ok = no 
+# Uncomment to allow remote administration of Windows print drivers. 
+# Replace 'ntadmin' with the name of the group your admin users are 
+# members of.
+######### !!!!!!!!!! Attention à cette ligne !!!!!!!!!!!!! ########
+   write list = root @ntadmin
+</file>
+
+C'est avec ces quelques lignes que vous pourrez partager les imprimantes gérées via [[:cups]].
+
+==== Vitesse de transfert lente et/ou temps d'accès longs ====
+
+Dans le cas où les transferts se trouvent réduits (très lents ou très longs), une solution est de modifier la configuration des //sockets// :
+<file>socket options = TCP_NODELAY IPTOS_LOWDELAY SO_RCVBUF=8192 SO_SNDBUF=8192</file>
+
+==== Sécurité ====
+
+Toute la configuration de **Samba** tourne autour de la politique de sécurité ; il s'agit du paramètre ''security''.
+
+<note important>**C'est sur ce paramètre là que vous devez réfléchir avant de commencer.** Un nom NetBios ou un groupe de travail qui change ce n'est qu'une ligne à changer, par contre, pour la politique de sécurité, c'est toute la philosophie de la configuration qui change.\\
+Vous êtes prévenu.</note>
+
+Ce paramètre peut avoir les valeurs suivantes :
+  * **[[#security_share|SHARE]]** : Sécurité basée sur les mots de passe. Les utilisateurs accèdent au partage en indiquant le mot de passe d'un utilisateur. Les droits sur les fichiers s'appliqueront sur le partage. Mode utilisé pour des postes sous Windows 9x et Me. Il est aussi possible de ne pas faire d'authentification via ce mode.
+  * **[[#security_user|USER]]** : Une sécurité basée sur une identification par login et mot de passe depuis une liste d'utilisateurs (Base d'utilisateurs Samba, base d'annuaire LDAP, ...). Ce mode est celui par défaut si le champ security n'est pas renseigné.
+  * **[[#security_domain|DOMAIN]]** : Une sécurité basée sur une identification par login et mot de passe géré par un contrôleur de domaine.
+  * **[[#security_server|SERVER]]** : Une sécurité basée sur une identification par login et mot de passe géré par un autre serveur sur le réseau.
+  * **[[#security_ads|ADS]]** : Une sécurité basée sur Active Directory.
+
+Vous l'avez compris, pour une utilisation "à la maison", on choisira l'un des deux premiers cas.
+
+===== security = SHARE =====
+<note important>Obsolète avec Samba 4 ([[:samba_smb.conf#security_server|cf. note security = server]])\\
+Vous êtes prévenu.\\
+Il est fort probable que votre testparm ne passe pas à cause de cela.
+</note>
+
+Dans ce mode, donc pas de droits à gérer, juste les partages en accès libre. La seule restriction possible est la lecture seule. L'authentification se fait par mot de passe. Ce mode permet aux postes sous Windows 9x et Me d'accéder à un partage avec des identifiants différents.
+
+Exemple de section ''[global]'' :
+<file>
+[global]
+    server string = %h server (Samba, Ubuntu)
+    security = SHARE
+    syslog = 0
+    dns proxy = No
+    guest account = ( !!!! mettre ici le login de l'utilisateur principal)
+</file>
+
+Exemple de configuration d'un partage :
+<file>
+[Nom_du_partage]
+   path = /chemin/du/répertoire/partagé
+   comment = qui peut le plus peut le moins
+   read only = no
+   guest ok = yes
+   public = yes
+</file>
+Le nom du partage ne doit pas excéder 12 caractères si vous avez des clients sous MS windows 98.
+
+===== security = USER =====
+
+==== Gestion des utilisateurs : à la maison ====
+
+Les utilisateurs qui ne se servent pas du PC sont créés de sorte qu'ils ne puissent pas utiliser le système (shell par défaut sur /bin/false et répertoire personnel (home) sur /dev/null) :
+<code>
+sudo useradd -s /bin/false -d /dev/null -g guest nom_utilisateur
+sudo pdbedit -a nom_utilisateur
+</code>
+Puis rentrer deux fois le mot de passe de cet utilisateur (ou le faire taper par l'utilisateur lui-même).
+
+Les utilisateurs qui ont déjà un compte sur le PC pourront être autorisés aussi avec "valid users". Cependant, il faudra définir un mot de passe samba pour tous les utilisateurs :
+<code>
+sudo pdbedit -a nom_utilisateur
+</code>
+<note important> //smbpasswd// était utilisé pour des bases utilisateurs(([[https://www.samba.org/samba/docs/man/Samba-HOWTO-Collection/passdb.html#id2592512|page sur samba.org concernant les bases des comptes utilisateurs]])) de type "smbpasswd" défini dans ///etc/samba/smb.conf// avec le paramètre //passdb backend// qui assurait sous samba 3 la compatibilité avec du samba 2. \\
+Sous samba 4, vous devez avoir //passdb backend = tdbsam// et c'est donc //pdbedit// qu'il faut utiliser :
+<code>pdbedit -a username</code>
+Pour importer la base de données smbpasswd :
+<code>pdbedit -i smbpasswd -e tdbsam</code>
+</note>
+Pour supprimer un utilisateur :
+<code> pdbedit -x -u nom_utilisateur </code>
+
+Création du groupe en commun :
+<code>groupadd sambausers</code>
+
+Ensuite soit les utilisateurs sont créés de sorte qu'ils ne puissent pas utiliser le système (shell par défaut sur /bin/false et répertoire personnel (home) sur /dev/nutiuytill) :
+<code>
+sudo useradd -s /bin/false -d /dev/null -g sambausers nom_utilisateur
+</code>
+
+Soit les utilisateurs du système déjà existants sont directement ajoutés dans le groupe sambausers
+<code>
+sudo adduser [nom_utilisateur_existant] sambausers
+</code>
+
+Enfin, créer pour chaque utilisateur un accès "samba" :
+
+<code> sudo pdbedit -a nom_utilisateur </code>
+
+Puis rentrer deux fois le mot de passe de cet utilisateur (ou le faire taper par l'utilisateur)
+
+Pour lister les utilisateurs samba:
+
+<code> sudo pdbedit -L -v </code>
+
+
+
+
+==== Configuration ====
+
+
+## Identification ###
+workgroup = nom-du-domaine --> Nom sous lequel le serveur apparaitra 
+server string = Serveur Samba MohYns (%h) --> Nom du serveur Samba
+netbios name = Serveur Samba --> Nom
+
+### Debugging ###
+log file = /var/log/samba/log.%m --> Emplacement du fichier log
+max log size = 1000 --> Taille maximum
+
+#### Authentication ####
+security = user --> Sécurité
+valid users = YnsMohUser --> Utilisateurs valides
+encrypt passwords = true --> Les mots de passent sont cryptés
+passdb backend = YnsMoh --> Stockage des comptes utilisateurs autorisés à se connecter au serveur
+
+
+#### Reste ####
+Browseable=yes --> Visible par les clients
+Writable=yes --> Droit d'écriture
+
+#### Configuration d'un partage en lecture/écriture pour certains utilisateurs ####
+path = /mnt/raid/screen --> Chemin du dossier partagé
+comment = Repertoire " Screen " --> Répertoire en lecture et écriture pour tous ceux qui y ont accès
+read only = non --> Restriction de lecture
+write list = liste des utilisateurs ayant le droit de lire et d'écrire séparés par des espaces
+
+
+
+==== Droits sur les répertoires partagés : à la maison ====
+
+Une solution simple consiste à dire que le répertoire appartient à l'utilisateur principal et au groupe "guest" afin que tout le monde puisse y accéder. Attention aux utilisateurs tiers du PC. Commande à lancer pour chaque répertoire partagé :
+<code>
+sudo chown -R $USER:guest /répertoire/partagé
+sudo chmod -R 770 /répertoire/partagé
+</code>
+
+==== Droits sur les répertoires partagés : en entreprise de petite taille ====
+
+Remarque importante : Au niveau d'un répertoire partagé, Samba choisi toujours les droits "minimum". Si on désire qu'un utilisateur ou groupe puisse écrire sur le répertoire partagé à partir d'un autre ordinateur, non seulement il doit disposer des droits d'écriture sur le répertoire lui-même (à vérifier avec la commande chmod), ET le smb.conf doit également lui permettre de le faire. 
+
+Le plus simple étant que le répertoire appartienne à l'utilisateur "samba"  ainsi qu'au groupe "sambausers" prévu à cet effet. Voici la commande à lancer pour tous les répertoires partagés :
+<code>
+sudo chown -R samba:sambausers /répertoire/partagé
+sudo chmod -R 770 /répertoire/partagé
+</code>
+
+Ainsi, tous les utilisateurs qui sont présents dans le groupe propriétaire "sambausers" disposeront de tous les droits sur ce répertoire, mais via le partage réseau c'est la configuration de Samba (dans le smb.conf) qui fixera précisément qui peut lire et qui peut écrire parmi les utilisateurs de ce groupe :
+<code>
+valid user = @sambausers                 # seuls les utilisateurs du groupe sambausers peuvent se connecter au répertoire partagé
+read only = yes                       # limitation des droits à la lecture pour tout le groupe sambausers, mais .....
+write list = utilisateur01             #........sauf pour utilisateur01 (qui est dans le groupe sambausers) qui pourra y écrire.
+</code>
+L'umask sur le serveur samba joue aussi un rôle important. Reportez-vous à la page [[droits#droits_attribues_automatiquement_a_un_fichier|droits attribués automatiquement à un fichier (ou répertoire)]]
+===== security = DOMAIN =====
+Configure Samba en contrôleur de domaine.
+cf. [[:samba-active-directory]]\\
+FIXME Appel à contribution
+
+aide mémoire : !! preferred master = yes
+
+===== security = SERVER =====
+Obsolète avec Samba 4((cf. la page sur [[https://wiki.samba.org/index.php/Samba_4.0_Whitepaper]])) (version actuellement supportée) 
+
+===== security = ADS =====
+Permet l'intégration du serveur Samba dans un contrôleur de domaine Active Directory
+
+L'authentification Active Directory se fait avec kerberos, nous devons installer un client kerberos sur notre Linux pour pouvoir nous authentifier.
+
+Installation de kerberos et winbind
+<code>
+#aptitude install krb5-user libpam-krb5 winbind
+</code>
+Paramétrage de kerberos
+<code>
+#vi /etc/krb5.conf
+</code>
+<file>
+[libdefaults]
+default_realm = DOMAINE.LOCAL         #Nom dns du domaine AD EN MAJUSCULE
+...
+[realms]
+DOMAINE.LOCAL = {
+kdc = domaine.local                              #Nom DNS ou adresse IP du contrôleur de domaine
+admin_server = domaine.local
+}
+...
+[domain_realm]
+.kerberos.server = DOMAINE.LOCAL
+</file>
+Teste de connexion au contrôleur de domaine
+<code>
+#kinit ADMINISTRATEUR@DOMAINE.LOCAL
+</code>
+Authentification des utilisateurs par winbind
+<code>
+#vi /etc/nsswitch.conf
+</code>
+<file>
+passwd:            compat winbind
+group:             compat winbind
+shadow:            compat winbind
+</file>
+Paramétrage de samba. Pensez à sauvegarder le fichier smb.conf!
+<code>
+#vi /etc/samba/smb.conf
+</code>
+<file>
+[global]
+workgroup = DOMAINE
+realm = DOMAINE.LOCAL
+security = ADS
+encrypt passwords = yes
+winbind enum users = yes
+winbind enum groups = yes
+winbind use default domain = yes
+idmap uid = 600-20000
+idmap gid = 600-20000
+template shell = /bin/bash
+template homedir = /home/%u
+
+...
+</file>
+On vérifie avec testparm la configuration du fichier smb.conf puis on redémarre les services smbd et winbind.
+<code>
+#testparm
+#service smbd restart
+#service winbind restart
+</code>
+
+Connexion au contrôleur de domaine
+<code>
+#net ads join -U administrateur
+</code>
+
+
+Dans le fichier smb.conf, vous pouvez utiliser l'option write list = @nom_du_groupe_AD dans vos partages
+<file>
+[Applications]
+comment = Applications
+path = /bureautique/applications
+write list = @GG_admins
+read only = no
+</file>
+
+Si vous devez redémarrer le service smbd, pensez à redémarrer le service winbind sinon, l'authentification ne fonctionnera pas.
+FIXME Appel à contribution
+
+===== Version Protocole =====
+Certains serveurs Windows utilisaient smb v1 qui comporte des failles de sécurité et il est donc vivement conseillé de désactiver cette version du protocole SMB. Cela peut entraîner des soucis de connexion pour les utilisateurs ubuntu.\\
+La version, //vers=2.1//, peut-être précisée lors du montage:
+<code>[login@machine ~]$ id login
+uid=XXXXX(login) gid=YYYYY(groupe)
+
+[login@machine ~]$ mkdir /media/PARTAGE
+[login@machine ~]$ sudo mount -v -t cifs //@IP_SERVEUR/PARTAGE/ /media/PARTAGE/ -o user="login",dom="TON-DOMAINE.FR",vers=2.1,uid=XXXXX,gid=YYYYY
+</code>
+
+mais il est possible de spécifier la version min/max dans le fichier de conf((https://askubuntu.com/questions/919967/how-to-tell-gigolo-gvfs-to-use-smbv2-for-windows-shares)):
+<file>
+server min protocol = SMB2
+client min protocol = SMB2
+</file>
+<note>Le protocole SMB v1 sera désactivée par défaut à partir de Samba 4.11 [[https://wiki.samba.org/index.php/Samba_4.11_Features_added/changed|(paragraphe 7.2.2 du wiki)]]</note>
+===== Liens =====
+
+  * [[samba|Page principale concernant Samba]].
+  * [[https://www.samba.org/samba/docs/man/manpages-3/smb.conf.5.html|page détaillant les options du fichier smb.conf sur samba.org]] (en anglais)
+
+----
+//Contributeurs principaux : [[utilisateurs:MrWaloo]], [[utilisateurs:bcag2]] ...//
+----

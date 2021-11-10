@@ -1,0 +1,912 @@
+
+{{tag>serveur}}
+
+----
+
+
+====== Installation de Postfix avec TLS, SASL, MySQL, Clamav, SpamAssassin ======
+
+Ce tuto a été réalisé sur une Debian Etch. Il est compatible pour Ubuntu.
+La mise en place d'une telle solution demande du temps ainsi qu'un certain niveau pour savoir étudier les logs s'il y a une erreur.
+
+<note>note du 15 mars 2014 : Ce tuto nécesssite d'être revu du fait de l'obsolescence de certains paquets</note>
+
+Niveau confirmé.
+Temps d'application : une bonne demi-heure.
+
+[[http://www.postfix.org/|Postfix]] est un mta (Mail Transfer Agent, simple d'utilisation contrairement à Sendmail ou bien qmail. Postfix est utilisé par défaut chez Mac OS X, disponible sur GNU/Linux, la famille BSD et d'autres unix encore. 
+
+Ce tuto vous permettra de mettre en place une solution multi-domaine basée sur des utilisateurs et domaines virtuels, couplée avec MySQL. Postfix peut être couplé a LDAP et ProgresSQL.
+
+Le tuto n'est pas tout à fait finalisé, mais il est opérationnel. Je n'utilise pas la commande sudo, je travaille directement sous root, c'est moins prise de tête que taper sudo devant chaque commande. Pour travailler sous le compte root, faite un sudo -i puis votre mot de passe habituel.
+
+
+
+===== Première partie =====
+
+Paquets principaux [[:tutoriel:comment_installer_un_paquet|à installer]] : **postfix postfix-mysql mysql-client-5.0 mysql-server-5.0 courier-authdaemon courier-authlib-mysql courier-pop courier-pop-ssl  courier-imap courier-imap-ssl postfix-tls libsasl2-2 libsasl2-modules libsasl2-modules-sql sasl2-bin libpam-mysql openssl phpmyadmin**
+
+<note warning>postfix-tls est un paquet obsolète il semble faire partie de postfix </note>
+<note>je préfère mettre mysql-client mysql-server (sans préciser la version) pour réussir l'installation à tous les coups</note>
+
+<note tip>Chez moi, le package courier-authlib-mysql s'appelle courier-authmysql</note>
+
+Si c'est la 1ère fois que vous installez MySQL, définissez un mot de passe pour le root
+
+  mysqladmin -u root password 'motdepasse'
+
+Si jamais le mot de passe root ne peut être changé voici une petite procédure pour pouvoir le faire:\\
+
+<code>
+/etc/init.d/mysql stop
+rm -Rf /var/lib/mysql/*
+mysql_install_db
+/etc/init.d/mysql start
+mysqladmin -u root password 'xxxxxxxx'
+</code>
+
+
+==== Postfix ====
+
+Création de la base de donnée nommée postfix
+
+  mysqladmin -u root --password='motdepasse' create postfix
+
+Création de l'utilisateur postfix
+  
+  $ mysql -u root -p
+  Enter password:
+  GRANT ALL PRIVILEGES ON postfix.* TO "postfix"@"localhost" IDENTIFIED BY 'motdepasse';
+
+Insertion des tables dans la base de données 
+
+  USE postfix;
+  CREATE TABLE `alias` (
+  `address` varchar(255) NOT NULL default '',
+  `goto` text NOT NULL,
+  `domain` varchar(255) NOT NULL default '',
+  `created` datetime NOT NULL default '0000-00-00 00:00:00',
+  `modified` datetime NOT NULL default '0000-00-00 00:00:00',
+  `active` tinyint(1) NOT NULL default '1',
+  PRIMARY KEY  (address)
+  ) ENGINE=MyISAM COMMENT='Postfix Admin - Virtual Aliases';
+
+  USE postfix;
+  CREATE TABLE `domain` (
+  `domain` varchar(255) NOT NULL default '',
+  `description` varchar(255) NOT NULL default '',
+  `aliases` int(10) NOT NULL default '0',
+  `mailboxes` int(10) NOT NULL default '0',
+  `maxquota` int(10) NOT NULL default '0',
+  `transport` varchar(255) default NULL,
+  `backupmx` tinyint(1) NOT NULL default '0',
+  `created` datetime NOT NULL default '0000-00-00 00:00:00',
+  `modified` datetime NOT NULL default '0000-00-00 00:00:00',
+  `active` tinyint(1) NOT NULL default '1',
+  PRIMARY KEY  (domain)
+  ) ENGINE=MyISAM COMMENT='Postfix Admin - Virtual Domains';
+
+  USE postfix;
+  CREATE TABLE `mailbox` (
+  `username` varchar(255) NOT NULL default '',
+  `password` varchar(255) NOT NULL default '',
+  `name` varchar(255) NOT NULL default '',
+  `maildir` varchar(255) NOT NULL default '',
+  `quota` int(10) NOT NULL default '0',
+  `domain` varchar(255) NOT NULL default '',
+  `created` datetime NOT NULL default '0000-00-00 00:00:00',
+  `modified` datetime NOT NULL default '0000-00-00 00:00:00',
+  `active` tinyint(1) NOT NULL default '1',
+  PRIMARY KEY  (username)
+  ) ENGINE=MyISAM COMMENT='Postfix Admin - Virtual Mailboxes';
+
+  quit;
+
+On crée un dossier nommé vmail. Ce dossier regroupera les boîtes mail des utilisateurs. 
+
+   $ groupadd -g 5000 vmail
+   $ useradd -g vmail -u 5000 vmail -d /home/vmail -m
+
+On ajoute dans /etc/postfix/main.cf en fin de fichier
+
+  # Support Mysql
+  virtual_alias_maps = mysql:/etc/postfix/mysql_virtual_alias_maps.cf
+  virtual_gid_maps = static:5000
+  virtual_mailbox_base = /home/vmail
+  virtual_mailbox_domains = mysql:/etc/postfix/mysql_virtual_domains_maps.cf
+  virtual_mailbox_limit = 51200000
+  virtual_mailbox_maps = mysql:/etc/postfix/mysql_virtual_mailbox_maps.cf
+  virtual_minimum_uid = 5000
+  virtual_transport = virtual
+  virtual_uid_maps = static:5000
+  # Support du quota
+  virtual_create_maildirsize = yes
+  virtual_mailbox_extended = yes
+  virtual_mailbox_limit_maps = mysql:/etc/postfix/mysql_virtual_mailbox_limit_maps.cf
+  virtual_mailbox_limit_override = yes
+  virtual_maildir_limit_message = Desole, la boite email de l'utilisateur est pleine, essayez plus tard.
+  virtual_overquota_bounce = yes
+  # Suport du relay
+  #relay_domains = mysql:/etc/postfix/mysql_relay_domains_maps.cf
+
+Le smtp de postfix est chrooté, il faut donc le retirer afin d'assurer son bon fonctionnement. On retire le chroot dans /etc/postfix/master.cf et modifier comme dessous.
+
+  #
+  # Postfix master process configuration file.  For details on the format
+  # of the file, see the Postfix master(5) manual page.
+  #
+  # ==========================================================================
+  # service type  private unpriv  chroot  wakeup  maxproc command + args
+  #               (yes)   (yes)   (yes)   (never) (100)
+  # ==========================================================================
+  smtp      inet  n       -       n       -       -       smtpd
+  cleanup   unix  n       -       n       -       0       cleanup
+  rewrite   unix  -       -       n       -       -       trivial-rewrite
+
+On va désormais créer les fichiers de configuration de postfix pour MySQL. Dans /etc/postfix, créer les fichiers suivants, tout en modifiant le mot de passe.
+
+<note tip>Pour aller plus vite, ne modifiez pas le mot de passe et copier-coller tels quels les fichiers. Une fois terminé, lancez la ligne de commande suivante en prenant soin de remplacer VOTREMOTDEPASSE par le bon. Tous les fichiers seront alors modifié en même temps, vous limiterez ainsi les erreurs ;-) :
+
+$ ''sed -i 's/motdepasse/VOTREMOTDEPASSE/' /etc/postfix/mysql_*.cf''
+
+Cela peut également vous servir le jour où vous désirez modifier le mot de passe...</note>
+
+Creation des fichiers : mysql_virtual_alias_maps.cf, mysql_virtual_domains_maps.cf, mysql_virtual_mailbox_maps.cf, mysql_virtual_mailbox_limit_maps.cf, mysql_relay_domains_maps.cf
+
+  MYSQL_USER=postfix
+  MYSQL_PASSWORD=motdepasse
+  MYSQL_HOST=127.0.0.1
+  
+  cat << EOF >/etc/postfix/mysql_virtual_alias_maps.cf
+  user = $MYSQL_USER
+  password = $MYSQL_PASSWORD
+  hosts = $MYSQL_HOST
+  dbname = postfix
+  query = SELECT goto FROM alias WHERE address='%s' AND active = 1
+  EOF
+  
+  cat <<EOF >/etc/postfix/mysql_virtual_domains_maps.cf
+  user = $MYSQL_USER
+  password = $MYSQL_PASSWORD
+  hosts = $MYSQL_HOST
+  dbname = postfix
+  query = SELECT domain FROM domain WHERE domain='%s'
+  #optional query to use when relaying for backup MX
+  #query = SELECT domain FROM domain WHERE domain='%s' and backupmx = '0' and active = '1'
+  EOF
+  
+  cat <<EOF >/etc/postfix/mysql_virtual_mailbox_maps.cf
+  user = $MYSQL_USER
+  password = $MYSQL_PASSWORD
+  hosts = $MYSQL_HOST
+  dbname = postfix
+  query = SELECT maildir FROM mailbox WHERE username='%s' AND active = 1
+  EOF
+  
+  cat <<EOF>/etc/postfix/mysql_virtual_mailbox_limit_maps.cf
+  user = $MYSQL_USER
+  password = $MYSQL_PASSWORD
+  hosts = $MYSQL_HOST
+  dbname = postfix
+  query = SELECT quota FROM mailbox WHERE username='%s'
+  EOF
+  
+  cat <<EOF>/etc/postfix/mysql_relay_domains_maps.cf
+  user = $MYSQL_USER
+  password = $MYSQL_PASSWORD
+  hosts = $MYSQL_HOST
+  dbname = postfix
+  query = SELECT domain FROM domain WHERE domain='%s' and backupmx = '1'
+  EOF
+
+Pour le bon fonctionnement et la sécurité il faut exécuter ces deux lignes de commandes
+
+    chmod 640 mysql_*
+    chgrp postfix mysql_*
+
+On crée des liens pour le bon fonctionnement de l'ensemble
+
+   mkdir -p /var/spool/postfix/var/run/mysqld
+   chown mysql /var/spool/postfix/var/run/mysqld
+   ln -s /var/run/mysqld/mysqld.sock /var/spool/postfix/var/run/mysqld/mysqld.sock
+
+   mkdir -p /var/spool/postfix/var/run/courier/authdaemon
+   ln -s /var/run/courier/authdaemon/socket /var/spool/postfix/var/run/courier/authdaemon/socket
+   chown -R daemon:daemon /var/spool/postfix/var/run/courier
+   chmod 755 /var/spool/postfix/var/run/courier/authdaemon
+
+
+
+==== TLS (Imap TLS)====
+
+Pour le support du TLS il faut créer une clef SSL toujours dans le répertoire /etc/postfix/
+
+   $ openssl req -new -outform PEM -out smtpd.cert -newkey rsa:2048 -nodes -keyout smtpd.key -keyform PEM -days 365 -x509
+
+  <-- Enter your Country Name (e.g., "FR").
+  <-- Enter your State or Province Name.
+  <-- Enter your City.
+  <-- Enter your Organization Name (e.g., the name of your company).
+  <-- Enter your Organizational Unit Name (e.g. "IT Department").
+  <-- Enter the Fully Qualified Domain Name of the system (e.g. "server.domain.tld").
+  <-- Enter your Email Address.
+
+   $ chmod o= /etc/postfix/smtpd.key
+
+Ajoutez dans /etc/postfix/main.cf
+
+  # Support TLS
+  smtpd_tls_cert_file = /etc/postfix/smtpd.cert
+  smtpd_tls_key_file = /etc/postfix/smtpd.key
+
+
+==== SASL ====
+
+Pour l'ajout du sasl mettez en fin de fichier de /etc/postfix/main.cf
+
+  # Support SASL
+  broken_sasl_auth_clients = yes
+  smtpd_recipient_restrictions = 
+    permit_mynetworks,
+    permit_sasl_authenticated,
+    reject_non_fqdn_hostname,
+    reject_non_fqdn_sender,
+    reject_non_fqdn_recipient,  
+    reject_unauth_destination,
+    reject_unauth_pipelining,   
+    reject_invalid_hostname,
+    reject_rbl_client list.dsbl.org,
+    reject_rbl_client bl.spamcop.net,
+    reject_rbl_client sbl-xbl.spamhaus.org
+  smtpd_sasl_auth_enable = yes
+  smtpd_sasl_local_domain = $myhostname
+  smtpd_sasl_security_options = noanonymous
+  broken_sasl_auth_clients = yes
+  smtpd_sasl_type = cyrus
+  cyrus_sasl_config_path = /etc/postfix/sasl
+
+On peut supprimer reject_rbl_client opm.blitzed.org, le projet étant abandonné depuis mai 2006 : [[http://wiki.blitzed.org/OPM_status]].
+
+Créez le fichier smtpd.conf dans /etc/postfix/sasl et ajoutez :
+
+  pwcheck_method: saslauthd
+  mech_list: login plain
+
+<note tip>
+Pour certaines personnes qui ont eu ce message d'erreur:
+
+warning: SASL authentication failure: cannot connect to saslauthd server: No such file or directory
+
+Il faut ajouter, dans le fichier     /etc/postfix/sasl/smtpd.conf la ligne: 
+
+  saslauthd_path: /var/spool/postfix/var/run/saslauthd/mux
+
+</note>
+
+
+Editez le fichier /etc/default/saslauthd de façon à ce qu'il ait la configuration suivante
+
+  START=yes
+  MECHANISMS="pam"
+  OPTIONS="-c -r -m /var/spool/postfix/var/run/saslauthd"
+
+  
+Créez les répertoires et attribuez les droits.
+
+  mkdir -p /var/spool/postfix/var/run/saslauthd
+  chown -R root:sasl /var/spool/postfix/var/run/saslauthd
+  chmod 710 /var/spool/postfix/var/run/saslauthd
+
+
+Créez un  lien symbolique pour que cela fonctionne lorsque postfix est chrooté [sionib] :
+
+   ln -s /var/spool/postfix/var/run/saslauthd /var/run/saslauthd
+   
+FIXME
+
+<note warning>Sur debian il faut faire [sebtiz13] :
+
+   ln -s /var/spool/postfix/var/run/saslauthd /var/run/
+
+</note>
+
+<note warning> Depuis au moins Ubuntu 14.04, le lien symbolique disparaît à chaque reboot. Comme workaround, éditez /etc/init.d/rc.local : 
+
+   sudo vi /etc/init.d/rc.local
+
+
+Et ajoutez ces lignes tout à la fin du fichier : 
+ 
+   /bin/sleep 5
+   ln -s /var/spool/postfix/var/run/saslauthd /var/run/saslauthd
+   /etc/init.d/saslauthd restart
+
+Ainsi le lien sera recréé à chaque reboot et sasl fonctionnera correctement.
+
+</note>
+
+Créez le fichier /etc/pam.d/smtp en prenant soin le cas échéant de remettre votre mot de passe. (chez moi il a fallu nommer ce fichier smtpd [jblanche])
+
+  auth       required     pam_mysql.so user=postfix passwd=motdepasse host=127.0.0.1 db=postfix table=mailbox usercolumn=username passwdcolumn=password crypt=1
+  account    sufficient   pam_mysql.so user=postfix passwd=motdepasse host=127.0.0.1 db=postfix table=mailbox usercolumn=username passwdcolumn=password crypt=1
+
+Redémarrez sasl
+
+   /etc/init.d/saslauthd restart
+
+Rajouter l'utilisateur postfix au groupe sasl :
+
+   adduser postfix sasl
+
+==== Courier (MTA: Pop3, IMAP) ====
+
+Editez le fichier /etc/courier/authdaemonrc
+Cherchez la ligne authmodulelist="authpam" et remplacez par authmodulelist="authmysql"
+
+Editez le fichier /etc/courier/authmysqlrc de façon à ce qui ressemble à ceci en n'oubliant pas de changer le mot de passe à la ligne 3 :
+
+  MYSQL_SERVER            127.0.0.1
+  MYSQL_USERNAME          postfix
+  MYSQL_PASSWORD          motdepasse
+  #MYSQL_SOCKET           /var/lib/mysql/mysql.sock
+  MYSQL_PORT              0
+  MYSQL_OPT               0
+  MYSQL_DATABASE          postfix
+  MYSQL_USER_TABLE        mailbox
+  MYSQL_CRYPT_PWFIELD     password
+  #DEFAULT_DOMAIN         domain.tld
+  MYSQL_UID_FIELD         5000
+  MYSQL_GID_FIELD         5000
+  MYSQL_LOGIN_FIELD       username
+  MYSQL_HOME_FIELD        "/home/vmail"
+  MYSQL_NAME_FIELD        name
+  MYSQL_MAILDIR_FIELD     maildir
+  #MYSQL_QUOTA_FIELD      quota
+  #MYSQL_WHERE_CLAUSE     server='exemple.domain.tld'
+
+Redémarrez courier
+
+   $ /etc/init.d/courier-authdaemon restart
+
+
+
+===== Deuxième Partie =====
+
+**Ajout d'un anti-spam, anti-virus**
+
+Cette deuxième partie n'est pas obligatoire pour le bon fonctionnement du serveur de mail. Elle est juste présente afin d'ajouter de nouvelles fonctionnalités pour l'utilisateur.
+
+   $ sudo apt-get install amavisd-new spamassassin clamav clamav-daemon zoo unzip arj bzip2 razor pyzor dcc-client
+
+<note warning> les paquets dcc-client dcc-server dcc-common n'existent plus sous debian note du 15/03/2014</note>
+
+Sous hardy 8.4, le paquet dcc-client n'existe plus, pas même dcc-server. [[http://www.howtoforge.com/the-perfect-spamsnake-ubuntu-8.04]] est peut être une piste en attendant la mise à jour de cette documentation.
+
+Il est toujours possible de télécharger le paquet dcc-server (qui remplace dcc-client) via les paquets ubuntu cela marche avec la version 8.4 et la version 8.10.
+Premièrement le paquet dcc-server a besoin de dcc-common pour fonctionner. 
+  * dcc-common : http://packages.ubuntu.com/gutsy/dcc-common
+  * dcc-server : http://packages.ubuntu.com/gutsy/dcc-server
+
+Par exemple on peut procéder ainsi :
+<code>
+wget http://launchpadlibrarian.net/11565554/dcc-server_1.3.42-5_amd64.deb
+wget http://launchpadlibrarian.net/11565552/dcc-common_1.3.42-5_amd64.deb
+dpkg -i dcc-common_1.3.42-5_amd64.deb
+dpkg -i dcc-server_1.3.42-5_amd64.deb
+
+cdcc "delete 127.0.0.1"
+cdcc "delete 127.0.0.1 Greylist"
+</code>
+==== Amavis ====
+
+Créer le fichier /etc/amavis/amavisd.conf
+
+  use strict;
+  
+  $MYHOME = '/var/lib/amavis';   # (default is '/var/amavis')
+  
+  $mydomain = 'localhost';
+  
+  # $myhostname = 'serveur.domain.tld';  # fqdn of this host, default by uname(3)
+  
+  $daemon_user  = 'amavis';        # (no default (undef))
+  $daemon_group = 'amavis';        # (no default (undef))
+  
+  $TEMPBASE = $MYHOME;           # (must be set if other config vars use is)
+  
+  $pid_file  = "/var/run/amavis/amavisd.pid";  # (default: "$MYHOME/amavisd.pid")
+  $lock_file = "/var/run/amavis/amavisd.lock"; # (default: "$MYHOME/amavisd.lock")
+  
+  $ENV{TMPDIR} = $TEMPBASE;       # wise to set TMPDIR, but not obligatory
+  
+  $max_servers  =  4;   # number of pre-forked children          (default 2)
+  $max_requests = 10;   # retire a child after that many accepts (default 10)
+  
+  $child_timeout=5*60;  # abort child if it does not complete each task in n sec
+                        # (default: 8*60 seconds)
+  
+  # @bypass_virus_checks_acl = qw( . );  # uncomment to DISABLE anti-virus code
+  # @bypass_spam_checks_acl  = qw( . );  # uncomment to DISABLE anti-spam code
+  
+  @local_domains_acl = ( ".$mydomain" );  # $mydomain and its subdomains
+  
+  $relayhost_is_client = 0;         # (defaults to false)
+  
+  $insert_received_line = 1;
+  
+  $unix_socketname = undef;
+  
+  $inet_socket_port = 10024;
+  $inet_socket_bind = '127.0.0.1';
+  @inet_acl = qw( 127.0.0.1 );
+  
+  $DO_SYSLOG = 1;
+  $LOGFILE = "/var/log/amavis.log";  # (defaults to empty, no log)
+  
+  #$log_level = 2;                # (defaults to 0)
+  
+  $log_templ = '[? %#V |[? %#F |[?%#D|Not-Delivered|Passed]|BANNED name/type (%F)]|INFECTED (%V)], #
+  [?%o|(?)|<%o>] -> [<%R>|,][? %i ||, quarantine %i], Message-ID: %m, Hits: %c';
+  
+  read_l10n_templates('en_US', '/etc/amavis');
+  
+  $final_virus_destiny      = D_REJECT; # (defaults to D_BOUNCE)
+  $final_banned_destiny     = D_REJECT;  # (defaults to D_BOUNCE)
+  $final_spam_destiny       = D_PASS;  # (defaults to D_REJECT)
+  $final_bad_header_destiny = D_PASS;  # (defaults to D_PASS), D_BOUNCE suggested
+  
+  $viruses_that_fake_sender_re = new_RE(
+    qr'nimda|hybris|klez|bugbear|yaha|braid|sobig|fizzer|palyh|peido|holar'i,
+    qr'tanatos|lentin|bridex|mimail|trojan\.dropper|dumaru|parite|spaces'i,
+    qr'dloader|galil|gibe|swen|netwatch|bics|sbrowse|sober|rox|val(hal)?la'i,
+    qr'frethem|sircam|be?agle|tanx|mydoom|novarg|shimg|netsky|somefool|moodown'i,
+    qr'@mm|@MM',    # mass mailing viruses as labeled by f-prot and uvscan
+    qr'Worm'i,      # worms as labeled by ClamAV, Kaspersky, etc
+    [qr'^(EICAR|Joke\.|Junk\.)'i         => 0],
+    [qr'^(WM97|OF97|W95/CIH-|JS/Fort)'i  => 0],
+    [qr/.*/ => 1],  # true by default  (remove or comment-out if undesired)
+  );
+  
+  $virus_admin = "postmaster\@$mydomain";                # due to D_DISCARD default
+  
+  $mailfrom_to_quarantine = '';   # override sender address with null return path
+  
+  $QUARANTINEDIR = '/var/lib/amavis/virusmails';
+  
+  $virus_quarantine_to  = 'virus-quarantine';    # traditional local quarantine
+  $spam_quarantine_to = 'spam-quarantine';
+  
+  $X_HEADER_TAG = 'X-Virus-Scanned';        # (default: undef)
+  $X_HEADER_LINE = "by $myversion (Debian) at $mydomain";
+  
+  $undecipherable_subject_tag = '***UNCHECKED*** ';  # undef disables it
+  
+  $remove_existing_x_scanned_headers = 0; # leave existing X-Virus-Scanned alone
+  #$remove_existing_x_scanned_headers= 1; # remove existing headers
+                                          # (defaults to false)
+  #$remove_existing_spam_headers = 0;     # leave existing X-Spam* headers alone
+  $remove_existing_spam_headers  = 1;     # remove existing spam headers if
+                                          # spam scanning is enabled (default)
+  
+  $keep_decoded_original_re = new_RE(
+  # qr'^MAIL$',   # retain full original message for virus checking (can be slow)
+    qr'^MAIL-UNDECIPHERABLE$',  # retain full mail if it contains undecipherables
+    qr'^(ASCII(?! cpio)|text|uuencoded|xxencoded|binhex)'i,
+  # qr'^Zip archive data',
+  );
+  
+  $banned_filename_re = new_RE(
+  #  qr'^UNDECIPHERABLE$',  # is or contains any undecipherable components
+     qr'\.[^.]*\.(exe|vbs|pif|scr|bat|cmd|com|dll)$'i, # some double extensions
+     qr'[{}]',     # curly braces in names (serve as Class ID extensions - CLSID)
+  #  qr'.\.(exe|vbs|pif|scr|bat|cmd|com)$'i,           # banned extension - basic
+  #  qr'.\.(ade|adp|bas|bat|chm|cmd|com|cpl|crt|exe|hlp|hta|inf|ins|isp|js|
+  #         jse|lnk|mdb|mde|msc|msi|msp|mst|pcd|pif|reg|scr|sct|shs|shb|vb|
+  #         vbe|vbs|wsc|wsf|wsh)$'ix,                  # banned extension - long
+  #  qr'.\.(mim|b64|bhx|hqx|xxe|uu|uue)$'i, # banned extension - WinZip vulnerab.
+  #  qr'^\.(zip|lha|tnef|cab)$'i,                      # banned file(1) types
+  #  qr'^\.exe$'i,                                     # banned file(1) types
+  #  qr'^application/x-msdownload$'i,                  # banned MIME types
+  #  qr'^application/x-msdos-program$'i,
+     qr'^message/partial$'i,  # rfc2046. this one is deadly for Outcrook
+  #  qr'^message/external-body$'i, # block rfc2046
+  );
+  
+  @lookup_sql_dsn =
+     ( ['DBI:mysql:database=postfix;host=127.0.0.1;port=3306', 'postfix', 'motdepasse'] );
+  
+  $sql_select_policy = 'SELECT "Y" as local FROM domains WHERE CONCAT("@",domain) IN (%k)';
+  
+  $sql_select_white_black_list = undef;  # undef disables SQL white/blacklisting
+  
+  $recipient_delimiter = '+';                # (default is '+')
+  
+  $replace_existing_extension = 1;        # (default is false)
+  
+  $localpart_is_case_sensitive = 0;        # (default is false)
+  
+  $blacklist_sender_re = new_RE(
+      qr'^(bulkmail|offers|cheapbenefits|earnmoney|foryou|greatcasino)@'i,
+      qr'^(investments|lose_weight_today|market\.alert|money2you|MyGreenCard)@'i,
+      qr'^(new\.tld\.registry|opt-out|opt-in|optin|saveonl|smoking2002k)@'i,
+      qr'^(specialoffer|specialoffers|stockalert|stopsnoring|wantsome)@'i,
+      qr'^(workathome|yesitsfree|your_friend|greatoffers)@'i,
+      qr'^(inkjetplanet|marketopt|MakeMoney)\d*@'i,
+  );
+  
+  map { $whitelist_sender{lc($_)}=1 } (qw(
+    nobody@cert.org
+    owner-alert@iss.net
+    slashdot@slashdot.org
+    bugtraq@securityfocus.com
+    NTBUGTRAQ@LISTSERV.NTBUGTRAQ.COM
+    security-alerts@linuxsecurity.com
+    amavis-user-admin@lists.sourceforge.net
+    razor-users-admin@lists.sourceforge.net
+    notification-return@lists.sophos.com
+    mailman-announce-admin@python.org
+    zope-announce-admin@zope.org
+    owner-postfix-users@postfix.org
+    owner-postfix-announce@postfix.org
+    owner-sendmail-announce@lists.sendmail.org
+    sendmail-announce-request@lists.sendmail.org
+    ca+envelope@sendmail.org
+    owner-technews@postel.ACM.ORGuse strict;
+    lvs-users-admin@LinuxVirtualServer.org
+    ietf-123-owner@loki.ietf.org
+    cvs-commits-list-admin@gnome.org
+    rt-users-admin@lists.fsck.com
+    owner-announce@mnogosearch.org
+    owner-hackers@ntp.org
+    owner-bugs@ntp.org
+    clp-request@comp.nus.edu.sg
+    surveys-errors@lists.nua.ie
+    emailNews@genomeweb.com
+    owner-textbreakingnews@CNNIMAIL12.CNN.COM
+    yahoo-dev-null@yahoo-inc.com
+  ));
+  
+  $MAXLEVELS = 14;                # (default is undef, no limit)
+  
+  $MAXFILES = 1500;                # (default is undef, no limit)
+  
+  $MIN_EXPANSION_QUOTA =      100*1024;  # bytes  (default undef, not enforced)
+  $MAX_EXPANSION_QUOTA = 300*1024*1024;  # bytes  (default undef, not enforced)
+  $MIN_EXPANSION_FACTOR =   5;  # times original mail size  (must be specified)
+  $MAX_EXPANSION_FACTOR = 500;  # times original mail size  (must be specified)
+  
+  $path = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/sbin:/usr/bin:/bin';
+  
+  $file   = 'file';   # file(1) utility; use 3.41 or later to avoid vulnerability
+  
+  $gzip   = 'gzip';
+  $bzip2  = 'bzip2';
+  $lzop   = 'lzop';
+  $uncompress = ['uncompress', 'gzip -d', 'zcat'];
+  $unfreeze   = ['unfreeze', 'freeze -d', 'melt', 'fcat'];
+  $arc        = ['nomarch', 'arc'];
+  $unarj      = ['arj', 'unarj'];  # both can extract, arj is recommended
+  $unrar      = ['rar', 'unrar'];  # both can extract, same options
+  $zoo    = 'zoo';
+  $lha    = 'lha';
+  $cpio   = 'cpio';   # comment out if cpio does not support GNU options
+  
+  $sa_local_tests_only = 0;   # (default: false)
+  #$sa_auto_whitelist = 1;    # turn on AWL (default: false)
+  
+  # Timout for SpamAssassin. This is only used if spamassassin does NOT
+  # override it (which it often does if sa_local_tests_only is not true)
+  $sa_timeout = 30;           # timeout in seconds for a call to SpamAssassin
+                              # (default is 30 seconds, undef disables it)
+  
+  # AWL (auto whitelisting), requires spamassassin 2.44 or better
+  # $sa_auto_whitelist = 1;   # defaults to undef
+  
+  $sa_mail_body_size_limit = 150*1024;
+  
+  $sa_tag_level_deflt  = 3.0; # add spam info headers if at, or above that level
+  $sa_tag2_level_deflt = 4.0; # add 'spam detected' headers at that level
+  $sa_kill_level_deflt = $sa_tag2_level_deflt;
+  
+  $sa_dsn_cutoff_level = 10;
+  
+  $sa_spam_subject_tag = '***SPAM*** ';
+  
+  $first_infected_stops_scan = 1;
+  
+  @av_scanners = (
+  
+  ### http://www.clamav.net/
+  ['Clam Antivirus-clamd',
+    \&ask_daemon, ["CONTSCAN {}\n", "/var/run/clamav/clamd.ctl"],
+    qr/\bOK$/, qr/\bFOUND$/,
+    qr/^.*?: (?!Infected Archive)(.*) FOUND$/ ],
+  # NOTE: run clamd under the same user as amavisd;  match the socket
+  # name (LocalSocket) in clamav.conf to the socket name in this entry
+  # When running chrooted one may prefer: ["CONTSCAN {}\n","$MYHOME/clamd"],
+  
+  );
+  
+  @av_scanners_backup = (
+  
+    ### http://www.clamav.net/
+    ['Clam Antivirus - clamscan', 'clamscan',
+      "--stdout --no-summary -r --tempdir=$TEMPBASE {}", [0], [1],
+      qr/^.*?: (?!Infected Archive)(.*) FOUND$/ ],
+  
+  );
+  
+  1;  # insure a defined return
+
+Pensez à changer le mot de passe à la ligne 112 par celui de votre base de donné postfix.
+
+Configurez /etc/amavis/conf.d/05-node_id
+  use strict;
+  # $myhostname is used by amavisd-new for node identification, and it is
+  # important to get it right (e.g. for ESMTP EHLO, loop detection, and so on).
+  chomp($myhostname = `hostname --fqdn`);
+  # To manually set $myhostname, edit the following line with the correct Fully
+  # Qualified Domain Name (FQDN) and remove the # at the beginning of the line.
+  #
+  $myhostname = "your hostname mail";
+  1;  # ensure a defined return
+
+Pensez à changer le nom d'hôte mail "your hostname mail" à la ligne 9 par le votre (celui configurer dans /etc/postfix/main.cf)
+
+Ajoutez en fin fichier /etc/postfix/master.cf
+
+  amavis unix - - - - 2 smtp
+          -o smtp_data_done_timeout=1200
+          -o smtp_send_xforward_command=yes
+  
+  127.0.0.1:10024 inet n - - - - smtpd
+          -o content_filter=
+          -o local_recipient_maps=
+          -o relay_recipient_maps=
+          -o smtpd_restriction_classes=
+          -o smtpd_client_restrictions=
+          -o smtpd_helo_restrictions=
+          -o smtpd_sender_restrictions=
+          -o smtpd_recipient_restrictions=permit_mynetworks,reject
+          -o mynetworks=127.0.0.0/8
+          -o strict_rfc821_envelopes=yes
+          -o receive_override_options=no_unknown_recipient_checks,no_header_body_checks
+          -o smtpd_bind_address=127.0.0.1
+
+Ajoutez en fin de fichier /etc/postfix/main.cf
+
+  # Support Amavis
+  content_filter = amavis:[127.0.0.1]:10024
+  receive_override_options = no_address_mappings
+
+Testons la configuration de postfix
+
+   $ postfix check
+
+S'il n'y a pas de réponse, c'est que votre configuration est bonne. On peut recharger postfix.
+
+   $ postfix reload
+
+==== Spamassassin ====
+
+Avant tout, il faut créer l'utilisateur "spamd"
+
+   sudo groupadd spamd
+   sudo useradd -g spamd -s /sbin/nologin -d /var/lib/spamassassin spamd
+   sudo mkdir /var/lib/spamassassin
+   sudo chown spamd:spamd /var/lib/spamassassin
+   sudo mkdir /var/log/spamd
+   sudo chown spamd:spamd /var/log/spamd
+
+Modifer le fichier /etc/default/spamassassin :
+
+   ENABLED=1
+   SAHOME="/var/lib/spamassassin/"
+   OPTIONS="--create-prefs --max-children 5 --username spamd --helper-home-dir ${SAHOME} -s /var/log/spamd/spamd.log"
+   PIDFILE="${SAHOME}spamd.pid"
+  
+
+Editez le fichier /etc/spamassassin/local.cf
+
+  # This is the right place to customize your installation of SpamAssassin.
+  #
+  # See 'perldoc Mail::SpamAssassin::Conf' for details of what can be
+  # tweaked.
+  #
+  ###########################################################################
+  #
+  # rewrite_header Subject *****SPAM*****
+  # report_safe 1
+  # trusted_networks 212.17.35.
+  # lock_method flock
+  
+  # dcc
+  use_dcc 1
+  dcc_path /usr/bin/dccproc
+  dcc_add_header 1
+  dcc_dccifd_path /usr/sbin/dccifd
+  
+  # Pyzor
+  use_pyzor 1
+  pyzor_path /usr/bin/pyzor
+  pyzor_add_header 1
+  
+  # Razor
+  use_razor2 1
+  razor_config /etc/razor/razor-agent.conf
+  
+  # Bayes
+  use_bayes 1
+  use_bayes_rules 1
+  bayes_auto_learn 1
+
+Démarrez le daemon spamassassin
+
+   $ /etc/init.d/spamassassin start   
+Pour dire à postfix d'utiliser spamassassin, modifier le fichier "/etc/postfix/master.cf" et changer la ligne : 
+
+   smtp      inet  n       -       -       -       -       smtpd   
+par  
+   smtp      inet  n       -       -       -       -       smtpd
+       -o content_filter=spamassassin
+et à la fin du fichier, ajoutez : 
+   spamassassin unix -     n       n       -       -       pipe
+       user=spamd argv=/usr/bin/spamc -f -e    
+       /usr/sbin/sendmail -oi -f ${sender} ${recipient}
+Créez le fichier /usr/sbin/sa_rules_update.sh
+
+  #!/bin/sh
+  PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/71_sare_redirect_pre3.0.0.cf -O 71_sare_redirect_pre3.0.0.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/70_sare_bayes_poison_nxm.cf -O 70_sare_bayes_poison_nxm.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/70_sare_html.cf -O 70_sare_html.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/70_sare_html4.cf -O 70_sare_html4.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/70_sare_html_x30.cf -O 70_sare_html_x30.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/70_sare_header0.cf -O 70_sare_header0.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/70_sare_header3.cf -O 70_sare_header3.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/70_sare_header_x30.cf -O 70_sare_header_x30.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/70_sare_specific.cf -O 70_sare_specific.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/70_sare_adult.cf -O 70_sare_adult.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/72_sare_bml_post25x.cf -O 72_sare_bml_post25x.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/99_sare_fraud_post25x.cf -O 99_sare_fraud_post25x.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/70_sare_spoof.cf -O 70_sare_spoof.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/70_sare_random.cf -O 70_sare_random.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/70_sare_oem.cf -O 70_sare_oem.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/70_sare_genlsubj0.cf -O 70_sare_genlsubj0.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/70_sare_genlsubj3.cf -O 70_sare_genlsubj3.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/70_sare_genlsubj_x30.cf -O 70_sare_genlsubj_x30.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/70_sare_unsub.cf -O 70_sare_unsub.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/70_sare_uri.cf -O 70_sare_uri.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.timj.co.uk/linux/bogus-virus-warnings.cf -O bogus-virus-warnings.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.yackley.org/sa-rules/evilnumbers.cf -O evilnumbers.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.stearns.org/sa-blacklist/random.current.cf -O random.current.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/00_FVGT_File001.cf -O 00_FVGT_File001.cf &> /dev/null
+  ## Next lines are remplaced by the one above
+  ##cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/88_FVGT_body.cf -O 88_FVGT_body.cf &> /dev/null
+  ##cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/88_FVGT_rawbody.cf -O 88_FVGT_rawbody.cf &> /dev/null
+  ##cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/88_FVGT_subject.cf -O 88_FVGT_subject.cf &> /dev/null
+  ##cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/88_FVGT_headers.cf -O 88_FVGT_headers.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/88_FVGT_uri.cf -O 88_FVGT_uri.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/99_FVGT_DomainDigits.cf -O 99_FVGT_DomainDigits.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/99_FVGT_Tripwire.cf -O 99_FVGT_Tripwire.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.rulesemporium.com/rules/99_FVGT_meta.cf -O 99_FVGT_meta.cf &> /dev/null
+  cd /etc/spamassassin/ &> /dev/null && /usr/bin/wget http://www.nospamtoday.com/download/mime_validate.cf -O mime_validate.cf &> /dev/null
+  
+  /etc/init.d/amavis restart &> /dev/null
+  
+  exit 0
+
+   $ chmod 755 /usr/sbin/sa_rules_update.sh
+
+Ajoutez la crontab suivante
+
+   $ crontab -e
+
+  30 2 */2 * * /usr/sbin/sa_rules_update.sh &> /dev/null
+
+On l'execute manuellement, cette opération peut être longue la première fois.
+
+   $ /usr/sbin/sa_rules_update.sh
+
+Testons le serveur smtp
+
+   $ telnet localhost 25
+
+  Trying 127.0.0.1...
+  Connected to 127.0.0.1.
+  Escape character is '^]'.
+  220 localhost.localdomain ESMTP Postfix (Debian/GNU)
+  ehlo localhost
+  250-localhost.localdomain
+  250-PIPELINING
+  250-SIZE 51200000 
+  250-VRFY
+  250-ETRN
+  250-STARTTLS
+  250-AUTH LOGIN PLAIN
+  250-AUTH=LOGIN PLAIN
+  250-ENHANCEDSTATUSCODES
+  250-8BITMIME
+  250 DSN
+  quit
+
+Si les tests sont ok, votre serveur de mail est opérationnel. 
+===== Création des utilisateurs/domaines =====
+
+Il ne nous reste plus qu'à remplir les tables pour la gestion des domaines, des boxes, et des aliases.
+Pour cela, vous pouvez passer par phpmyadmin, ce que je vous conseille. Ou pour les mordus de la console comme mouaaaa...
+
+  $ mysql -u root -p
+  Enter password:
+  USE postfix;
+  INSERT INTO domain (domain,description) VALUES ('domain.tld','Test Domain');
+  INSERT INTO alias (address,goto) VALUES ('alias@domain.tld', 'utilisateur@domain.tld');
+  INSERT INTO mailbox (username,password,name,maildir)  VALUES ('utilisateur@domain.tld',ENCRYPT('"votre mot de passe"'),'Mailbox User','utilisateur@domain.tld/');
+  quit;
+
+
+<note warning>
+Attention, lors de la création de l'utilisateur, il faut supprimer les doubles quotes lors de l'utilisation d' ENCRYPT ( ENCRYPT('myMdp') et non pas ENCRYPT('"myMdp"') )
+</note>
+
+Les mots de passe seront à chiffrer via la fonction ENCRYPT sous PHPMyAdmin.
+
+<note tip>Pour Postfix Admin je vous conseille de l'installer avant de faire la configuration de postfix + SQL</note>
+Il existe une interface d'administration, [[http://high5.net/postfixadmin/|Postfix Admin]] qui permet la gestion de tout cela, vous trouverez un tutoriel pour l'installer à cette [[http://www.system-linux.eu/index.php?post/2009/10/22/Installation-et-Configuration-de-postfixadmin|adresse]]. Je l'ai testé à ses débuts, le trouvant très mal fait, je l'ai laissé tomber, entre temps il a subi quelques améliorations, et je ne l'ai pas testé de nouveau.
+
+Testez votre nouvelle installation avec votre client de messagerie. Pour information les identifiants de connexion sont sous la forme **utilisateur@domain.tld**
+
+Postfix a été configuré pour les quota mais le tuto n'en parle pas. C'est tout à fait normal, je n'ai pas tout à fait finalisé le tuto, et je ne parle pas de la mise en place des quota. Pour cela, il faut compiler postfix via les sources, voir le patcher si je ne raconte pas de bêtise. Une recherche sur google vous en dira plus en attendant ;-)
+
+===== Création du répertoire de stockage des mails =====
+
+Il faut créer le répertoire ou seront stockés les mails (envoyés, brouillons, etc...)
+Aller dans le répertoire ou tout les comptes mails sont enregistrés (/home/vmail par exemple), puis
+
+  $ maildirmake VOTREREPERTOIREDEMAIL
+
+Modifier VOTREREPERTOIREDEMAIL par le nom que vous voulez donner au compte mail (machin@domain.ltd par exemple).
+
+Donner les droits adéquats aux dossiers contenus dans votre répertoire où les comptes mails sont enregistrés :
+
+  $ sudo chown vmail:vmail -R /home/vmail;
+===== En cas d'erreurs =====
+
+  - Si vous souhaitez tester la configuration de sasl, vous pouvez utiliser : <code>testsaslauthd -u adresse@domain.tld -p password -s smtp</code>
+
+<note info>
+Pour vérifier que sasl va bien chercher dans la db les utilisateurs, mettez un nom d'utilisateur inexistant dans l'option -u. 
+La log /var/log/auth.log devrait indiquer que le SELECT SQL ne retourne pas de résultat.
+Dans le cas contraire, vous avez probablement un problème de configuration.
+</note>
+<note info>
+Si vous n'arrivez toujours pas à obtenir une connection correcte et que le point ci-dessus est vérifié, modifiez le fichier /etc/pam.d/smtp en changeant sur les deux lignes le paramétre crypt=1 à crypt=0 (non crypté).
+Il vous suffit alors de créer un nouveau user ou de modifier le précédent par un mot de passe simple (test par exemple) et de retester.
+</note>
+
+  - Si le serveur smtp ne répond pas, sachez qu'Orange et Free bloquent le port smtp (25) en dehors de leurs réseaux par défaut afin de limiter la diffusion de spam. Vous devrez donc les débloquer pour le serveur mais aussi pour les clients.
+
+Dans ce cas, le serveur pop3 risque de ne pas fonctionner. Pour cela, il faut créer à la main les répertoires des différents utilisateurs ajoutés dans la table mailbox.
+
+  cd /home/vmail
+  mkdir NomRépertoireDeLaBase
+  mkdir NomRépertoireDeLaBase/cur
+  mkdir NomRépertoireDeLaBase/tmp
+
+Les trois dernières commandes sont à effectuer autant de fois qu'il y a d'occurrences dans la base.
+
+Ensuite, il faut attribuer les droits à l'utilisateur vmail, comme indiqué précédemment.
+  chown vmail:vmail -R /home/vmail;
+
+- Si une fois un test d'envoi de mail effectué (test SMTP+SASL), vous obtenez dans le journal /var/log/auth.log le message suivant : 
+  postfix/smtpd[23340]: sql_select option missing
+  postfix/smtpd[23340]: auxpropfunc error no mechanism available 
+
+Il faut désinstaller le package suivant : libsasl2-modules-sql
+  apt-get remove libsasl2-modules-sql
+
+
+
+----
+
+//Contributeurs: [[:utilisateurs:cereal_killer_du_77|CeReAl KiLLeR DU 77]], psykokwak78//, Association BreizhTux Saint-Brieuc

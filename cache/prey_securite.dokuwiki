@@ -1,0 +1,132 @@
+
+{{tag>webcam sécurité vidéosurveillance}}
+
+----
+
+======Prey - Localisation en cas de vol ======
+
+Prey est un logiciel libre qui permet de localiser un matériel volé ou perdu. Il permet également de prendre des photos de la personne en face de l'appareil (s'il y a une webcam).
+
+Site officiel : [[https://preyproject.com/]]
+
+Bémol : il faut que l'appareil soit connecté à Internet afin de transmettre les informations. Rien ne se passer si votre appareil n'est jamais allumé ou jamais connecté à Internet.
+
+Lorsque votre ordinateur portable est porté disparu et est ensuite utilisé, Prey "téléphone maison", en utilisant soit une connexion Wi-Fi ou Ethernet direct. Il enverra non seulement la situation géographique de votre appareil, mais peut aussi fournir une capture d'écran du bureau, stats sur quels programmes sont en cours d'exécution, de disponibilité et, comme mentionné avant, il peut même vous envoyer un instantané de la personne assise en face de l'ordinateur (via l'éventuelle webcam) !
+
+La géolocalisation se base sur les hotspots Wifi détectés par l'appareil (à l'aide de Google Location API, ce qui est très précis en zone urbaine, ou peut ne pas marcher du tout en zone rurale). Dans tous les cas, on peut connaître l'adresse IP publique, ce qui permet d'avoir une localisation beaucoup moins précise. Et on peut effectuer certaines actions à distance sur l'appareil.
+
+Quelques exemples de personnes qui ont retrouvé leur matériel grâce à ce système : [[https://preyproject.com/blog/cat/recoveries]]
+
+A noter qu'il existe des versions de Prey pour divers appareils/systèmes d'exploitation : [[https://preyproject.com/download]]
+
+=====Installation=====
+
+==== Depuis les dépôts officiels ====
+<note>Prey n'est plus disponible dans les dépôts officiels depuis [[focal|Ubuntu 20.04]]((https://packages.ubuntu.com/search?suite=default&section=all&arch=any&searchon=names&keywords=prey))</note>
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>prey]]**
+
+====Depuis le site du projet====
+  * [[http://preyproject.com/download|Téléchargez sur le site officiel]]
+  * Installez le paquet
+NB : l'emplacement de certains fichiers est différente dans la version distribuée sur le site. De plus, le nom de certains modules a changé : "secure" est renommé en "wipe"
+
+Les exemples et lignes de commande ci-dessous sont basés sur le paquet Ubuntu, et non sur la dernière version du site.
+
+<note important>Sur la 14.04, il se peut que vous ayez une erreur à l'installation du paquet tiré du site. Pour que ça marche, effectuez la [[http://ubuntuforums.org/showthread.php?t=2276081  | manip' suivante]]: 
+  * Editez le fichier ''/var/lib/dpkg/info/prey.postinst'' en superutilisateur (avec ''sudo nano var/lib/dpkg/info/prey.postinst'' par exemple)
+  * Dans le fichier, commentez la ligne ''set -e'' (elle devient donc ''#set -e''), et sauvegardez 
+  * Lancez la commande ''sudo apt-get install -f'' 
+  * Lancez la commande ''sudo /usr/lib/prey/current/bin/prey config account setup'', suivez ce qui est demandé, et c'est bon!
+</note>
+=====Utilisation=====
+Le jour où votre appareil est volé ou perdu, il faut le déclarer comme disparu. Soit via le "panel control", soit en modifiant un fichier de votre serveur HTTP (voir le paragraphe "Configuration").
+
+Si vous avez un peu de chance, quelqu'un allumera votre appareil, et le connectera à Internet. Si c'est le cas, et suivant ce que vous avez configuré, prey pourra vous envoyer des informations (géolocalisation etc) et/ou effectuer des actions (cacher/supprimer des données sensibles, déclencher une alarme etc).
+
+=====Configuration=====
+Cet outil a besoin de se connecter à un serveur pour vérifier périodiquement s'il est déclaré volé ou non. Il y a plusieurs possibilités pour cela, détaillées ci-dessous.
+
+Toute la configuration se fait dans le fichier /etc/prey/config.
+
+Le plus simple pour les débutants est d'utiliser l'assistant de configuration (disponible depuis Trusty 14.04, c'est-à-dire dans les versions récentes de Prey), en tapant la commande ci-dessous dans un Terminal :
+<code>
+sudo /usr/lib/prey/platform/linux/prey-config.py
+</code>
+(votre mot de passe sera demandé)
+
+Sous la 18.04, lancer le script 
+<code>
+/usr/lib/prey/current/bin/prey
+</code>
+====Utiliser le serveur officiel du projet (leur "panel control")====
+C'est l'option la plus facile à configurer.
+
+Il faut s'inscrire sur leur site [[https://panel.preyproject.com/signup]]. Une option gratuite permet une utilisation basique, et plusieurs options payantes permettent d'aller plus loin : [[https://preyproject.com/plans]]
+
+====Utiliser un autre serveur HTTP(S) (mode "standalone")====
+N'importe quel serveur HTTP(S) peut convenir (pour peu que vous puissiez facilement y déposer/modifier des fichiers). Exemple : les pages perso de votre fournisseur d'accès.
+Préférer si possible un serveur en HTTPS : avec un serveur HTTP sans cryptage SSL, on peut dans certains cas être exposé à une attaque de type man-in-the-middle.
+
+C'est plus compliqué à configurer, et l'administration est beaucoup moins facile.
+Par contre, c'est totalement gratuit et pourra rassurer les plus paranos d'entre nous.
+Prey vous préviendra en vous envoyant un email.
+
+Quelques explications sur la manière de faire :
+  * Il faut déposer un fichier XML sur le serveur http(s). Exemple de contenu :
+<code>
+<prey>
+	<configuration>
+		<!-- Enlever le no_ devant les balises ouvrante/fermante de la ligne ci-dessous pour declarer le device comme perdu -->
+		<no_device_missing>true</no_device_missing>
+		<delay>20</delay>
+	</configuration>
+	<modules>
+		<module name="network">
+			<trace_route>y</trace_route>
+			<get_nearby_wifi_hotspots>y</get_nearby_wifi_hotspots>
+		</module>
+		<module name="geo">
+		</module>
+		<module name="session">
+		</module>
+		<module name="system">
+		</module>
+		<module name="webcam">
+			<!-- La video ne marche pas sur tous les appareils -->
+			<capture_video>y</capture_video>
+			<video_capture_time>30</video_capture_time>
+			<frames_per_second>12</frames_per_second>
+		</module>
+	</modules>
+</prey>
+</code>
+Attention : Prey ne fait pas de vrai parsing XML. Il lit le fichier ligne à ligne via des expressions régulières. Autrement dit, mettre des lignes en commentaire <!-- ... --> n'empêchera pas Prey de les prendre en compte...
+  * On déclare l'appareil comme perdu en positionnant une balise device_missing dans la partie "configuration" (dans l'exemple ci-dessous, cela consiste à enlever le préfixe "no_" des balises ouvrante et fermante no_device_missing
+  * La balise delay indique le nombre de minutes entre chaque vérification de prey
+  * On indique ensuite les modules à activer : ceux proposés ci-dessous rapportent des informations, sans prévenir le voleur
+  * Si nécessaire, vous pouvez déclencher certaines actions sur votre appareil. Notamment, vous pouvez supprimer certaines données sensibles, en ajoutant les modules ci-dessous (**à utiliser avec précaution : cela supprime vraiment les données!**. Il est possible de cacher les données plutôt que les supprimer un mettant la valeur "hide" au lieu de "delete" dans la balise "method") :
+<code>
+		<module name="secure">
+			<method>delete</method>
+			<terminate_if_running>y</terminate_if_running>
+			<delete_firefox_data>y</delete_firefox_data>
+			<delete_credentials>y</delete_credentials>
+			<hide_thunderbird_data>y</hide_thunderbird_data>
+		</module>
+</code>
+  * Pour en savoir plus sur la configuration, je n'ai pas trouvé de documentation du fichier XML. Je n'ai pas trouvé mieux que de regarder comment cela était codé : [[https://github.com/prey/prey-bash-client]] et [[https://github.com/prey/prey-bash-client-modules]]
+  * Sur Ubuntu Trusty, pour que l'envoi par email fonctionne, il faut également [[:tutoriel:comment_installer_un_paquet|Installer le paquet]]**[[apt>sendemail]]**
+  * Je vous conseille de tester votre configuration sur un appareil de test, ou dans une machine virtuelle, avant de l'utiliser réellement. Surtout pour les options qui suppriment des données. Pour comprendre ce que prey fait, vous pouvez regarder son fichier de log : /var/log/prey.log
+  * Si vous mettez votre fichier XML à un emplacement qui risque d'être supprimé un jour, vous pouvez modifier le code retour HTTP qui déclenche les actions par défaut : dans le fichier /etc/prey/config, ce paramètre missing_status_code est par défaut à 404 (code qui indique que le fichier n'existe pas). Vous pouvez le mettre par exemple à 418 (code HTTP qui ne devrait jamais être utilisé, même si vos fichiers disparaissent ou sont déplacés)
+
+====Installer son propre "panel control" sur un serveur====
+Encore plus compliqué à mettre en place, mais peut rendre l'administration intuitive. Nécessite Ruby et MongoDB pour tourner.
+
+Je n'ai pas testé, mais cela semble possible puisque les sources de leur panel control sont disponibles sur Github : [[https://github.com/prey/prey-standalone-control-panel]]
+
+=====Voir aussi=====
+
+  * [[Sécurité]]
+  * [[videosurveillance]] 
+
+Contributeurs : [[:utilisateurs:mossroy]], [[:utilisateurs:psychederic|Psychederic ]]

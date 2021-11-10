@@ -1,0 +1,169 @@
+
+{{tag>partitions système BROUILLON}}
+
+<note>Cette page est en cours de construction... Si vous êtes arrivé ici, c'est que le sujet vous intéresse. Si vous avez suffisamment de connaissances, vous pouvez continuer ce topic. (Pour ma part j'ai peu de temps a y consacré en ce moment malheureusement...)
+
+Pour plus d'info sur le sujet vous pouvez allez voir sur le forum: [[http://forum.ubuntu-fr.org/viewtopic.php?id=141941|Déplacer le contenu de / vers une partition plus grande]].
+
+Voir aussi [[:tutoriel:deplacer_home|la page traitant du déplacement du /home]].</note>
+
+====== Déplacer sa racine(ou root (/)) ======
+Cet article s'adresse à ceux qui ont besoin de déplacer leur partition / (ou partition root). Cette partition est la partition principale du système Linux.
+
+===== Pourquoi déplacer sa partition / =====
+La principale raison de déplacer sa partition / est de conserver son système actuel avec toutes ses configurations et applications lors d'une réorganisation des partitions de son disque dur (déplacement, agrandisement, retrécissement de partitions, utilisation d'un autre disque dur, suppression de Windows du disque dur).
+
+===== Mode opératoire =====
+La procédure de déplacement de la partition / consiste en 4 étapes :
+
+  - Créer une partition vide avec suffisamment de place pour accueillir le futur système. Nous appellerons cette partition dans la suite "new" en opposition à la partition actuelle que nous souhaitons déplacer et que nous appellerons "old".
+  - Copier les fichiers de l'ancienne partition ("old") à la nouvelle partition ("new").
+  - Modifier les fichiers de gestion de partition (fstab) et modifier les fichiers de démarrage du système (grub).
+  - Effacer l'ancienne partition après avoir vérifié que la nouvelle configuration de partition fonctionne correctement.
+
+===== Pré-requis =====
+
+  * Posséder un live CD afin de pouvoir manipuler vos partitions de l'extérieur.
+  * Posséder une connexion internet pour pouvoir installer [[GParted]] si celui ci ne figure pas sur le live CD. 
+  * Connaître les identifiants de ses partitions (sous la forme ''/dev/sda1''), à l'aide de GParted ou de la commande <code bash>sudo fdisk -l </code>
+
+===== Déplacer son / =====
+
+==== Créer une nouvelle partition ====
+Vous devez utiliser une partition vide et formatée linux (voir la  page [[ssd_solid_state_drive#choix_du_systeme_de_fichier|choix du système de fichier (SSD)]] si vous avez un SSD). Si vous n'avez pas déjà cette partition, vous devez la créer. Pour modifier, créer ou supprimer vos partitions, vous pouvez utiliser le logiciel [[GParted]] (ou d'autres comme [[QtParted]]).
+
+<note important>Attention, un disque dur utilisant une table de partition de type MBR (ce qui est le cas pour la majorité des PCs) ne peut pas supporter plus de quatre partitions principales. Si vous avez besoin de plus de partitions, il est conseillé de créer une partition étendue, dans laquelle vous pourrez créer des partitions logiques.
+</note>
+
+A voir: [[repartitionner|Comment repartitionner]]
+
+==== Copier sa partition / ====
+Maintenant qu'une nouvelle partition a été créée, il faut copier les fichiers de l'ancienne vers la nouvelle. Pour cela, il faut booter à l'aide d'un live CD et lancer un terminal. Voici une série de commandes à exécuter pour copier les fichiers de la partition "old" vers la partition "new".
+
+La copie peut se faire de différentes façons :
+* En ligne de commande :
+    * Avec dd
+    * Avec rsync
+    * Avec cp
+  * En interface graphique :
+    * Avec gparted
+
+Avantages / inconvénients :
+|Méthode|On doit monter les partitions avant la copie|On peut copier la partition root active|Copie le UUID et label|
+|dd|non|oui|oui|
+|rsync ou cp|oui|oui|non|
+|gparted|non|non|oui|
+
+
+<note important>On prendra l'exemple de l'ancienne partition ("old") :''/dev/sda1'' (où Ubuntu est installé) \\ et la nouvelle partition ("new") : ''/dev/sda3'' (où Ubuntu sera installé)</note>
+Pour plus d'informations sur la gestion des partitions sous Linux, voir [[:mount_fstab#Présentation|cet article]]
+
+=== Créer 2 répertoires (méthode rsync ou cp) ===
+Les deux commandes ci-dessous permettent de créer deux répertoires qui serviront à monter les 2 partitions. 
+
+  sudo mkdir /old
+  sudo mkdir /new
+
+=== Monter les 2 partitions (méthode rsync ou cp) ===
+Les deux commandes [[:mount_fstab#La commande mount|mount]] ci-dessous permettent de monter les partitions dans les répertoires précédemment créés.
+
+<note important>Pensez à modifiez les partitions sda1 et sda3 en fonction de vos besoins !</note>
+<code bash>sudo mount /dev/sda1 /old
+sudo mount /dev/sda3 /new</code>
+
+=== Copie des fichiers ===
+Cette commande va lancer la copie de tous les fichiers de l'ancienne partition vers la nouvelle. En fonction de la quantité de données, cela peut prendre plus ou moins de temps. Ici, on présente 3 méthodes : avec **rsync** ou **cp** ou **dd**
+
+**Copie avec rsync**
+<code bash>sudo rsync -axHAXP /old/ /new/</code>
+
+Rsync permet l’arrêt, la reprise et est plus verbeux que cp. \\
+Vous pouvez installer rsync dans le LiveCD (il disparaîtra à l'extinction) à l'aide de la commande ''sudo apt-get install rsync''
+
+**Ou copie avec cp**
+<code bash>
+cd /old
+sudo cp -axRv . /new
+</code>
+
+<note important>L'option ''-x'' permet de ne pas copier en-dessous des liens logiques vers d'autres partitions (comme ''/home'') pour ne copier que ce qui est réellement dans la partition. En d'autres termes, si vous avez un ''/home'' séparé, il ne sera pas copié (option ''-x''). Vous devez donc, si vous le voulez, déplacer votre dossier utilisateur dans une nouvelle partition. (pas besoin d'être dans un LiveCD)
+</note>
+
+**Ou copie avec dd**.
+Une autre alternative est d'utiliser [[dd#copier_une_partition_de_disque_sur_un_autre_disque|Commande “dd” pour copier une partition]] :
+  * Avantage :
+    * la partition de destination sera un clone identique de la partition initiale
+    * pas la peine de monter les disques
+  * Avantage / inconvenient : l'[[uuid_et_label|UUID et label]] sera copié. Il ne sera pas nécessaire de faire l'étape suivante (edition de fstab). Par contre, vous devez changer l'UUID du disque initial soit en virant le disque initial, soit en changeant son UUID (astuce : un clic droit sur la partition dans l'application [[gpart|gpart]])
+
+A ce moment, vous avez deux systèmes Ubuntu installés sur votre (vos) disque(s) dur(s).
+==== Modifier les fichiers de gestion du disque ====
+Il reste à modifier :
+  * le fichier de gestion des partitions ([[:mount_fstab#Le fichier fstab|fstab]]) pour indiquer au nouvel ubuntu la nouvelle organisation du disque dur.
+  * la configuration de [[grub|grub]] pour que le démarrage s'effectue bien sur la nouvelle partition.
+Les deux étapes suivantes nécessitent de savoir utiliser un [[tutoriel:comment_editer_un_fichier#Partout (même sans interface graphique)|éditeur en mode texte]] comme nano ou vi.
+
+<note important>
+Avant toute manipulation des fichiers fstab et menu.lst, pensez à en faire une sauvegarde dans un coin de votre ordinateur afin de pouvoir, le cas échéant, les restaurer</note>
+=== Le fichier fstab ===
+Dans le plus simple des cas, c'est-à-dire si vous n'avez pas déplacé la partition de Swap, il n'y a qu'une ligne à changer. En effet le répertoire racine / devra désormais être monté sur la partition "new". Ouvrez le fichier /new/etc/fstab (fichier fstab situé sur la nouvelle partition). En suivant l'exemple précédent, il faut remplacer la ligne :
+<code bash>/dev/sda1     /              ext4        defaults,errors=remount-ro 0    1</code>
+par la ligne :
+<code bash>/dev/sda3     /              ext4        defaults,errors=remount-ro 0    1</code>
+
+<note>Si vous avez dû utiliser les UUID pour désigner les partitions avec grub, il faudra les réutiliser dans fstab. Voilà ce que donne la ligne :
+<code bash>UUID=b6702dea-bd1e-4177-a4d1-a5560b48836c /               ext3    defaults,errors=remount-ro 0    1</code>
+</note>
+<note>
+Pour obtenir l'UUID d'une partition, tapez :
+<code bash>sudo blkid /dev/sda3</code>
+</note>
+
+=== Configuration de Grub ===
+
+== Mise à jour du menu de démarrage de Grub ==
+
+Démarrez le système depuis un live CD. Un fois démarré ouvrez une console, ensuite le but est de monter la nouvelle partition root et de se loguer en super utilisateur ( se "chrooter" sur la partition). Entrez les commandes suivantes (en remplaçant sda3 par votre nouvelle partition) :
+<code bash>sudo mount /dev/sda3 /mnt
+sudo mount --bind /dev /mnt/dev
+sudo mount --bind /proc /mnt/proc
+sudo mount --bind /sys /mnt/sys
+sudo chroot /mnt /bin/bash</code>
+
+<note>Si la commande chroot génère une erreur du type "bash: ... command not found", il est possible que le dossier /usr doive être monté sur une autre partition sdaY. Dans ce cas, il suffit d'ajouter la ligne de commande :
+
+sudo mount /dev/sdaY /usr
+
+</note>
+
+Ensuite il vous reste à mettre à jour le grub :
+<code bash>grub-mkconfig -o /boot/grub/grub.cfg
+grub-install /dev/sda</code>
+
+  * Si la commande "grub-install" échoue vous pouvez essayer <code bash> grub-install --recheck /dev/sda </code>
+
+  * Si la commande "grub-mkconfig" échoue, essayez:
+
+<note warning>Attention nécessite d'avoir un accès internet depuis le live CD = accès réseau, il peut arriver que les cartes WiFi ne soient pas reconnues</note> 
+ <code bash> apt-get remove --purge grub-pc
+ apt-get install grub-pc </code>
+
+<note>Si la nouvelle partition (contenant le /new) était sur un disque différent, pensez à modifier l'ordre du boot dans le BIOS afin de démarrer sur ce nouveau disque</note>
+
+<note>Ne pas oublier d'éditer le fichier de configuration /etc/initramfs-tools/conf.d/resume et de corriger l'UUID en le remplaçant par celui de l'éventuelle nouvelle partition swap :
+RESUME=UUID=<uuid>
+en remplaçant <uuid> par la valeur adéquate… </note>
+
+Et voilà ! Il ne reste qu'à rebooter sans le live CD.
+
+====== Voir aussi ======
+  * [[:tutoriel:deplacer_home|Déplacer son /home]]
+  * [[:deplacer_repertoire_usr|Déplacer son /usr]]
+  * [[repartitionner|Comment repartitionner]]
+
+
+----
+//Contributeurs :
+  [[utilisateurs:Polarman]]
+  [[utilisateurs:Jerome]]
+//

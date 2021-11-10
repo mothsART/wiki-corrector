@@ -1,0 +1,475 @@
+
+{{tag>Brouillon Messagerie_instantanée Serveur}}
+----
+====== Installation et Configuration de jabberd2 ======
+
+Le but de ce document est de proposer une façon simple et rapide d'installer un serveur jabberd2. Pour une configuration plus détaillée, il faut se référer à la [[http://www.jabberdoc.org/front_page.html|documentation officielle de jabberd2]] qui a servi à l'élaboration de cette page.
+
+
+
+===== Pré-requis =====
+Pour garder les informations liées aux utilisateurs, vous devez avoir un serveur de base de donnée installé ([[:postgresql|postgre]], [[:mysql|mysql]]...).
+
+Cette façon de procéder doit marcher pour dapper et edgy (il y a de forte chance que ce soit toujours valable pour feisty).
+
+
+Pour ajouter un utilisateur au serveur, exécutez la commande suivante en tant que root :
+
+
+
+  sudo groupadd jabber 
+  sudo useradd -g jabber jabber 
+
+
+
+
+Choisissez ensuite un mot de passe pour ce compte à l'aide de la commande suivante :
+
+
+  sudo passwd jabber
+
+
+
+Après avoir changé le mot de passe, nous devons créer un répertoire dans lequel le processus stockera ses journaux et ses pids. Pour ce faire, exécutez les commandes suivantes :
+
+
+<code>
+sudo mkdir -p /usr/local/var/jabberd/pid/
+sudo mkdir -p /usr/local/var/jabberd/log/
+</code>
+
+
+Une fois les répertoires créés, changeons l'appartenance des répertoires de façon à ce que l'utilisateur jabber puisse écrire dedans. Exécutez les commandes suivantes :
+
+
+<code>
+sudo chown -R jabber:jabber /usr/local/var/jabberd/pid/
+sudo chown -R jabber:jabber /usr/local/var/jabberd/log
+</code>
+
+<note>Est-ce que sudo chown -R jabber:jabber /usr/local/var/jabberd/ ne suffirait pas dans ce cas puisque -R signifie Récursif et applique donc les changements au dossier et sous-dossiers pid/ et log/ en même temps ?</note>
+<note>Réponse : le résultat n'est pas tout à fait le même : en appliquant sudo chown -R jabber:jabber /usr/local/var/jabberd/, le dossier /usr/local/var/jabberd appartiendra à jabber alors qu'ici, il appartient toujours à root, seul pid et log  dans jabberd appartiennent à jabber. Maintenant, reste à savoir si cela a une réelle importance...</note>
+
+===== Installation du package jabberd2 ======
+
+  sudo apt-get update
+  sudo apt-get install jabberd2
+
+Vous pouvez également utiliser Synaptic.
+
+
+
+===== pour Mysql    jabberd2-mysql ======
+
+  sudo apt-get update
+  sudo apt-get install jabberd2-mysql
+
+
+via phpmyadmin créer un compte jabber et sa table et entrer le mots de passe équivalent au fichier *xml  cité plus bas 
+<note>Sur Karmic, le paquet jabberd2-mysql n'existe plus, il est remplacé par jabberd2. 
+Sur Precise, le support mysql est inclus dans le paquet jabberd2</note>
+
+=====le script pour créer les tables =====
+
+
+    CREATE DATABASE jabberd2;
+    USE jabberd2;
+    
+    --
+    -- c2s authentication/registration table
+    --
+    CREATE TABLE `authreg` (
+        `username` TEXT, KEY `username` (`username`(255)),
+        `realm` TINYTEXT, KEY `realm` (`realm`(255)),
+        `password` TINYTEXT ) DEFAULT CHARSET=UTF8;
+    
+    --
+    -- Session manager tables 
+    --
+    
+    --
+    -- Active (seen) users
+    -- Used by: core
+    --
+    CREATE TABLE `active` (
+        `collection-owner` TEXT NOT NULL, KEY(`collection-owner`(255)),
+        `object-sequence` BIGINT NOT NULL AUTO_INCREMENT, PRIMARY KEY(`object-sequence`),
+        `time` INT ) DEFAULT CHARSET=UTF8;
+    
+    --
+    -- Logout times
+    -- Used by: mod_iq_last
+    --
+    CREATE TABLE `logout` (
+        `collection-owner` TEXT NOT NULL, KEY(`collection-owner`(255)),
+        `object-sequence` BIGINT NOT NULL AUTO_INCREMENT, PRIMARY KEY(`object-sequence`),
+        `time` INT ) DEFAULT CHARSET=UTF8;
+    
+    --
+    -- Roster items
+    -- Used by: mod_roster
+    --
+    CREATE TABLE `roster-items` (
+        `collection-owner` TEXT NOT NULL, KEY(`collection-owner`(255)),
+        `object-sequence` BIGINT NOT NULL AUTO_INCREMENT, PRIMARY KEY(`object-sequence`),
+        `jid` TEXT,
+        `name` TEXT,
+        `to` TINYINT,
+        `from` TINYINT,
+        `ask` INT ) DEFAULT CHARSET=UTF8;
+    
+    --
+    -- Roster groups
+    -- Used by: mod_roster
+    --
+    CREATE TABLE `roster-groups` (
+        `collection-owner` TEXT NOT NULL, KEY(`collection-owner`(255)),
+        `object-sequence` BIGINT NOT NULL AUTO_INCREMENT, PRIMARY KEY(`object-sequence`),
+        `jid` TEXT,
+        `group` TEXT ) DEFAULT CHARSET=UTF8;
+    
+    --
+    -- vCard (user profile information)
+    -- Used by: mod_iq_vcard
+    --
+    CREATE TABLE `vcard` (
+        `collection-owner` VARCHAR(255) NOT NULL, KEY(`collection-owner`(255)),
+        `object-sequence` BIGINT NOT NULL AUTO_INCREMENT, PRIMARY KEY(`object-sequence`),
+        `fn` VARCHAR(255),
+        `nickname` VARCHAR(255),
+        `url` VARCHAR(255),
+        `tel` VARCHAR(255),
+        `email` VARCHAR(255),
+        `jabberid` VARCHAR(3071),
+        `mailer` VARCHAR(1023),
+        `title` VARCHAR(255),
+        `role` VARCHAR(255),
+        `bday` VARCHAR(255),        # Shouldn't this be a DATE?
+        `tz` VARCHAR(7),
+        `n-family` VARCHAR(255),
+        `n-given` VARCHAR(255),
+        `n-middle` VARCHAR(255),
+        `n-prefix` VARCHAR(255),
+        `n-suffix` VARCHAR(255),
+        `adr-street` VARCHAR(255),
+        `adr-extadd` VARCHAR(255),
+        `adr-pobox` VARCHAR(15),
+        `adr-locality` VARCHAR(255),
+        `adr-region` VARCHAR(255),
+        `adr-pcode` VARCHAR(31),
+        `adr-country` VARCHAR(63),
+        `geo-lat` VARCHAR(255),
+        `geo-lon` VARCHAR(255),
+        `org-orgname` VARCHAR(255),
+        `org-orgunit` VARCHAR(255),
+        `agent-extval` VARCHAR(255),
+        `sort-string` VARCHAR(255),
+        `desc` TEXT,
+        `note` TEXT,
+        `uid` VARCHAR(255),
+        
+        `photo-type` VARCHAR(127),
+        `photo-binval` TEXT,
+        `photo-extval` VARCHAR(255),
+        
+        `logo-type` VARCHAR(127),
+        `logo-binval` TEXT,
+        `logo-extval` VARCHAR(255),
+        
+        `sound-phonetic` VARCHAR(255),
+        `sound-binval` TEXT,
+        `sound-extval` VARCHAR(255),
+        
+        `key-type` VARCHAR(127),
+        `key-cred` TEXT,
+        
+        `rev` VARCHAR(255)
+        ) DEFAULT CHARSET=UTF8;
+    
+    --
+    -- Offline message queue
+    -- Used by: mod_offline
+    --
+    CREATE TABLE `queue` (
+        `collection-owner` TEXT NOT NULL, KEY(`collection-owner`(255)),
+        `object-sequence` BIGINT NOT NULL AUTO_INCREMENT, PRIMARY KEY(`object-sequence`),
+        `xml` MEDIUMTEXT ) DEFAULT CHARSET=UTF8;
+    
+    --
+    -- Private XML storage
+    -- Used by: mod_iq_private
+    --
+    CREATE TABLE `private` (
+        `collection-owner` TEXT NOT NULL, KEY(`collection-owner`(255)),
+        `object-sequence` BIGINT NOT NULL AUTO_INCREMENT, PRIMARY KEY(`object-sequence`),
+        `ns` TEXT,
+        `xml` MEDIUMTEXT ) DEFAULT CHARSET=UTF8;
+    
+    --
+    -- Message Of The Day (MOTD) messages (announcements)
+    -- Used by: mod_announce
+    --
+    CREATE TABLE `motd-message` (
+        `collection-owner` TEXT NOT NULL, KEY(`collection-owner`(255)),
+        `object-sequence` BIGINT NOT NULL AUTO_INCREMENT, PRIMARY KEY(`object-sequence`),
+        `xml` TEXT ) DEFAULT CHARSET=UTF8;
+    
+    --
+    -- Times of last MOTD message for each user
+    -- Used by: mod_announce
+    --
+    CREATE TABLE `motd-times` (
+        `collection-owner` TEXT NOT NULL, KEY(`collection-owner`(255)),
+        `object-sequence` BIGINT NOT NULL AUTO_INCREMENT, PRIMARY KEY(`object-sequence`),
+        `time` INT ) DEFAULT CHARSET=UTF8;
+    
+    --
+    -- User-published discovery items
+    -- Used by: mod_disco_publish
+    --
+    CREATE TABLE `disco-items` (
+        `collection-owner` TEXT NOT NULL, KEY(`collection-owner`(255)),
+        `object-sequence` BIGINT NOT NULL AUTO_INCREMENT, PRIMARY KEY(`object-sequence`),
+        `jid` TEXT,
+        `name` TEXT,
+        `node` TEXT ) DEFAULT CHARSET=UTF8;
+    
+    --
+    -- Default privacy list
+    -- Used by: mod_privacy
+    --
+    CREATE TABLE `privacy-default` (
+        `collection-owner` TEXT NOT NULL, KEY(`collection-owner`(255)),
+        `object-sequence` BIGINT NOT NULL AUTO_INCREMENT, PRIMARY KEY(`object-sequence`),
+        `default` text ) DEFAULT CHARSET=UTF8;
+    
+    --
+    -- Privacy lists
+    -- Used by: mod_privacy
+    --
+    CREATE TABLE `privacy-items` (
+        `collection-owner` TEXT NOT NULL, KEY(`collection-owner`(255)),
+        `object-sequence` BIGINT NOT NULL AUTO_INCREMENT, PRIMARY KEY(`object-sequence`),
+        `list` TEXT,
+        `type` TEXT,
+        `value` TEXT,
+        `deny` TINYINT,
+        `order` INT,
+        `block` INT ) DEFAULT CHARSET=UTF8;
+    
+    --
+    -- Vacation settings
+    -- Used by: mod_vacation
+    --
+    CREATE TABLE `vacation-settings` (
+        `collection-owner` TEXT NOT NULL, KEY(`collection-owner`(255)),
+        `object-sequence` BIGINT NOT NULL AUTO_INCREMENT, PRIMARY KEY(`object-sequence`),
+        `start` INT,
+        `end` INT,
+        `message` TEXT ) DEFAULT CHARSET=UTF8;
+    
+    --
+    -- Users statuses
+    -- Used by: mod_status
+    --
+    CREATE TABLE `status` (
+        `collection-owner` TEXT NOT NULL,
+        `object-sequence` BIGINT NOT NULL AUTO_INCREMENT, KEY(`object-sequence`),
+        `status` TEXT NOT NULL,
+        `show` TEXT NOT NULL,
+        `last-login` INT DEFAULT '0',
+        `last-logout` INT DEFAULT '0',
+        `xml` TEXT);
+
+
+Le script peut être trouvé dans le fichier db-setup.mysql disponible sous 
+    /usr/share/doc/jabberd2/db-setup.mysql.gz
+
+Pour l'installer :
+    gzip -d /usr/share/doc/jabberd2/db-setup.mysql.gz
+    mysql -u root -p
+
+Une fois connectée à l'interface d'admin de mysql, taper :
+    \. db-setup.mysql
+
+Puis :
+    GRANT select,insert,delete,update ON jabberd2.* 
+    to jabberd2@localhost IDENTIFIED by 'secret';
+
+En remplaçant secret par le mot de passe de votre choix
+
+===== Configuration =====
+
+
+==== Nom du serveur dans sm.xml et c2s.xml ====
+
+Votre nom de serveur doit être renseigné à la fois dans ''sm.xml'' et dans ''c2s.xml''.
+
+Editez ''sm.xml'' :
+  gksudo gedit /etc/jabberd2/sm.xml
+
+Renseignez le champ ''id'' de la section ''sm'' (~ ligne 1) :
+<code xml>
+  <!-- Session manager configuration -->
+  <sm>
+    <!-- Our ID on the network. Users will have this as the domain part of
+         their JID. If you want your server to be accessible from other
+         Jabber servers, this ID must be resolvable by DNS.s
+         (default: localhost) -->
+    <id>ma_machine.mon_domaine.com</id>    
+</code>
+
+Editez ''c2s.xml'' :
+  gksudo gedit /etc/jabberd2/c2s.xml
+
+Renseignez le champ ''id'' de la section ''local'' (~ ligne 63) :
+<code xml>
+  <!-- Local network configuration -->
+  <local>
+    <!-- Who we identify ourselves as. This should correspond to the
+         ID (host) that the session manager thinks it is. You can
+         specify more than one to support virtual hosts, as long as you
+         have additional session manager instances on the network to
+         handle those hosts. The realm attribute specifies the auth/reg
+         or SASL authentication realm for the host. If the attribute is
+         not specified, the realm will be selected by the SASL
+         mechanism, or will be the same as the ID itself. Be aware that
+         users are assigned to a realm, not a host, so two hosts in the
+         same realm will have the same users.
+         If no realm is specified, it will be set to be the same as the
+         ID. -->
+    <id>ma_machine.mon_domaine.com</id>
+</code>        
+
+Comme il est mentionné dans le fichier ''c2s.xml'', le nom du serveur (qui est concaténé à l'id jabber) doit pouvoir être résolu par DNS (ou via ''/etc/hosts'')
+:!: EVITEZ ''localhost'', une ID jabber est <nom d'utilisateur>@<nom de serveur>, donc lorsqu'un client se connecte à votre serveur il doit avoir le bon nom de serveur et pas ''localhost'' :!:
+:!: Pensez à reporter le mot de passe mysql saisi à l'étape 4 dans le fichier c2s.xml (~ ligne 383)
+
+
+
+
+==== Création de la base de données et configuration de jabberd2 ====
+=== Postgresql ===
+
+Dans un terminal :
+  sudo su postgres
+  createuser -SDRP jabberd2
+  createdb -O jabberd2 jabberd2
+  psql -U jabberd2 -h 127.0.0.1
+
+Dans la session ''psql'' :
+  jabberd2=>\i /usr/share/doc/jabberd2/db-setup.pgsql
+  jabberd2=>\q
+(Ne pas faire attention à la première ligne d'erreur)
+N'oubliez pas de vous déconnecter de la session ''postgres'' :
+  exit
+
+Editez ''sm.xml'' et dans la section ''Storage database configuration'', renseignez le champ ''driver'' avec ''pgsql'' (PostgreSQL) :
+
+  gksudo gedit /etc/jabberd2/sm.xml
+
+<code xml>
+  <!-- Storage database configuration -->
+  <storage>
+    <!-- By default, we use the MySQL driver for all storage -->
+    <driver>pgsql</driver>   
+</code>
+
+Toujours dans ''sm.xml'' dans la section ''PostgreSQL driver configuration'', remplacez ''secret'' avec le mot de passe de l'utilisateur ''jabberd2'' de PostgreSQL. Changez le nom de l'utilisateur et/ou de la base si vous n'utilisez pas ceux par défaut  (''jabberd2'' et ''jabberd2'') :
+
+<code xml>
+  <!-- PostgreSQL driver configuration -->
+  <pgsql>
+    <!-- Database server host and port -->
+    <host>localhost</host>
+    <port>5432</port>
+
+    <!-- Database name -->
+    <dbname>jabberd2</dbname>
+
+    <!-- Database username and password -->
+    <user>jabberd2</user>
+    <pass>secret</pass>
+
+    <!-- Transaction support. If this is commented out, transactions
+         will be disabled. This might make database accesses faster,
+         but data may be lost if jabberd crashes. -->
+    <transactions/>
+  </pgsql>
+</code>
+
+Vous ne devez changer le champ ''host'' que si votre base de données ne se trouve pas sur la même machine que le serveur jabberd2.
+Si vous n'utilisez pas le port par défaut de PostgreSQL (5432), vous devez modifier le champ ''port''.
+
+Jabberd2 est maintenant configuré pour stocker ses informations dans une base PostgreSQL.
+
+Il reste à configurer l'authentification. On peut recourir à d'autres solutions que PostgreSQL pour cela (PAM ou OpenLDAP), mais cela dépasse mes compétences.
+
+Dans ''c2s.xml'' sous la section ''Authentication/registration database configuration'', modifiez le champ ''module'' avec la valeur ''pgsql'' (PostgreSQL):
+
+  gksudo gedit /etc/jabberd2/c2s.xml
+
+<code xml>
+  <!-- Authentication/registration database configuration -->
+  <authreg>
+    <!-- Backend module to use -->
+    <module>pgsql</module>      
+</code>
+
+Toujours dans ''c2s.xml'', dans la section ''PostgreSQL module configuration'', remplacez ''secret'' avec le mot de passe de l'utilisateur ''jabberd2'' de PostgreSQL. Changez le nom de l'utilisateur et/ou de la base si vous n'utilisez pas ceux par défaut  (''jabberd2'' et ''jabberd2'') :
+
+<code xml>
+  <!-- PostgreSQL module configuration -->
+  <pgsql>
+    <!-- Database server host and port -->
+    <host>localhost</host>
+    <port>5432</port>
+
+    <!-- Database name -->
+    <dbname>jabberd2</dbname>
+
+    <!-- Database username and password -->
+    <user>jabberd2</user>
+    <pass>secret</pass>
+  </pgsql>
+</code>
+
+Vous ne devez changer le champ ''host'' que si votre base de données ne se trouve pas sur la même machine que le serveur jabberd2.
+Si vous n'utilisez pas le port par défaut de PostgreSQL (5432), vous devez modifier le champ ''port''.
+
+Jabberd2 est maintenant configuré. Il ne vous reste plus qu'à tester votre installation.
+
+=== Mysql ===
+<code xml>
+<!-- MySQL driver configuration -->
+    <mysql>
+      <!-- Database server host and port -->
+      <host>localhost</host>
+      <port>3306</port>
+
+      <!-- Database name -->
+      <dbname>jabberd2</dbname>
+
+      <!-- Database username and password -->
+      <user>jabberd2</user>
+      <pass>secret</pass>
+
+</code>
+
+
+Vous ne devez changer le champ ''host'' que si votre base de données ne se trouve pas sur la même machine que le serveur jabberd2.
+Si vous n'utilisez pas le port par défaut de mysSQL (3306), vous devez modifier le champ ''port''.
+
+Jabberd2 est maintenant configuré. Il ne vous reste plus qu'à tester votre installation.
+
+
+
+===== Tests de l'installation =====
+
+Le serveur jabberd2 étant lancé dès l'installation du paquet, il faut redémarrer celui-ci afin de prendre en compte les étapes précédentes :
+
+  sudo /etc/init.d/jabberd2 restart
+
+Ensuite configurez un client jabber ([[pidgin]] par exemple) depuis une machine du réseau local pour vous connecter à votre serveur jabberd2. Si ça ne marche pas, bonne chance ! Allez tout de même jeter un coup d'oeil dans les logs (''/var/log/jabber/'').
+
+Si cette opération réussit et que vous voulez que votre serveur soit accessible depuis internet, recommencez l'opération depuis une machine extérieure à votre réseau (ou un service live comme JWchat), si cela ne fonctionne pas vérifiez vos firewalls et que vous utilisez un FQDN (essayez par exemple de résoudre votre DNS par un des sites qui propose ce service)

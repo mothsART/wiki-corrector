@@ -1,0 +1,127 @@
+
+{{tag>Bionic Xenial tutoriel audio dvd}}
+----
+====== Extraire une piste audio d'un DVD ======
+
+Il est possible d'extraire la bande son d'un DVD, par piste ou par chapitre, en utilisant la ligne de commande. 
+
+Si vous n'êtes pas à l'aise avec la ligne de commande, orientez-vous vers le logiciel [[:xcfa]] qui propose les mêmes fonctionnalités, mais via une interface graphique.
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Être en mesure de [[:lire_un_dvd|lire le DVD]].
+=====Installation=====
+<note>Transcode n'est plus disponible dans les dépôts officiels depuis [[:Focal]]((https://packages.ubuntu.com/search?suite=default&section=all&arch=any&searchon=names&keywords=transcode)).</note>
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>lsdvd,transcode|lsdvd et transcode]]**.
+=====Utilisation=====
+
+==== Identification des pistes ====
+
+Afin d'identifier la piste audio à extraire, insérez le DVD dans votre lecteur puis, dans la [[:console]], tapez la commande lsdvd :
+<code bash>lsdvd</code>
+
+Le résultat de la commande est alors : 
+<code>
+libdvdread: Using libdvdcss version 1.2.10 for DVD access
+Disc Title: NOM_DU_DVD
+Title: 01, Length: 00:00:13.100 Chapters: 01, Cells: 01, Audio streams: 08, Subpictures: 32
+Title: 02, Length: 01:15:46.084 Chapters: 18, Cells: 18, Audio streams: 01, Subpictures: 00
+Longest track: 02
+</code>
+
+Les informations délivrées sont les suivantes : 
+  * Le nom du DVD, monté dans l'[[:arborescence]] du système de fichiers à l'emplacement ///media/NOM_DU_DVD// ;
+  * Le premier titre ne contient qu'un chapitre, d'une durée de 13 secondes (qui correspond à l'introduction du DVD) ;
+  * Le second titre contient 18 chapitres pour une durée totale de 1h15 (qui correspondent aux musiques). C'est ce titre qu'il faut utiliser pour extraire les musiques.
+
+==== Syntaxe d'extraction ====
+
+Le logiciel transcode est capable d'extraire les pistes du DVD et de les transcoder en fichiers audio. Il dispose à cet effet de nombreuses options, sa [[http://www.transcoding.org/cgi-bin/transcode?Transcode_Command_Line_Options|syntaxe]] est donc relativement complexe. 
+
+Voici la commande à utiliser pour extraire la troisième piste du second chapitre au format mp3 : 
+
+<code bash>transcode -i /media/NOM_DU_DVD/ -x dvd,dvd -T2,3 -a 0 -y null,tcaud -m /home/omnisilver/Musique/DVD/Live3.mp3</code>
+
+Les arguments ont le rôle suivant : 
+  * -i : indique le média à importer dans l'arborescence de votre système;
+  * -x : le type de média;
+  * -T : le titre et le chapitre;
+  * -a : la piste audio;
+  * -y : le format de sortie vidéo et audio (soit null car nous ne voulons pas de vidéo, et tcaud est le nom du module convertissant la musique en le mp3);
+  * -m : le nom de fichier de sortie.
+
+**Syntaxe de 1 commande pour plusieurs pistes à la fois:**
+Pour extraire les 18 pistes du titre 2, en 18 fichiers (par exemple de format libre .ogg), en une seule ligne de commande:
+
+<code>for i in {1..18};do transcode -x null,dvd -y null,tcaud -i /dev/sr0 -T 2,$i,1 -a 0 -E 44100,16,2 --lame_preset medium -m /home/BIBI/Musique/CONCERT/piste${i}.ogg; done</code>
+
+où les arguments utilisés sont:
+  * -T 2    : pour sélectionner le titre 2
+  * for i in {1..18};do    : extraire depuis la piste 1 jusqu'à la piste 18
+  * --lame_preset medium:      qualité moyenne. Pour une meilleure qualité, remplacer medium par standard ou par extreme (attention la taille du fichier généré augmente beaucoup avec la qualité, ainsi que le temps mis pour encoder)
+  * piste${i}.ogg :      va générer un fichier piste1.ogg, puis ensuite un fichier piste2.ogg, etc ...
+
+Le chemin /home/... est à adapter à votre propre chemin.
+
+A vous de modifier les paramètres de ces arguments pour obtenir le résultat que vous désirez (fichier ogg, etc.).
+
+Pour les types de fichiers non gérés nativement par transcode, il est possible d'extraire au format WAV (sans perte) et de réencoder dans une deuxième étape, par exemple à l'aide de l'utilitaire en ligne flac (FLAC est un format de compression audio présentant l'avantage d'être sans pertes), lancé dans le répertoire contenant les fichiers wav.
+
+Ce qui donne ici, à considérer que lsdvd -a a permis d'identifier le titre TITRE, angle ANG (en général:1), audio AUD (choisir, autant que possible, la piste stéréo, idéalement LPCM si elle existe), comptant CHAP chapitres (remplacer par les vraies valeurs dans la ligne de commande)... comme celui dont on veut extraire l'audio en wav (fichiers XXX_01.wav...) avant de les convertir en flac:
+
+<code bash>for((x=1; x<=CHAP; x++)) do transcode -i /dev/dvd -x dvd -T TITRE,$x,ANG -a AUD -y wav -m XXX_$x.wav;done
+flac --best *.wav</code>
+
+Ceci donnera en sortie les mêmes fichiers compressés sans perte, extension .flac, avec le meilleur ratio de compression (--best).
+
+A noter que l'extraction de pistes audio de DVD video (concerts...) va généralement donner des fichiers musicaux 16bits (jusque là, OK!) mais échantillonnés à 48kHz. Ceci pose problème à pas mal de baladeurs qui n'acceptent en général pas des fréquences d'échantillonnage supérieures à celle du CD audio (44.1kHz)!
+
+Il va donc falloir dans ce cas passer par une étape intermédiaire de ré-échantillonnage, qui est assez problématique avec le ratio "tordu" 48/44.1 (entre 96kHz, utilisé pour les master audio et les 48kHz classiques sur DVD, le facteur entier 2 serait par exemple bien plus facile à gérer). Tous les utilitaires permettant cette opération ne sont hélas pas tous égaux, en particulier pour ces deux fréquences.
+
+Le meilleur existant (en 2011) dans le monde libre n'est en plus hélas pas packagé sous Ubuntu. Il s'agit de ssrc, disponible sur le site de son auteur:
+http://shibatch.sourceforge.net/
+
+Il est néanmoins aisé de le compiler soit-même (si on a installé le paquet "build-essentials", voir l'aide correspondante):
+- Le downloader:
+<code bash>wget http://shibatch.sourceforge.net/download/ssrc-1.30.tgz</code>
+
+- L'extraire/compiler:
+<code bash>tar -xjf ssrc-1.30.tgz
+cd ssrc-1.30
+make all
+sudo mv ssrc /usr/local/bin</code>
+
+Il faudra dans ce cas ajouter l'appel à ssrc entre l'extraction au format wav et la conversion au format flac:
+<code bash>ssrc --rate 44100 fichier_original_48k.wav fichier_44_1k.wav</code>
+
+Le mieux étant bien entendu de scripter l'affaire, ssrc n'acceptant qu'un fichier unique en entrée (pas de wildcard...): Pas très convivial, mais c'est le prix à payer pour avoir le meilleur down-sampling libre existant.
+
+Par exemple, si on a extrait une suite de fichiers XXX.wav dans un répertoire avec transcode, le script suivant (fichier à sauver sous ssrc44k par exemple et à rendre exécutable: chmod +r ssrc44k) placé sous son home appelé dans ce répertoire d'extraction (~/ssrc44k) va downsampler en XXX_44k.wav les fichiers d'origine, les renommer avec le nom d'origine (attention, ceux en 48kHz seront perdus, travailler au besoin sur une copie ou modifier le script) et en faire des flac, avant de supprimer les wav qui ne servent plus à rien, flac étant sans perte donc parfait pour l'archivage (et reconversion sur demande):
+<code bash>#!/bin/bash
+#flac -d *.flac # Set this line if we have to decode flac to wav before downsample
+FILES=*.wav
+for f in $FILES
+do
+  echo "Processing $f file..."
+  # take action on each file. $f store current file name
+  ssrc --rate 44100 "$f" "44k_$f"
+  mv -f "44k_$f" "$f" # Set to overwrite 48kHz original files, unset to encode both...
+done
+flac -f --best --verify *.wav
+\rm -rf 44k_*.wav # Set this to autoremove intermediate 44k wav files</code>
+
+Seul bémol: ssrc ne semble pas aimer les échantillons "drc" que l'on retrouve parfois (lsdvd -a l'indique au chapitre "quantization", en lieu et place des habituels "16 bits"): Il lui faut des échantillons 8/16/24 bits.
+
+===== Voir aussi =====
+
+
+  * **(en)** [[http://www.transcoding.org/cgi-bin/transcode?Transcode_Wiki|Site officiel de l'outil Transcode]];
+  * **(fr)** [[http://forum.ubuntu-fr.org/viewtopic.php?id=362504|Une assistance sur le forum d'ubuntu-fr]] (qui m'a permis de mettre à jour la syntaxe devenue obsolète)
+
+----
+//Contributeurs principaux : [[:utilisateurs:Omnisilver]].//
+
+//Basé sur [[http://www.ubuntugeek.com/how-to-rip-dvd-audio-to-mp3-or-ogg.html|How to Rip DVD audio to mp3 or ogg]].//

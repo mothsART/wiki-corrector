@@ -1,0 +1,280 @@
+
+{{tag>Trusty Xenial virtualisation}}
+----
+
+{{ :docker_container_engine_logo.png?200|}}
+====== docker ======
+
+
+**Docker** est un logiciel libre (sous [[wpfr>Licence_Apache|licence Apache 2.0]]) à mi-chemin entre la virtualisation applicative et l'automatisation. Il permet de manipuler des conteneurs de logiciels. Il complète le conteneur Linux LXC (il n'utilise plus LXC depuis peu) en isolant les processus les uns des autres pour créer une virtualisation de haut niveau.
+<note info>Dans l'esprit docker: **un processus = un conteneur**.\\
+Facteur à prendre en compte dans le choix LXC vs DOCKER.</note>
+
+Contrairement aux autres systèmes de (para) virtualisation, **Docker** n’embarque pas un système d’exploitation invité mais ne s’occupe que de la partie haut niveau. Il utilise le noyau de l'hôte et ne fait fonctionner que le strict nécessaire sur les invités.
+
+Docker c'est aussi [[https://registry.hub.docker.com/|un dépôt d'images]] à partir duquel vous pouvez télécharger et partager des applications sans avoir à réinventer la roue.
+
+<note tip>Pour mettre en place un serveur LAMP grâce à Docker, n'hésitez pas à consulter [[:docker_lamp|ce tutoriel]].</note>
+
+<note warning>À l'heure actuelle, Docker n'est [[https://github.com/Microsoft/WSL/issues/575|pas compatible]] avec [[:wsl|Windows Subsystem for Linux 1]]. Pour l'utiliser vous devez convertir votre subsystem en version 2. (`wsl.exe --set-version ubuntu 2`)</note>
+===== Pré-requis  =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+
+===== Installation =====
+==== Méthode conseillée : installation depuis les dépôts officiels ====
+
+**Docker** fait partie des [[:depots|dépôts officiels]] à partir d’[[:trusty|Ubuntu 14.04 LTS]]. Il suffit donc d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>docker.io]]**.
+
+Il peut-être utile d'installer également **docker-compose** pour travailler avec plusieurs conteneurs, comme illustré dans la page [[docker_lamp#methode_avancee|docker_lamp]] :
+<code bash>apt install docker-compose</code>
+
+==== Méthode conseillée par le site docker.com ====
+Il existe 2 versions de Docker : Docker CE (Community Edition) et Docker EE (Enterprise Edition). La version CE est gratuite et open-source, et correspond à la version packagée par défaut dans les dépôts Ubuntu, mais en version plus récente. C'est donc l'installation de cette version qui est décrite ci-après, et qui utilise le dépôt officiel mis à disposition par le site Docker.
+(page d'origine en anglais : https://docs.docker.com/install/linux/docker-ce/ubuntu/#install-docker-ce)
+=== Désinstaller les anciennes versions ===
+Les anciennes versions de Docker étaient appelées docker, docker.io ou docker-engine. Si celles-ci sont installées, désinstallez-les :
+<code bash>sudo apt-get remove docker docker-engine docker.io containerd runc</code>
+Le contenu de /var/lib/docker/, y compris les images, les conteneurs, les volumes et les réseaux, sont préservés. Si vous n'avez pas besoin de sauvegarder vos données existantes et que vous souhaitez commencer par une installation propre, reportez-vous à [[https://docs.docker.com/engine/install/ubuntu/#uninstall-docker-engine|uninstall Docker Engine]](en).
+
+=== Configurer le dépôt ===
+Mettre à jour APT :
+<code bash>sudo apt-get update</code>
+Installer les paquets permettant à APT d'utiliser un serveur HTTPS de dépôt :
+<code bash>sudo apt-get install \
+apt-transport-https \
+ca-certificates \
+curl \
+software-properties-common</code>
+
+Puis ajouter la clé GPG du site de Docker :
+<code bash>curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg</code>
+
+Pointer vers le dépôt de la version "stable" de Docker CE :
+<code bash>echo \
+"deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
+$(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null</code>
+
+=== Installer Docker CE ===
+Mettre à jour l'index APT :
+<code bash>sudo apt-get update</code>
+Installer la dernière version de Docker Engine et containerd :
+<code bash>sudo apt-get install docker-ce docker-ce-cli containerd.io</code>
+==== Pour les versions précédentes ou pour obtenir les dernières versions de Docker ====
+
+=== En utilisant le script d'installation fourni par Docker ===
+
+Le script est à [[https://get.docker.com|télécharger depuis le site officiel]] de Docker.
+
+- Télécharger le script et executer le script<code>
+wget https://get.docker.com/ -O script.sh
+chmod +x script.sh
+./script.sh
+</code>
+
+=== Manuellement === 
+(testé avec succès sur Ubuntu 16.04 64Bits)
+
+
+  - Tout d'abord, [[:tutoriel:comment_modifier_un_fichier|ouvrez le fichier]] **/etc/apt/sources.list.d/docker.list** en modification, puis collez-y la ligne suivante : <file>deb http://get.docker.io/ubuntu docker main</file>
+  - Télécharger la clé GPG et installer le package avec les [[commande_shell|commandes]] suivantes saisies dans un [[:terminal]] :<code>
+sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 36A1D7869245C8950F966E92D8576A8BA88D21E9
+sudo apt-get update
+sudo apt-get install lxc-docker
+</code>
+
+===== Configuration =====
+
+
+Dans un environnement privé, vous pouvez éventuellement ajouter votre utilisateur au groupe **docker** afin de manipuler les containers sans avoir à utiliser **sudo** systématiquement :
+<note important>N'ajoutez pas votre utilisateur au groupe docker sur un serveur accessible publiquement : cette méthode pose un problème de sécurité. Il devient en effet possible d'élever les privilèges de l'utilisateur sans entrer à nouveau de mot de passe. Si vous êtes sur un serveur en production n'entrez pas cette commande et utilisez la commande **sudo docker** au lieu de **docker** pour l'ensemble des opérations.</note>
+<code>sudo usermod -aG docker $USER</code>
+<note>Vous devez fermer et rouvrir votre session pour que les changements prennent effet.</note>
+
+Une fois Docker installé, vous pouvez lancer le service :
+
+  sudo service docker start
+
+et vérifier s'il fonctionne correctement (n'oubliez pas le //sudo// devant la commande docker si vous n'avez pas ajouté votre utilisateur au groupe //docker//) :
+
+  docker run hello-world
+
+À la première exécution, Docker ne doit pas trouver l'image de l'application //hello-word// en local. Il va alors tenter de télécharger la dernière version. En cas de réussite, il exécute l'application qui affiche une simple page d'explication sur la sortie standard et s'arrête.
+
+===== Utilisation =====
+
+==== Manipulation d’images ====
+
+Prendre une Debian sur le dépôt officiel de Docker et se connecter dessus :
+
+<code>
+docker pull debian
+docker run -i -t debian /bin/bash
+</code>
+
+Faire tout ce qu’on veut sur la nouvelle image
+
+<code>
+root@xxxxxx# …
+</code>
+
+Et sauvegarder les changements
+
+<code>
+root@xxxxxx# exit
+docker commit xxxxxx le_nom_de_l_image
+</code>
+
+Supprimer une image :
+
+<code>
+docker image rm id_ou_nom_de_l_image
+</code>
+ou:
+
+<code>
+docker rmi id_ou_nom_de_l_image
+</code>
+==== Manipulation de conteneurs ====
+
+<code>
+JOB1=$(docker run -d conteneur)
+docker logs $JOB1
+docker stop $JOB1
+</code>
+
+Voir les conteneurs actifs ou les lister tous ou lister id des actifs :
+
+<code>
+docker container ps
+docker container ps -a
+docker container ps -q
+</code>
+
+Supprimer un conteneur ou supprimer tous les conteneurs :
+
+<code>
+docker container rm $JOB1
+docker container rm id_du_conteneur
+docker container rm $(docker container ps -a -q)
+</code>
+
+
+
+==== Import, export ====
+
+Une des grandes forces de Docker est de pouvoir exporter et importer très facilement les images.
+
+Exporter un container en tar.gz :
+
+<code>
+docker export 419eed6ff306 > nginx.tgz
+</code>
+
+Importer un tar.gz :
+
+<code>
+docker import - nginx < nginx.tgz
+</code>
+
+==== Automatisation avec un Dockerfile ====
+
+Le dockerfile est un fichier texte qui inclut une liste d'actions à exécuter pour construire une image. 
+
+Par exemple une image simpliste de Apache pourrait ressembler à ça :
+
+<file>
+# Apache et PHP dans un container
+#
+# VERSION               0.0.1
+#
+
+FROM     debian:wheezy
+MAINTAINER Adminrezo "admin@adminrezo.fr"
+
+ENV DEBIAN_FRONTEND noninteractive
+
+# Depots, mises a jour et installs
+
+RUN (apt-get update && apt-get upgrade -y -q && apt-get dist-upgrade -y -q && apt-get -y -q autoclean && apt-get -y -q autoremove)
+RUN apt-get install -y -q apache2 libapache2-mod-php5 php5 supervisor
+RUN rm /var/www/index.html
+ADD index.php /var/www/index.php
+
+# Config de Apache
+
+ENV APACHE_RUN_USER www-data
+ENV APACHE_RUN_GROUP www-data
+ENV APACHE_LOG_DIR /var/log/apache2
+
+EXPOSE 80
+
+# Demarrage des services
+
+RUN mkdir -p /var/log/supervisor
+ADD apache.conf /etc/supervisor/conf.d/apache.conf
+
+CMD source /etc/apache2/envvars && exec /usr/sbin/apache2 -DFOREGROUND
+</file>
+
+  * MAINTAINER : nom et mail de mainteneur du conteneur
+  * FROM : image de base (ubuntu, debian)
+  * VOLUME : Point de montage
+  * RUN : commande à exécuter pour installer le conteneur.
+  * ENTRYPOINT : commande qui s’exécute au démarrage du conteneur (une seule sera exécutée).
+  * CMD : commande qui s’exécute au démarrage du conteneur.
+  * ADD : Copier un fichier du répertoire courant dans le filesystem du conteneur.
+  * USER : utilisateur qui exécute les commandes dans le conteneur.
+  * EXPOSE : Port(s) à exposer à l’exterieur.
+
+Construire un conteneur :
+
+<code>
+docker build -t nom_du_conteneur .
+</code>
+
+===== Divers =====
+==== Date et heure ====
+La date et l'heure du conteneur est basée sur celle du système hôte. Cependant il est possible de constater un écart d'heure entre le système et le conteneur. Ceci est dû au fait que  le conteneur peut-être configuré sur un autre fuseau horaire (timezone).
+
+  * Date de votre système et fuseau : <code>
+date
+cat /etc/timezone</code>
+  * Date du conteneur et fuseau : <code>
+sudo docker attach CONTENEUR
+date
+cat /etc/timezone </code> ou : <code>
+docker exec CONTENEUR bash -c "date ;  cat /etc/timezone"
+</code>
+  * Réglage du fuseau depuis le conteneur <code>
+sudo docker attach CONTENEUR 
+sudo dpkg-reconfigure tzdata
+</code> ( se détacher du conteneur : CTRL-p CTRL-q )
+<note important>Cette technique ci-dessus n'est pas forcément pertinente/persistante. Préférer ce qui suit : </note>
+  * Créer un conteneur avec la time Zone configurée. Pour cela utiliser la variable d'environnement "TZ" (voir [[https://serverfault.com/questions/683605/docker-container-time-timezone-will-not-reflect-changes|ce post]] ) <code>
+docker run -e TZ=Europe/Amsterdam debian:jessie date
+</code>
+  * Dans le Dockerfile : ajouter la ligne <code> ENV TZ Europe/Amsterdam </code> ou encore : <code> ENV TZ=America/Los_Angeles
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone </code>
+
+
+===== Désinstallation =====
+ 
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée. Les journaux du système, et les fichiers de préférence des utilisateurs dans leurs dossiers personnels sont toujours conservés.
+
+===== Voir aussi =====
+
+  * [[:docker_lamp]] Mettre en place un serveur web (LAMP) à base de conteneurs docker
+  * [[tutoriel:comment_installer_gitlab-ce_avec_docker_pour_son_poste_de_travail|Comment installer Gitlab-ce avec Docker pour son poste de travail]]
+  * [[https://linuxfr.org/news/docker-tutoriel-pour-manipuler-les-conteneurs|Tutoriels et articles en français sur Docker]]
+  * [[https://docs.docker.com/|Documentation officielle]]
+  * [[https://xataz.developpez.com/tutoriels/utilisation-docker/|Tutoriel sur developpez.com (mis à jour en mai 2017)]]
+  * [[https://www.it-connect.fr/debuter-avec-docker-et-les-containers-sous-debian-8/|Docker et les containers sous Debian 8 (oct 2014)]]
+
+----
+
+//Contributeur principal : [[:utilisateur:chacmool|Chacmool]]//
+
+//Contributeurs : //
+  * //[[:utilisateurs:chamblard|chamblard]]//

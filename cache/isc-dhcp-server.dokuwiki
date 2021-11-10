@@ -1,0 +1,344 @@
+
+FIXME{{tag>Xenial réseau serveur}}
+
+----
+
+====== Serveur DHCP : isc-dhcp-server ======
+Le protocole [[wpfr>Dynamic_Host_Configuration_Protocol|DHCP]] (Dynamic Host Configuration Protocol (**en**) : « Protocole de configuration dynamique des hôtes » (**fr**)) est un service réseau TCP/IP. Il permet aux ordinateurs clients l'obtention automatique d'une configuration réseau. Il évite la configuration de chaque ordinateur manuellement. Les ordinateurs configurés pour utiliser DHCP n'ont pas le contrôle de leur configuration réseau qu'ils reçoivent du serveur DHCP. La configuration est totalement transparente pour l'utilisateur.
+
+Ce guide est destiné aux personnes désireuses d'apprendre comment configurer et maintenir un serveur DHCP avec **isc-dhcp-server**. 
+
+===== Introduction ======
+Tout ordinateur d'un réseau TCP/IP (Internet ou Intranet) nécessite une adresse IP pour pouvoir communiquer avec les autres ordinateurs du réseau.
+
+Ces adresses IP sont attribuées :
+  * statiquement, en configurant le réseau directement sur l'ordinateur,
+  * dynamiquement, avec un serveur DHCP qui attribue les adresses en fonction de son fichier de configuration.
+
+<note warning>Ne pas confondre **fixe** et **statique** : le serveur DHCP peut attribuer des adresses IP fixes (toujours la même) en fonction de l'[[wpfr>Adresse_MAC|adresse MAC]] (//Media Access Control//, Adresse de contrôle d'accès au média) reçue.</note>
+
+Configurée pour utiliser le protocole DHCP, une carte réseau à son démarrage envoie une demande sur le réseau (une requête DHCP). Le serveur DHCP, à l'écoute sur le réseau, débute la procédure d'identification et lui attribue une adresse en fonction de celle-ci.
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]] sur le serveur.
+  * Disposer d'un réseau local.
+  * Connaître les bases de TCP/IP (adressage, sous-réseaux, etc.).
+
+===== Installation =====
+<note>
+isc-dhcp-server remplace dhcp3-server
+</note>
+
+Pour installer le serveur isc-dhcp-server, il faut [[:tutoriel:comment_installer_un_paquet|installer le paquet]] [[apt://isc-dhcp-server|isc-dhcp-server]].
+
+Vous devrez certainement changer la configuration par défaut en éditant le fichier **/etc/dhcp/dhcpd.conf** pour la faire correspondre à vos besoins et configurations particulières.
+
+Dans ce fichier, on définit l'ensemble des options globalement ou par réseau.
+Vous aurez également besoin d'éditer le fichier **/etc/default/isc-dhcp-server** pour spécifier les interfaces que dhcpd (le démon de isc-dhcp-server) devra écouter. Par défaut, il écoute l'interface eth0.
+
+<note warning>Les interfaces réseaux de votre serveur doivent être configurées __obligatoirement__ en adresses [[:ubuntu_server#adressage_ip|IP statiques]] </note>
+
+===== Configuration basique =====
+
+La configuration la plus fréquente est d'assigner aléatoirement une adresse IP. Ceci peut être fait en suivant ces instructions :
+
+Editer le fichier :
+
+<file -  /etc/dhcp/dhcpd.conf>
+# Sample /etc/dhcpd.conf
+# (add your comments here) 
+default-lease-time 600;
+max-lease-time 7200;
+option subnet-mask 255.255.255.0;
+option broadcast-address 192.168.1.255;
+option routers 192.168.1.254;
+option domain-name-servers 192.168.1.1, 192.168.1.2;
+option domain-name "ubuntu-fr.lan";
+option ntp-servers 192.168.1.254;
+
+subnet 192.168.1.0 netmask 255.255.255.0 {
+  range 192.168.1.10 192.168.1.100;
+  range 192.168.1.150 192.168.1.200;
+} 
+</file>
+
+Le serveur DHCP assignera au client une adresse IP comprise entre 192.168.1.10 et 192.168.1.100 ou entre 192.168.1.150 et 192.168.1.200 pour une durée de 600 secondes. Le client peut spécifier une période de temps spécifique, dans ce cas, le temps d'allocation maximum est de 7200 secondes.
+
+Le serveur va également informer le client qu'il doit utiliser :
+  * un masque de sous réseau à 255.255.255.0
+  * une adresse de multi-diffusion à 192.168.1.255
+  * une adresse de routeur/passerelle à 192.168.1.254
+  * des serveurs DNS à 192.168.1.1 et 192.168.1.2
+  * un suffixe DNS ubuntu-fr.lan
+  * un serveur de temps
+
+<note>Si vous devez spécifier un serveur WINS pour vos clients Windows, vous devez inclure l'option //netbios-name-servers// :
+<code>option netbios-name-servers 192.168.1.1;</code>
+</note>
+ 
+===== Configuration : Adresses IP fixes uniquement =====
+Dans ce cas, l'adresse IP que reçoit le client est toujours la même. Pour cela il suffit d'ajouter une directive //host// dans la définition du subnet. Pour chaque client, il faut donner son adresse fixe en fonction de son adresse MAC.
+
+<file>
+deny unknown-clients;
+
+subnet 192.168.1.0 netmask 255.255.255.0 {
+    host client1 {
+        hardware ethernet DD:GH:DF:E5:F7:D7;
+        fixed-address 192.168.1.20;
+    }
+    host client2 {
+        hardware ethernet 00:JJ:YU:38:AC:45;
+        fixed-address 192.168.1.21;
+    }
+}
+</file>
+
+L'option **deny unknown-clients** 8-)interdit l'attribution d'une adresse IP à une station dont l'adresse MAC est inconnue du serveur.  
+<note tip>Pour trouver l'adresse MAC d'une interface réseau, il faut taper la commande : <code>ifconfig | grep HWaddr</code></note>
+
+===== Ecoutes sur plusieurs interfaces =====
+
+Pour que le serveur écoute sur certaines interfaces, il faut les spécifier dans **/etc/default/isc-dhcp-server** :
+
+<file>
+INTERFACES="eth0 eth1"
+</file>
+
+Dans ce cas l'écoute se fait sur eth0 et eth1.
+
+===== Configuration complète à plusieurs interfaces=====
+
+Considérons les aspects suivants :
+
+Il existe 3 réseaux.
+  * Le réseau internet (que nous ne configurons pas, l'interface connectée dessus obtient automatiquement son IP, par le serveur DHCP du FAI((Fournisseur d'accès à Internet)) ; ceci dit vous pouvez adapter la configuration afin d'intégrer le serveur DHCP sur un réseau local).
+  * Le réseau local ''192.168.1.*'' réservé aux serveurs (web, FTP, messagerie, etc.).
+  * Le réseau local ''192.168.2.*'' réservé aux clients (réseau local partagé).
+Il y a 4 autres machines sur les réseaux : ''192.168.1.2'' (nommée ''ftp''), ''192.168.1.3'' (nommée ''web''), ''192.168.1.4'' (nommée ''mail'') et ''192.168.2.2'' (nommée ''portable'').
+  * Aucune machine inconnue ne se verra attribuer une adresse IP par DHCP (voir fichier de configuration //« option deny unknown-clients »//).
+  * Toutes les machines des réseaux ont la possibilité de démarrer par [[:netboot|PXE]].
+  * La machine serveur DHCP est aussi le routeur/pare-feu/NAT (tels que décrits dans la page « [[:tutoriel:comment_configurer_son_reseau_local]] » mais sans le //dnsmasq//) connecté au modem. Il fait aussi office de serveur DNS du domaine //ubuntu-fr.lan// (tel que décrit dans la page « [[:bind9]] »).
+  * les interfaces sur lesquelles le serveur démarre doivent avoir une adresse quand le service dhcp démarre. On leur attribuera les adresses 192.168.1.1 et 192.168.2.1. (volontairement le réseau 192.168.0.0 n'est pas utilisé : il est souvent pris par le modem/routeur de votre FAI).
+
+==== Configuration du serveur ====
+
+Voici une configuration détaillée du fichier :
+
+<file - /etc/dhcp/dhcpd.conf>
+##### Option générale par défaut #####
+
+### RÉSEAU #####
+
+## Nom du serveur DHCP
+server-name "dns.ubuntu-fr.lan";
+
+## Mode autoritaire (autoritaire)
+authoritative;
+
+## Masque de sous-réseau
+option subnet-mask 255.255.255.0;
+
+### DOMAINE ###
+
+## Nom du domaine
+option domain-name "ubuntu-fr.lan";
+
+## Adresse IP du serveur DNS
+# a remplacer par l ip de votre serveur dns ou par celle de votre fai
+option domain-name-servers XXX.XXX.XXX.XXX;
+
+## Type de mise à jour du DNS (aucune)
+ddns-update-style none;
+
+### TEMPS DE RENOUVÈLEMENT DES ADRESSES ###
+default-lease-time 3600;
+max-lease-time 7200;
+
+### Sécurité ###
+
+## refus(deny)/autorise(allow) les clients inconnus (refuse client inconnu)
+deny unknown-clients;
+
+## Use this to send dhcp log messages to a different log file (you also
+## have to hack syslog.conf to complete the redirection).
+log-facility local7;
+
+### PXE ###
+## Permet le boot réseau pour TFTP 
+allow bootp;
+allow booting;
+
+##### RÉSEAUX #####
+## déclaration sous réseau 192.168.1.*
+subnet 192.168.1.0 netmask 255.255.255.0 {
+  # Si vous voulez spécifier un domaine différent de celui par défaut :
+  option domain-name "ubuntu-fr.lan";
+  ## Adresse de diffusion 
+  option broadcast-address 192.168.1.255;
+  ## Serveurs DNS 
+  option domain-name-servers 8.8.8.8, 1.1.1.1;
+  ## routeur par défaut
+  option routers 192.168.1.1;
+        ## Plage d'attribution d'adresse
+        # Ici débute à 1.5, 1.1 à 1.4 étant déjà prises.
+        # La plage ne contient qu'1 adresse ce qui empêche l'attribution sauf au client dont celle-ci est fixée.
+  	range 192.168.1.5 192.168.1.5;
+  ## Option pxe nom du fichier servi.
+  # elilo.efi pour ia64; pxelinux.0 pour x86
+  # À placer à la racine du serveur TFTP.
+  # Le fichier peut être spécifié dans la section « host », il deviendra alors prioritaire sur celui-ci 
+  filename "pxelinux.0";
+  # définit le serveur qui servira le fichier « pxelinux.0 »
+  next-server 192.168.2.1;
+  # évalue si l'adresse est déjà attribuée
+  ping-check = 1;
+}
+
+## Déclaration sous réseau 192.168.2.*
+subnet 192.168.2.0 netmask 255.255.255.0 {
+  option domain-name "ubuntu-fr.lan";
+  option broadcast-address 192.168.2.255;
+  option domain-name-servers 8.8.8.8, 1.1.1.1;
+  option routers 192.168.2.1;
+  	range 192.168.2.2 192.168.2.3;
+  ping-check = 1;
+  filename "pxelinux.0";
+  next-server 192.168.2.1;
+}
+
+#### Configuration des hôtes avec IP fixée ####
+# hôte « FTP »
+host ftp {
+  hardware ethernet 00:0f:75:af:eb:44;
+  fixed-address 192.168.1.2;
+  ### PXE ###
+  # fichier spécifique à une machine 
+  # filename "debian-installer/ia64/elilo.efi";
+  # definit le serveur qui servira le fichier pxelinux.0
+  # next-server 192.168.2.1;
+} 
+# hôte « WEB »
+host web {
+  hardware ethernet 00:02:0d:31:d1:cc;
+  fixed-address 192.168.1.3;
+}
+# hôte « mail »
+host mail {
+  hardware ethernet 00:02:55:d2:d1:cc;
+  fixed-address 192.168.1.4;
+}
+# hôte « PORTABLE »
+host portable {
+  hardware ethernet 00:0e:af:31:d1:cc;
+  fixed-address 192.168.2.2;
+}
+
+# Groupe séparé avec certains paramètres équivalents :
+group {
+  # Tout le groupe disposera d'un autre serveur DNS (dans ce cas "desktop" et "tv")
+  options domain-name-servers 8.8.4.4;
+  host desktop {
+    hardware ethernet ab:cd:ef:11:22:33;
+  }
+  
+  host tv {
+    hardware ethernet 33:22:11:ef:cd:ab;
+  }
+}
+</file>
+
+Nous pouvons maintenant demander à notre serveur de prendre en compte nos modifications :
+
+<code>sudo service isc-dhcp-server restart</code>
+
+===== Vérifications =====
+
+Si il y a des messages d'erreurs, regardez le fichier suivant :
+
+<code>tail /var/log/syslog</code>
+
+==== Logs ====
+
+Les événements sont enregistrés par défaut dans /var/log/syslog. Pour qu'ils soient enregistrés dans un fichier de log dédié, par exemple /var/log/dhcpd.log :
+
+  * Dans le fichier de conf **/etc/dhcp/dhcpd.conf**, ajoutez : (voir dans l'exemple plus haut) 
+
+<code>log-facility local7;</code>
+
+  * Créer le fichier /var/log/dhcpd.log avec comme propriétaire syslog (droits rw) et comme groupe adm (droits r).
+<code>
+  sudo touch /var/log/dhcpd.log
+  sudo chown syslog:adm /var/log/dhcpd.log
+  sudo chmod 0640 /var/log/dhcpd.log
+</code>
+  * Puis ajouter ceci dans le fichier /etc/rsyslog.d/50-default.conf :
+<code>  local7.*          /var/log/dhcpd.log</code>
+  * Pour ne plus logguer dans syslog, dans /etc/rsyslog.d/50-default.conf modifier :
+<code>*.*;auth,authpriv.none              -/var/log/syslog</code>
+en
+<code>*.*;auth,authpriv.none;local7.none              -/var/log/syslog</code>
+
+  * et relancer les daemons syslog et isc-dhcp-server
+<code>sudo service rsyslog restart
+sudo service isc-dhcp-server restart</code>
+
+==== Baux (Leases) ====
+
+Par défaut, le fichier **/var/lib/dhcp/dhcpd.leases** donne des informations sur les baux actuellement distribués par le serveur. On y retrouve des informations essentielles comme l'adresse IP distribuée à une adresse MAC, le nom de la machine qui a fait cette demande DHCP, l'heure de début et de fin du bail...
+<file bash /var/lib/dhcp/dhcpd.leases>
+lease 192.168.2.128 {
+  starts 2 2012/07/31 20:24:28;
+  ends 3 2012/08/01 01:24:28;
+   ...
+   hardware ethernet 01:11:5b:12:34:56;
+   ...
+   client-hostname "machine01";
+}
+</file>
+===== Relais DHCP =====
+Sur les réseaux de grande envergure, le réseau peut être segmenté. Ceci a notamment pour effet la réduction des trames de multi-diffusion, puisqu'elles ne sont pas routées. Le serveur DHCP n'est alors plus joignable par le client.
+
+Dans ce cas, un relais DHCP peut être placé sur chaque segment réseau. L'agent relais écoute les requêtes des clients et les transfère au serveur DHCP. Cette fois-ci, le serveur peut être contacté, puisque l'agent relais établit la connexion via une connexion TCP/IP.
+
+==== Configuration ====
+Vous devrez changer la configuration par défaut en éditant le fichier /etc/default/dhcpd-relay : 
+<file>
+# le serveur DHCP a relayer
+SERVERS="192.168.1.1"
+# Interface a écouter
+INTERFACES="eth0 eth1"
+</file>
+
+Dans les interfaces, il doit y avoir l'interface pour communiquer avec le client, ainsi que l'interface pour communiquer avec le serveur DHCP.
+
+Il faut également éditer le fichier /etc/dhcp/dhcpd.conf dans le serveur DHCP, et ajouter le réseau où se trouve le relais DHCP.
+
+<file>
+#Remplacez 192.168.2.0 par le réseau où se trouve le relais DHCP
+subnet 192.168.2.0 netmask 255.255.255.0 {}
+</file>
+
+===== Configuration ipTV =====
+Pour l'ipTV (exemple TV d'Orange) avec DHCP de la box désactivé, il faut utiliser cette configuration : 
+<file>
+host tvorange {
+        hardware ethernet 00:78:9E:AA:AA:AA; #adapter avec l'adresse MAC du décodeur
+        option routers 192.168.1.1; #adresse IP box
+        option domain-name-servers 192.168.1.1; #adresse IP box
+        option domain-name "home"; #exemple pour orange
+        option ntp-servers 172.20.224.167; #exemple pour orange
+}
+</file>
+
+===== Voir aussi =====
+  * **(en)** [[http://www.isc.org/software/dhcp|ISC - DHCP]]
+  * **(en)** [[http://www.isc.org/software/dhcp/documentation|ISC - DHCP documentation]]
+  * **(en)** [[https://help.ubuntu.com/community/isc-dhcp-server|help.ubuntu.com - isc-dhcp-server]]
+  * [[http://arnofear.free.fr/linux/template.php?tuto=1&page=1|Enregistrement dynamique des clients dans le DNS]] 
+  * **(fr)** [[http://www.it-connect.fr/redondance-de-serveurs-dhcp-sous-linux/|Redondance de serveurs DHCP sous Linux]] sur IT-Connect
+
+----
+
+//Contributeurs : [[:utilisateurs:benje]], [[:utilisateurs:lmrv]], lo72, roro350, [[:utilisateurs:bcag2]], nicolas84//*

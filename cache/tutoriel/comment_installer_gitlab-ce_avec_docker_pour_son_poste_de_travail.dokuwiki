@@ -1,0 +1,679 @@
+
+{{tag>focal hirsute git docker virtualisation gitlab}}
+----
+
+====== Comment installer Gitlab-ce avec Docker pour son poste de travail ======
+Nous allons installer GitLab avec Docker.
+Cet exemple a été testé avec Ubuntu 21.04 en poste de travail.
+
+===== Configurer le DNS local =====
+Faire d'abord [[/configuration_serveur_dns_bind9_pour_son_poste_de_travail|Configurer un Serveur DNS Bind9 pour son poste de travail]]
+
+==== Paramétrer votre DNS pour gitlab ====
+Éditer **/etc/bind/db.domaine-perso.fr** pour définir les alias DNS définitifs
+<file>
+…
+              IN NS      @
+              IN A       10.10.10.1
+              IN AAAA    fd00::
+
+              IN MX      1 courriel
+
+; domaine vers adresse IP
+gitlab        IN A       10.10.10.1
+gitlab        IN AAAA    fd00::
+courriel      IN A       10.10.10.1
+courriel      IN AAAA    fd00::1
+*             IN A       10.10.10.1
+*             IN AAAA    fd00::
+</file>
+
+Éditer **/etc/bind/db.10.10.10** pour définir les alias inverse DNS
+<file>
+$TTL 15m
+@       IN SOA     gitlab.domaine-perso.fr. root.domaine-perso.fr. (
+    2021082512     ; n° série
+            1h     ; intervalle de rafraîchissement esclave
+           15m     ; intervalle de réessaie pour l’esclave
+            1w     ; temps d’expiration de la copie esclave
+            1h )   ; temps de cache NXDOMAIN
+
+        IN NS      gitlab.domaine-perso.fr.
+
+; IP vers nom de domaine DNS
+1   IN PTR     gitlab.domaine-perso.fr.
+1   IN PTR     courriel.domaine-perso.fr.
+1   IN PTR     domaine-perso.fr.
+</file>
+
+Éditer **/etc/bind/db.fd00** pour définir les alias inverse DNS
+<file>
+$TTL 15m
+@       IN SOA     gitlab.domaine-perso.fr. root.domaine-perso.fr.  (
+    2021082512     ; n° série
+            1h     ; intervalle de rafraîchissement esclave
+           15m     ; intervalle de réessaie pour l’esclave
+            1w     ; temps d’expiration de la copie esclave
+            1h )   ; temps de cache NXDOMAIN
+
+        IN NS      gitlab.domaine-perso.fr.
+
+; IPv6 vers nom de domaine DNS
+0             IN PTR     gitlab.domaine-perso.fr.
+0             IN PTR     domaine-perso.fr.
+1             IN PTR     courriel.domaine-perso.fr.
+</file>
+
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo systemctl restart named
+</code>
+
+<code bash>
+utilisateur@MachineUbuntu:~$ dig -x 10.10.10.1 +noall +answer
+1.10.10.10.in-addr.arpa. 900 IN PTR gitlab.domaine-perso.fr.
+1.10.10.10.in-addr.arpa. 900 IN PTR domaine-perso.fr.
+1.10.10.10.in-addr.arpa. 900 IN PTR courriel.domaine-perso.fr.
+utilisateur@MachineUbuntu:~$ dig -x fd00:: +noall +answer
+0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.d.f.ip6.arpa. 900 IN PTR gitlab.domaine-perso.fr.
+0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.d.f.ip6.arpa. 900 IN PTR domaine-perso.fr.
+utilisateur@MachineUbuntu:~$ dig -x fd00::1 +noall +answer
+1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.d.f.ip6.arpa. 900 IN PTR courriel.domaine-perso.fr.
+</code>
+
+===== Installer Docker =====
+==== Installer les applications de base ====
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo apt install docker.io curl openssh-server ca-certificates postfix mailutils
+</code>
+
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:postfix_01.png?nolink |}}
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:postfix_02.png?nolink |}}
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:postfix_03.png?nolink |}}
+
+Pour aller plus loin avec le transport de courriels [[:installer_postfix_en_local_pour_un_poste_de_travail|Installer Postfix en local pour un poste de travail]]
+==== Autorisez le compte utilisateur à utiliser docker ====
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo usermod -aG docker $USER
+</code>
+
+Démarrez le service docker et ajoutez-le au démarrage du système :
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo systemctl start docker
+</code>
+
+Vérifiez le bon fonctionnement du service docker à l'aide de la commande **systemctl** ci-dessous.
+<code bash>
+utilisateur@MachineUbuntu:~$ systemctl status docker
+● docker.service - Docker Application Container Engine
+     Loaded: loaded (/lib/systemd/system/docker.service; enabled; vendor preset: enabled)
+     Active: active (running) since Fri 2020-10-09 11:07:10 CEST; 47s ago
+TriggeredBy: ● docker.socket
+       Docs: https://docs.docker.com
+   Main PID: 6241 (dockerd)
+      Tasks: 12
+     Memory: 38.6M
+     CGroup: /system.slice/docker.service
+             └─6241 /usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock
+q
+</code>
+
+Activez le service au démarrage.
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo systemctl enable docker
+</code>
+
+<code bash>
+utilisateur@MachineUbuntu:~$ ip a
+…
+4: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN group default qlen 1000
+    link/ether 02:42:a3:0c:9c:fb brd ff:ff:ff:ff:ff:ff
+    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0
+       valid_lft forever preferred_lft forever
+    inet6 fa80::42:a3ff:fe0c:9cfb/64 scope link
+       valid_lft forever preferred_lft forever
+…
+</code>
+
+Éditer **/etc/bind/named.conf.options** pour ajouter l’interface de docker à l'écoute du serveur DNS
+<file>
+options {
+    directory "/var/cache/bind";
+
+    // Pour des raisons de sécurité.
+    // Cache la version du serveur DNS pour les clients.
+    version "Pas pour les crackers";
+
+    listen-on { 127.0.0.1; 10.10.10.1; 172.17.0.1; };
+    listen-on-v6 { ::1; fd00::; fe80::42:a3ff:fe0c:9cfb; };
+
+    // Optionnel - Comportement par défaut de BIND en récursions.
+    recursion yes;
+
+    allow-query { 127.0.0.1; 10.10.10.1; ::1; fd00::; 172.17.0.0/16; fe80::42:a3ff:fe0c:9cfb; };
+
+    // Récursions autorisées seulement pour les interfaces clients
+    allow-recursion { 127.0.0.1; 10.10.10.0/24; ::1; fd00::/8; 172.17.0.0/16; fe80::42:a3ff:fe0c:9cfb; };
+
+    dnssec-validation auto;
+
+    // Activer la journalisation des requêtes DNS
+    querylog yes;
+};
+</file>
+
+<code bash>
+utilisateur@MachineUbuntu:~$ sudo named-checkconf
+</code>
+
+Redémarrer votre Ubuntu pour valider les modifications
+<code bash>
+utilisateur@MachineUbuntu:~$ reboot
+</code>
+
+===== Tester Docker =====
+Après vous être reconnecter sous Ubuntu, vérifiez dans un terminal que docker fonctionne bien en exécutant la commande docker "hello-world" ci-dessous.
+<code bash>
+utilisateur@MachineUbuntu:~$ docker run hello-world
+Unable to find image 'hello-world:latest' locally
+latest: Pulling from library/hello-world
+0e03bdcc26d7: Pull complete 
+Digest: sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+Status: Downloaded newer image for hello-world:latest
+
+Hello from Docker!
+This message shows that your installation appears to be working correctly.
+
+To generate this message, Docker took the following steps:
+ 1. The Docker client contacted the Docker daemon.
+ 2. The Docker daemon pulled the "hello-world" image from the Docker Hub.
+    (amd64)
+ 3. The Docker daemon created a new container from that image which runs the
+    executable that produces the output you are currently reading.
+ 4. The Docker daemon streamed that output to the Docker client, which sent it
+    to your terminal.
+
+To try something more ambitious, you can run an Ubuntu container with:
+ $ docker run -it ubuntu bash
+
+Share images, automate workflows, and more with a free Docker ID:
+ https://hub.docker.com/
+
+For more examples and ideas, visit:
+ https://docs.docker.com/get-started/
+</code>
+
+<code bash>
+utilisateur@MachineUbuntu:~$ docker ps -a
+CONTAINER ID   IMAGE         COMMAND    CREATED          STATUS 30 dcd0d025b44b   hello-world   "/hello"   19 seconds ago   Exited (0) 16 seconds ago
+PORTS     NAMES
+          nervous_cohen
+</code>
+
+Nous sommes maintenant prêts à installer GitLab.
+
+===== Installer GitLab =====
+GitLab est un gestionnaire de référentiels open source basé sur Rails (langage Rubis) développé par la société GitLab. Il s'agit d'un gestionnaire de révisions de code WEB basé sur git qui permet à votre équipe de collaborer sur le codage, le test et le déploiement d'applications. 
+GitLab fournit plusieurs fonctionnalités, notamment les wikis, le suivi des problèmes, les révisions de code et les flux d'activité.
+
+Téléchargez le paquet d’installation GitLab pour Ubuntu et l’installer
+
+
+https://packages.gitlab.com/gitlab/gitlab-ce et choisissez la dernière version gitlab-ce pour ubuntu focal
+
+<code bash>
+utilisateur@MachineUbuntu:~/gitlab$ wget https://packages.gitlab.com/gitlab/gitlab-ce/packages/ubuntu/focal/gitlab-ce_14.1.3-ce.0_amd64.deb/download.deb
+utilisateur@MachineUbuntu:~/gitlab$ sudo apt install git ; sudo EXTERNAL_URL="http://gitlab.domaine-perso.fr" dpkg -i download.deb
+Paramétrer GitLab
+</code>
+
+<code bash>
+utilisateur@MachineUbuntu:~/gitlab$ sudo gitlab-ctl show-config
+</code>
+
+<code bash>
+utilisateur@MachineUbuntu:~/gitlab$ sudo chmod o+r /etc/gitlab/gitlab.rb
+utilisateur@MachineUbuntu:~/gitlab$ sudo nano /etc/gitlab/gitlab.rb
+</code>
+
+<file>
+…
+external_url "http://gitlab.domaine-perso.fr"
+…  
+# Pour activer les fonctions artifacts (tester la qualité du code, déployer sur un serveur distant en SSH, etc.)
+gitlab_rails['artifacts_enabled'] = true
+…
+# pour générer la doc et l’afficher avec Gitlab
+pages_external_url "http://documentation.domaine-perso.fr"
+</file>
+
+<code bash>
+utilisateur@MachineUbuntu:~/gitlab$ sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/gitlab/trusted-certs/MachineUbuntu.key -out /etc/gitlab/trusted-certs/MachineUbuntu.crt
+</code>
+
+<code bash>
+utilisateur@MachineUbuntu:~/gitlab$ sudo gitlab-ctl reconfigure
+</code>
+
+
+===== Configurer et tester GitLab =====
+Saisissez dans un navigateur l’URL **gitlab.domaine-perso.fr**
+
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:conf-gitlab_02.png?nolink |}}
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:conf-gitlab_01.png?nolink |}}
+
+Pour changer de mot de passe de root en cas de besoins.
+<code bash>
+utilisateur@MachineUbuntu:~/gitlab$ sudo gitlab-rake "gitlab:password:reset"
+</code>
+
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:conf-gitlab_03.png?nolink |}}
+
+Choisissez **Preferences**
+
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:conf-gitlab_04.png?nolink |}}
+
+Changez la localisation et le jour de début de semaine
+
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:conf-gitlab_05.png?nolink |}}
+
+Tapez la **touche F5** pour rafraîchir l’affichage de votre navigateur.
+
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:conf-gitlab_06.png?nolink |}}
+
+Changez l'icone du site Gitlab, renseignez le statut de l'administrateur du site, la zone de temps pour votre localité, le nom du compte administrateur, etc.
+
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:conf-gitlab_07.png?nolink |}}
+
+Dans le menu à gauche cliquer sur **Compte**. Puis modifiez le nom de connexion de l'administrateur. 
+
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:conf-gitlab_08.png?nolink |}}
+
+Allez dans le menu d'administration de Gitlab
+
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:conf-gitlab_09.png?nolink |}}
+
+Choisissez dans l'arbre du menu de gauche **Paramètres/Général**
+
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:conf-gitlab_10.png?nolink |}}
+
+Modifiez dans **Contrôles de visibilité et d'accès** les protections que vous volez pour vos dépôts [[:git|Git]]
+
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:conf-gitlab_11.png?nolink |}}
+
+===== Intégrer le dépot git local dans Gitlab =====
+<code bash>
+utilisateur@MachineUbuntu:~/$ cd repertoire_de_developpement
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ git config credential.helper store
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ git remote add origin http://gitlab.domaine-perso.fr/utilisateur/mon_projet.git
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ git push -u origin --all
+Username for 'http://gitlab.domaine-perso.fr': utilisateur
+Password for 'http://gitlab.domaine-perso.fr': motdepasse
+Énumération des objets: 51, fait.
+Décompte des objets: 100% (43/43), fait.
+Compression par delta en utilisant jusqu’à 4 fils d’exécution
+Compression des objets: 100% (43/43), fait.
+Écriture des objets: 100% (51/51), 180.78 Kio | 4.89 Mio/s, fait.
+Total 51 (delta 3), réutilisés 0 (delta 0), réutilisés du pack 0
+To http://gitlab.domaine-perso.fr/utilisateur/mon_projet.git
+* [new branch]        master → master
+La branche 'master' est paramétrée pour suivre la branche distante 'master' depuis 'origin'.
+</code>
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:git_01.png?nolink |}}
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:git_02.png?nolink |}}
+
+===== Configurez votre projet Gitlab =====
+
+==== Paramétrages ====
+
+Modifiez les propriétés de votre projet dans **Paramètres/Général**
+
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:git_03.png?nolink |}}
+
+Vous pouvez voir les fichiers de votre projet dans GitLab
+
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:git_04.png?nolink |}}
+
+==== Modifiez le dépôt ====
+
+Ajouter à partir de GitLab de nouveaux fichiers
+
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:git_05.png?nolink |}}
+
+Vous pouvez maintenant récupérer ces nouveaux fichiers d’information Gitlab (CHANGELOG, CONTRIBUTING.md, LICENSE et README.md) dans votre projet local :
+<code bash>
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ git fetch
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ git merge
+</code>
+
+==== Sécurisez le dépôt ====
+
+Vous pouvez définir vos échanges avec GitLab une configuration plus sécurisée avec git en activant une communication chiffrée
+<code bash>
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ ssh-keygen -t rsa -b 2048 -C "Ma clé de chiffrement"
+Generating public/private rsa key pair.
+Enter file in which to save the key (/home/utilisateur/.ssh/id_rsa):
+Created directory '/home/utilisateur/.ssh'.
+Enter passphrase (empty for no passphrase): motdepasse
+Enter same passphrase again: motdepasse
+Your identification has been saved in /home/utilisateur/.ssh/id_rsa
+Your public key has been saved in /home/utilisateur/.ssh/id_rsa.pub
+The key fingerprint is:
+SHA256:n60tA2JwGV0tptwB48YrPT6hQQWrxGYhEVegfnO9GXM Ma clé de chiffrement
+The key's randomart image is:
++---[RSA 2048]----+
+|  +o+ooo+o..     |
+|   = ..=..+ .    |
+|  . = o+++ o     |
+| . +.oo+o..      |
+|  . +o+ S E      |
+|   . oo=.X o     |
+|     ...=.o .    |
+|         .oo     |
+|          .o.    |
++----[SHA256]-----+
+</code>
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:git-ssh_01.png?nolink |}}
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:git-ssh_02.png?nolink |}}
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:git-ssh_03.png?nolink |}}
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:git-ssh_04.png?nolink |}}
+
+Copier le contenu du fichier **/home/utilisateur/.ssh/id-rsa.pub**
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:git-ssh_05.png?nolink |}}
+===== Autorisations pour Docker et le Runner =====
+Cette étape consiste à créer un certificat pour autoriser Docker à interagir avec le registre et le Runner.
+
+Pour le registre
+<code bash>
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ sudo mkdir -p /etc/docker/certs.d/MachineUbuntu:5000
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ sudo ln -s /etc/gitlab/trusted-certs/MachineUbuntu.crt /etc/docker/certs.d/MachineUbuntu:5000/ca.crt
+</code>
+
+Pour le runner
+<code bash>
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ sudo mkdir -p /etc/gitlab-runner/certs
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ sudo ln -s /etc/gitlab/trusted-certs/MachineUbuntu.crt /etc/gitlab-runner/certs/ca.crt
+</code>
+ 
+===== Configurer et tester le Runner =====
+==== Installation du runner dans docker ====
+
+<code bash>
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ docker run --rm -it -v /etc/gitlab-runner:/etc/gitlab-runner gitlab/gitlab-runner register
+Unable to find image 'gitlab/gitlab-runner:latest' locally
+latest: Pulling from gitlab/gitlab-runner
+a31c7b29f4ad: Pull complete
+d843a3e4344f: Pull complete
+cf545e7bed9f: Pull complete
+c863409f4294: Pull complete
+ba06fc4b920b: Pull complete
+Digest: sha256:79692bb4b239cb2c1a70d7726e633ec918a6af117b68da5eac55a00a85f38812
+Status: Downloaded newer image for gitlab/gitlab-runner:latest
+
+
+Runtime platform                                    arch=amd64 os=linux pid=7 revision=8925d9a0 version=14.2.0
+Running in system-mode.
+
+Enter the Gitlab instance URL (for example, https://gitlab.com/):
+</code>
+
+==== Activer le runner pour Gitlab ====
+
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:runner_01.png?nolink |}}
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:runner_02.png?nolink |}}
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:runner_03.png?nolink |}}
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:runner_04.png?nolink |}}
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:runner_05.png?nolink |}}
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:runner_06.png?nolink |}}
+
+<code bash>
+Enter the GitLab instance URL (for example, https://gitlab.com/):
+http://gitlab.domaine-perso.fr/
+Enter the registration token:
+9FfDsP_9Z2cXWi1Axwig
+Enter a description for the runner:
+[75d626bde768]: Runner Developpement Python 3
+Enter tags for the runner (comma-separated):
+runner
+Registering runner... succeeded                     runner=Tzzfs5xc
+Enter an executor: kubernetes, custom, docker-ssh, shell, docker+machine, docker-ssh+machine, docker, parallels, ssh, virtualbox:
+docker
+Enter the default Docker image (for example, ruby:2.6):
+python:latest
+Runner registered successfully. Feel free to start it, but if it's running already the config should be automatically reloaded!
+</code>
+
+==== Paramétrez le runner pour GitLab ====
+
+<code bash>
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ sudo chmod o+r /etc/gitlab-runner/config.toml
+</code>
+
+Changez dans **/etc/gitlab-runner/config.toml**
+<code bash>
+concurrent = 1
+check_interval = 0
+
+[session_server]
+  session_timeout = 1800
+
+[[runners]]
+  name = "Runner Developpement Python 3"
+  url = "http://gitlab.domaine-perso.fr/"
+  token = "9FfDsP_9Z2cXWi1Axwig"
+  executor = "docker"
+  pull_policy = "if-not-present"
+  [runners.custom_build_dir]
+  [runners.cache]
+    [runners.cache.s3]
+    [runners.cache.gcs]
+    [runners.cache.azure]
+  [runners.docker]
+    tls_verify = false
+    image = "python:latest"
+    privileged = false
+    disable_entrypoint_overwrite = false
+    oom_kill_disable = false
+    disable_cache = false
+    volumes = ["/var/run/docker.sock:/var/run/docker.sock", "/cache"]
+    shm_size = 0
+</code>
+
+Vous pouvez démarrer le Runner
+<code bash>
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ docker run -d --restart always --name gitlab-runner -v /etc/gitlab-runner:/etc/gitlab-runner -v /var/run/docker.sock:/var/run/docker.sock gitlab/gitlab-runner:latest
+c9f30b11275ac803ebb17209441c7e0b6351c60d9f0ddadc17c8b0a7ae9cbb96
+</code>
+
+Autorisez le registre pour la machine ubuntu
+<code bash>
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ sudo ln -s /etc/docker/certs.d/MachineUbuntu\:5000/ca.crt /usr/local/share/ca-certificates/MachineUbuntu.crt
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ sudo update-ca-certificates
+</code>
+
+Si tout se passe bien vous obtenez le message
+<code bash>
+Updatting certificates in /etc/ssl/certs...
+1 added, 0 removed; done.
+Running hooks in /etc/ca-certificates/update.d...
+done.
+</code>
+
+Dans **Paramètres/Intégration et livraison/Exécuteurs** mettre en pause le runner nouvellement créé pour votre projet
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages-runner_03.png?nolink|}}
+
+Cliquez sur l’icone {{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:runner-run_02.png?nolink|}}, et sélectionnez «Indique si l’exécuteur peut choisir des tâches sans étiquettes (tags)» :
+
+{{ :tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:runner-run_03.png?nolink |}}
+
+Relancez le runner
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages-runner_07.png?nolink|}}
+==== Tester le fonctionnement du runner ====
+Éditer le fichier **.gitlab-ci.yml** dans repertoire_de_developpement.
+<file>
+travail-de-construction:
+  stage: build
+  script:
+    - echo "Bonjour, $GITLAB_USER_LOGIN !"
+
+travail-de-tests-1:
+  stage: test
+  script:
+    - echo "Ce travail teste quelque chose"
+
+travail-de-tests-2:
+  stage: test
+  script:
+    - echo "Ce travail teste quelque chose, mais prend plus de temps que travail-de-test-1."
+    - echo "Une fois les commandes echo terminées, il exécute la commande de veille pendant 20 secondes"
+    - echo "qui simule un test qui dure 20 secondes de plus que travail-de-test-1."
+    - sleep 20
+
+deploiement-production:
+  stage: deploy
+  script:
+    - echo "Ce travail déploie quelque chose de la branche $CI_COMMIT_BRANCH."
+</file>
+
+<code bash>
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ git add .
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ git commit -m "Test du runner dans Gitlab"
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ git push
+</code>
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:runner-test_01.png?nolink|}}
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:runner-test_02.png?nolink|}}
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:runner-test_03.png?nolink|}}
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:runner-test_04.png?nolink|}}
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:runner-test_05.png?nolink|}}
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:runner-test_06.png?nolink|}}
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:runner-test_07.png?nolink|}}
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:runner-test_08.png?nolink|}}
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:runner-test_09.png?nolink|}}
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:runner-test_10.png?nolink|}}
+
+Pour plus d’informations sur Gitlab et son utilisation https://github.com/SocialGouv/tutoriel-gitlab, https://makina-corpus.com/blog/metier/2019/gitlab-astuces-projets.
+
+===== Tester les Pages GitLab =====
+Créer un projet de rendu de pages HTML
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages_01.png?nolink|}}
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages_02.png?nolink|}}
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages_03.png?nolink|}}
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages_04.png?nolink|}}
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages_05.png?nolink|}}
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages_06.png?nolink|}}
+
+Créer le «runner» pour ce projet
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages-runner_01.png?nolink|}}
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages-runner_02.png?nolink|}}
+
+<code bash>
+utilisateur@MachineUbuntu:~/repertoire_de_developpement$ docker run --rm -it -v /etc/gitlab-runner:/etc/gitlab-runner gitlab/gitlab-runner register
+Runtime platform                                    arch=amd64 os=linux pid=7 revision=8925d9a0 version=14.2.0
+Running in system-mode.
+
+Enter the GitLab instance URL (for example, https://gitlab.com/):
+http://gitlab.domaine-perso.fr/
+Enter the registration token:
+7YBLdSA9en4NMex5zyQy
+Enter a description for the runner:
+[75d626bde768]: Runner Test Pages GitLab
+Enter tags for the runner (comma-separated):
+runner
+Registering runner... succeeded                     runner=Tzzfs5xc
+Enter an executor: kubernetes, custom, docker-ssh, shell, docker+machine, docker-ssh+machine, docker, parallels, ssh, virtualbox:
+docker
+Enter the default Docker image (for example, ruby:2.6):
+alpine:latest
+Runner registered successfully. Feel free to start it, but if it's running already the config should be automatically reloaded!
+</code>
+
+Changez dans **/etc/gitlab-runner/config.toml**
+<file>
+concurrent = 1
+check_interval = 0
+
+[session_server]
+  session_timeout = 1800
+
+[[runners]]
+  name = "Runner Developpement Python 3"
+  url = "http://gitlab.domaine-perso.fr/"
+  token = "9FfDsP_9Z2cXWi1Axwig"
+  executor = "docker"
+  [runners.custom_build_dir]
+  [runners.cache]
+    [runners.cache.s3]
+    [runners.cache.gcs]
+    [runners.cache.azure]
+  [runners.docker]
+    tls_verify = false
+    image = "python:latest"
+    privileged = false
+    disable_entrypoint_overwrite = false
+    oom_kill_disable = false
+    disable_cache = false
+    volumes = ["/var/run/docker.sock:/var/run/docker.sock", "/cache"]
+    shm_size = 0
+
+[[runners]]
+  name = "Runner Test Pages GitLab"
+  url = "http://gitlab.domaine-perso.fr/"
+  token = "7YBLdSA9en4NMex5zyQy"
+  executor = "docker"
+  pull_policy = "if-not-present"
+  [runners.custom_build_dir]
+  [runners.cache]
+    [runners.cache.s3]
+    [runners.cache.gcs]
+    [runners.cache.azure]
+  [runners.docker]
+    tls_verify = false
+    image = "alpine:latest"
+    privileged = false
+    disable_entrypoint_overwrite = false
+    oom_kill_disable = false
+    disable_cache = false
+    volumes = ["/var/run/docker.sock:/var/run/docker.sock", "/cache"]
+    shm_size = 0
+</file>
+
+Vous pouvez configurer et redémarrer le Runner
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages-runner_03.png?nolink|}}
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages-runner_04.png?nolink|}}
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages-runner_05.png?nolink|}}
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages-runner_06.png?nolink|}}
+
+Relancer le runner
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages-runner_07.png?nolink|}}
+
+Déployer et tester le HTML dans une Pages GitLab
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages-runner_08.png?nolink|}}
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages-runner_09.png?nolink|}}
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages-runner_10.png?nolink|}}
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages-runner_11.png?nolink|}}
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages-runner_12.png?nolink|}}
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages-runner_13.png?nolink|}}
+
+{{:tutoriel:comment_installer_gitlab-ce_sur_son_poste_de_travail:pages-runner_14.png?nolink|}}
+
+Supprimez le projet (**Paramètres/Général/Advenced/Delete project**), et nettoyez le runner de test «Runner Test Pages GitLab» du fichier **/etc/gitlab-runner/config.toml**.

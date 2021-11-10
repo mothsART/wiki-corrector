@@ -1,0 +1,199 @@
+
+{{tag>Xenial Bionic matériel système processeur énergie}}
+
+----
+
+====== Cpufrequtils :gérer la vitesse du processeur ======
+
+**Cpufrequtils** permettent de modifier selon ses besoins la vitesse du processeur, outil en ligne de commande il contient deux utilitaires pour inspecter et configurer la fréquence du processeur via les interfaces noyau ''sysfs'' et ''procfs'' de CPUFreq.
+Cela est particulièrement intéressant pour :
+  * Économiser de l'électricité, augmenter le temps de batterie ;
+  * Diminuer la chaleur dégagée par le processeur ;
+  * Diminuer les bruits des ventilateurs ;
+  * Prolonger la durée de vie du matériel.
+
+Il existe également [[:TLP]], une solution sans interface graphique qui travaille en tâche de fond et estime lui-même la façon idéale de gérer votre consommation d'énergie.
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+
+==== Configuration du BIOS ====
+Il peut être utile d'apporter quelques modifications à votre [[wpfr>Basic_Input_Output_System |BIOS]] si celui-ci le permet.
+Vérifiez que l'option //Cool'n'Quiet// pour AMD ou //SpeedStep// pour Intel est activée. Si votre BIOS ne propose pas cette option, elle est sûrement activée par défaut. En outre, certains Bios donnent un nom différent à ces options (L'//Enhanced Intel SpeedStep Technologie//™ ou EIST pour Intel). Au besoin reportez-vous à la documentation de votre carte mère.
+
+
+=====Installation=====
+
+Il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>cpufrequtils]]**.
+
+
+=====Utilisation=====
+
+====Identifier son CPU et choisir le module adéquat====
+En premier lieu il peut être utile de connaître son matériel. Pour cela voici quelques commandes à cette fin.\\
+Pour connaître les spécifications de votre CPU, vous pouvez entrer la commande suivante:
+<code>
+cat /proc/cpuinfo
+</code>
+
+Si vous désirez juste le nom de votre ou vos CPU :
+<code>grep name /proc/cpuinfo</code>
+
+
+ou encore
+<code>
+sudo dmidecode -t processor   
+</code>
+
+Il existe plusieurs modules de modulation de fréquence selon les processeurs :
+  * ''powernow-k7'' pour les AMD Sempron/Athlon/MP (K7)
+  * ''powernow-k8'' pour les AMD Duron/Sempron/Athlon/Phenom II/Opteron 64 (K8)
+  * ''p4-clockmod'' pour les Intel Pentium 4 et pour les Intel Celeron M
+  * ''acpi-cpufreq'' pour les Intel Pentium M/Core Duo/Core 2 Duo
+  * ''amd_freq_sensitivity'' 
+  * ''speedstep-lib'' 
+
+Pour voir les noms des modules :
+<code>ls -1 /lib/modules/`uname -r`/kernel/drivers/cpufreq/</code> (à vérifier : FIXME)
+==== Définir et choisir un module permettant la modulation de la fréquence CPU ====
+Les stratégies de modulation de fréquence CPU sont appelées gouverneurs (gouvernor en anglais). Ils contrôlent le système et ajustent la fréquence du CPU en conséquence.
+
+La liste des gouverneurs peut être obtenue avec la commande suivante : <code>cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors</code>
+Si plusieurs processeurs, remplacer le 0 par un autre numéro.
+
+Les gouverneurs sont donc les suivant (du plus performant / plus énergivore au moins performant / plus économe) :
+  * **performance** : induit la fréquence maximum du CPU
+  * **ondemand** : utilisation de la fréquence minimale puis augmentation au maximum lorsque la charge processeur atteint 100% en fréquence minimale
+  * **conservative** : Identique a ondemand, mis à part qu'il passe par les autres fréquences possibles avant d'arriver à la fréquence maxi, ce qui permet de ne pas tout de suite passer le processeur au maximum. Recommandé pour les ordinateurs portables
+  * **powersave** : fréquence minimum
+  * **schedutil** : un gouverneur plus intelligent et équilibré qui vient avec le noyau Linux 4.18
+
+<note important>Les gouverneurs **ondemand** et **conservative** ne fonctionnent pas dans deux cas fréquents :
+  * le flash dans firefox, typiquement la vidéo sur dailymotion ou youtube
+  * les applications utilisant wine. Vous constaterez des ralentissements durant l'utilisation de ces applications
+</note>
+
+Le gouverneur **userspace** est particulier puisque c'est vous qui le programmerez :
+  * **userspace** : la fréquence est choisie par l'utilisateur.
+
+==== Charger les modules ====
+
+Le but maintenant est de contrôler que tout fonctionne avant d'automatiser la procédure au démarrage. Pour commencer, charger les modules avec les commandes suivantes : FIXME comment connaître le nom du module??
+<code>
+sudo -s
+modprobe le_module_de_votre_processeur 
+modprobe cpufreq_conservative
+modprobe cpufreq_ondemand
+modprobe cpufreq_powersave
+modprobe cpufreq_stats
+modprobe cpufreq_userspace
+</code>
+
+==== Identifier les chemins des fichiers de configuration ====
+
+Le bon chemin qui mène à la gestion de vos processeurs est **/sys/devices/system/cpu/cpuX/cpufreq/** avec //X// comme numéro du processeur. 
+
+Ces dossiers contiennent les fichiers de configuration du processeur. En voici la liste :
+
+^ Fichier ^ À quoi sert-il ? ^
+| cpuinfo_cur_freq | la fréquence actuelle de votre processeur (en kHz)|
+| cpuinfo_max_freq | la fréquence maximum (en kHz)|
+| cpuinfo_min_freq | la fréquence minimum (en kHz)|
+| scaling_available_frequencies | les fréquences disponibles (en kHz)|
+| scaling_available_governors | les gouverneurs disponibles |
+| scaling_cur_freq | la fréquence actuelle (en kHz)|
+| scaling_driver | le pilote du processeur utilisé |
+| scaling_governor | le gouverneur en action |
+| scaling_max_freq | |
+| scaling_min_freq | |
+
+
+Ces fichiers sont lisibles (utilisez la commande ''cat nom_du_fichier'') et modifiables [[:sudo|en mode superutilisateur]]:
+
+  - ''cat scaling_available_governors'' : Nous donne les gouverneurs disponibles pour le processeur (répétez l'opération avec les autres proc si vous en avez)
+  - ''echo **le_gouverneur_que_vous_avez_choisi** > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor'' : vous permet de configurer la gestion de votre processeur avec le gouverneur que vous voulez (La commande ''echo'' affiche du texte et le signe ''>'' écrit l'output de la commande echo dans le fichier scaling_governor).
+  - Un dossier portant le nom du gouverneur a été crée. Dedans des fichiers de configurations pointus que nous ne toucherons pas ici et que vous ne toucherez que si vous savez VRAIMENT ce que vous faites...
+  - utilisez la commande cat pour savoir si tout fonctionne : ''cat cpuinfo_cur_freq, cat cpuinfo_max_freq, cat cpuinfo_min_freq
+'', etc.
+  - Utilisez la commande ''echo quelque_chose > fichier_de_config'' pour paramétrer comme vous l'entendez (Si, et seulement si, quelque chose ne fonctionne pas, comme par exemple un processeur ne descendant pas en dessous de 2 MHz alors qu'il peut supporter 1 MHz…).
+  - Répétez l'opération avec les autres processeurs si vous en avez et si vous désirez utilisez plusieurs gouverneurs par la suite, faites le test des autres gouverneurs en suivant la même procédure.
+
+==== Charger les modules au démarrage ====
+
+Une fois que les opérations précédents ont été concluantes,[[:tutoriel:comment_modifier_un_fichier|ouvrez le fichier]] **/etc/modules** avec les [[:sudo|droits d'administration]] et copiez les lignes suivantes :
+<file>
+cpufreq_conservative
+cpufreq_ondemand
+cpufreq_powersave
+cpufreq_stats
+cpufreq_userspace
+LE_MODULE_CORRESPONDANT_A_VOTRE_PROCESSEUR
+</file>
+
+<note>
+pour vérifier le chargement des modules au prochain reboot :
+<note important>journalctl -u systemd-modules-load.service -f -n50</note>
+</note>
+==== Configurer les modules au démarrage ====
+
+Ici, le but est de pouvoir sauvegarder les paramètres que vous désirez concernant les modules. Ainsi, lorsque vous démarrerez l'ordinateur, les bons paramètres seront pris en considération. Pour réussir cela, [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>sysfsutils]]**.
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez ensuite le fichier de configuration]] **/etc/default/cpufrequtils**. À l'intérieur de ce fichier, mettez :
+
+<file>
+# valid values: userspace conservative powersave ondemand performance
+cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors
+GOVERNOR="conservative"
+
+cat /sys/devices/system/cpu/cpu1/cpufreq/scaling_available_governors
+GOVERNOR="conservative"
+</file>
+
+Vérifiez bien que le chemin correspond et que le dossier cpu0 existe réellement. En outre, si vous avez un deuxième cœur, il faut aussi le mentionner ici. Ex: ''/sys/devices/system/cpu/cpu1/cpufreq/scaling_governor = LE_GOUVERNEUR_QUE_VOUS_VOULEZ''.
+
+Il peut arriver que la fréquence maximale des processeurs soit mal reconnue, il faudra donc rajouter au fichier: ''/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq = FREQ_MAXIMALE_DE_MON_PROC'' et ''devices/system/cpu/cpu1/cpufreq/scaling_max_freq = FREQ_MAXIMALE_DE_MON_PROC''.
+
+Si votre fréquence minimale était mal reconnue, pensez à aussi la définir ici avec : ''/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq = FREQ_MINIMALE_DU_PROC'', etc.
+
+
+==== Changer la fréquence et le gouverneur par la ligne de commande ====
+
+Vous pouvez changer directement les fichiers ''/sys/devices/system/cpu/cpu*/cpufreq/{scaling_setspeed,governor}''. Néanmoins, le paquet ''cpufrequtils''  vous simplifiera la tâche.
+
+Le paquet ''cpufrequtils'' vous donne accès à deux commandes :
+  * ''cpufreq-info'' pour afficher l'état
+  * ''cpufreq-set'' pour changer de féquence et/ou de gouverneur à la volée.
+
+
+Vérifiez que tout est paramétré comme vous l'entendez avec la commande : <code>cpufreq-info</code>
+
+Exemples d'utilisation de ''cpufreq-set'' :
+  * Si vous désirez mettre votre cpu0 en mode powersave :<code>sudo cpufreq-set -c 0 -g powersave</code>
+  * Si vous voulez que votre cpu1 soit en mode performance mais que la fréquence maximale soit de 1,6 GHz au lieu des 2 GHz d'origine : <code>sudo cpufreq-set -c 1 -g performance -u 1600000.</code>
+  * Pour plus de renseignements :<code>man cpufreq-set</code>
+
+
+==== Changer les paramètres de manière permanante ====
+L'initialisation se passe dans ce fichier : ''/etc/init.d/cpufrequtils''
+
+Pour changer les paramètres de manière permanante, il suffit d'editer ce fichier. Par ex, vous pouvez changer le gouverneur qui est normalement par defaut : 
+  GOVERNOR="ondemand"
+  
+par :
+
+  GOVERNOR="powersave"
+  
+
+En ligne de commande, ça donne :
+  sudo sed -i 's/^GOVERNOR=.*/GOVERNOR="powersave"/' /etc/init.d/cpufrequtils
+=====Voir aussi=====
+
+  * [[:indicator-cpufreq]], outil graphique qui fait le même travail,
+  * **[[apt>powernap]]**, regarde une série de moniteurs configurables. Si aucune activité ne se produit sur les éléments surveillés durant une période spécifiée, PowerNap juge le système inactif, et prend des mesures, telles que configurées par l'administrateur système,
+  * [[:laptop-mode-tools]], Laptop-mode est une fonctionnalité du noyau de Linux qui permet à votre ordinateur d'économiser  considérablement de l'énergie en permettant à votre disque dur de s'arrêter pendant des laps de temps plus importants.
+  * La page [[:énergie]] de la documentation.
+  * [[http://plfnicolarius.free.fr/tutoriel_logiciel_linux_gerer_son_processeur_avec_cpufreq.php|Gérer son processeur avec CPUFREQ]].
+----
+
+//Contributeur :  [[:utilisateurs:Vicks]], [[http://www.zaide.org|Zaide]], [[:utilisateurs:dolmen]], [[:utilisateurs:l_africain|L'Africain]]//

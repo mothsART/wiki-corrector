@@ -1,0 +1,124 @@
+
+{{tag>xenial sécurité sauvegarde}}
+----
+ 
+====== Borg Backup : un outil de sauvegarde extrêmement simple mais puissant (et gérant la déduplication) ======
+
+Borg est un outil de sauvegarde incrémentielle en ligne de commande écrit en Python. C’est un fork d’Attic mais un peu plus en avance puisqu’il corrige pas mal de bug d’Attic et propose des fonctionnalités supplémentaires (choix de la compression, par exemple).En outre le projet est très actif et en constante évolution.
+
+Une des particularités de Borg est qu’il supporte la déduplication, c’est-à-dire que les fichiers sauvegardés sont découpés en une multitude de tronçons, et Borg ne sauvegarde que les tronçons qui ont été modifiés depuis la dernière sauvegarde, d’où une économie substantielle en termes d’espace disque et un gain lors de transfert des sauvegardes distantes. De plus Borg gère différents types de compression permettant de diminuer encore la taille des sauvegardes ainsi que le chiffrement en AES 256-bit.
+
+Une fois compris le principe des sauvegardes de Borg, celui-ci est très simple d'utilisation au quotidien, pas de base de données à gérer, les commandes sont simples et logiques et l'aide est très bien faite.
+
+Pour ceux que la ligne de commande rebute, il est possible d'installer une interface graphique en complément. Celle-ci est indépendante de Borg mais est pleinement fonctionnelle, même si elle n'utilise pas toutes les fonctionnalités que l'on retrouve avec la ligne de commande
+===== Particularités principales =====
+  * __Optimisation de l'espace disque__ : la déduplication, basée sur une segmentation du contenu, est utilisée pour réduire le nombre d'octets stockés: chaque fichier est divisé en un certain nombre de morceaux de longueur variable et seuls les morceaux qui n'ont jamais été sauvegardés auparavant sont ajoutés au dépôt. Peu importe qu'ils viennent de machines différentes, de sauvegardes précédentes ou de la même sauvegarde. Il n'y aura aucun fichier en double dans ces sauvegardes, tout reposant sur les empreintes de chaque fichier sauvegardé. Tous les morceaux dans le même dépôt sont référencés, peu importe s’ils proviennent de différentes machines, à partir de sauvegardes précédentes, à partir de la même sauvegarde ou même à partir du même fichier unique.
+  * __Vitesse__ : Le code critique (chunking, compression, chiffrement) est implémenté en C / Python et Borg gère la mise en cache locale des fichiers / données d'index des morceaux ainsi que la détection rapide des fichiers non modifiés.
+  * __Chiffrement des données__ : Toutes les données peuvent être protégées en utilisant la méthode de chiffrement AES 256-bit, l'intégrité des données et l'authenticité sont vérifiées en utilisant HMAC-SHA256. Les données sont chiffrées côté client.
+  * __Compression__ : Toutes les données peuvent être compressées au choix par LZ4 (super rapide, faible compression), zlib (vitesse et compression moyenne) ou lzma (basse vitesse, compression élevée). À noter que plus la compression est forte, plus le processeur est sollicité.
+  * __Sauvegardes hors site__ : Borg peut stocker des données sur un hôte distant accessible via SSH. Si Borg est installé sur l'hôte distant, des gains importants de performance peuvent être atteints par rapport à un système de fichiers réseau (sshfs, nfs, ...).
+  * __Sauvegardes montables comme un simple système de fichier__ :  Les archives de sauvegarde peuvent être montées comme des systèmes de fichiers dans l'espace utilisateur pour un examen interactif, rapide et faciles des sauvegardes, la restauration se faisant alors par une simple copie de fichier.
+
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+ 
+===== Installation =====
+ 
+Il suffit juste d'installer les paquets **[[apt>borgbackup]]** et **[[apt>borgbackup-doc]]**, ceux-ci  installant automatiquement les dépendances nécessaires.
+
+==== Installation d'une interface graphique ====
+=== Vorta ===
+Pour installer l'interface graphique (Vorta), il faut installer le paquet **[[apt>vorta]]**, celui-ci installant aussi automatiquement les dépendances nécessaires (les paquets sont disponibles pour Ubuntu ≥21.04 [Hirsute]).
+=== Autres interfaces graphiques ===
+  * __Pika Backup__ : GTK desktop client pour Linux [[https://gitlab.gnome.org/World/pika-backup|Pika Backup sur Gitlab]].
+  * __Borg Web__ : web-based user interface [[https://borgweb.readthedocs.io/en/stable/|Borg Web]].
+  * __Cyborg Backup__ : web-based user interface [[https://github.com/cyborgbackup/cyborgbackup|CyborgBackup sur Github]].
+  * __Borg Hive__ : web-based user interface [[https://github.com/bpereto/borg-hive|Borg Hive sur Github]].
+ 
+===== Utilisation =====
+==== Utilisation de l'interface graphique Vorta :====
+L'utilisation de celle-ci simplifie les tâches de Borg, mais il est quand même nécessaire de bien avoir compris les principes de base de Borg (dépots, archives, etc.). Une fois assimilé ces bases, l'utilisation de cette dernière est plutôt intuitive.
+==== Utilisation en ligne de commande :====
+Toutes les commandes se lanceront via le [[:terminal]] :\\
+De nombreuses options sont disponibles pour chaque commande, aussi n'hésitez pas à consulter la [[http://borgbackup.readthedocs.io/en/stable/usage.html|documentation de Borg Backup]] afin d'avoir toutes les possibilités permises pour chaque commande.
+
+  * **Création d'un dépôt pour gérer les sauvegardes :**
+<code>borg init -e none /path-to-repo</code> "-e none" signifie pas de chiffrement de la sauvegarde. Si vous souhaitez chiffrer celle-ci, la documentation explique toutes les options disponibles.
+
+  * **Sauvegarde des répertoires ~/src et ~/Documents dans une archive appelée Lundi** :
+<code>borg create /path-to-repo::Lundi ~/src ~/Documents</code>
+
+  * **Le lendemain, créez une nouvelle archive appelée Mardi :**
+<code>borg create -v --stats /path-to-repo::Mardi ~/src ~/Documents</code>
+Cette sauvegarde sera beaucoup plus rapide et beaucoup plus petite puisque seules les nouvelles données jamais vues auparavant sont stockées. L'option --stats demande à  Borg les statistiques de sortie sur l'archive nouvellement créée, comme la quantité de données uniques (non partagé avec d'autres archives)
+
+  * **Affiche la liste de toutes les archives dans le dépôt :**
+<code>borg list /path-to-repo</code>
+
+//Lundi lun, 15/04/2016 19:14:44
+Mardi mar, 16/04/2016 19:15:11//
+
+  * **Affiche le contenu de l'archive Lundi :**
+
+<code>borg list /path-to-repo::Lundi</code>
+
+//drwxr-xr-x user group 0 Mon, 2016-02-15 18:22:30 home/user/Documents\\
+-rw-r--r-- user group 7961 Mon, 2016-02-15 18:22:30 home/user/Documents/Important.doc//
+
+  * **Restore l'archive Lundi :**
+
+<code>borg extract /path-to-repo::Lundi</code>
+
+  * **Monte une archive comme un système de fichier FUSE :**
+
+<code>borg mount /path-to-repo::Lundi /tmp/mymountpoint</code>
+ensuite on peut très facilement y accéder
+<code>ls /tmp/mymountpoint</code>
+puis démonter le système de fichier
+<code>fusermount -u /tmp/mymountpoint</code>
+
+  * **On peut aussi optimiser les sauvegardes en supprimant toutes les archives qui ne correspondent pas l'une des options de rétention spécifiées :**\\
+Cette commande est normalement utilisée par les scripts de sauvegarde automatisés qui souhaitent garder un certain nombre de sauvegardes historiques.
+
+Garder les 7 dernières archives journalières ainsi que 4 sauvegardes additionnelles de fin de semaine 
+<code>borg prune --keep-daily=7 --keep-weekly=4 /path-to-repo</code>
+
+Garder 7 jours de sauvegarde, 4 sauvegardes de fin de semaines et toutes les sauvegardes de fin de mois (Vous remarquerez le "-" devant les sauvegardes mensuelles, spécifier un nombre négatif de sauvegardes signifie qu’on conserve une sauvegarde indéfiniment):
+<code>borg prune --keep-daily=7 --keep-weekly=4 --keep-monthly=-1 /path-to-repo</code>
+
+Garder toutes les sauvegardes des 10 derniers jours, 4 sauvegardes additionnelles  de fin de semaine et toutes les sauvegardes mensuelles
+<code>borg prune --keep-within=10d --keep-weekly=4 --keep-monthly=-1 /path-to-repo</code>
+
+  * **Faire des sauvegardes, c'est bien mais les vérifier, c'est encore mieux :**
+Tester tout (dépôt et fichiers sauvegarde) => Attention : peut prendre un certain temps en fonction de la taille de la sauvegarde...
+<code>borg check  /path-to-repo</code>
+Tester juste la cohérence du dépôt (plus rapide)
+<code>borg check --repository-only /path-to-repo</code>
+
+===== Astuces =====
+Il est facile d'intégrer Borg dans un script bash en créant une archive par jour :
+<code>borg create /path-to-repo::{now:%Y%m%d} ~/src ~/Documents</code>
+Ainsi il sera créé chaque jour une sauvegarde différente dont le nom sera sous la forme aaaammjj
+
+===== Problèmes connus =====
+==== Erreur "OSError: [Errno 28] No space left on device" :====
+Dans le cas d'une sauvegarde de taille conséquente, il se peut que Borg plante avec l'erreur ci-dessus bien que l'espace disque où est effectué la sauvegarde soit suffisant.
+En effet, Borg utilise un espace temporaire pour effectuer la sauvegarde et celui-ci est situé par défaut dans "~/.cache/borg". Si l'espace disque de la partition home est insuffisant pour absorber celui-ci, la sauvegarde n'aboutira pas. Pour contourner cette erreur, il est possible de forcer Borg à utiliser le fichier cache sur une autre partition.
+Pour ce faire, il suffit de placer en tête du script de sauvegarde l'instruction suivante :
+export BORG_CACHE_DIR=/mynewpath/cache
+
+===== Désinstallation =====
+ 
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée. Les journaux du système, et les fichiers de préférence des utilisateurs dans leurs dossiers personnels sont toujours conservés.
+ 
+===== Voir aussi =====
+ 
+  * **(en)** [[https://borgbackup.readthedocs.io/en/stable/index.html|le site officiel de Borg Backup]].
+  * **(fr)**  [[https://connect.ed-diamond.com/Linux-Pratique/LP-098/Ne-procrastinez-plus-vos-sauvegardes-grace-a-Borg3|Ne procrastinez plus vos sauvegardes grâce à Borg / LP-098]]
+  
+----
+//Contributeurs principaux : [[dpara]].//
+
+//Basé sur [[http://www.ubuntugeek.com/borg-backup-deduplicating-backup-program.html|« Borg Backup – Deduplicating backup program »]] par ruchi.//

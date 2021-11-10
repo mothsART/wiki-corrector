@@ -1,0 +1,478 @@
+
+{{tag>Bionic réseau téléphonie sip voip}}
+
+
+====== Asterisk (For VoIP) ======
+
+{{ http://upload.wikimedia.org/wikipedia/fr/7/7f/Asterisk_logo4.png?200}}
+
+===== Préambule =====
+
+Asterisk permet de transformer un ordinateur en commutateur téléphonique performant. Il se présente sous la forme d'un logiciel libre édité par la société américaine Digium.
+La configuration d'un serveur Asterisk n'est pas relativement aisée, surtout pour les néophytes, c'est pour cette raison que certaines sociétés dont Digium éditent maintenant des distributions entièrement consacrées à Asterisk parmi lesquelles on peut citer :
+  * Asterisk Now (édité par Digium)
+  * Trixbox (anciennement Asterisk@home)
+  * Xivo (édité par Avencall, société française et basée sur Debian)
+
+
+
+===== Installation =====
+Tout d'abord, veillez à avoir une distribution à jour : 
+<code>sudo apt update
+sudo apt upgrade </code>
+
+Nous procédons ensuite à l'[[:tutoriel:comment_installer_un_paquet|installation]] des dépendances : 
+<code>sudo apt install build-essential libxml2-dev libncurses5-dev linux-headers-`uname -r` libsqlite3-dev libssl-dev libedit-dev uuid-dev libjansson-dev</code>
+
+On télécharge la dernière version d’Asterisk et on l’installe : 
+
+1 - Auparavant vérifier la version à utiliser et modifiez les trois lignes (3, 4, 5) en fonction de la version d'Asterisk
+
+2 - Exécuter la ligne 6 en étant dans le répertoire /usr/src/asterisk/asterisk-18.6.0 (car configure est un fichier exécutable du répertoire asterisk-18.6.0)
+<code>
+mkdir /usr/src/asterisk
+cd /usr/src/asterisk                       
+wget http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-18-current.tar.gz
+tar -xvzf asterisk-18-current.tar.gz
+cd asterisk-18.6.0
+./configure --with-jansson-bundled
+make menuselect
+</code>
+
+Lorsque vous faites le ./configure, il est possible qu'il manque des paquets; dans ce cas, installez la version dev de ce paquet (par exemple, s'il manque le paquet libedit, exécutez la commande sudo apt-get install libedit-dev) puis relancez le ./configure.
+
+Dans le menu qui s'affiche, allez dans **Core Sound Package** et cochez à l'aide de la touche Espace **CORE-SOUNDS-FR-ULAW**. Quittez en pressant la touche Echap.
+Allez ensuite dans **Music On Hold File Packages**, décochez **MOH-OPSOUND-WAV** et cochez **MOH-OPSOUND-ULAW**. Enfin, allez dans **Extras Sound Packages** et cochez **EXTRA-SOUNDS-FR-ULAW**.
+
+Revenez à l'écran principal et appuyez sur Echap pour terminer et pressez S pour sauvegarder.
+
+Enfin tapez les commandes suivantes pour terminer l’installation :
+
+<note important>Avant d'effectuer ces commandes, assurez vous que vous avez une connexion Internet configurée et active.</note>
+
+<code>make
+make install
+make samples
+make config</code>
+
+Enfin, lancez Asterisk avec la commande suivante : 
+
+<code>/etc/init.d/asterisk start</code>
+
+Lancez la console Asterisk avec la commande suivante : 
+
+<code>sudo asterisk -rvvvv</code>
+
+Si vous avez l'erreur "Unable to connect to remote asterisk (does /var/run/asterisk.ctl exist?)", assurez-vous que vous avez bien démarré la console Asterisk en root.
+
+==== Autre méthode ====
+L'installation qui suit a été effectuée avec Ubuntu 6.06.1 LTS depuis des paquets debian. Tout d'abord, il faut installer les pilotes Zaptel qui vous permettront ensuite d'ajouter des cartes analogique, T0... de marque Digium.
+
+<code> sudo vim /etc/udev/rules.d/50-zaptel.rules</code>
+Ajoutez dans ce fichier les lignes suivantes :
+
+<code>KERNEL=="zapctl", NAME="zap/ctl", OWNER="asterisk", GROUP="asterisk", MODE="0660"
+KERNEL=="zaptimer", NAME="zap/timer", OWNER="asterisk", GROUP="asterisk", MODE="0660"
+KERNEL=="zapchannel", NAME="zap/channel", OWNER="asterisk", GROUP="asterisk", MODE="0660"
+KERNEL=="zappseudo", NAME="zap/pseudo", OWNER="asterisk", GROUP="asterisk", MODE="0660"
+KERNEL=="zap[0-9]*", NAME="zap/%n", OWNER="asterisk", GROUP="asterisk", MODE="0660"</code>
+
+Ensuite, il faut compiler et installer les pilotes :
+<code> sudo apt-get install gcc zaptel zaptel-source
+ sudo module-assistant auto-install zaptel</code>
+
+Fin de l'installation des pilotes Zaptel, redémarrez maintenant votre ordinateur a l'aide de la commande :
+<code> sudo reboot</code>
+
+Ensuite nous allons procéder à l'installation de Asterisk :
+<code> sudo apt-get install asterisk</code>
+
+Un fois installé, modifiez ces paramètres pour que Asterisk demarre au démarrage de l'ordinateur :
+<code> sudo vim /etc/default/asterisk</code>
+<code>RUNASTERISK=yes
+RUNASTSAFE=no</code>
+
+Pour installer les paquets français de Asterisk, vous devez lancer cette commande :
+<code>sudo apt-get install asterisk-prompt-fr</code>
+
+===== Configuration =====
+La configuration d'Asterisk s'articule sur les fichiers de configuration suivants : 
+
+  * **''/etc/asterisk/sip.conf''** : Configuration globale d'Asterisk
+  * **''/etc/asterisk/users.conf''** : Configuration des utilisateurs
+  * **''/etc/asterisk/extensions.conf''** : Configuration du Dialplan
+  * **''/etc/asterisk/voicemail.conf''** : Configuration des messageries
+
+
+<note important>Chaque modification dans la configuration devra être suivie par la commande
+<code>reload</code>
+saisie dans la console d'Asterisk</note>
+==== Paramétrer les sons en français ====
+[[:tutoriel:comment_modifier_un_fichier|Modifier le fichier]]  **''/etc/asterisk/sip.conf''** et modifiez la ligne : 
+
+<code>;language=en                     ; Default language setting for all users/peers</code>
+
+en : 
+
+<code>language=fr                     ; Default language setting for all users/peers</code>
+<note important>N'oubliez pas d'enlever le point-virgule au début de la ligne.</note>
+==== Modifier les utilisateurs ====
+[[:tutoriel:comment_modifier_un_fichier|Modifier le fichier]]  **''/etc/asterisk/users.conf''** et veillez que la configuration de la rubrique général corresponde avec ce qui suit : 
+
+<code>[general]
+hasvoicemail = yes
+hassip = yes
+hasiax = yes
+callwaiting = yes
+threewaycalling = yes
+callwaitingcallerid = yes
+transfer = yes
+canpark = yes
+cancallforward = yes
+callreturn = yes
+callgroup = 1
+pickupgroup = 1
+nat = yes</code>
+
+=== Méthode sans template ===
+Pour chaque utilisateur, ajoutez le code suivant (avec les modifications nécessaires) : 
+
+<code>[6001]				; Numéro SIP
+type=friend			; Type d'objet SIP (friend = utilisateur)
+host=dynamic			; Vous pouvez vous connecter a ce compte SIP a partir de n’importe quelle adresse IP
+dtmfmode=rfc2833		; Mode du DTMF
+disallow=all			; Désactiver tous les codecs
+allow=ulaw			; Activer les codecs µlaw
+fullname = John DOE		; Nom complet de l'utilisateur (ce qui s'affichera sur le téléphone)
+username = jdoe			; Nom d'utilisateur
+secret=secret			; Mot de passe
+context = work			; Contexte (exploité par le fichier extensions.conf)</code>
+
+=== Méthode avec template ===
+Pour chaque template, ajoutez le code suivant (avec les modifications nécessaires) : 
+<code>
+[template](!)			; Nom du template (ici template)
+type=friend			; Type d'objet SIP (friend = utilisateur)
+host=dynamic			; Vous pouvez vous connecter a ce compte SIP a partir de n’importe quelle adresse IP
+dtmfmode=rfc2833		; Mode du DTMF
+disallow=all			; Désactiver tous les codecs
+allow=ulaw			; Activer les codecs µlaw
+context = work			; Contexte (exploité par le fichier extensions.conf)
+</code>
+
+Pour chaque utilisateur, ajoutez le code suivant (avec les modifications nécessaires) : 
+<code>[6001](template)		; Numéro SIP et template utilisé
+fullname = John DOE		; Nom complet de l'utilisateur (ce qui s'affichera sur le téléphone)
+username = jdoe			; Nom d'utilisateur
+secret=secret			; Mot de passe
+</code>
+==== Configuration du Dialplan ====
+[[:tutoriel:comment_modifier_un_fichier|Modifier le fichier]]  **''/etc/asterisk/extensions.conf''** et ajoutez le code suivant (avec les modifications nécessaires) : 
+
+<code>[work]			; Nom du contexte
+exten => _6XXX,1,Dial(SIP/${EXTEN},20)	
+exten => _6XXX,2,Hangup()</code>
+
+Dans ces trois lignes nous allons voir deux choses, les contextes et les extensions.
+**[work]** est le contexte c’est une sorte de conteneur dans lequel les utilisateurs faisant partis de ce contexte pourrons communiquer entre eux.
+Lors de la création de nos deux utilisateurs nous avons spécifié le contexte work.
+
+  * exten => : déclare l’extension (on peut aussi simplement dire numéros)
+  * _6XXX : Prend les extensions (ou numéros) de 6000 a 6999 le « _ » permet d’utiliser des regex
+  * 1 : Ordre de l’extension
+  * Dial : application qui va être utilisé
+  * SIP: Protocol qui va être utilisé
+  * ${EXTEN} : variable de l’extension composé, si on appelle le 6001 la variable ${EXTEN} prendra comme valeur 6001
+  * 20: temps d’attente avant de passer a l’étape suivante.
+
+Donc la ligne ''exten => _6XXX,1,Dial(SIP/${EXTEN},20)'' se traduit par:
+Quand on compose le numéro (par exemple) 6001, on appelle le numéro 6001 et si au bout de 20 secondes il n’y a pas de réponses on passe à la ligne du dessous.
+
+La seconde ligne : ''exten => _6XXX,2,Hangup()'' permet de raccrocher si il n’y a pas de réponses au bout des 20 secondes.
+
+=== Configuration des clients ===
+
+Les clients "logiciels" n'ont généralement besoin que de quelques infos : Un nom (qui apparaitra en clair sur le client de destination lors d'un appel) , un login et son mot de passe associé, et l'adresse du serveur VOIP. Leur configuration étant assez simple et disponible sur beaucoup de pages internet, elle ne sera pas détaillée ici.
+
+En revanche, si on utilise un appareil type combiné téléphonique IP, il y a un peu plus de travail…
+
+Comme tout périphérique IP, il doit avoir une adresse. Soit le réseau VOIP dispose d'un serveur DHCP, dans ce cas l'appareil en obtiendra une automatiquement (ces appareils sont par défaut en recherche dhcp), soit il faut lui en donner une avant de le relier au réseau. Cela se fait avec les touches et les menus internes (voir notice du téléphone). Une fois l'adresse IP connue, l'entrer dans un navigateur internet pour accéder à l'interface web. C'est avec qu'on va configurer l'appareil et surtout l'enregistrer sur le serveur VOIP.
+Les informations nécessaires sont généralement dans un onglet ou menu "Login" ou "Identity". Les plus importantes sont :
+
+Le compte ou l'ID de connexion (souvent le numéro du poste pour des raisons de simplicité, qui est défini entre les [ ] dans le users.conf )
+Le mot de passe associé à ce compte (qui est défini dans le users.conf à la ligne "secret ="
+L'adresse du serveur VOIP (appelé généralement "registrar")
+Les options de chiffrement et encodages des appels, qui doivent être compatibles avec celles du serveur VOIP. Si la sécurité des appels n'est pas critique, autant simplement désactiver ces fonctions.
+Une fois ces infos indiquées, enregistrer l'appareil sur le serveur VOIP (un bouton d'enregistrement ou "register" est normalement présent sur l'interface web). Si la console Asterisk est ouverte, elle indiquera par un message que le serveur a bien enregistré l'appareil. S'il y a un souci, elle indiquera une description du problème (par exemple un mauvais nom d'utilisateur, un chiffrement non pris en charge, etc). De plus, le numéro du poste s'affiche alors à l'écran de l'appareil.
+
+Remarque : S'il y a beaucoup de téléphones IP sur le réseau, leur interface permet généralement d'exporter la configuration pour la dupliquer.
+
+Ensuite, plus facultatif :
+
+Le nom qui apparaîtra sur le téléphone appelé (Displayname en général)
+Éventuellement une IP d'un proxy ou passerelle si le réseau VOIP interne peut communiquer avec l'extérieur
+des sonneries et messages personnalisés, etc.
+
+===== Matériel compatible =====
+
+==== Passerelle FXO ====
+
+Les passerelles FXO permettent de convertir une ligne analogique en VoIP. Par exemple utiliser Asterisk avec la ligne d'une box.
+
+Il s'agit de boîtiers indépendants se branchant d'une part sur une ou plusieurs lignes analogiques, d'autre part sur le réseau IP. Elles se configurent soit par une interface web, soit par divers protocoles comme telnet.
+
+=== Grandstream GXW 4104 ===
+
+Indications de configuration:
+
+Dans Asterisk:
+
+Ajouter dans sip.conf:
+<code>
+[gxw410x]
+type=peer
+context=incoming
+host=192.168.40.9
+insecure=port
+</code>
+Dans extensions.conf (dialplan):
+<code>
+[outgoing]                                ; Appels sortants
+exten => _XX,1,Dial(SIP/${EXTEN}@gxw410x)
+
+[incoming]                                ; Appels entrants. Attention: même context qu'indiqué dans sip.conf.
+exten => 9000,1,Dial(SIP/10,15,tTr)       ; Lors d'un appel de l'extérieur, ce sera le poste 10 qui recevra l'appel.
+</code>
+[[https://www.grandstream.com/sites/default/files/Faq/gxw410x_interop_asterisk.pdf]]
+==== Passerelle RNIS ====
+
+Le RNIS (ISDN en anglais) est une sorte de liaison téléphonique numérique utilisée surtout pour la téléphonie d'entreprise (ce n'est pas encore de la véritable VoIP).
+
+Une ligne RNIS ou ligne Numéris en France est appelée T0; le port est appelé BRI. 1 ligne physique T0 donne accès à 2 communications simultanées grâce à deux canaux. Ainsi une passerelle avec deux ports BRI permet 4 communications simultanées. Dans ce cas, les 2 T0 forment un groupement: les utilisateurs appellent un seul numéro qui utilise l'une des quatre lignes.
+
+Une passerelle RNIS est un boîtier indépendant se branchant d'une part sur un ou plusieurs ports BRI, d'autre part sur le réseau IP. Elle se configure soit par une interface web, soit par divers protocoles comme telnet.
+
+=== Patton Smartnode 4120 ===
+
+Cette passerelle compte 2 port T0. Mais la programmation Smartnode semble identique sur toutes les passerelles Patton RNIS.
+L'interface web est acceptable mais le langage du fichier de configuration est mieux. J'ai donc préféré travailler sur le fichier ce qui est simplifié par l'usage du wizard, comme indiqué ci-dessous. 
+
+On trouve beaucoup de documentation, mais le meilleur guide est sans doute [[https://www.patton.com/manuals/snfrench-gs.pdf|le manuel de configuration simplifié]]
+== Configuration de la passerelle ==
+Pour se connecter à la passerelle, il faut en connaître l'adresse IP. 
+Deux solutions: le logiciel de Patton, ou bien repérer l'adresse MAC sur votre routeur.
+
+Par défaut aucune route n'est définie. Il n'est donc pas possible de se connecter depuis un autre sous-réseau.
+On peut créer la route depuis l'interface web; on peut aussi directement charger un fichier de configuration avec une route.
+
+On trouve sur le site de Patton un wizard pour créer un fichier de configuration qu'il suffit ensuite de personnaliser. Aller sur [[https://www.patton.com/wizard/|cette page]], connectez-vous et choisissez ensuite le wizard "SmartWare ISDN PSTN gateway Asterisk trunk Setup" qui produit un fichier de configuration qu'il suffit de charger sur la passerelle.
+
+Ce wizard a trois défauts:
+
+   * Il ne crée pas le mot de passe. Il vaut donc mieux enlever la ligne concernée et créer ensuite login et mdp par l'interface web (System/AAA).
+   * Il ne crée pas de route.
+   * La passerelle enverra en DTMF le joli nom de "patton" et non pas le numéro de l'appelant.
+
+Ci dessous, un fichier de config sans la ligne de login et avec correction des deux derniers points. 
+Il faut penser à modifier les adresses IP selon vos besoins.
+
+<code>
+
+#----------------------------------------------------------------#
+#                                                                #
+# SN4120/2BIS4V                                                  #
+# R6.11 2019-07-02 H323 SIP                                      #
+# 1970-01-20T23:16:11                                            #
+# SN/00A0BA107E7B                                                #
+# Generated configuration file                                   #
+#                                                                #
+#----------------------------------------------------------------#
+
+cli version 3.20
+
+clock local default-offset +00:00
+webserver port 80 language en
+
+system
+
+  ic voice 0
+    low-bitrate-codec g729
+
+system
+  clock-source 1 bri 0 0
+  clock-source 2 bri 0 1
+
+profile ppp default
+
+profile tone-set default
+
+profile voip default
+  codec 1 g711alaw64k rx-length 20 tx-length 20
+  codec 2 g711ulaw64k rx-length 20 tx-length 20
+
+profile pstn default
+
+profile sip default
+  no autonomous-transitioning
+
+profile aaa default
+  method 1 local
+  method 2 none
+
+context ip router
+
+  interface WAN
+    ipaddress 192.168.40.9 255.255.255.0     # Adresse IP de la patton
+
+context ip router
+  route 0.0.0.0 0.0.0.0 192.168.40.1 0       # Adresse du routeur
+
+context cs switch
+
+  routing-table called-e164 RT_ISDN_TO_SIP
+    route .T dest-interface IF_SIP
+
+  interface isdn IF_ISDN_00
+    route call dest-table RT_ISDN_TO_SIP
+    call-reroute emit
+    diversion emit
+
+  interface isdn IF_ISDN_01
+    route call dest-table RT_ISDN_TO_SIP
+    call-reroute emit
+    diversion emit
+
+  interface sip IF_SIP
+    bind context sip-gateway GW_SIP
+    route call dest-service SRV_HG
+    remote 192.168.40.10                  # Adresse d'Asterisk
+    trust remote
+
+  service hunt-group SRV_HG
+    drop-cause normal-unspecified
+    drop-cause no-circuit-channel-available
+    drop-cause network-out-of-order
+    drop-cause temporary-failure
+    drop-cause switching-equipment-congestion
+    drop-cause access-info-discarded
+    drop-cause circuit-channel-not-available
+    drop-cause resources-unavailable
+    route call 1 dest-interface IF_ISDN_00
+    route call 2 dest-interface IF_ISDN_01
+
+context cs switch
+  no shutdown
+
+authentication-service AUTH_SRV
+
+location-service SER_LOC
+  domain 1 192.168.40.10                # Adresse d'Asterisk
+  match-any-domain
+
+  identity patton
+
+    authentication outbound
+      authenticate 1 authentication-service AUTH_SRV username patton
+
+    registration outbound
+      registrar 192.168.40.10              # Adresse d'Asterisk
+      register auto
+
+context sip-gateway GW_SIP
+
+  interface IF_GWSIP
+    bind interface WAN context router port 5060
+
+context sip-gateway GW_SIP
+  bind location-service SER_LOC
+  no shutdown
+
+port ethernet 0 0
+  medium auto
+  bind interface WAN router
+  no shutdown
+
+port bri 0 0
+  clock auto
+  encapsulation q921
+
+  q921
+    permanent-layer2
+    uni-side auto
+    encapsulation q931
+
+    q931
+      protocol dss1
+      uni-side user
+      bchan-number-order ascending
+      encapsulation cc-isdn
+      bind interface IF_ISDN_00 switch
+
+port bri 0 0
+  no shutdown
+
+port bri 0 1
+  clock auto
+  encapsulation q921
+
+  q921
+    permanent-layer2
+    uni-side auto
+    encapsulation q931
+
+    q931
+      protocol dss1
+      uni-side user
+      bchan-number-order ascending
+      encapsulation cc-isdn
+      bind interface IF_ISDN_01 switch
+
+port bri 0 1
+  no shutdown
+</code>
+
+== Configuration d'Asterisk ==
+Si les adresses IP sont fixes, il n'y a pas besoin d'authentification. 
+
+Il suffit donc d'ajouter ces lignes dans sip.conf:
+<code>
+[patton] 
+type=peer 
+context=incoming
+description=passerelle_BRI 
+host=192.168.40.21 
+insecure=port,invite
+</code>
+
+**Dans le dialplan (extensions.conf) quelques exemples d'utilisation:**
+
+Pour les appels entrants, la Patton passe en numéro d'extension les quatre derniers chiffres du numéro appelé (le vôtre, donc!). L'exemple suivant vaut donc pour un numéro du type: xx xx xx 5678. C'est d'ailleurs ainsi qu'on peut modifier le comportement d'Asterisk selon le SDA appelé.
+<code>
+[incoming]                                ; Attention, même context qu'indiqué dans sip.conf
+exten => 5678,1,Dial(SIP/10,25,tT)        ; Notez bien le numéro de l'extension.
+</code>
+
+Pour les appels sortants:
+<code>
+exten => _0X.,1,Set(CALLERID(num)=1 23 45 67 89)   ; Option pour afficher son numéro
+ same =>      n,Dial(SIP/${EXTEN}@patton)          ;remarquez le @patton correspondant au context dans sip.conf
+</code>
+
+
+==== Téléphones ====
+
+Matériel testé avec succès:
+
+  * Yealink T19 et T33 (interface web intuitive).
+  * Gigaset N870 (et S650H). La N870 est un système DECT pouvant couvrir de très grandes entreprises. La base N870 peut servir de manager (au moins un par installation) et/ou de base DECT (inscrite auprès de la base manager). La base manager fournit une interface web intuitive et puissante dans laquelle sont configurés tous les téléphones DECT.\\ L'utilisation avec Asterisk ne pose aucun problème particulier, sauf peut-être les MWI pour les messageries vocales: Bien les activer dans la page Provider du N870, en indiquant l'adresse IP du fournisseur (donc le serveur Asterisk). Du côté d'Asterisk, il faut que les users soient inscrits (''subscribemwi=yes'') et il faut indiquer les MWI dans extensions.conf: ajouter un context ''[mysuscribes]'' avec des lignes du type: ''exten => 10,hint,MWI:10@default'' 
+(''default'' étant le context de la boîte vocale du SIP 10).
+
+===== Liens =====
+   * [[http://www.asterisk.org/|Asterisk]]
+   * [[http://www.asterisk.org/downloads/asterisknow|AsteriskNow]]
+   * [[https://projects.xivo.fr/|Xivo]]
+   * [[https://wiki.koumbit.net/Asterisk14SurOpenWRT|Asterisk14SurOpenWRT]]
+   * [[http://www.lululaberlu.com/category/Asterisk|TP Asterisk Base]]
+   * [[http://oxydables.free.fr/page5.html|Informations sur la VOIP et installation d'asterisk, avec le sip de free]]
+   * [[http://people.via.ecp.fr/~alexis/asterisk/|Expérience de déploiements Asterisk dans des entreprises françaises]]
+   * [[http://denisrosenkranz.com/tuto-installer-et-configurer-asterisk-sous-debian-6-et-ubuntu/|Tutoriel sur lequel est basé cette documentation]]

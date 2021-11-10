@@ -1,0 +1,269 @@
+
+{{tag>serveur réseau dns}}
+
+====== Configurer un serveur DNS pour son poste de travail avec Dnsmasq ======
+DnsMasq est un petit serveur DNS (cache DNS). Peu gourmand en ressources et très simple à configurer, il est bien adapté à une installation pour installer un petit serveur DNS sur son poste de travail.
+
+Pour la résolution des noms, il se base sur les DNS déclarés dans la configuration réseau (/etc/resolv.conf) ou sur le fichier /etc/hosts. Ce qui est bien pratique pour configurer une petite zone lan : il suffit d’éditer le fichier /etc/hosts comme nous le ferions pour une seule machine.
+
+===== Installer une interface réseau virtuelle pour le serveur DNS =====
+
+Éditer /etc/systemd/network/10-virtualeth0.netdev
+<file>
+[NetDev]
+Name = virtualeth0
+Kind = dummy
+</file>
+
+Éditer /etc/systemd/network/10-virtualeth0.network
+<file>
+[Match]
+Name = virtualeth0
+
+[Network]
+Address = 10.10.10.1/24
+Address = fd00::/8
+</file>
+
+<code bash>
+systemctl start systemd-networkd.service
+systemctl enable systemd-networkd.service
+reboot
+</code>
+
+Après le redémarrage vérifier la présence de l'interface réseau virtuelle.
+<code>
+ip a
+…
+3: virtualeth0: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/ether 9a:3c:56:42:f5:c9 brd ff:ff:ff:ff:ff:ff
+    inet 10.10.10.1/24 brd 10.10.10.255 scope global virtualeth0
+       valid_lft forever preferred_lft forever
+    inet6 fd00::/8 scope global
+       valid_lft forever preferred_lft forever
+    inet6 fe80::983c:56ff:fe42:f5c9/64 scope link
+       valid_lft forever preferred_lft forever
+…
+</code>
+
+===== Configuration du client DHCP =====
+Pour pouvoir ajouter le serveur DNS local à /etc/resolv.conf, il faut renseigner l’option prepend qui permet l’ajout du serveur DNS local en début de la liste des serveurs DNS fournit automatiquement par DHCP.
+
+Vérifier les DNS présents :
+<code bash>
+$ nmcli dev show | grep DNS
+IP4.DNS[1]:                    yyy.yyy.yyy.yyy
+IP4.DNS[1]:                    yyy.yyy.yyy.yyy
+IP6.DNS[1]:                    yyyy:yyyy:yyyy::yyyy
+IP6.DNS[2]:                    yyyy:yyyy:yyyy::yyyy
+IP6.DNS[3]:                    yyyy:yyyy:yyyy::yyyy
+$ resolvectl dns
+Global:
+Link 2 (enp0sxx):
+Link 3 (wlx803xxxxx): yyyy:yyyy:yyyy::yyyy yyyy:yyyy:yyyy::yyyy yyyy:yyyy:yyyy::yyyy yyy.yyy.yyy.yyy
+Link 4 (wlo1): yyy.yyy.yyy.yyy
+Link 6 (virtualeth0):
+</code>
+
+Éditer /etc/dhcp/dhclient.conf
+<file>
+prepend domaine-perso.fr 10.10.10.1 fd00::
+</file>
+
+===== Domaine local du poste de travail =====
+Voir le domaine local du poste de travail
+<code bash>
+$ hostname -d
+
+</code>
+
+Définir le domaine local de la machine Ubuntu
+<code bash>
+$ sudo hostnamectl set-hostname MachineUbuntu.domaine-perso.fr --static
+$ hostname -d
+domaine-perso.fr
+</code>
+===== Installation de Dnsmasq =====
+Installer les applications de base pour Dnsmasq et sa gestion
+<code bash>
+$ sudo apt install dnsmasq net-tools
+</code>
+
+===== Configuration serveur DNS de Dnsmasq =====
+Éditer /etc/dnsmasq.conf
+<file>
+# Ne transmet pas les requêtes ne contenant pas un nom de domaine complet
+domain-needed
+# "no such domain" pour des adresses IP privées non référencées dans dnsmasq
+bogus-priv
+# Corrige du spam DNS Microsoft
+filterwin2k
+# Formate les requêtes DNS suivant l’interface réseau utilisée
+localise-queries
+
+# Domaine dns local
+local = /domaine-perso.fr/
+# Interfaces DNS
+interface = virtualeth0
+exept-interface = lo
+exept-interface = enp0sxx
+exept-interface = wlx803xxxxx
+exept-interface = wlox
+# Adresses écoutées
+listen-address = 127.0.0.1
+listen-address = 10.10.10.1
+listen-address = fd00::
+# Toutes les interfaces réseau sont en mode serveur DNS c’est ce qui permet de démarrer le serveur DNS
+bind-interfaces
+# Ajoute le nom de domaine DNS aux entrées /etc/hosts
+expand-hosts
+# Non de domaine pour extensions "expand-hosts"
+domain=domaine-perso.fr
+# Taille du cache DNS
+cache-size = 1000
+# Désactive le "cache négatif" sur réponses "no such domain"
+no-negcache
+</file>
+
+Ajout du server DNS local à la liste des serveurs DNS de systemd-resolved.
+Éditer /etc/systemd/resolved.conf
+<file>
+DNS=10.10.10.1 fd00::
+</file>
+
+===== Relance de Dnsmasq =====
+<code bash>
+$ systemctl restart dnsmasq.service
+$ systemctl enable dnsmasq.service
+$ systemctl restart systemd-resolved.service
+$ nmcli general reload
+</code>
+
+===== Ouvrir avec le pare feu les ports DNS pour les rendre accessibles depuis le réseau lan =====
+Ouvrir le port DNS sur l'interface d'ip xxx.xxx.xxx.xxx avec UFW. Si UFW est activé, ouvrez le port DNS 53, UDP.
+<code bash>
+$ sudo ufw allow from xxx.xxx.0.0/16 to any port 53 proto udp
+</code>
+
+===== Tests du serveur DNS =====
+Vérifier que le port 53 est utilisé par Dnsmasq
+<code bash>
+$ sudo lsof -i:53
+COMMAND     PID            USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+systemd-r 53916 systemd-resolve   12u  IPv4  99537      0t0  UDP localhost:domain
+systemd-r 53916 systemd-resolve   13u  IPv4  99538      0t0  TCP localhost:domain (LISTEN)
+dnsmasq   53732         dnsmasq    4u  IPv4  95141      0t0  UDP MachineUbuntu:domain
+dnsmasq   53732         dnsmasq    5u  IPv4  95142      0t0  TCP MachineUbuntu:domain (LISTEN)
+dnsmasq   53732         dnsmasq    6u  IPv4  95151      0t0  UDP localhost:domain
+dnsmasq   53732         dnsmasq    7u  IPv4  95152      0t0  TCP localhost:domain (LISTEN)
+dnsmasq   53732         dnsmasq    8u  IPv6  95153      0t0  UDP MachineUbuntu:domain
+dnsmasq   53732         dnsmasq    9u  IPv6  95154      0t0  TCP MachineUbuntu:domain (LISTEN)
+dnsmasq   53732         dnsmasq   10u  IPv6  95155      0t0  UDP MachineUbuntu:domain
+dnsmasq   53732         dnsmasq   11u  IPv6  95156      0t0  TCP MachineUbuntu:domain (LISTEN)
+</code>
+
+Vérifier que Dnsmasq écoute les requettes DNS sur les bonnes interfaces
+<code bash>
+$ sudo netstat -alnp | grep -i :53
+tcp        0      0 127.0.0.53:53           0.0.0.0:*               LISTEN      53916/systemd-resol
+tcp        0      0 127.0.0.1:53            0.0.0.0:*               LISTEN      53732/dnsmasq
+tcp        0      0 10.10.10.1:53           0.0.0.0:*               LISTEN      53732/dnsmasq
+tcp6       0      0 fd00:::53               :::*                    LISTEN      53732/dnsmasq
+tcp6       0      0 fe80::b817:faff:fe21:53 :::*                    LISTEN      53732/dnsmasq
+udp        0      0 127.0.0.53:53           0.0.0.0:*                           53916/systemd-resol
+udp        0      0 127.0.0.1:53            0.0.0.0:*                           53732/dnsmasq
+udp        0      0 10.10.10.1:53           0.0.0.0:*                           53732/dnsmasq
+udp        0      0 0.0.0.0:5353            0.0.0.0:*                           772/avahi-daemon: r
+udp6       0      0 fd00:::53               :::*                                53732/dnsmasq
+udp6       0      0 fe80::b817:faff:fe21:53 :::*                                53732/dnsmasq
+udp6       0      0 :::5353                 :::*                                772/avahi-daemon: r
+</code>
+
+Vérifier que le poste de travail écoute les résolution DNS de Dnsmasq
+<code bash>
+$ resolvectl dns
+Global: 10.10.10.1 fd00::
+Link 2 (enp0sxx): yyyy:yyyy:yyyy::yyyy yyy.yyy.yyy.yyy
+Link 3 (virtualeth0):
+Link 4 (wlx803xxxxx): yyyy:yyyy:yyyy::yyyy yyyy:yyyy:yyyy::yyyy yyyy:yyyy:yyyy::yyyy yyy.yyy.yyy.yyy
+Link 5 (wlox): yyy.yyy.yyy.yyy
+</code>
+
+Vérifier la résolution DNS
+<code bash>
+$ dig MachineUbuntu +noall +answer
+MachineUbuntu.                  0       IN      A       127.0.1.1
+</code>
+
+<code bash>
+$ dig MachineUbuntu.domaine-perso.fr +noall +answer
+MachineUbuntu.domaine-perso.fr. 0       IN      A       127.0.1.1
+</code>
+
+<code bash>
+$ dig bidon.domaine-perso.fr +noall +answer
+
+</code>
+
+<code bash>
+$ dig bidon +noall +answer
+
+</code>
+
+Éditer /etc/hosts pour définir les alias DNS
+<file>
+127.0.0.1 localhost
+127.0.1.1 MachineUbuntu
+…
+# Alias DNS
+10.10.10.5 courriel
+10.10.10.10 serveur
+10.10.10.20 documentation
+</file>
+
+Vérifier la résolution DNS ([[configuration_serveur_dns_pour_son_poste_de_travail#relance_de_dnsmasq|relancer Dnsmasq si nécessaire]])
+<code bash>
+$ dig courriel.domaine-perso.fr +noall +answer
+courriel.domaine-perso.fr. 0     IN     A     10.10.10.5
+</code>
+
+<code bash>
+$ dig courriel +noall +answer
+courriel.                  0     IN     A     10.10.10.5
+</code>
+
+<code bash>
+$ dig serveur.domaine-perso.fr +noall +answer
+serveur.domaine-perso.fr. 0     IN     A     10.10.10.10
+</code>
+
+<code bash>
+$ dig serveur +noall +answer
+serveur.                  0     IN     A     10.10.10.10
+</code>
+
+<code bash>
+$ dig documentation.domaine-perso.fr +noall +answer
+documentation.domaine-perso.fr. 0     IN     A     10.10.10.20
+</code>
+
+<code bash>
+$ dig documentation +noall +answer
+documentation.                  0     IN     A     10.10.10.20
+</code>
+
+<code bash>
+$ dig bidon.domaine-perso.fr +noall +answer
+
+</code>
+
+<code bash>
+$ dig bidon +noall +answer
+
+</code>
+
+Résolution DNS externe :
+<code bash>
+$ dig google.com +noall +answer
+google.com.              16    IN     A     216.58.223.110
+</code>

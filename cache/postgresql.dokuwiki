@@ -1,0 +1,723 @@
+
+
+{{tag>sgbd serveur réseau BROUILLON}}
+
+----
+
+====== PostgreSQL ======
+
+===== Introduction =====
+PostgreSQL est un système de gestion de bases de données ([[:SGBD]]) très performant sous licence BSD dont les performances sont comparables à Oracle 9.
+
+
+Il propose de très nombreuses fonctionnalités, tout en respectant les standards SQL : SQL 92, 99 et en partie la norme SQL2003. En outre, il intègre plusieurs langages embarqués (Perl, Python, Java) depuis de nombreuses années. [[http://www.postgresql.org/about/|Pour en savoir plus]]
+
+===== Documentation =====
+
+
+La documentation ainsi que d'autres informations sont disponibles sur le [[http://www.postgresql.org/|site officiel de PostgreSQL]].
+La communauté [[https://www.postgresql.fr/|postgresql francophone]] la reprend en [[http://docs.postgresql.fr/|français]].
+
+===== Installation du serveur PostgreSQL=====
+
+==== Méthode recommandée ====
+
+[[:tutoriel/comment_installer_un_paquet|Installez]] simplement le paquet [[apt://postgresql|postgresql]], soit en ligne de commande :
+<code>sudo apt install postgresql</code>
+
+Notez que l'installation ajoute l'utilisateur postgres à la liste des utilisateurs. Utilisez finger si vous souhaitez de plus amples informations sur ce nouvel utilisateur (finger est un utilitaire permettant de consulter les informations relatives aux utilisateurs système, il n'est pas installé par défaut dans ubuntu)
+<code>finger postgres</code>
+
+==== Installation manuelle avec l'installeur interactif EnterpriseDB ====
+
+Téléchargez le dernier fichier .run sur [[http://www.enterprisedb.com/products-services-training/pgdownload|cette page]] (elle est référencée sur [[https://www.postgresql.org/download/linux/ubuntu/|le site officiel]]) - vous aurez probablement besoin de la version //Linux x86-64//.
+  - rendez le fichier executable :
+<code>sudo chmod +x postgresql-10.6-1-linux-x64.run</code>
+  - puis exécutez-le en tant que [[:sudo|super utilisateur]] avec la commande :
+<code>sudo ./postgresql-10.6-1-linux-x64.run</code>
+
+Suivez les étapes affichées par l'interface graphique de l'installeur.
+
+Une fois l'installation terminée, PostgreSQL devrait être installé ainsi que pgAdmin.
+
+Cependant, l'icône de pgAdmin n'est pas visible dans le menu (enfin c'était mon cas).
+Dans ce cas, allez dans le dossier** /usr/share/applications/** et recherchez l'icône de pgadmin.
+Changer les droit en écriture (sudo chmod o+w pgadminIII), puis l'ouvrir avec un éditeur de texte.
+Dans mon cas, j'ai dû y ajouter la ligne :**Categories=Development;Engineering;**
+Pour le rendre visible dans mon menu sous la catégorie Développement.
+
+==== Mise à jour Postgres EnterpriseDB avec conservation des Bases de Données ====
+
+Supprimer l'ancienne version en lançant le désinstalleur Postgres (dans le dossier Postgres):
+<code>
+$ sudo ./uninstall-postgresql
+</code>
+Le dossier **Datas/** n'est pas supprimé.\\ Cela permet de garder les anciennes bases de données et la configuration utilisateur postgres.\\
+Lancer le programme d'installation de postgres, après l'avoir téléchargé sur le site ci-dessus.
+<code>
+$ sudo ./postgresql-version-linux-x64.run
+</code>
+Lors de la pré-installation, choisir le chemin du dossier **Datas/** qui n'a pas été supprimé.\\
+Confirmation de l'existence d'un dossier **Datas/** déjà existant.\\
+Lancer l'installation.
+
+==== Désinstallation ====
+Si vous souhaitez désinstaller, par exemple lors du passage à l'utilisation de conteneurs [[:docker]], il faut :
+<code bash>
+# arrêtez le service s'il est lancé
+sudo systemctl stop postgresql
+# lister les paquets installés liés à postgres :
+dpkg -l | grep postgres
+# et les supprimer :
+sudo apt --purge remove postgresql-*
+</code>
+
+===== Configuration =====
+==== L'utilisateur postgres et psql ====
+
+PostgreSQL est un serveur qui permet de se connecter à différentes bases de données. Par défaut, seul l'utilisateur //postgres// peut se connecter.
+
+Toutes les opérations d'administration se font, au départ, avec l'utilisateur //postgres//. À la fin de l'installation, celui-ci ne possède pas de mot de passe : c'est un utilisateur bloqué et le mieux est qu'il le reste. La première chose à faire sera de créer un nouvel utilisateur, mais pour ce faire, il faut se connecter au moins une fois en tant qu'utilisateur //postgres//. Pour devenir //postgres// et faire les opérations d'administration qui suivent, utilisez sudo :
+
+<code>
+$ sudo -i -u postgres 
+Password: 
+</code>
+
+**exit** permettra, à la fin de cette session d'administration dans PostgreSQL, de reprendre la main en tant qu'utilisateur du système.
+
+<note tip>Il se peut que cette authentification retourne une erreur liée au fait qu'il est impossible pour //postgres// de lire, par exemple, le fichier ~/.bashrc (si un terminal bash est utilisé). La commande //chmod ug+r ~/.bashrc// exécutée avant la connexion postgres réglera ce problème.</note>
+
+Désormais, l'invite de commande doit mentionner que vous êtes actif en tant que //postgres//. Pour lancer l'invite de commande SQL de PostgreSQL, tapez simplement :
+<code>
+psql
+</code>
+
+Vous devriez obtenir quelque chose comme :
+<code>
+psql (13.1-1)
+Type "help" for help.
+
+postgres=# 
+</code>
+
+<note tip>
+Si vous obtenez le message suivant :
+<code>
+psql: could not connect to server: Aucun fichier ou dossier de ce type
+</code>
+Reportez-vous à la section "Erreur psql au premier démarrage" pour résoudre le problème.
+ </note>
+
+Notez que vous avez une interface en ligne de commande, et que vous êtes connecté en tant que "root", comme l'indique le ''#'' en bout de ligne.
+
+Cette ligne de commande sera bien sûr utilisée pour exécuter des requêtes SQL, et aussi des commandes internes à postgreSQL (elles commencent toutes par un antislash)
+
+Petit guide de survie pour le client **psql** (# et le texte qui suit sont des commentaires)
+<code>
+        \h # pour l'aide-mémoire des commandes SQL
+        \? # pour l'aide-mémoire des commandes psql
+        \g # ou point-virgule en fin d'instruction pour exécuter la requête
+        \q # pour quitter
+        \l # liste les bases de données existantes
+        \du # liste les rôles (utilisateur ou groupe)
+        \c nom_base nom_utilisateur # connecte à la base <nom_base> avec le rôle <nom_utilisateur>
+        \lt # liste les tables de la base courante
+        set search_path to <mon_schéma>; # intéressant à faire avant la commande ci-dessous !-)
+        \d # liste les tables du schéma courant
+        \d nom_table # description de la table <nom_table> (colonne, type…)
+        \dn # liste tout le schéma de la base courante
+        \h ALTER TABLE # affiche l'aide pour la commande ALTER TABLE
+</code>
+====Supprimer l'utilisateur Postgres du greeter sous xubuntu 14.04.1====
+La suppression de l'utilisateur postgres dans le cas d'un greeter lightdm-webkit-greeter.\\
+Aller dans le répertoire **/var/lib/AccountsService/users/** .\\
+Créer un fichier text puis nommez-le **postgres** (nom de l'utilisateur postgres).\\
+Puis y ajouter le contenu suivant :
+<code>
+[User]
+XSession=xubuntu
+SystemAccount=true
+</code>
+
+Sauvegarder et re-démarrer le greeter.
+==== Erreur psql au premier démarrage ====
+Si vous obtenez une erreur du type :
+<code>
+psql: could not connect to server: Aucun fichier ou dossier de ce type
+Is the server running locally and accepting connections on Unix domain socket "/var/run/postgresql/.s.PGSQL.5432"?
+</code>
+Déconnectez-vous du compte postgres :
+<code>
+logout
+</code>
+Puis vérifiez que le dossier de configuration PostgreSQL existe :
+<code>
+stat /etc/postgresql
+</code>
+Si la réponse est du type :
+<code>
+  File: ‘/etc/postgresql’
+  Size: 4096      	Blocks: 8          IO Block: 4096   directory
+Device: fd01h/64769d	Inode: 131535      Links: 3
+Access: (0755/drwxr-xr-x)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2015-10-29 20:15:04.091560419 +0100
+Modify: 2015-10-29 20:15:04.091560419 +0100
+Change: 2015-10-29 20:15:04.091560419 +0100
+ Birth: -
+</code>
+Il peut s'agir d'une mauvaise configuration du port.
+[[:tutoriel:comment_modifier_un_fichier|Modifiez le fichier]] **/etc/postgresql/9.4/main/postgresql.conf**
+<code>
+...
+port = 5432
+...
+</code>
+Puis redémarrez le serveur PostgreSQL: 
+<code>
+$ sudo service postgresql restart
+</code>
+**Sinon**, si la réponse de ''stat'' est du type :
+<code>
+stat: cannot stat ‘/etc/postgresql’: No such file or directory
+</code>
+Il faut construire le cluster PostgreSQL avant de pouvoir le démarrer. Affichez la version installée de psql avec la comande suivante :
+<code>
+psql --version
+</code>
+Puis reportez les 2 premiers nombres du numéro de version dans la commande suivante : ''sudo pg_createcluster X.Y main''. Par exemple si le résultat de ''psql --version'' est ''psql (PostgreSQL) 9.3.10'', entrez la commande suivante :
+<code>
+sudo pg_createcluster 9.3 main
+</code>
+Puis redémarrez le serveur PostgreSQL: 
+<code>
+$ sudo service postgresql restart
+</code>
+Vous pouvez maintenant reprendre le tutoriel au début de la section "L'utilisateur postgres".
+==== encodage UTF-8  ====
+<note tips> Ce paragraphe est optionnel </note>
+FIXME En version PostgreSQL 9.1.5, l'installateur semble avoir directement créé avec le bon codage. Cette opération semble donc être devenue inutile.
+
+L'installateur initialise le cluster postgresql avec le support de jeux de caractères SQL_ASCII
+
+Pour ceux qui souhaitent privilégier l'encodage **UTF-8** / locale **FR-fr**, il faut supprimer le cluster et le recréer.
+
+=== jeux de caractères par défaut ===
+  * Connexion en tant qu'utilisateur postgres 
+
+  sudo -i -u postgres
+
+  psql -l
+                             List of databases
+    Name    |  Owner   | Encoding  | Collate | Ctype |   Access privileges   
+  ----------+----------+-----------+---------+-------+-----------------------
+  postgres  | postgres | SQL_ASCII | C       | C     | 
+  template0 | postgres | SQL_ASCII | C       | C     | =c/postgres          +
+            |          |           |         |       | postgres=CTc/postgres
+  template1 | postgres | SQL_ASCII | C       | C     | =c/postgres          +
+            |          |           |         |       | postgres=CTc/postgres
+
+=== supprimer le cluster et le recréer ===
+
+  * Identifier la version et le nom de votre cluster
+<code>
+$ pg_lsclusters 
+  Version Cluster   Port Status Owner    Data directory                     Log file
+  9.1     main      5432 online postgres /var/lib/postgresql/9.1/main       /var/log/postgresql/postgresql-9.1-main.log
+</code>
+  * Supprimer le cluster
+
+  pg_dropcluster 9.1 main --stop
+
+  * Créer le cluster
+
+  pg_createcluster --locale fr_FR.UTF-8 9.1 main
+
+  * Démarrage
+
+  pg_ctlcluster 9.1 main start
+
+Les bases systèmes seront alors conformes aux locales système
+<code>
+$ psql -l
+                                  List of databases
+    Name    |  Owner   | Encoding |   Collate   |    Ctype    |   Access privileges   
+  ----------+----------+----------+-------------+-------------+-----------------------
+  postgres  | postgres | UTF8     | fr_FR.UTF-8 | fr_FR.UTF-8 | 
+  template0 | postgres | UTF8     | fr_FR.UTF-8 | fr_FR.UTF-8 | =c/postgres          +
+            |          |          |             |             | postgres=CTc/postgres
+  template1 | postgres | UTF8     | fr_FR.UTF-8 | fr_FR.UTF-8 | =c/postgres          +
+            |          |          |             |             | postgres=CTc/postgres
+</code>
+
+
+==== Créer un utilisateur PostgreSQL ====
+
+=== Méthode rapide, non sécurisée (-> privilégier la méthode décrite dans le chapitre suivant)===
+
+''postgres'' est à psql ce que ''root'' est à Ubuntu. Il ne faut l'utiliser que pour les tâches d'administration, en aucun cas s'en servir pour un applicatif, sinon vous allez créer une faille de sécurité.
+
+Par facilité, nous allons assimiler les utilisateurs du système à ceux qui se connecteront avec psql, mais ce n'est nullement obligatoire. Par la suite, nous supposerons que votre login système est ''nom_utilisateur''.
+
+Commencez par créer un nouvel utilisateur, qui portera par exemple le même nom que vous. Dans la ligne de commande ci-dessous, tapez (rappel : la partie « postgres=# » est l'invite de commande, il ne faut pas la retaper ! Ainsi, la commande ci-dessous requiert de taper « CREATE ROLE <nom_utilisateur>; », en remplaçant <nom_utilisateur> par un identifiant bien choisi) :
+<code>
+postgres=# CREATE ROLE <nom_utilisateur> LOGIN;
+</code>
+N'oubliez pas le point-virgule à la fin...
+
+Par défaut, votre nouvel utilisateur n'a aucun droit.
+Donnez-lui la possibilité de créer de nouvelles bases de données :
+<code>
+postgres=# ALTER ROLE <nom_utilisateur> CREATEDB;
+</code>
+
+Ensuite, créez une base de données pour votre utilisateur. Par exemple, vous pouvez prendre comme nom : ''nom_utilisateur''. Ainsi, la connexion sera automatique.
+
+<note tip>
+si une base de données possède le même nom que l'utilisateur avec lequel on se connecte alors le client psql se connecte par défaut à cette base.
+</note>
+
+<code>
+postgres=# CREATE DATABASE <nom_base_de_donnee> OWNER <nom_utilisateur>;
+</code>
+
+Attribuer un mot de passe à l'utilisateur pour qu'il puisse se connecter à la base (le ENCRYPTED permet l'utilisation de md5 dans le pg_hba.conf) :
+<code>
+postgres=# ALTER ROLE <nom_utilisateur> WITH ENCRYPTED PASSWORD 'mon_mot_de_passe';
+</code>
+
+Vous pouvez maintenant quitter, "redevenir vous-même" et relancer psql directement, en étant cette fois connecté sous votre propre nom :
+<code>
+postgres=# \q
+postgres@ubuntu:~$ psql nom_base_de_donnee
+</code>
+
+La ligne de commande est devenue : 
+<code>
+nom_base_de_donnee=>
+</code> 
+
+Notez la transformation du # en > : vous n'êtes plus superutilisateur...
+
+<note tip>Il peut être plus simple pour commencer d'utiliser la commande **createuser --interactive <nom-utilisateur>** en ligne de commande (hors psql) qui est interactive et vous demande les autorisations à y associer (LOGIN, SUPERUSER, CREATEDB, CREATEROLE…)</note>
+
+==== Pour aller plus loin ====
+
+=== Méthode alternative pour créer un utilisateur ===
+
+Vous pouvez aussi créer vos utilisateurs directement en ligne de commande, depuis le terminal standard. Pour cela, vous allez d'abord autoriser les connexions avec mot de passe chiffré, puis vous vous connecterez en tant que postgres (l'administrateur par défaut de Postgres) et créerez un nouvel utilisateur.
+
+Cette méthode est beaucoup plus sûre que la précédente.
+Tous les utilisateurs auront des mots de passe chiffrés.
+(Ce qui n'est pas le cas lorsque l'on emploie la méthode précédente)
+
+Il faut d'abord modifier le fichier de configuration pour autoriser les connexions via mot de passe chiffré (sur les versions récentes, au moins la 12, ça ne semble pas nécessaires) :
+<code>
+sudo nano /etc/postgresql/x.x/main/pg_hba.conf 
+</code>
+
+Remplacez "x.x" par le numéro de version de PostgreSQl installée sur votre ordinateur (exemple : 9.1).
+
+Les utilisateurs "avancés" noteront que le fichier est amplement commenté.
+Voir la [[http://www.postgresql.org/docs/8.2/static/index.html|documentation]] pour plus d'informations.
+
+<note important>Si vous modifiez les paramètres de la sécurité, avant de relancer postgresql pensez à donner un mot de passe à l'utilisateur postgres (voir plus bas)</note>
+Modifier le fichier en remplaçant **ident sameuser** par **md5** afin d'obtenir les lignes suivantes : 
+
+<code>
+...
+# Database administrative login by Unix domain socket
+local   all             postgres                                peer
+
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+
+# "local" is for Unix domain socket connections only
+local   all             all                                     md5
+# IPv4 local connections:
+host    all             all             127.0.0.1/32            md5
+# IPv6 local connections:
+host    all             all             ::1/128                 md5
+...
+</code>
+
+La modification des paramètres de connexion au serveur nécessite son redémarrage pour que ces derniers soient pris en compte.
+
+<code>
+$ sudo service postgresql restart
+</code>
+ou
+<code>
+$ sudo pg_ctlcluster 9.5 main restart
+</code>
+
+On peut ensuite créer notre utilisateur :
+
+<code>
+$ sudo -i -u postgres
+$ createuser -P --interactive <nom_utilisateur>
+Enter password for new role: 
+Enter it again: 
+Shall the new role be a superuser? (y/n) n
+Shall the new role be allowed to create databases? (y/n) y
+Shall the new role be allowed to create more new roles? (y/n) y
+</code>
+
+Puis, on lui crée une base de données dédiée :
+<code>
+$ createdb -O <nom_utilisateur> -E UTF8 <ma_database>
+</code>
+
+<note>
+Si vous avez recréé le groupe de bases de de données (cluster) avec les locales UTF8, il ne sera pas nécessaire de préciser l'option //-E UTF8// car la base modèle par défaut (//template1//) présente déjà cet encodage
+
+L'option //-O <nom_utilisateur>//  est là pour préciser l'identité du propriétaire de la base <ma_database>.
+</note>
+
+
+Ensuite, on peut se connecter via :
+<code>
+$ psql -U <nom_utilisateur>
+Mot de passe pour l'utilisateur <nom_utilisateur> : 
+</code>
+
+ou, si le nom de la base de l'utilisateur n'est pas le même que celui de l'utilisateur : 
+<code>
+$ psql -U <nom_utilisateur> <nom_database_de_l_utilisateur>
+Mot de passe pour l'utilisateur <nom_utilisateur> : 
+</code>
+
+=== Commodités d'usage ===
+Le fichier pg_hba.conf tel que défini ci-avant exige qu'un mot de passe soit fourni pour autoriser la connexion d'un rôle postgresql (dans notre cas <nom_utilisateur>). Si vous administrez une base de données et que vous êtes amenés à effectuer fréquemment des opérations, il peut être intéressant de se faciliter les connexions.
+
+== Les variables d'environnement ==
+Les [[http://docs.postgresqlfr.org/9.0/libpq-envars.html|variables  d'environnement]] sont utilisées pour sélectionner des valeurs par défaut pour les paramètres de connexion.
+Les plus intéressantes à utiliser son PGUSER et PGHOST (notamment pour cette dernière si vous administrez une base qui n'est pas sur un serveur //localhost//).
+
+Pour que ces variables soient systématiquement disponibles dans votre shell de commandes, il faut les ajouter dans le fichier ~/.profile correspondant à votre utilisateur.
+Les lignes à ajouter sont (à vous de défionir les variables à ajouter):
+  export PGHOST=<nom_hôte>
+  export PGUSER=<nom_utilisateur>
+   ...
+   
+ La variable PGUSER étant ainsi définie, votre connexion peut alors se résumer à 
+  psql <nom_database>
+et si vous définissez PGDATABASE, votre connexion express sera simplement
+  psql
+
+<note>
+il faut toujours saisir le mot de passe correspondant à l'utilisateur. Une variable PGPASSWORD existe, mais pour des raisons de sécurité, il est vivement recommandé de ne pas en faire usage.
+</note>
+
+
+== Le fichier .pgpass ==
+
+Une autre manière, ou une manière complémentaire, de se simplifier les connexions est possible avec la définition du fichier [[http://docs.postgresqlfr.org/9.0/libpq-pgpass.html|~/.pgpass]].
+Ce fichier n'existe pas par défaut, il vous faut donc le créer.
+  nano ~/.pgpass
+Son contenu est simplement défini par les chaînes de connexions à utiliser. 
+  localhost:5432:*:nomutilisateur:motdepasse 
+Ceci indiquera à votre client psql que l'utilisateur //nomutilisateur// accompagné du mot de passe //modepasse// est à utiliser pour la connexion à toutes //*// les bases de données de votre serveur //localhost// sur le port //5432// (port standard postgresql).
+Ce fichier étant défini, la saisie du mot de passe n'est plus effectuées par l'utilisateur car il est directement fourni par les paramètres contenu dans ce fichier.
+
+Et la sécurité ?
+si vous tentez une connexion
+  psql <nom_database>
+  WARNING: password file "/home/<user>/.pgpass" has group or world access; permissions should be u=rw (0600) or less
+La limitation des droits d'accès à ce fichier est recommandée
+  chmod 0600 ~/.pgpass.
+
+
+=== Personnalisation ===
+Le tuning d'un serveur postgreSQL se fait grâce au fichier **postgresql.conf** généralement positionné dans **/etc/postgresql/X.x/main/**, X.x étant la version utilisée de postgreSQL.
+
+Plusieurs paramètres sont faciles à modifier et peuvent apporter un gain de performance important:
+  * **shared_buffers** = peut être positionné à 25% de la RAM pour un serveur dédié. Attention de ne pas trop monter ce paramètre tout de même car il faut laisser de la RAM au noyau pour gérer son cache
+  * **wal_buffers** = il est raisonnable de la passer à 8MB
+  * **work_mem** = à ajuster en fonction du nombre de connexion à la base, valeur entre 10MB et 100MB
+  * **maintenance_work_mem** = mémoire allouée aux actions de maintenance. Dépend de la taille des bases et de la RAM dispo. Perso, je l'a met à 25% de la RAM
+  * **checkpoint_segments** = mettre au moins 10
+  * **effective_cache_size** = pour un serveur dédié compter 2/3 de la RAM
+
+Ces quelques paramètres doivent suffire dans la majorité des cas. Si vous souhaitez aller plus loin dans le tuning de PostgreSQL, je vous conseille d'aller voir là [[http://docs.postgresqlfr.org|documentation PostgreSQL]] (qui existe en français)
+
+
+
+=== Rôles et droits ===
+
+Cette notion a été effleurée car les utilisateurs dont il a été question dans les lignes ci-avant sont des rôles au sens de postgresql.
+Les droits affectés à ces rôles permet une gestion fine des autorisations d'accès aux différents objets de la base de données (tables, vues, fonctions, champs...)
+
+La  [[http://docs.postgresql.fr/9.1/user-manag.html|documentation postgresql]] est explicite à ce sujet, le mieux est de la consulter !
+
+=== Gestion des connexions ===
+
+Postgresql permet en amont des droits attribués aux rôles sur la base de données, une gestion des connexions. Celle ci est définie dans les fichiers de configuration ///etc/postgresql/x.x/main/pg_hba.conf // et ///etc/postgresql/x.x/main/postgresql.conf// dans le chapitre //# CONNECTIONS AND AUTHENTICATION//
+
+La documentation complète est disponible à ces adresses
+
+//[[http://docs.postgresql.fr/9.1/runtime-config-connection.html|/etc/postgresql/x.x/main/postgresql.conf]]//
+
+//[[http://docs.postgresql.fr/9.1/client-authentication.html|/etc/postgresql/x.x/main/pg_hba.conf]]//
+
+
+=== ajout de contributions ===
+Différentes contributions sont disponibles (cf la [[http://docs.postgresqlfr.org/9.1/contrib.html|documentation PostgreSQL]]). Leur installation (et désinstallation) est facilitée par l'existence de paquets dédiés
+
+<code>
+sudo apt-get install postgresql-contrib
+Les paquets supplémentaires suivants seront installés : 
+  libossp-uuid16 postgresql-contrib-9.1
+</code>
+
+Les scripts permettant l'application de ces extensions sont disponibles dans **/usr/share/postgresql/9.1/extension/*.sql**
+L'ajout se fait par exécution du script concerné sur la base de données souhaitée.
+<code>
+$ psql -U <nom_utilisateur> <nom_database> -f /usr/share/postgresql/9.1/extension/<nom_extension>.sql
+</code>
+
+=== Créer un utilisateur en lecture seul ===
+
+Pour ne permettre seulement une consultation des données par un utilisateur sans droit de modification, il faut exécuter la requête suivante:
+<code>
+ALTER USER <nom_utilisateur>  set default_transaction_read_only = on;
+</code>
+
+
+
+
+
+
+
+
+
+===== Installation de la cartouche spatiale PostGIS =====
+====Ce qu'est postgis====
+[[http://postgis.refractions.net/|Postgis]] est une extension de postgresql qui permet la gestion d'objets géographiques. Concrètement la cartouche spatiale postgis ajoute au serveur :
+  *  la possibilité de définir le type de champ //geometry// 
+  * l'ensemble des fonctions permettant les traitements géographiques
+  * la base de référence des projections géographiques //spatial_ref_sys//
+  * la base de gestion des attributs géographiques des tables //geometry_columns//
+====Installation====
+Installer le paquet correspondant à votre version de postgres, exemples:
+  * [[apt://postgresql-10-postgis-2.4|postgresql-10-postgis-2.4]] sous [[:bionic]]
+  * [[apt://postgresql-9.1-postgis|postgresql-9.1-postgis]]
+
+<code>
+Les paquets supplémentaires suivants seront installés : 
+  libgeos-3.2.2 libgeos-c1 libproj0 postgis proj-data
+</code>
+
+Les scripts nécessaires à la capacitation géographique de postgresql sont installé dans le dossier\\
+ // /usr/share/postgresql/9.1/contrib/postgis-1.5/// ou\\
+ // /usr/share/postgresql/10/contrib/postgis-2.4///
+
+====Donner à une base la capacité géographique====
+
+
+<note>
+Les scripts donnés ci-après prennent pour hypothèse qu'un nouvel utilisateur a été créé avec la méthode [[postgresql#pour_aller_plus_loin|recommandée]]
+</note>
+
+Tout d'abord, créer la base de données en question
+  createdb -U <nom_utilisateur> <nom_base_geo>
+Puis on utilser le rôle postgres (super user postgresql)
+  $ sudo -i -u postgres 
+pour exécuter dans cet ordre les scripts suivants :
+
+  psql -f /usr/share/postgresql/9.1/contrib/postgis-1.5/postgis.sql  <nom_base_geo>
+  psql -f /usr/share/postgresql/9.1/contrib/postgis-1.5/spatial_ref_sys.sql  <nom_base_geo>
+
+puis on quitte le shell postgres
+  exit
+  
+<note tip>
+Si vous êtes amenés à créer plusieurs bases géographiques, il peut être intéressant de créer une base qui serve de modèle, par exemple //template_postgis//
+Il est ensuite très facile de créer une base géographique en appelant ce modèle lors de la création d'un base
+  createdb -U <nom_utilisateur> -T template_postgis <nom_base_geo>
+</note>
+
+Pour faire des imports et des exports (car la fonction sur phppgadmin est bancale) :
+
+  $ sudo -i -u postgres
+
+export :
+  pg_dump <nom_de_la_base> > nom_de_la_base.pgdump
+
+import:
+  cat  nom_de_la_base.pgdump | psql -d  nom_de_la_base
+
+===== Clients graphiques =====
+
+==== DBeaver ====
+Si vous utilisez d'autres types de base de données, cette solution a l'avantage de les supporter,\\ voir la page [[:dbeaver]]
+
+
+==== Le client pgadmin4 ====
+Outils web graphique d'administration de vos bases
+<code bash>
+sudo apt install postgresql-common
+sudo sh /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+sudo apt update
+sudo apt install postgresql-11 pgadmin4
+</code>((source (EN) [[https://wiki.postgresql.org/wiki/Apt]]))
+puis simplement lancer pgadmin4 via le lanceur qui a été ajouté ou en CLI
+
+==== Le client pgadmin3 ====
+
+PgAdmin III est un outil graphique d'administration de votre serveur PostgreSQL. L'application pgAdmin III peut être utilisé pour administrer les serveurs PostgreSQL 7.3 et les versions supérieures. PgAdmin III existe pour toutes les plateformes dont, évidemment, Ubuntu, KUbuntu, XUbuntu.
+
+PgAdmin III a été conçu pour répondre aux besoins de tous les utilisateurs, depuis la rédaction de simple requêtes SQL au développement complexe de base de données. L'interface graphique supporte toutes les fonctionnalités de PostGreSQL et permet une administration simple. L'application inclut aussi un éditeur de requête avec coloration syntaxique, un éditeur de code, un agent de gestion de tâche automatique, un support pour les réplication via Slony-I et bien d'autres fonctionnalités. 
+
+== Installation du client pgadmin3 ==
+
+On commence par [[:tutoriel/comment_installer_un_paquet|installer]] les paquets nécessaires : pgadmin3
+<code>sudo apt-get install pgadmin3</code>
+
+Cela va également installer les paquets suivants :
+  * libpq4
+  * libwxbase2.6-0 
+  * libwxgtk2.6-0
+  * pgadmin3-data
+
+^ Installer en 1 clic ^
+| [[apt://pgadmin3|{{ :apt.png |Installer en 1 clic.}}]] |
+
+
+== Lancement du client pgadmin3 ==
+
+Sous Ubuntu, pour lancer PgAdmin III, aller dans le menu **Applications** => **programmation** => **pgAdmin III** 
+<note>**Remarque:**
+
+En suivant la section ci-haut "Méthode rapide, non sécurisée" pgadmin3 n'acceptera pas la connexion aux bases de données. Il faudra definir un mot de passe à l'utilisateur avant (voir la procédure sécurisée)
+	$ psql -d template1 -c "alter user <nom_utilisateur> with password '<votre_mot_de_passe>'"
+</note>
+== Utilisation du client pgadmin3 via ssh ==
+
+La connexion à la base de donnée necessite la création d'un tunnel
+<code>ssh -L 5555:localhost:5432 utilisateur@adresse_du_serveur</code>
+
+Le port 5555 correspond au port de redirection sur le port local (vous pouvez en choisir un autre). Le port 5432 correspond au port d'écoute de postgres (ne pas modifier).
+
+Cet exemple s'entend en connexion ssh sur le port standard 22.
+
+Si vous avez modifié le port d'écoute ssh (et vous devriez le faire pour des raisons de sécurité), utilisez cette commande : (1444 est un exemple, vous pouvez en chosir un autre).
+<code>ssh -L 5555:localhost:5432 utilisateur@nom_du_serveur -p 1444</code>
+
+Le serveur vous demandera votre mot de passe. Ouvrez maintenant pgadmin3
+
+<code>Nom : nom_de_votre_database
+Hôte : localhost
+Port TCP : 5555 (selon l'exemple ci-dessus)</code>
+
+Vous devriez être maintenant connecté
+
+==== Le client phppgadmin ====
+
+=== Installation du client phppgadmin ===
+
+Il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **phppgadmin**, à condition que vous ayez un serveur Web fonctionnel et reconnaissant php.
+
+^ Le serveur Web php en un clic ^
+| [[apt://apache2,apache2-doc,mysql-server,php5,libapache2-mod-php5,php5-mysql,phpmyadmin
+|{{ :apt.png |Installer en 1 clic.}}]] |
+
+^ phppgadmin en un clic^
+| [[apt://phppgadmin|{{ :apt.png |Installer en 1 clic.}}]] |
+
+Réaliser ensuite les opérations suivantes : FIXME (sous [[bionic]], pas de fichier //apache.conf// mais //config.inc.php// !
+<code>
+sudo ln -s /etc/phppgadmin/apache.conf /etc/apache2/conf.d/phppgadmin.conf
+sudo mv /etc/apache2/conf.d/phppgadmin /etc/apache2/conf-available/phppgadmin.conf
+sudo a2enconf phppgadmin
+sudo service apache2 restart
+</code>
+
+=== Lancement du client phppgadmin ===
+
+Lance votre navigateur Web préféré à l'adresse [[http://localhost/phppgadmin/]].
+
+=== Utilisation du client phppgadmin ===
+
+
+ 
+FIXME
+
+
+
+
+====Connexions vers PHP====
+
+[[:tutoriel/comment_installer_un_paquet|installer|Installer le paquet]] [[apt://php-pgsql|php-pgsql]]
+
+<note>Il faut recharger Apache après avoir installé ce module : sudo service apache2 reload</note>
+
+Activer ce module
+<code>sudo phpenmod pdo_pgsql</code>
+Redémarrer apache2
+====Pool de connexion : PgBouncer====
+[[pgbouncer|PgBouncer]]
+===== Récupération du contenu d'une base de données après un crash serveur =====
+
+Supposons que vous ayez installé sous [[ubuntu_server|ubuntu server]] une application d'entreprise s'appuyant sur une base de données postgresql (cette procédure a été testée avec [[redmine|redmine]]), et qu'un crash se produise qui rende impossible de redémarrer le serveur. Se pose alors le problème de la récupération des données. La procédure est relativement simple. Il va vous falloir:
+  * Monter votre ancienne installation depuis une autre installation ou via un live cd
+  * [[chroot|chrooter ]]dessus
+  * changer d'utilisateur pour l'utilisateur postgres
+  * démarrer la base de données
+  * effectuer un pg_dump pour sauvegarder la base de données.
+Ceci fait, après avoir réinstallé votre application d'entreprise sur un nouveau serveur ubuntu neuf, il n'y aura plus qu'à y importer la sauvegarde. Venons en aux détails techniques.
+
+=== Montage et chroot sur votre ancienne installation depuis un live CD ou depuis le nouveau serveur ===
+<code>
+sudo fdisk -l                     # pour vous aider à trouver la bonne partition
+sudo mount /dev/sdYX /mnt         # montage de celle-ci en remplaçant le Y par la lettre du volume, et le X par le bon numéro de partition
+sudo mount --bind /dev /mnt/dev   # lien symbolique du dossier /dev en cours d'utilisation vers le disque monté
+sudo mount -t proc /proc /mnt/proc # Étape facultative?
+sudo chroot /mnt                  # mise à la racine du disque monté
+</code>
+
+=== démarrage de la base de données, changement d'utilisateur, et sauvegarde de son contenu ===
+Démarrez la base de données dans le chroot
+<code>
+service postgresql-8.4 start      # démarre postgresql dans le chroot
+</code>
+<note tip>Si vous avez effectué le chroot depuis une installation d'Ubuntu où un serveur de base de données postgresql est déjà installé et actif, vous aurez probablement des avertissements concernant les ports non disponibles. Deux solutions existent alors, soit affecter des ports différents à l'un des deux, soit interrompre temporairement le serveur actif le temps de la sauvegarde via la commande <code>service postgresql-8.4 stop</code> </note>
+Maintenant, connectez-vous en tant que postgres, et effectuez la sauvegarde.
+<code>
+sudo -i -u postgres                                                # change l'utilisateur courant (root) pour l'utilisateur postgres
+pg_dump -f /chemin/de/sauvegarde/choisi/NOM_BDD.sql NOM_BDD     # effectue la sauvegarde de la base de données
+</code>
+
+=== Sortie du chroot en douceur ===
+Au cours de ces opérations, vous avez monté des partitions et créé un chroot. Il ne faut pas oublier de les exécuter dans l'ordre inverse, si possible proprement.
+<code>
+exit                          # permet de cesser d'agir en tant qu'utilisateur postgres
+service postgresql-8.4 stop   # permet de stopper le serveur postgresql dans le chroot
+exit                          # permet de quitter le chroot
+sudo umount /mnt/dev/         # désactive le lien symbolique du dossier /dev en cours d'utilisation vers le disque monté
+sudo umount /mnt/proc/        # désactive le lien symbolique du dossier /proc en cours d'utilisation vers le disque monté
+sudo umount /mnt/             # démontage final de l'ancienne partition d'installation du serveur
+</code>
+<note tip>Si vous avez sauvegardé votre base de données sur la partition du chroot (ce qui est déconseillé, le volume n'étant a priori pas sûr), pensez à le copier sur un support externe avant de terminer le démontage de la partition.</note>
+
+=== Restaurer la sauvegarde sur la nouvelle installation ===
+La restauration de la sauvegarde est très simple : connectez-vous sur votre nouvelle installation, et changez d'utilisateur pour postgres. Supprimez la base de données créée par défaut pour éviter tout conflit (une petite sauvegarde préalable de celle-ci ne fera pas de mal), recréez-la, et importez-y votre base sauvegardée :
+
+<code>
+sudo -i -u postgres                  # change l'utilisateur courant (root) pour l'utilisateur postgres
+dropdb NOM_BDD                    # efface la base de données existante
+createdb --owner=NOM_APPLI --encoding=utf-8 NOM_BDD         # recréée une base de données vide
+psql -f /chemin/de/sauvegarde/choisi/redmine.sql NOM_BDD    # importe la base de données sauvegardée
+</code>
+
+<note tip>L'option ''--owner=NOM_APPLI'' de la troisième commande suppose que vous avez configuré un utilisateur système pour votre application</note>
+
+===== Formations =====
+La société Dalibo mets ses support de cours à disposition ([[https://creativecommons.org/licenses/by-nc-sa/2.0/fr/|CC BY NC SA]]):\\
+[[https://www.dalibo.com/formations]]\\
+sous l'intitulé de chaque formation, vous trouvez les liens pour télécharger le support au format [[pdf|PDF]] ou [[epub|EPUB]]\\
+exemple: lien directe au support PDF de la formation //DBA1 - PostgreSQL Administration// : [[https://dali.bo/dba1_pdf]]
+
+
+----
+
+//Contributeurs : [[utilisateurs:yannick_LM|Yannick]], [[utilisateurs:sparky|Sparky]], [[utilisateurs:elemmire|Elemmire]], [[utilisateurs:aldian|Aldian]], [[utilisateurs:fred|Fred]],[[utilisateurs:xavierjm|XAVIER_jean-marie]]. //

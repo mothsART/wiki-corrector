@@ -1,0 +1,686 @@
+
+{{tag>amorçage}}
+
+----
+
+<note>**Cette version de GRUB ne concerne plus aucune version supportée d'Ubuntu**
+
+Le chargeur d'amorçage par défaut de toutes les variantes d'Ubuntu est **[[:grub-pc|GRUB 2]]**.
+
+Cette documentation n'est conservée qu'à titre d'information pour les très vieux ordinateurs ne pouvant être installés avec des versions récentes de distributions Linux.</note>
+
+====== GRUB Legacy, l'ancien chargeur d'amorçage d'Ubuntu ======
+
+{{  http://www.inf.sgsp.edu.pl/pub/MALUNKI/LOGO/grub.png}}
+
+**GRUB Legacy** est un programme informatique permettant de charger un système d'exploitation. Il peut amorcer par lui-même des systèmes compatibles avec la norme POSIX (GNU/Linux, *BSD, Apple(r) Mac OS(r), etc.) et possède la capacité d'enchaîner vers un autre amorceur pour les systèmes non compatibles avec la norme POSIX (comme Microsoft(r) Windows(r)).
+
+À l'origine, ce programme s'appelait //GNU GRand Unified Bootloader//, ou simplement //GNU GRUB//. Cependant, le projet GRUB lui a donné un successeur : [[:grub-pc|GRUB 2]]. Pour bien distinguer les deux logiciels, incompatibles entre eux, GNU GRUB a été renommé **GRUB Legacy**. Le présent document ne traite que de GRUB Legacy.
+
+GRUB Legacy est installé automatiquement avec Ubuntu 9.04 et versions antérieures lors d'une installation classique pour ordinateurs de types IBM PC-Compatible et MacIntel.
+
+===== Multi-amorçage =====
+
+**Pour éviter tout problème, il faut toujours installer Grub sur la partition où vous faites l'installation**
+
+nb : avec les cartes-mères modernes, il est possible de changer l'ordre de boot des disques sans changer leur jumpers. Ceci permet de simplifier grandement l'installation dans le cas où vous avez un disque dur par OS :
+- installation de Windows sur un disque qui est déclaré "premier dans l'ordre de boot" -> le loader écrit dans le mbr de ce disque
+- échange de l'ordre des disques, installation de linux sur le deuxième. Windows ne voit pas la différence.
+Si vous réinstallez Windows par la suite : il suffit d'échanger l'ordre des deux disques avant l'opération, puis de réinstaller. 
+Quand vous remettrez le disque contenant Linux en premier dans l'ordre du boot, Grub fonctionnera toujours car Windows aura écrasé le MBR de l'autre disque.
+
+==== Windows ====
+
+De façon générale, et sur un PC standard en dual-boot (Windows et Linux ensemble), on aura un schéma similaire a celui-ci :
+
+{{grub_fonctionnement.jpg}}
+
+<note warning>En cas de **//dual boot// avec Windows Vista** : 
+
+Il est FORTEMENT recommandé de **ne pas installer Grub sur le MBR**, mais sur la racine de la partition. Car cela pourrait rendre impossible le redémarrage de Vista.
+
+Voir le tutoriel « [[tutoriel:comment_amorcer_ubuntu_avec_bootmgr|Comment amorcer Ubuntu avec bootmgr de Vista ?]] ».
+</note>
+
+Pour ajouter //Microsoft Windows// dans la liste des systèmes d'exploitation qui pourront être démarrés via Grub, il faut [[:tutoriel:comment_editer_un_fichier|modifier, avec les droits d'administration, le fichier]] « /boot/grub/menu.lst ».
+
+Les lignes à ajouter dépendent de votre cas en particulier où se trouve la partition Windows.
+
+=== Windows se trouve sur la 1re partition du 1er disque dur ===
+
+Ajoutez les lignes suivantes à la fin du fichier :
+<file>
+title Windows
+rootnoverify (hd0,0)
+makeactive
+chainloader +1
+</file>
+
+=== Windows se trouve sur la 1re partition du 2e disque dur ===
+
+Il faut alors virtuellement placer ce disque dur en « hd0 » sans quoi Windows ne peut démarrer. Les lignes à ajouter sont alors :
+<file>
+title		Windows NT/2000/XP
+root		(hd1,0)		# la partition à démarrer
+makeactive			# cette commande positionne le bit de partition active à 1 (au cas où)
+map		(hd0) (hd1)	# hd0 devient hd1
+map		(hd1) (hd0)	# hd1 devient hd0 virtuellement
+chainloader	+1		# saut au début de la piste suivante car c'est un OS Microsoft(R).
+</file>
+
+==== Grub comme relais (chainloader) ====
+
+Si vous voulez installer un autre système Linux (Ubuntu, Debian ou autre) et éviter d'avoir à modifier votre « menu.lst » à chaque changement de noyau pour pouvoir le lancer ou, si vous ne voulez pas que le Grub de votre nouveau système écrase celui de votre système principal, vous pouvez utiliser Grub comme un relais qui ira chercher le Grub propre à votre deuxième système.
+
+C'est la façon la plus simple et la plus sûre pour lancer d'autres systèmes Linux car ils restent ainsi indépendants, et ne viendront pas compromettre votre système principal.
+
+=== Pré-requis : le secteur d'amorçage ===
+
+Le Grub de votre deuxième système Linux **ne doit pas être installé dans le MBR** de votre disque dur. Il doit être installé dans le secteur d'amorçage (BS : boot sector) de la partition sur laquelle vous avez installé votre deuxième système Linux (la partition « / »).
+
+<note warning>__Attention__ : par défaut l'installation se fait sur le MBR. Pensez à modifier ce comportement dans les options avancées (dernière étapes de paramétrage de l'installation)</note>
+
+Si vous voulez réinstaller Grub sur le boot sector, référez-vous à la méthode décrite dans la paragraphe [[:grub_legacy#installer_grub_dans_le_mbr]] en faisant attention à bien adapter la partition sur laquelle installer grub :
+
+<file>
+grub> root (hd0,4)
+grub> setup (hd0,4) # correspond à /boot/grub installé sur /dev/sda5
+</file>
+
+Les valeurs ci-dessus sont à adapter selon la réponse de la commande "find" :
+<file>
+grub> find /boot/grub/stage1
+</file>
+
+//__NB__ : cette méthode peut être faite directement à partir de votre installation sur laquelle vous voulez installer grub, ou d'un liveCD ubuntu après un écrasement du MBR.
+//
+
+=== Ajout dans « menu.lst » ===
+
+Dans l'exemple ci dessous, le 2e système Linux se nomme GNU/Debian, et a été installé, ainsi que son Grub, sur la partition « /dev/sda3 » (ici « ''hd0,2'' » dans le langage de Grub).
+
+Rajouter simplement une entrée dans le « /boot/grub/menu.lst » de votre système Linux principal (en dessous des lignes //« END DEBIAN AUTOMAGIC KERNELS... »// pour éviter qu'elle soit effacée lors d'une mise à jour du Grub) en adaptant bien sûr (hd0,2) à votre cas : 
+
+<file>
+### END DEBIAN AUTOMAGIC KERNELS LIST
+
+# This is a divider, added to separate the menu items below from the Debian
+# ones.
+title           Other operating systems:
+root
+
+# GNU/Debian Linux installé sur /dev/sda3
+title   Grub Debian
+root (hd0,2)
+chainloader +1
+boot
+</file>
+
+Ainsi, lorsque vous sélectionnerez votre 2e système, le Grub de votre système principal passera le relais au Grub de votre 2e système et vous proposera les choix configurés dans son propre « menu.lst »
+
+=== Autre méthode : chainage de menu.lst ===
+
+Cette méthode est particulièrement appropriée pour chaîner des installations multiples d'Ubuntu.
+
+== Pour Ubuntu jusqu'à Jaunty (inclus) ==
+
+Comme pour l'autre méthode, le Grub de votre deuxième système Linux ne doit pas être installé dans le MBR de votre disque dur. Il doit être installé dans le secteur d'amorçage (BS : boot sector) de la partition sur laquelle vous avez installé votre deuxième système Linux (la partition « / »).
+
+Vous pouvez ajouter dans le menu.lst de votre installation principale un appel vers le menu.lst de votre ou de vos installations secondaires. Par exemple :
+
+<file>
+title Ubuntu - seconde installation
+root            (hd1,0)
+configfile      /boot/grub/menu.lst
+</file>
+
+hd1,0 est ici la première partition (0) du second disque dur (hd1). Cet adressage est à adapter selon le disque dur et/ou la partition utilisée pour la seconde installation. 
+Sur la partition ainsi définie, le premier menu.lst va donc chercher le second menu.lst (normalement **/boot/grub/menu.lst**).
+
+== Pour Ubuntu à partir de Karmic ==
+
+Si vous voulez lancer Karmic depuis le grub d'une version moins récente d'Ubuntu, la méthode ci-dessus ne marche pas car Karmic utilise grub-pc qui gère différemment du grub-legacy.
+
+En plaçant ces lignes (avec l'UUID correspondant à la partition souhaitée) dans le menu.lst d'un Grub-Legacy, on pourra lancer un Grub-pc derrière un grub-legacy.
+Pour connaitre l'uuid d'une partition,  utilisez la comande : sudo vol_id -u /dev/sdxX ou référez-vous à la page [[uuid_et_label]]
+
+<code>title		Karmic via GRUB-pc
+uuid		à adapter à votre cas
+kernel		/boot/grub/core.img</code>
+
+==== Ajout d'une entrée à la main (déconseillé) ====
+
+Il est aussi possible de se passer du programme d'amorçage secondaire. Cette solution est moins intéressante que la précédente car elle ne met pas à jour les entrées dans le cas d'une mise à jour du noyau. Elle est juste là à titre informatif.
+
+Voici un exemple commenté
+<file>
+### END DEBIAN AUTOMAGIC KERNELS LIST
+
+# This is a divider, added to separate the menu items below from the Debian
+# ones.
+title           Other operating systems:
+root
+
+title       Ubuntu 8.04 alpha 2                   # Titre qui apparait dans Grub
+root        (hd0,9)                               # Racine contentant le répertoire /boot
+kernel      /boot/vmlinuz-2.6.24-2-generic root=UUID=957e7eae-fc5c-442a-8ba6    -38ac4a0e8128 ro quiet splash
+initrd      /boot/initrd.img-2.6.24-2-generic.bak # Fichier les scripts dans la racine
+</file>
+
+Remarques :
+  * Attention à bien définir la racine comme la partition contenant les fichiers initrd* et vmlinuz* utilisés dans les lignes suivantes.
+  * Dans le cas d'une Ubuntu, il est aussi possible d'utiliser la notation root=/dev/sda10 dans la ligne kernel. (Ce paramètre //root=// définit la partition racine du système, qui peut être différente de la racine utilisée par grub pour chercher les fichiers initrd* et vmlinuz*).
+
+===== Paramétrage =====
+
+==== Délai au démarrage ====
+
+Pour entrer dans le menu de Grub, vous devez très rapidement appuyer sur « Echap » juste après le démarrage « par défaut ». Pour augmenter ce temps, [[:tutoriel:comment_editer_un_fichier|éditez]] « /boot/grub/menu.lst », puis augmentez le nombre de secondes dans la section **timeout**. 
+Pour supprimer ce délai de démarrage ajoutez un **#** au début de cette ligne.
+
+Vous pouvez également faire apparaître systématiquement le menu de GRUB pendant le boot en commentant **hiddenmenu** dans le même fichier (rajouter un symbole **#** devant). Une fois que vous avez changé **menu.lst** vous pouvez redémarrer votre ordinateur, les changements seront pris en compte.
+
+Notez que si l'//installateur d'Ubuntu// détecte d'autres systèmes d'exploitation sur le disque pendant l'installation, alors le menu de Grub sera visible par défaut au boot et le //timeout// sera augmenté, ainsi les étapes ci-dessus seront inutiles.
+
+==== Noyaux listés automatiquement ====
+
+<note tip>Le script //update-grub// ajoute automatiquement les noyaux lors des mises à jour d'Ubuntu. Pour cela il utilise les paramètres listé entre les lignes **### BEGIN AUTOMAGIC KERNELS LIST** et **### END AUTOMAGIC KERNELS LIST**.</note>
+
+=== Introduction ===
+
+Update-grub examine le répertoire  /boot  et y recherche tous les fichiers dont le nom commence par  "vmlinuz-". Ces fichiers seront supposés constituer des noyaux et donneront lieu à des entrées dans le menu.lst.
+
+Update-grub, pour chacune des entrées introduites, ajoutera en outre les lignes initrd correspondant à chacun des noyaux identifiés (à partir de l'analyse du nom complet des fichiers commençant par "initrd" trouvés dans /boot (exemple: /boot/vmlinuz-2.6.22-14-generic et /boot/initrd.img-2.6.22-14-generic).
+
+Remarques :
+  * Quoi qu'il en soit, chaque entrée de noyau Ubuntu est doublée d'une entrée en mode "recovery" pour permettre certaines récupérations. Si la valeur est fixée à 1, deux entrées seront préservées: noyau en lancement "normal" et noyau en "mode recovery";
+  * Seules les entrées directement gérées par update-grub sont concernées soient les entrées correspondant à des noyaux Linux (fichiers identifiés par un début de nom en vmlinuz, situés dans le répertoire /boot ). Les entrées spécifiques correspondant à memtest86+ ou aux entrées Windows ne sont pas concernées.
+  * update-grub conserve les sections identifiant d'autres systèmes d'exploitation (Windows par exemple).
+
+Enfin Update-grub prend en compte, pour chacune des entrées de noyaux, les paramètres génériques décrits dans les lignes de paramètres (//# kopt=root=/dev/hda1 ro// et //# defoptions=quiet locale=fr_FR// dans l'exemple pris).
+
+<note tip>Après une modification sur un paramètre, mettez à jour « menu.lst » avec la commande :
+<code>$ sudo update-grub</code></note>
+
+Ces paramètres viennent donc s'appliquer pour chacune des lignes introduites.
+
+**Les réglages détaillées qui auront pu être apportés (paramètres spécifiques) seront donc perdus. **
+
+En certains cas, il est donc préférable d'agir directement sur les lignes kernel pour passer des paramètres plutôt que d'utiliser la directive  # kopt=root= et le script update-grub, notamment si l'on veut pouvoir lancer un même noyau avec des batteries différentes de paramètres.
+
+=== Options ===
+
+== Options du noyau ==
+
+Le script //update-grub// se sert d'un certain nombre d'options lorsqu'il met à jour le « menu.lst », options qu'il trouve aussi dans le « menu.lst ».
+ 
+Dans « /boot/grub/menu.lst », vous trouverez une ligne comme ceci :
+
+<file>kopt=root=/dev/sda1 ro</file>
+
+C'est un commentaire, mais n'enlevez pas le « # » au début, **c'est important** : il distingue les paramètres des entrées générées plus bas.
+
+Si vous avez besoin de paramètres additionnels pour le noyau (par exemple, si quelqu'un vous a demandé d'examiner le boot avec certains paramètres afin de dépanner un problème), ajoutez-les à la fin de la ligne, par exemple pour ajouter le **noapic** :
+
+<file>kopt=root=/dev/sda1 ro noapic</file>
+
+== Ajouter une option de démarrage normal ==
+
+Les "defoptions" permettent d'ajouter des paramètres additionnels de démarrage, mais uniquement dans le cas d'un démarrage normal (pour ne pas perturber les démarrages alternatifs). Dans la ligne suivante, la clause quiet réduit l'affichage des messages émis au démarrage du système et la variable locale est initialisée par défaut.  
+<code># defoptions=quiet locale=fr_FR</code>
+Voyons ici l'ajout de deux options pour spécifier la résolution de l'écran au démarrage. Les options en questions sont (pour une résolution de 800x600) :
+<code>x=800 y=600</code>
+  - [[tutoriel:comment_editer_un_fichier|Éditez le fichier]] (avec les droits d'administration) **/boot/grub/menu.lst**
+   - Trouvez la ligne qui ressemble à ceci : <code> defoptions=quiet splash</code> 
+   - Et ajoutez vos options (séparées par une espace) à la fin de la ligne. Par exemple : <code>x=800 y=600</code> Voici le résultat attendu : <code> defoptions=quiet splash x=800 y=600</code>
+   - Enregistrez et fermez.
+<del>   - Exécutez dans un terminal : <code>sudo update-grub</code></del>
+
+D'autres réglages sont possibles mais de portée plus complexe (voir le man update-grub pour plus d'informations).
+
+==== Ne garder que le dernier noyau dans la liste ====
+
+Lors des mises à jour d'une nouvelle version du noyau, Grub conserve la liste des versions précédentes pour des raisons de sécurité et régler certaines incompatibilités éventuelles. Or, cette liste peut devenir très longue et inesthétique. Il est possible de dire à Grub combien de versions différentes du noyau on souhaite afficher.
+
+Cherchez la ligne : <file># howmany=all</file> et la remplacer par :<file># howmany=1</file>
+où 1 est le nombre de noyaux qu'on veut afficher. Pour afficher les 2 derniers, mettre le chiffre 2 et ainsi de suite.
+
+<note importante>Ne pas retirer le symbole « # » (voir paragraphe [[#Noyaux listés automatiquement]]).</note>
+
+À la prochaine mise à jour du noyau, la liste se mettra à jour automatiquement.
+
+Après les modifications, ne pas oublier de mettre à jour Grub avec la commande « ''sudo update-grub'' ».
+
+<note tip>Il est possible de désinstaller les noyaux que l'on n'utilise plus… comme d'habitude il faut garder un peu de recul et ne pas laisser que le strict minimum (ou être sportif) et a minima le noyau //N// et le noyau //N// − 1 (ou tout au moins, un noyau antérieur dont le bon fonctionnement a été confirmé).</note>
+
+==== Choix du système d'exploitation par défaut ou du noyau par défaut ====
+
+Le système d'exploitation lancé par défaut par Grub peut être choisi par l'utilisateur, en modifiant la valeur du champ « ''default'' » dans le fichier « /boot/grub/menu.lst ».
+
+Ce champ « ''default'' » correspond au numéro de la ligne qui est sélectionnée par défaut lors du démarrage.
+
+Attention, « 0 » correspond à la première ligne, « 1 » correspond à la deuxième ligne, etc.
+
+Pour modifier le système d'exploitation lancé par défaut, on peut procéder en deux étapes :
+
+  - **Étape 1 : Position de ce sur quoi on veut booter**\\ Dans le menu de Grub, vérifier à quelle position se trouve le noyau ou l'OS sur lequel vous voulez booter.\\ On peut utiliser deux méthodes pour cela : Soit on redémarre l'ordinateur, et on retient le numero (n) de la ligne qui correspond (méthode bête mais simple), soit on ouvre le fichier ''/boot/grub/menu.lst'', et on retient l'index (n) de la présentation de l'OS qui correspond (méthode plus rapide mais mon explication n'est peut-être pas très claire)
+  - **Étape 2 : Modification du fichier de configuration de grub**\\ Dans Ubuntu, ouvrez le fichier ''/boot/grub/menu.lst'' tel que décrit à l'étape précédente et recherchez la ligne suivante : <file>default		k</file> où « k » est un nombre (généralement 0). Remplacez « k » par le nombre « n-1 ».
+
+Exemple : vous voulez booter par défaut sous windows
+
+  -  au redémarrage de l'ordinateur, on regarde quelle ligne est sélectionnée par défaut (k+1) et à quelle ligne se trouve windows (par exemple n=4).
+  - on ouvre le fichier menu.lst, on cherche les occurrences de ''default'' en tapant « Ctrl+F » puis rechercher puis « ''default'' ». Normalement, il n'y a qu'une seule ligne qui ne commence pas par « ''#'' » et qui contienne le mot « ''default'' ». Alors il suffit de modifier ''k+1'' par ''n-1'', soit ''default    0'' par ''default    3''
+
+Pour déterminer quel chiffre mettre en face de "default" une autre méthode assez simple est de compter les champs "title". Repérez celui correspondant au système que vous voulez lancer par défaut et déterminez sa position. Sachant que le décompte par grub commence à "0" le chiffre à indiquer face à "default" sera donc "position-1".
+
+Exemple de ce que "menu.lst" peut contenir : comme vous le voyez ici 04 champs "title" sont présents :
+<file>
+**title**		Ubuntu 8.04, kernel 2.6.24-18-generic  
+root		(hd0,7)
+kernel		/boot/vmlinuz-2.6.24-18-generic root=UUID=e9aecbac-8ff7-42fb-96c2-09c36461a8db ro quiet splash
+initrd		/boot/initrd.img-2.6.24-18-generic
+quiet
+
+**title**		Ubuntu 8.04, kernel 2.6.24-18-generic (recovery mode)
+root		(hd0,7)
+kernel		/boot/vmlinuz-2.6.24-18-generic root=UUID=e9aecbac-8ff7-42fb-96c2-09c36461a8db ro single
+initrd		/boot/initrd.img-2.6.24-18-generic
+
+### END DEBIAN AUTOMAGIC KERNELS LIST
+
+# This is a divider, added to separate the menu items below from the Debian
+# ones.
+
+**title**		Other operating systems:
+root
+
+# This entry automatically added by the Debian installer for a non-linux OS
+# on /dev/sda1
+
+**title**		Microsoft Windows XP edition familiale
+root		(hd0,0)
+savedefault
+makeactive
+chainloader	+1
+
+</file>
+ En conséquence pour lancer :
+
+-Ubuntu 8.04, kernel 2.6.24-18-generic      -> Inscrire  "default   0"
+
+-Microsoft Windows XP Édition familiale      -> Inscrire  "default   3"  
+
+==== Comment faire un sous-menu avec Grub ====
+
+Vous avez plusieurs distributions GNU-Linux, plusieurs Ubuntu, Debian ou autre. Comment faire des menus qui vont être toujours à jour ?
+
+Chaque distribution gère son menu de démarrage normalement automatiquement, mais on ne peut pas le faire depuis un unique menu.
+On va donc utiliser des sous-menus
+
+Grub permet d'avoir un menu qui va charger un fichier de configuration différent, qui peut être sur une autre partition bien sûr.
+
+<file>
+title monsousmenu ubuntu autre version
+root		(hd0,0)
+configfile  /boot/grub/menu.lst
+</file>
+
+Cela peut être un autre emplacement à définir soi-même. C'est tout, ce n'est pas plus compliqué.
+
+==== Profiler le démarrage ====
+
+Cette astuce permet de demander au noyau de créer un profile du démarrage afin de gagner un léger temps (de l'ordre de une à deux seconde). 
+
+Au démarrage de l'ordinateur appuyez sur [echap] pendant le message "GRUB loading"
+
+Vous devriez être sur le menu du choix de système, appuyez sur ces touches:
+  - [e] pour éditer la ligne
+  - [flèche bas] pour sélectionner la ligne du kernel
+  - [e] de nouveau pour éditer cette ligne
+  - A la fin de la ligne ajoutez "profile"
+  - [enter] validez
+  - [b] Bootez
+
+Ce démarrage-ci sera plus long et va créer un profile pour essayer d'optimiser la vitesse des prochains démarrages. Cette manipulation est à renouveler à chaque mise à jour du kernel.
+
+===== Installation de GRUB =====
+
+<note warning>En cas de **//dual boot// avec Ubuntu/Vista** : 
+
+Il est conseillé de **ne pas installer Grub sur le MBR**, mais sur la racine de la partition. Car cela pourrait rendre impossible le redémarrage de Vista.
+
+Voir le tutoriel « [[tutoriel:comment_amorcer_ubuntu_avec_bootmgr|Comment amorcer Ubuntu avec bootmgr de Vista ?]] ».
+</note>
+
+==== Le paquet GRUB ====
+
+Les fichiers de GRUB sont installés automatiquement avec Ubuntu.
+
+Si vous avez 2 versions d'Ubuntu installées en même temps, ça ne l'est pas sur la deuxième, et vous pouvez installer le paquet **[[apt>grub|grub]]** pour ensuite utiliser [[#grub_comme_relais_chainloader]].
+
+==== Installer GRUB dans le MBR ====
+
+Pour (re)mettre à jour le menu que Grub affiche au démarrage du disque hd0 (le disque principal), Tapez la commande :
+
+  sudo grub-install hd0
+
+==== Les fichiers de Grub ont disparu ! ====
+
+Si vous avez malencontreusement effacé le répertoire « /boot/grub/ », vous pouvez vous en sortir en recréant un nouveau répertoire « grub/ » dans « /boot/ » et en y copiant le contenu de « /usr/lib/grub/i386-pc/ » :
+
+  sudo mkdir /boot/grub
+  sudo cp -a /usr/lib/grub/i386-pc/* /boot/grub
+
+Ensuite, suivez les étapes décrites au point 5 à partir d'ici.
+
+De plus, si vous comptez également regénérer le fichier « /boot/grub/menu.lst », vous pouvez vous inspirer du fichier « /usr/share/doc/grub/examples/menu.lst ».
+
+==== Restauration ====
+
+Lorsque Grub a été effacé par l'installation d'un autre système d'exploitation (par exemple Windows), il est nécessaire de le restaurer pour pouvoir accéder à Ubuntu.\\ Pour cela, **suivez le tutoriel [[:grub-pc#Réinstaller/Restaurer GRUB 2|Comment réinstaller GRUB Legacy]]** (il s'agit des mêmes commandes que Grub2 qui s'appliquent si vous n'avez que grub-legacy sur votre système).
+
+===== Autres =====
+==== Fond d'écran dans Grub ====
+
+Il est possible de paramétrer Grub pour qu'une image, appelée « splash image » soit affichée en fond d'écran.
+
+=== Installation ===
+
+Tout d'abord, vous pouvez [[:tutoriel:comment_installer_un_paquet|installer le paquet]] [[apt>grub-splashimages|grub-splashimages]] contenant des images par défaut.
+
+Ces images vont être placées dans « /boot/grub/splashimages/ ». Il n'est pas obligatoire d'utiliser ce paquet, vous pouvez télécharger vos propres images sur Internet ou les créer vous-mêmes (voir [[#creation_de_son_image|Création de son image]]), mais il faut que vous les placiez dans « /boot/grub/splashimages/ ».
+
+Cependant vous n'aurez probablement pas les droits d'écriture pour les placer à cet endroit. Utiliser alors la commande //cp// qui sert à copier des fichiers d'un emplacement vers un autre (on doit les saisir en les séparant avec un espace). En la combinant avec sudo vous obtenez les droits d'écriture. Manipulez-la toutefois avec précaution (gare à la syntaxe) :
+
+  sudo cp /chemin_de_votre_image /boot/grub/splashimages/
+
+Ou, pour ne pas les avoir en double sur le disque :
+
+  sudo mv /chemin_de votre_image /boot/grub/splashimages/
+
+<note>[[http://schragehome.de/splash/|Ce site-ci]] et [[http://www.schultz-net.dk/grub.html|ce site-là]] contiennent de chouettes images pour Ubuntu.
+
+A noter également l'inévitable [[http://www.gnome-look.org/|Gnome-Look.org]]!!</note>
+
+Puis [[:tutoriel:comment_éditer_un_fichier|ajoutez]] ceci dans le fichier « /boot/grub/menu.lst » (juste avant la déclaration des divers systèmes installés, car si vous rajoutez cette ligne à la fin du fichier cela ne fonctionnera pas, le Grub met en place le fond avant le reste). Si /boot n'est pas une partition, insérez juste après : ## ## End Default Options ## :
+  splashimage=(hdX,Y)/boot/grub/splashimages/NOM_IMAGE.xpm.gz
+Ou :
+  root 	   (hdX,Y)  
+  # Ce qui signifie qu'à partir de maintenant, GRUB transposera / comme (hdX,Y)
+  splashimage=/boot/grub/splashimages/NOM_IMAGE.xpm.gz
+
+<note important>Si /boot est montée sur un partition spécifique, il ne faut pas inclure le terme "/boot" dans la ligne splashimage du fichier menu.lst 
+Par exemple si (hdX,Y) représente la partition « /boot », on doit écrire dans menu.lst :
+splashimage=(hdX,Y)/grub/splashimages/NOM_IMAGE.xpm.gz
+</note>
+
+(hdX,Y) se détermine ainsi :
+X=numéro du disque, numéroté à partir de 0. Si vous n'avez qu'un disque X=0 ; si vous en avez deux et que /boot est sur le second, X=1, s'il est sur le premier, toujours X=0. Grub ne fait pas la différence entre les disque IDE, SATA. Il leur attribue un numéro en fonction de leur ordre de détection.\\
+Le fichier /boot/grub/device.map permet de savoir quelle est la coïncidence entre le nommage selon grub et celui selon Linux.
+<file>
+(hd0)   /dev/sda
+(hd1)   /dev/sdb
+(hd2)   /dev/sdc
+</file>
+
+Y=numéro de la partition sur le disque, numérotées à partir de 0. Si votre « /boot » est sur la 5e partition, Y=4.
+Le plus simple, consiste à regarder sous la ligne que vous insérez, à quel endroit Grub a défini « root ». Vous trouverez pour chaque boot possible des blocs du type :
+
+<file>
+title  Ubuntu, kernel...
+root   (hdX,Y)
+...
+</file>
+
+Pour voir votre image, redémarrez l'ordinateur et admirez.
+
+Sachez cependant que si vous utilisez //splashimage// dans « /boot/grub/menu.lst », la commande « color » pour choisir les couleurs des textes, du cadre, des ombres et du fond ne fonctionnera pas. Néanmoins il existe une astuce. Remplacez « color » par :
+
+<file>
+foreground XXXXXX
+background XXXXXX
+</file>
+
+Ou XXXXXX est un code de couleur hexdécimal, comme dans le code HTML. Pour vous faciliter la vie, cherchez, par exemple dans [[:gimp|The Gimp]] une couleur qui vous plaît et notez son code.
+
+=== Création de son image ===
+
+Les images utilisées par Grub sont bien particulières. Elle doivent remplir un certain cahier des charges :
+  * fichier de type « xpm.gz » ;
+  * taille de 640x480 ;
+  * être en 14 couleurs seulement.
+Pour vous aider, Coffee a écrit un petit script disponible [[http://lecoindespotes.free.fr/article.php3?id_article=14|ici]].
+
+Sinon, vous pouvez transformer vos images en ligne de commande grâce à //imagemagick//. Vérifiez que le paquet est installé (en cliquant [[apt>imagemagick|ici]] pour **Gutsy** et supérieur) puis :
+
+  convert -resize 640x480! -colors 14 /...chemin.../MonImage.jpg MonImage.xpm
+
+Notez que « .jpg » dans le format initial est un exemple. Puis il faut compresser l'image au format « .gz » :
+
+  gzip MonImage.xpm
+
+Enfin vous la déplacez dans le répertoire « /boot/grub/splashimages » :
+
+  sudo mv /...chemin.../MonImage.xpm.gz /boot/grub/splashimages
+
+==== Utiliser un clavier AZERTY dans grub ====
+
+Si un jour vous devez éditer des lignes dans Grub ou que vous décidez d'activer un mot de passe, vous constaterez que le clavier est en QWERTY. 
+
+Si vous avez un clavier AZERTY vous allez peiner pour retrouver certaines touches. En effet par défaut Grub utilise en clavier QWERTY.
+
+En s'inspirant de fichier de configuration [[http://www.mail-archive.com/debian-french@lists.debian.org/msg10579.html|suivant]], il faut faire ceci :  
+
+Sauvegardez puis [[:tutoriel:comment_editer_un_fichier|ouvrez le fichier]] « menu.lst » :
+
+<file>
+# Emulation d'un clavier azerty_FR
+setkey less backquote
+setkey greater tilde
+setkey ampersand 1
+setkey 1 exclam
+setkey tilde 2
+setkey 2 at
+setkey doublequote 3
+setkey 3 numbersign
+setkey quote 4
+setkey 4 dollar
+setkey parenleft 5
+setkey 5 percent
+setkey minus 6
+setkey 6 caret
+setkey backquote 7
+setkey 7 ampersand
+setkey underscore 8
+setkey 8 asterisk
+setkey backslash 9
+setkey 9 parenleft
+setkey at 0
+setkey 0 parenright
+setkey parenright minus
+setkey numbersign underscore
+# no change for equal
+# no change for plus
+setkey a q
+setkey A Q
+setkey z w
+setkey Z W
+setkey caret bracketleft
+# no equivalent for diaresis => we keep the US braceleft
+setkey dollar bracketright
+# no equivalent for pound => we keep the US braceright
+setkey q a
+setkey Q A
+setkey m semicolon
+setkey M colon
+setkey bracketleft quote 
+setkey percent doublequote
+setkey asterisk backslash
+setkey bracketright bar
+setkey w z
+setkey W Z
+setkey comma m
+setkey question M
+setkey semicolon comma
+setkey period less
+setkey colon period
+setkey slash greater
+setkey exclam slash
+setkey bar question
+</file>
+
+Ceci va dire à Grub qu'il doit changer chacune des touches d'un clavier QWERTY par son équivalent en AZERTY. Au prochain démarrage, votre clavier dans Grub sera un AZERTY.
+
+Vous pouvez également ajouter un menu au fichier « /boot/grub/menu.lst » pour repasser sous clavier QWERTY. Pour faire cela ajoutez le fragment suivant à la fin du fichier :
+
+<file>
+# Repasser le clavier en qwerty
+title Repasser le clavier en qwerty
+setkey
+</file>
+
+Un autre fichier de configuration fait en 2003 se trouve [[http://lists.gnu.org/archive/html/bug-grub/2003-10/msg00178.html|ici]].
+
+==== Mettre un mot de passe à grub ====
+
+Pour des raisons de sécurité et notamment une sécurisation du  [[:recovery_mode|mode de récupération]], il peut être utile de mettre un mot de passe dans grub. Assurez vous auparavant d'avoir permis l'utilisation d'un clavier azerty dans grub. Ouvrez un terminal :
+
+  grub
+
+puis lancez la commande : md5crypt
+
+Vous obtenez :
+  grub> md5crypt
+  md5crypt
+  Password: votre mot de passe
+  Encrypted: $1$gLhU0/$aW78kHK1QfV3P2b2znUoe/
+
+  quit
+
+Copiez le dans [[:tutoriel:comment_editer_un_fichier|boot/grub/menu.lst]] comme dans l'exemple :
+
+  ## password ['--md5'] passwd
+  # If used in the first section of a menu file, disable all interactive editing
+  # control (menu entry editor and command-line)  and entries protected by the
+  # command 'lock'
+  # e.g. password topsecret
+  password --md5 $1$gLhU0/$aW78kHK1QfV3P2b2znUoe/
+  # password topsecret
+
+Pour protéger une entrée en particulier, il faut mettre lock après le title comme dans l'exemple.
+
+  title		Ubuntu 9.04, kernel 2.6.28-14-generic (recovery mode)
+  lock
+  uuid		e77d8ae8-36d8-42d1-891d-2cf89dbf0b0c
+  kernel		/boot/vmlinuz-2.6.28-14-generic root=UUID=e77d8ae8-36d8-42d1-891d-2cf89dbf0b0c ro  single
+  initrd		/boot/initrd.img-2.6.28-14-generic
+
+Faites un essai sur un ancien noyau ou sur un noyau en recovery mode car s'il y a un problème vous ne pourriez plus démarrer.
+
+Si vous voulez protéger toutes les sessions du mode recovery de façon automatique à chaque mise à jour du kernel.
+
+Remplacez 
+
+  # lockalternative=false
+
+par
+
+  # lockalternative=true
+
+  sudo update-grub
+
+Il faudra désormais appuyer sur "p" et rentrer votre mot de passe sur toutes les sections protégées.
+
+==== Afficher le détail sous la barre Ubuntu ====
+
+Depuis la version 6.10, l'affichage par défaut ne donne pas d'information sur l'état de l'arrêt ou du démarrage. Pour changer ce comportement, il faut éditer son « /boot/grub/menu.lst » et supprimer le mot « quiet » de la ligne qui commence par « ''# defoptions='' ». Il faut ensuite actualiser :
+
+  sudo update-grub
+
+On voit alors des lignes bleues s'afficher indiquant l'état de l'avancement de l'arrêt-démarrage.
+
+===== Problèmes connus et résolus =====
+
+==== Les numéros d'erreur GRUB ====
+
+[[http://www.linux-france.org/article/sys/chargeurs/ix86/grub/grub-manual-fr.html#Depannage]]
+
+[[http://www.gentoo.org/doc/fr/grub-error-guide.xml]]
+
+=== GRUB Error 15 ===
+
+[[http://forum.ubuntu-fr.org/viewtopic.php?id=215207|Démarrer malgré l'erreur]]
+
+[[http://forum.ubuntu-fr.org/viewtopic.php?id=227542|Éviter que l'erreur se reproduise à chaque mise à jour du noyau]]
+
+==== Les gros disques durs et les limites du BIOS ====
+
+À la mise sous tension de l'ordinateur, le BIOS récupère l'information primaire des composantes du système, dont les disques durs.
+
+De ce fait, au démarrage du système, si le gestionnaire de démarrage Grub cherche à démarrer un système d'exploitation au-delà des limites connues du BIOS, il plantera.
+
+=== Cas type ===
+
+Dans mon cas, le matériel est un disque dur Western Digital de 250 Go, reconnu comme un 136 Gio dans le BIOS.
+
+À la mise sous tension de l'ordinateur, le BIOS récupère l'information primaire des disques durs.
+
+L'ordinateur est un GoldStar LG8S, la carte mère est une « MSI 815E PRO VER. 1 » et son BIOS ne sait pas gérer correctement les disques durs supérieurs à 136 Go, même avec la dernière mise à jour du BIOS version 1.4 (2007-05-25).  Au démarrage du système, le BIOS "tronque" les disques à sa taille maximale, soit 136 Go.  Si le gestionnaire de démarrage Grub cherche à démarrer un noyau situé au-delà de cette limite, le BIOS ne peut le charger et une erreur 15 "Le fichier n'existe pas" est soulevée.  Le démarrage s'arrête.
+
+Ce problème est connu et résolu : il faut et il suffit que la partition comprenant le répertoire /boot soit dans la partie du disque dur reconnue par votre BIOS, dans mon exemple, dans les 136 premiers Gio, peut importe les autres fichiers.  Les systèmes Linux, souvent installés en double amorçage avec Windows ou « dual boot », sont plus loin sur le disque dur que Windows.  En effet, le chargeur de MS Windows est limité à la première partition du disque dur et en conséquence Windows est toujours installé dans la première partition.  Les fichiers de démarrage pèsent au total et réalistement 64 Mo, vous devriez - je n'en suis pas sûr mais faites-le quand-même - annuellement évacuer les noyaux devenus inutiles.
+
+Pour connaître les limites de votre BIOS (8 Go, 32 Go 136 Go ou 137 Go), vérifiez, au démarrage de votre ordinateur, immédiatement après la vérification de la mémoire, que la taille des disques durs est détectée ou vérifiez en entrant dans le BIOS avec la touche « Suppr » ou « F1 » ou « F2 », etc.  Pour éviter l'erreur 15, la fin de votre partition contenant « /boot » de vos Linux ne doit pas être au-delà de cette limite.
+
+Il est à noter que vous pouvez placer tous vos fichiers en-deçà de cette limite pour simplifier la configuration.
+==== Taille réelle de disque dur perdue ====
+
+=== Cas type ===
+
+En interrompant une copie du disque dur entier sur un autre, volontairement ou par coupure de courant, la taille du disque dur cible peut-être erronée. Au BIOS, dans mon cas type, je me retrouvais avec une taille de 33821 Mo. Que cela soit avec un formatage de bas niveau (low Format) ou en réinstallant le MBR, rien n'y faisait. Il y avait plusieurs utilitaires qui reconnaissaient la véritable taille du disque et reformataient bien le disque dur, mais que cela soit sous Windows XP SP2 ou Linux Kubuntu 7.04, rien ne fonctionnait.
+
+La solution se trouvait du côté de la réécriture de la bonne taille du disque dur **sur le disque dur**.
+
+Pour ce faire, je vous suggère la méthode testée suivante :
+
+  - Avec le CD (déjà cité si haut) « Ultimate Boot CD », ma version était 4.0.3 (2007-05-25), démarrer votre ordinateur.
+  - Entrer dans la section « Hard Disk Tools ».
+  - Entrer dans la sous-section « Installations Tools ».
+  - Sélectionner le programme « MaxBlast V4.0 (Maxtor).
+  - Suivez les instructions et appuyez sur la touche « Entrée ».
+  - Accepter les termes de la licence d'utilisation en cliquant sur le bouton « I agree ».
+  - Sur l'écran suivant, cliquer sur le bouton « Yes ».
+  - Sélectionner l'option « Utilites ».
+  - Puis, sélectionnez l'option « Set Hard Drive Size ».
+  - Cliquer sur le bouton « Next ».
+  - Copier la valeur du champ « Native LBA » ou la plus grande taille que vous verrez sur cette page, dans le champ « Recommended Reported LBA ».
+  - Cliquer sur le bouton « Next » pour procéder à l'écriture de la bonne valeur sur votre disque dur.
+
+Voilà, il ne vous reste plus qu'à redémarrer votre ordinateur et à re-partitionner et reformater votre disque dur pour y récupérer tout son espace réel.
+
+==== Les nouveaux noyaux ne sont pas rajoutés après les mises à jour ====
+
+[[:tutoriel:comment_editer_un_fichier|
+Editez le fichier]] **/etc/kernel-img.conf** et rajoutez les lignes suivantes si elles ne sont pas présentes :
+<file>
+postinst_hook = /usr/sbin/update-grub
+postrm_hook   = /usr/sbin/update-grub
+</file>
+
+===== Liens =====
+
+Voici quelques liens, pour ceux qui veulent approfondir **le sujet** :
+
+  * Wiki anglophone [[http://wiki.ubuntu.com/GrubHowto|GrubHowto]]
+  * site du [[http://www.gnu.org/software/grub/|projet GNU GRUB]] [en]
+  * [[http://www.gnu.org/software/grub/manual/grub.html| Manuel Grub 0.97]] [en]
+  * [[http://www.linux-france.org/article/sys/chargeurs/ix86/grub/grub-manual-fr.html|Traduction française du manuel de la version 0.92 de Grub]] [fr] 
+  * [[http://wiki.mandriva.com/fr/GRUB,_le_manuel | Manuel (un peu plus lisible)]] [fr]
+
+===== Autres pages en lien avec les sujets =====
+
+{{backlinks>.}}
+{{topic>amorçage boot mbr}}
+
+----
+
+//Contributeurs : Blackpegaz (L'auteur), [[:contributeurs|les contributeurs d'Ubuntu-fr]], [[utilisateurs:did]], [[utilisateurs:BastNic]], [[utilisateurs:adam0509]], sonal, tontonjoe, def.ub, [[utilisateurs:sbrunner]], benjisan, jahmon, [[utilisateurs:lami|L'ami René]] (Problèmes connus et résolus)+(Mise en page)+(Autres pages en lien avec les sujets), Norio, [[utilisateurs:Ner0lph]], [[utilisateurs:luigifab]], [[utilisateurs:herrib]], [[utilisateurs:fanfantasy7]], Alrim, livier, krop, [[utilisateurs:prometee]], [[utilisateurs:Id2ndR]], [[utilisateurs:polarman]], ubunpac, commandant, [[utilisateurs:Canigou 66]], javascriptmaniac, perfran, so_good, [[utilisateurs:astre]], [[utilisateurs:thesa]], [[utilisateurs:frombenny]], [[utilisateurs:fnx]], Imoreion, [[utilisateurs:MrWaloo]], La Pouille, [[utilisateurs:YannUbuntu]], [[utilisateurs:andso]], [[utilisateurs:YoBoY]], salope, thierrybo, [[:utilisateurs:methu]] (relecture), Ju (merge avec doc statique), Eric P (explications fond d'écran), [[:utilisateurs:Zolgot]] (explication GrubConf), Théo Thirion, [[:utilisateurs:raph|Raphaël Doursenaud]].//

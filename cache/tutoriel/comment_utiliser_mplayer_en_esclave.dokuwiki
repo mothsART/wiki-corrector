@@ -1,0 +1,134 @@
+
+{{tag>mplayer tutoriel}}
+
+----
+
+====== Comment utiliser Mplayer en esclave ? ======
+
+===== Introduction =====
+
+[[:Mplayer]] est un puissant logiciel de lecture de vidéos et de musique. Ce tutoriel explique comment l'utiliser en tant qu'esclave, autant pour la musique que pour la vidéo. Cette technique permet de se passer d'une [[wpfr>Environnement_de_bureau|interface graphique]] et ainsi d'économiser de la mémoire vive et de la place à l'écran. De plus, cette option permet un contrôle du lecteur via de simples [[:tutoriel:script_shell|scripts shell]].
+
+Cette méthode est plutôt déconseillée aux adeptes de solutions «usine à gaz», qui préféreront alors une interface graphique complète, il existe de nombreux [[:lecteur_audio|lecteurs de musique]] et [[:lecture_et_encodage_de_fichiers_videos|lecteurs vidéos]] de qualité.
+
+===== Prérequis =====
+
+Cette utilisation de mplayer est dite en tant que «backend», c'est-à-dire que mplayer devient contrôlable par n'importe quel programme ou script. C'est cette deuxième solution qui va nous intéresser. Pour suivre ce tutoriel, il faudra donc de rapides connaissance sur les scripts shell. La lecture du man de mplayer permettra une meilleure compréhension de la suite.
+<code>man mplayer
+man bash</code>
+il faut aussi comprendre les notions de [[wpfr>Flux_standard|flux]] et de redirection de flux.
+
+Pour continuer le tutoriel, assurez-vous d'avoir [[:tutoriel:comment_installer_un_paquet|installé le paquet]] mplayer ([[apt://mplayer]]), [[wpfr>Tube_nommé|mkfifo]]. Munissez vous de votre [[:terminal]] favori, d'un peu de patience, et de courage.
+
+===== Let's go ? =====
+==== Trouver la commande ====
+Tout d'abord, il faut trouver la commande adéquate pour lancer mplayer. Le manuel nous informe qu'il faut utiliser l'argument -slave.
+<code>Cette option enclenche le mode esclave. Ceci est prévu pour l’utilisation de MPlayer en tant que base (backend) pour d’autres programmes. Au lieu d’intercepter les événements clavier, MPlayer va lire ses commandes séparées par un retour chariot (\n) via l’entrée stdin.
+NOTE : Voir −input cmdlist pour une liste des commandes esclaves, et DOCS/tech/slave.txt pour leur description.</code>
+Il faudra, comme indiqué aussi utiliser l'argument -input file="chemin/vers/mon/fichier/de/controle". Cette fois-ci, je vous laisse lire le manuel :p. De même, pour plus de clarté, l'argument -quiet sera passé, pour un [[wpfr>Flux_standard|stdout]] plus «épuré». Voici ce que vous devriez obtenir après une petite torture mentale :p :
+<code>mplayer -quiet -slave -input file=/tmp/music-control</code>
+NB : l'argument -shuffle permet de rendre la playlist aléatoire ,-idle évite à mplayer de quitter si rien n'est joué et -playlist permet de préloader une playlist. 
+
+====Utiliser la commande====
+Comme indiqué dans le man, cette commande implique l'utilisation d'un fifofile. C'est à dire un «fichier» qui servira à rediriger ce qui rentre dans son stdin vers celui de mplayer. Ainsi, les commandes passées au fifofile seront transmises à mplayer, qui les exécutera. Pour obtenir une liste des commandes disponibles, c'est :
+<code>mplayer -input cmdlist</code>
+Le principe est donc simple, il suffit de passer des commandes à notre fifofile ce qui influencera le comportement de mplayer.
+
+=====  Mise en pratique =====
+<note tip>Les chemins cités ci-dessous ne sont pas obligatoires, ils ne font qu'office d'exemple. Adaptez les en fonction en vos besoins et envies.</note>
+
+Nous allons tout d'abord créer notre fichier fifofile. Pour cela, simplement exécuter la commande "mkfifo".
+<code>mkfifo /tmp/music-control</code>
+Ensuite, il faut lancer la commande de mplayer. Avoir un lecteur en background n'a d’intérêt que s'il est en background (tâche de fond, non dépendante d'un terminal). Pour ce faire, ajouter un [[:projets/ecole/scripting/initiation_au_shell#presentation_de1|&]] en fin de ligne. 
+
+Cependant, le stdout et le stderr nous intéressent, car ils permettent de récupérer le nom du titre joué, par exemple dans le cas d'une chanson (cf fixme). Nous allons donc les rediriger vers deux fichiers distincts.
+<code>mplayer -slave -input file=/tmp/music-control -shuffle -playlist ~/Musique/ma-playlist.m3u -idle &> ~/.mplayer/mplayer.log 2> ~/.mplayer/mplayer-err.log</code>
+
+Pour contrôler mplayer, il suffit de rediriger le stdout d'un echo vers le stdin du fifofile.
+<code>echo 'macommande' > /tmp/music-control</code>
+Pour liste toutes les commandes, c'est ''mplayer -input cmdlist''. On notera "seek" pour se déplacer dans la chanson, "volume", "loadfile" pour ouvrir un fichier, "loadlist" pour ouvrir une playlist. Pour plus d'infos : [[http://www.mplayerhq.hu/DOCS/tech/slave.txt|en]].
+
+On peut récupérer des infos sur le média en cours de lecture en utilisant les commandes ''get_xxx'' de mplayer (la liste est donnée plus bas) :
+<code>echo 'get_meta_title' > /tmp/music-control</code>
+Cela affichera la ligne suivante dans ~/.mplayer/mplayer.log
+<code>ANS_META_TITLE='Le titre de la chanson'</code>
+On peut donc filtrer la sortie de la manière suivante :
+<code>tac ~/.mplayer/mplayer.log | grep "ANS_META_TITLE='" | cut -d "'" -f 2 | head -n 1</code>
+Notez l'utilisation de tac, qui passe le fichier à grep en ordre inverse (dernière ligne en premier), c'est plus rapide que de démarrer au début. Une autre solution consiste à utiliser un fifo comme sortie de mplayer (au lieu du fichier .log), mais il est (très) difficile d'avoir le même script qui contrôle à la fois une fifo d'entrée et de sortie, donc il faudra avoir deux scripts (un qui envoie les commandes, un qui affiche les infos).
+
+Une autre solution, moins propre, consiste à rechercher à coup de "grep", de "tail" et de "cut" les infos sur la dernière chanson : ''grep '^ Title' ~/.mplayer/mplayer.log | cut -d ":" -f 2 | tail -n 1''
+
+On peut récupérer la liste des get_xxx avec la commande ''mplayer -input cmdlist'' :
+<code>get_percent_pos      # Position en pourcentage dans le fichier
+get_time_pos         # Position en secondes et dixièmes de secondes
+get_time_length      # Longueur totale en secondes et dixièmes
+get_file_name        # Nom de fichier
+get_video_codec      # Codec vidéo utilisé
+get_video_bitrate    # Débit vidéo en KiloBits par seconde
+get_video_resolution # Résolution de la vidéo en pixels
+get_audio_codec      # Codec audio utilisé
+get_audio_bitrate    # Débit audio en KiloBits par seconde
+get_audio_samples    # Fréquence d'échantillonnage et nombre de cannaux (1 = mono / 2 = stereo)
+get_meta_title       # Titre
+get_meta_artist      # Artiste
+get_meta_album       # Album
+get_meta_year        # Année
+get_meta_comment     # Commentaire
+get_meta_track       # Numéro de piste
+get_meta_genre       # Genre</code>
+
+===== Aller plus loin =====
+Cet aspect de mplayer nous permet de le contrôler via des scripts bash. 
+Pour ne citer qu'eux, il est possible
+   *de passer à la chanson suivante
+<code bash>#!/bin/sh
+# Aller au fichier suivant
+echo 'pt_step 1' > /tmp/music-control
+exit 0</code>
+   *de passer à la chanson précédente
+<code bash>#!/bin/sh
+# Aller au fichier précédent
+echo 'pt_step -1' > /tmp/music-control
+exit 0</code>
+   *de mettre mplayer en pause
+<code bash>#!/bin/sh
+# Mettre la lecture en pause ou la reprendre
+echo 'pause' > /tmp/music-control
+exit 0</code>
+   *d'arrêter mplayer
+<code bash>#!/bin/sh
+# Quitte mplayer
+echo 'quit' > /tmp/music-control
+exit 0
+</code>
+
+Ces petits scripts, combinés par exemple à [[:zenity]], permettent un excellent contrôle de mplayer. On notera par exemple la possibilité de créer un petit script qui affichera un navigateur et permettra d'ouvrir un morceau, et de le jouer dans mplayer. Allez je suis gentil, je vous le donne aussi :p
+<code bash>#!/bin/sh
+# Open a file
+echo "loadfile '`zenity --question --text="Si vous jouez une autre liste de lecture, la liste de lecture en cours sera effacée \!" && zenity --file-selection --title "Sélectionnez le fichier à jouer."`' 0" > /tmp/music-control 
+exit 0 </code>
+
+De même, une méthode pas très conventionnelle permet de récupérer dans le fichier log le titre de la dernière chanson. Exemple (décidément, je vous donne tout !), et pardonnez la mauvaise qualité de ces scripts.
+<code bash>
+#!/bin/sh
+# Récupérer les informations de la chanson.
+
+cd ~/.mplayer
+title=`grep Title mplayer.log | cut -d ":" -f 2 | tail -n 1`
+artist=`grep Artist mplayer.log | cut -d ":" -f 2 | tail -n 1`
+album=`grep Album mplayer.log | cut -d ":" -f 2 | tail -n 1`
+year=`grep Year mplayer.log | cut -d ":" -f 2 | tail -n 1`
+genre=`grep Genre mplayer.log | cut -d ":" -f 2 | tail -n 1`
+
+#L'afficher dans une fenêtre
+zenity --info --text="`echo $title"\n"$artist"\n"$album"\n"$year"\n"$genre`" --title="Current song" --no-wrap
+</code>
+
+===== Infos utiles =====
+A l'aide de [[../xbindkeys]], on peut facilement arriver à tout contrôler au clavier !
+   *[[http://www.mplayerhq.hu|Le site officiel de mplayer]]
+   *[[http://www.mplayerhq.hu/DOCS/man/fr/mplayer.1.html|Des infos sur le mode "slave" et les commandes possibles]]
+   *[[wpfr>Mplayer| La page wikipédia de mplayer]]
+
+----
+//Contributeurs: [[:utilisateurs:blackbg]]//

@@ -1,0 +1,326 @@
+
+{{tag>Portail comptabilité}}
+-------
+====== Suivre le cours de la bourse ======
+
+Cette documentation indique les moyens disponibles pour suivre le cours de ses valeurs mobilières (actions, FCP...) ainsi que les procédures d'installations des logiciels disponibles.
+
+Les divers sites internet permettant de suivre la bourse ne seront pas évoqués dans cette documentation.
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]] ;
+  * Disposer d'une connexion à Internet configurée et activée ;
+
+===== Les moyens disponibles=====
+
+Les moyens suivants donnent les valeurs en temps réel ou décalé de 0 minutes.
+
+
+
+==== Invest ====
+
+Invest est une applet disponible en standard pour Gnome qui permet de suivre ses actions en bourse.
+
+Pour l'installer, vous devez avoir le paquet //gnome-applets// puis, il suffit de l'ajouter au tableau de bord en effectuant la manipulation suivante :
+  * Bouton droit sur le tableau de bord puis "Ajouter au tableau de bord"
+  * Ajouter Invest (ne fonctionne plus sous 11.04 Ubuntu Classic, voir Edit ci-dessous)
+  * Bouton droit sur la partie grise de l'applet puis "Préférences"
+  * Dans les préférences, cliquez sur "Ajouter" puis double-cliquez sur les valeurs de la ligne pour les modifier
+
+(Pour avoir les valeurs du CAC40 : copier le code de la valeur sur [[http://fr.finance.yahoo.com/q/cp?s=^FCHI]])
+
+**Edit**  : ne s'installe plus sous 11.04 sous //Ubuntu Classic (sans effets)//. Probablement trop lié à Gnome 2. STOCKS ci-dessous est une alternative décente qui fonctionne sous 11.04 //Ubuntu Classic (sans effets)//. Pas testé sous Unity.
+==== StocksScreenlet ====
+
+StocksScreenlet est un [[:screenlets|screenlet]] permettant de suivre les cours de la bourse en temps réel. Tout comme Invest, il se base sur les cours de Yahoo Finance.
+
+Pour l'installer, vous devez avoir le paquet **[[apt>screenlets]]** installé. Ensuite, ouvrez le gestionnaire de screenlets (applications->accessoires), et double cliquez sur "Stocks" pour l'utiliser. Enfin:
+  * Cliquez  droit sur le screenlet, puis "Propriétés"
+  * Dans "Options-Stock", mettez les symbole du cours à suivre (^FCHI pour le CAC 40), réglez la fréquence de mise à jour, le cours va apparaitre immédiatement sur le screenlet.
+
+
+==== Yahooquote ====
+<note warning>Le paquet n'est plus disponible sur ubuntu 16.04</note>
+Yahooquote est une application texte permettant d'obtenir les informations relatives à une action. Elle retourne les informations depuis [[http://finance.yahoo.com/|Yahoo! Finance]]. 
+
+Le principal intérêt de cette application par rapport à Invest est de pouvoir suivre les valeurs du **marché parisien**. Attention, les données ne sont pas en temps réel, il y a un décalage d'environ 20 minutes.
+
+Pour l'installer :
+<code>
+sudo apt-get install libfinance-yahooquote-perl
+</code>
+
+Syntaxe :
+<code>
+/usr/bin/yahooquote [--verbose] symbol [symbol ...]
+</code>
+
+Exemples d'utilisation (CAC40) :
+<code>
+$ yahooquote ^FCHI
+^FCHI   CAC 40  5951.54 4/25/2007       Paris
+
+$ yahooquote --verbose ^FCHI
+Symbol: ^FCHI
+Name: CAC 40
+Last: 5949.37
+Trade Date: 4/25/2007
+Trade Time: 8:32am
+Change: +63.34
+% Change: +1.08%
+Volume: 0
+Avg. Daily Volume: 0
+Bid: N/A
+Ask: N/A
+Prev. Close: 5886.03
+Open: 5902.54
+Day's Range: 5907.15 - 5953.44
+52-Week Range: 4564.69 - 5958.47
+EPS: N/A
+P/E Ratio: N/A
+Div. Pay Date: N/A
+Div/Share: N/A
+Div. Yield: N/A
+Mkt. Cap: N/A
+Exchange: Paris
+</code>
+
+**Remarque :**
+
+Un script basé sur Yahooquote et permettant d'afficher en couleur et sur une seule ligne le nom de la société, la dernière valeur mais aussi l'évolution journalière est disponible ci-dessous.
+
+Pour l'installer, copier le code ci-dessous dans un script exécutable "bourse" :
+<code>
+CouleurPositif=2
+CouleurNegatif=1
+CouleurNul=7
+
+yahooquote=/usr/bin/yahooquote
+
+# Definition des constantes
+LongeurNomSociete=15
+LongeurCours=7
+LongeurEvolution=8
+
+# On verifie si on demande l'aide
+if [ "$1" == "--help" ]
+then
+  echo "Usage: $0 [-f [-sxx] [-c]] symbole [symbole] ..."
+  echo "Affiche le cours et la variation journaliere correspondant a un symbole."
+  echo " "
+  echo "Options:"
+  echo "  -f   : Rafraichit les informations"
+  echo "  -sxx : Positionne le delai d'attente avant rafraichissement a xx secondes"
+  echo "  -c   : Demande un vidage de l'ecran avant d'afficher les nouvelles donnees"
+  echo " "
+  echo "Exemples :"
+  echo "$0 ^FCHI             # Affiche la valeur du CAC40"
+  echo "$0 -f -s300 -c ^FCHI # Affiche et rafraichit la valeur du CAC40 toutes les 5 minutes"
+  echo " "
+  echo "Necessite l'application Yahoo! quote"
+  echo "Paquet libfinance-yahooquote-perl sous Ubuntu"
+  echo " "
+  echo "Auteur : Loack"
+  echo "E-mail : loack at pileouface.org"
+  exit 0
+fi
+
+# On verifie que yahooquote existe
+if [ ! -f $yahooquote ]
+then
+  echo "Le paquet yahooquote n'est pas installe."
+  echo "Veuillez l'installer."
+  echo "" 
+  echo "Sous Ubuntu : sudo apt-get install libfinance-yahooquote-perl"
+  exit 1
+fi
+
+#On regarde si on doit boucler (parametre -f)
+if [ "$1" == "-f" ]
+then
+  Boucler=1
+else
+  Boucler=0
+fi;
+
+Continuer=1
+DelaiAttente=60
+while [ $Continuer == 1 ] 
+do
+  
+  Continuer=0
+  EffacerPage=0
+
+  # On parcours les parametres fournis 
+  for Id in $@;
+  do
+
+    if [ ${Id:0:1} != "-" ]
+    then
+      # Le parametre correspond a une action 
+      # On recupere les informations importantes
+      Societe=`$yahooquote $Id | cut -f 2`
+      Cours=`$yahooquote $Id | cut -f 3`
+      Changement=`$yahooquote --verbose $Id |grep Change |grep %|cut -d ' ' -f 3`
+
+      # On recherche la variation 
+      Evolution=`echo $Changement | grep "-"`
+  
+      if [ -n "$Evolution" ]
+      then
+        Couleur=$CouleurNegatif
+      elif [ $Changement == "0.00%" ]
+      then
+        Couleur=$CouleurNul
+      else
+        Couleur=$CouleurPositif
+      fi;
+
+      # On formate le nom de la societe
+      if [ ${#Societe} -gt $LongeurNomSociete ]
+      then
+        Societe=${Societe:0:LongeurNomSociete}
+      fi;
+
+      # On formate le cours
+      while [ ${#Cours} -lt $LongeurCours ]
+      do
+        Cours=" $Cours"
+      done;
+
+      # On formate l'evolution
+      while [ ${#Changement} -lt $LongeurEvolution ]
+      do
+        Changement=" $Changement"
+      done;
+
+      # On affiche les informations     
+      for Valeur in "$Id" "$Societe" "$Cours";
+      do 
+        echo -n "$Valeur"
+        if [ ${#Valeur} -lt 8 ]
+        then
+          echo -n $'\t'
+        fi;
+        echo -n $'\t'
+      done;
+
+      tput setaf $Couleur
+      echo "$Changement"
+      tput sgr0 
+  
+    else    
+      #Le parametre est une option
+      #On regarde si on doit boucler (parametre -f)
+      if [ "$Id" == "-f" ]
+      then
+        Boucler=1
+      elif [ ${Id:0:2} == "-s" ]
+      then
+        DelaiAttente=${Id:2:10}
+      elif [ "$Id" == "-c" ]
+      then
+        EffacerPage=1
+      else
+        echo "$0: Option invalide -$Id"
+        echo "Pour en savoir d'avantage, faites: \"$0 --help\""
+        exit 1
+      fi;
+    fi;
+  done;
+
+  # On gere le demande de boucle
+  if [ $Boucler == 1 ]
+  then
+    Continuer=1
+    sleep $DelaiAttente
+    echo ""
+    if [ $EffacerPage == 1 ]
+    then
+      clear
+    fi;
+  else
+    Continuer=0
+  fi;
+done;
+</code>
+
+Syntaxe (se mettre dans le dossier contenant le script bourse) :
+<code>
+./bourse [-f [-sxx] [-c]] symbole [symbole] ...
+  -f   : Rafraichit les informations
+  -sxx : Positionne le delai de rafraichissement a xx secondes
+  -c   : Demande un vidage de l'ecran avant d'afficher les nouvelles donnees
+</code>
+
+Exemple d'utilisation pour le CAC40 :
+<code>
+$ ./bourse ^FCHI
+^FCHI           CAC 40          5931.47         +0.77%
+</code>
+ou pour une action cotée à Paris dont le code mnémonique est XX :
+<code>$  ./bourse XX.PA</code>
+==== Prorealtime ====
+
+=== Présentation ===
+
+Le logiciel Prorealtime, accessible à cette adresse [[http://www.prorealtime.com/fr/]] permet de pratiquer l'analyse technique sur des cours de bourse.
+
+Le must des logiciels de bourse. ProRealTime couvre de nombreux marchés et reste entièrement gratuit pour des flux en fin de journée. Si vous souhaitez devenir un investisseur actif, ProRealTime vous propose plusieurs offres payantes en temps réel. Le tarif dépend notamment du délai mais aussi des marchés couverts. De plus, plusieurs modules d'aides à la décision sont accessibles de façon payante.
+
+Dans tous les cas, n'hésitez pas à user et abuser des formidables capacités du logiciel d'analyse technique en version gratuite. 
+
+
+Il est possible d'utiliser le logiciel de Prorealtime avec Ubuntu 
+
+=== Installation ===
+
+Pour utiliser Prorealtime il faut installer la dernière version de Java [[:java]].
+=== Utilisation ===
+
+Apres avoir installé Java, il faut redémarrer votre logiciel Internet pour que les modifications soit prise en compte.
+Ensuite créer un compte gratuit sur le site de Prorealtime [[http://www.prorealtime.com/fr/]].
+
+Et pour finir, Il ne reste plus qu'a Cliquer sur **Lancer la plateforme**
+
+==== Kmymoney ====
+Avec [[:KmyMoney]] vous avez la possibilité de suivre l'évolution d'un portefeuille de valeurs mobilières très facilement.
+Dans l'onglet "Investissement" (colonne de gauche), clic droit, "nouvel investissement". Sélectionnez le type de valeur mobilière (VM) et cliquez sur "suivant".
+
+Sur la nouvelle fenêtre renseignez le nom de la VM.
+Il vous faut maintenant le symbole commercial; symbole qui est indispensable pour que la mise à jour en ligne puisse s'effectuer.
+
+  * Pour les actions: allez sur le [[http://fr.finsearch.yahoo.com/fr/index.php?s=fr_sort&nm=&tp=S&r=*&sub=Recherche+|Site de Yahoo Finance]]   , sur le site entrez le nom de votre action ou directement le code ISIN. 
+Exemple: Altran: code ISIN: FR0000034639; le symbole commercial est: ALT.PA
+
+  * Pour les SICAV et FCP: si vous avez le code ISIN (par exemple: FR0010021568) il vous suffit de rajouter EUR à la fin du code ISIN; le symbole commercial sera donc: FR0010021568EUR
+
+Ensuite sélectionnez le "marché des changes", EUREX pour l'Europe, AMEX pour les USA, etc... ainsi que la devise.
+
+Sur la page suivante dans "Source en ligne", sélectionnez "Yahoo France". 
+
+Une fois que vous avez validé, vous retournez sur la page "investissement", clic droit et "mettre à jour le cours".
+
+
+===== Voir aussi =====
+
+  * Portail [[:Comptabilité]]
+  * [[http://www.slideshare.net/clkao/trading-with-open-source-tools-preview|Trading with opensource tools]]
+====Autres logiciels====
+Trading
+   * [[eclipsetrader|Eclipse Trader]]
+   * [[http://aiotrade.com/|AIO Trade]]
+   * [[http://itrade.sourceforge.net/fr/downloads.htm|Itrade]]
+
+Java : 
+   * http://groups.google.com/group/JavaTraders?pli=1
+
+Liste de logiciels : 
+   * [[http://sourceforge.net/directory/business-enterprise/financial/investment|"Investment Software" sur SourceForge.net]]
+
+----
+
+
+
+//Contributeurs : [[:utilisateurs:Vigix]], Nandayo  et ???? //

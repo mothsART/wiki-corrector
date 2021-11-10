@@ -1,0 +1,183 @@
+
+{{tag>Focal Hirsute matériel imprimante Brother}}
+
+----
+
+====== Brother p-touch D450VP ======
+
+La Brother p-touch D450VP est une petite étiqueteuse destinée à l'impression thermique d'étiquettes bicolores sur rubans laminés ou tissus de 3,5 à 18 mm de large.
+
+Si l'imprimante est autonome, puisqu'elle est dotée d'un clavier et d'un écran, elle peut aussi être reliée à un ordinateur. Bien entendu Brother n'a pas pris la peine de développer un utilitaire compatible Linux mais un utilisateur suisse, Dominic Radermacher, a créé un outil en ligne de commande appelé ptouch-print qui permet d'utiliser l'appareil sous Ubuntu. Voici comment l'installer et utiliser votre p-touch sous Ubuntu.
+
+===== Compatibilité =====
+
+  * PT-2420PC
+  * PT-1230PC
+  * PT-2430PC
+  * PT-2730 (48 lignes blanches pourraient être imprimées avant le texte souhaité)
+  * PT-E500 (espaces blanc intercalaires possibles)
+  * PT-D450
+  * PT-D450VP (seule testée sous Ubuntu)
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+
+Dominic utilise Arch Linux, par conséquent sous Ubuntu il va falloir compiler l'application. Ce n'est pas si difficile mais ça demande un peu de méthode.
+
+====Outils====
+En tout premier lieu, il est nécessaire d'installer tous les outils de [[compilation|compilation]] : 
+<code>
+usr@usr-pc:~$ sudo apt install build-essential fakeroot checkinstall
+</code>
+
+Vous devez également installer git :
+<code>
+usr@usr-pc:~$ sudo apt install git
+</code>
+====Dépendances====
+
+puis les dépendances de ptouch-print sous Ubuntu : libusb-dev libgd-dev autopoint 
+<code>
+usr@usr-pc:~$ sudo apt install libusb-dev libgd-dev autopoint
+</code>
+
+===== Installation =====
+
+Vous pouvez désormais télécharger les sources dans un répertoire temporaire.
+<code>
+usr@usr-pc:~$ mkdir ~/Documents/RepDeTravail
+usr@usr-pc:~$ cd ~/Documents/RepDeTravail
+usr@usr-pc:~$ git clone https://github.com/Nihlus/ptouch-print
+</code>
+====Compilation====
+Si vous avez de la chance, la compilation va se dérouler sans souci ainsi :
+<code>
+usr@usr-pc:~$ cd ptouch-print
+usr@usr-pc:~$ ./autogen.sh
+usr@usr-pc:~$ ./configure --prefix=/usr
+usr@usr-pc:~$ make
+usr@usr-pc:~$ sudo checkinstall
+</code>
+
+<note tip>Attention : lorsque checkinstall vous fait saisir les informations d'installation, ne pas oublier d'inscrire un nombre pour le numéro de version, la valeur par défaut - du texte - n'est pas acceptée
+</note>
+<note tip>
+sudo make install peut être utilisé à la place de checkinstall mais pour le suivi des paquets, checkinstall est plus adapté. C'est plus simple à désinstaller.
+</note>
+
+Vous devriez être désormais capable d'imprimer avec votre étiqueteuse :
+<code>
+usr@usr-pc:~$ sudo ptouch-print --text "Ma première étiquette !"
+</code>
+====En cas de problème lors de la compilation====
+Si jamais configure ou autogen.sh rencontrent des difficultés (ils le diront), les manipulations suivantes ont permis de régler le problème sous une Ubuntu 20.04 (on suppose que le terminal est ouvert dans le répertoire cloné ptouch-print)
+<code>
+usr@usr-pc:~$ cp /usr/share/automake-1.16/missing ../ (à adapter à votre version d'automake)
+usr@usr-pc:~$ cp config.rpath ../
+usr@usr-pc:~$ aclocal
+usr@usr-pc:~$ autoconf
+usr@usr-pc:~$ autoheader
+usr@usr-pc:~$ automake --add-missing
+</code>
+puis :
+<code>
+usr@usr-pc:~$ ./autogen.sh
+usr@usr-pc:~$ ./configure --prefix=/usr
+usr@usr-pc:~$ make
+usr@usr-pc:~$ sudo checkinstall
+</code>
+<note tip>Installation avec Ubuntu 21.04 Hirsute Hippo : difficulté rencontrée avec libusb pourtant installé.
+<code>E: Impossible de trouver le paquet libusb-1.0-dev
+E: Impossible de trouver de paquet correspondant à l'expression rationnelle « libusb-1.0-dev »
+</code>
+La difficulté a été contournée en téléchargeant manuellement les paquets libusb-dev_0.1.12-32_amd64.deb et udo dpkg -i libusb-1.0-0-dev_1.0.23-2build1_amd64.deb. Cette installation a rencontré des problèmes de version MAIS un sudo apt-get -f install a permis de tout remettre d'aplomb ... et de finaliser la compilation de l’utilitaire : voir ce [[https://forum.ubuntu-fr.org/viewtopic.php?pid=22469678#p22469678|post]] sur le forum.
+</note>
+===== Configuration : Ajout d'une règle udev=====
+sudo ? mais pourquoi sudo ?
+Essayez sans :
+<code>
+usr@usr-pc:~$ ptouch-print --text "Ma première étiquette !"
+PT-D450 found on USB bus 1, device 30
+libusb_open error :LIBUSB_ERROR_ACCESS
+</code>
+Que se passe-t-il ? L'étiqueteuse est attribuée à l'utilisateur root, pas à l'utilisateur courant. Une petite règle udev va régler tout ça.
+====Identifiants USB====
+Première étape : repérer les identifiants de l'étiqueteuse
+<note tip>
+Si vous voulez aller vite, vous pouvez essayer avec idVendor=="04f9" et idProduct=="2073". Avec un peu de chance ça fonctionnera chez vous, sinon il faut chercher un peu (pas trop, rassurez-vous).
+</note>
+Le plus simple pour repérer les caractéristiques de l'étiqueteuse : commencer par la débrancher puis la rebrancher. Saisir alors  :
+<code>
+usr@usr-pc:~$ find /dev/bus/usb/ ! -type d -mmin -5
+/dev/bus/usb/001/032
+</code>
+Cette commande va afficher la liste des périphériques branchés depuis moins de 5 mn. Si vous vous débrouillez bien il n'y en aura qu'un : l'étiqueteuse !
+On peut alors utiliser udevadm pour afficher les caractéristiques de la machine (à adapter selon les retours de find) :
+<code>
+usr@usr-pc:~$ udevadm info /dev/bus/usb/001/032 | grep -E "VENDOR|PRODUCT"
+E: PRODUCT=4f9/2073/100
+E: ID_VENDOR=Brother
+E: ID_VENDOR_ENC=Brother
+E: ID_VENDOR_ID=04f9
+E: ID_VENDOR_FROM_DATABASE=Brother Industries, Ltd
+</code>
+idVendor est donc 04f9 et idProdut est donc 2073 (et pas 4f9 !)
+====Création de la règle udev====
+On peut alors créer une règle udev.
+
+On commence par vérifier qu'une règle portant le nom envisagé n'existe pas déjà (peu probable mais par principe, on vérifie) :
+<code>
+usr@usr-pc:~$ if [[ -f /etc/udev/rules.d/41-brother-ptouch.rules ]]; then echo "Changer de nom"; else echo "OK"; fi
+</code>
+Si le retour est "Changer de nom", ben changez le nom. Peu importe lequel, il est cependant conseillé de respecter la syntaxe en commençant par un numéro (ordre d'exécution des règles) suivi d'un tiret et de ne pas faire comme dans l'exemple qui a pris 41 comme numéro d'ordre. Commencer à 50 :
+<code>
+sudo echo 'SUBSYSTEM=="usb",ATTRS{idVendor}=="04f9",ATTRS{idProduct}=="2073",GROUP="users",MODE="0666"' > /etc/udev/rules.d/41-brother-ptouch.rules
+</code>
+Attention à bien respecter la syntaxe des guillemets et apostrophes. Dans users mettre un group auquel vous appartenez (cat /etc/group).
+
+Rechargez les règles udev (ou redémarrez votre système) :
+<code>
+sudo udevadm control --reload
+</code>
+Et là tout va bien :
+<code>
+usr@usr-pc:~$ ptouch-print --text "Ma première étiquette !"
+</code>
+=====UTILISATION=====
+
+====Syntaxe====
+ptouch-print [options] <paramètres d'impression>
+
+===options===
+  * --font <nom police>	utiliser une police spécifique
+  * --font <fichier>		utiliser un fichier de police <fichier>
+  * --writepng <fichier>	au lieu d'imprimer sur l'imprimante, la sortie d'impression est envoyée dans un fichier png. Fonctionne uniquement pour le texte (paramètre --text) et accepte un seul et unique paramètre de texte
+  * --help pour afficher l'aide
+	
+===paramètres d'impression===
+  * --image <fichier>		imprime le fichier d'image passé en paramètre. Format noir et blanc png impératif.
+  * --text <texte>			imprime 1 à 4 lignes de textes. Si le texte contient des espaces, utiliser des guillemets anglais "". Lorsqu'il y a plusieurs lignes, entourer le texte de chaque ligne par des guillemets, chaque groupe étant séparé par un espace. Ex. : --text "ligne 1" "ligne 2" "ligne 3"
+  * --cutmark				imprime une marque de découpe sur le ruban.
+  * --fontsize				fixe manuellement (pas automatique, qui est par défaut le plus grand possible compte tenu du nombre de lignes et de la hauteur du ruban) la taille de la police.
+  * --pad <n>				ajoute n pixels de marge (espaces blancs).
+
+===Exemples===
+<code>
+usr@usr-pc:~$ ptouch-print --text "Texte sur une seule ligne"
+usr@usr-pc:~$ ptouch-print --text "Première ligne" "Deuxième ligne" "Troisième ligne"
+usr@usr-pc:~$ ptouch-print --text "Etiquette de test" --writepng EtiquetteDeTest.png
+usr@usr-pc:~$ ptouch-print --pad 4 --text "Texte précédé de 4 pixels de marge"
+usr@usr-pc:~$ ptouch-print --text "Un texte suivi d'une image" --image image.png
+usr@usr-pc:~$ ptouch-print --help
+usr@usr-pc:~$ ptouch-print --font "Ubuntu:bold" --fontsize 23 --text "Texte Ubuntu gras, 23 pixels"
+usr@usr-pc:~$ ptouch-print --text "Etiquette 1" --cutmark --text "Etiquette 2"
+</code>
+===== Voir aussi =====
+  * Site : https://familie-radermacher.ch/dominic/computer/p-touch2430pc/
+  * git alternatif : https://github.com/Nihlus/ptouch-print/blob/master/README
+
+----
+//Contributeurs principaux : [[utilisateurs:zococo|Zococo]]
+

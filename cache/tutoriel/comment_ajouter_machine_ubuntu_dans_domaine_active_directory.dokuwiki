@@ -1,0 +1,433 @@
+
+{{tag>Focal windows authentification tutoriel}}
+
+----
+
+====== Comment ajouter une machine Ubuntu dans un domaine Active Directory ? ======
+
+
+===== Logiciels utilisés =====
+
+^ Nom                       ^ Version        ^
+| Microsoft Windows Server  | 2007     |
+| Linux                     | Ubuntu 16.04 LTS   |
+| Winbind                   | 3.0.22-Ubuntu ou supérieur |
+| Samba                     | 3.0.22-Ubuntu ou supérieur |
+| krb5-user                 | Krb5-1.4.3 ou supérieur   |
+
+| 10.0.0.3 | Adresse IP du serveur Kerberos |
+
+===== Termes employés =====
+
+^ Terme ^ Signification ^
+| AD | Active Directory |
+| Administrateur | Utilisateur du domaine ayant des droits administrateur |
+| CD (DC plus communément) | Contrôleur de domaine |
+| FQDN | Nom de domaine pleinement qualifié //(Fully Qualified Domain Name)// |
+| SLINUX3001 | Nom de machine de la station Ubuntu |
+| SLINUX3001.DHYDRONIC.DCIAT.FR | FQDN de la station Ubuntu |
+| DHYDRONIC.DCIAT.FR | Domaine AD  |
+| DHYDRONIC | Royaume Kerberos |
+| NTP | Protocole de temps réseau //(Network Time Protocol)//  |
+| PAM | Modules d\'authentification enfichables //(Pluggable Authentication Modules)// |
+| ServeurCD.MonDomaine | FQDN du contrôleur de domaine |
+| ServeurKRB.MonDomaine | FQDN du serveur Kerberos |
+| ServeurNTP.MonDomaine | FQDN du serveur de temps |
+| Utilisateur | Utilisateur du domaine |
+| 172.20.20.20 | Adresse IP du contrôleur de domaine |
+| 10.0.0.2 | Adresse IP du serveur de temps |
+
+
+<note tip>Un problème existe avec Likewise dans Ubuntu 10.04. Un script d'installation semi automatique d'un poste Ubuntu 10.04 à un serveur AD 2003 est en cours d'élaboration ici : http://forum.ubuntu-fr.org/viewtopic.php?id=395977&p=1</note>
+
+===== Réglage de l'heure =====
+
+Le temps est essentiel pour Kerberos. Le meilleur moyen de s'affranchir de cela est d'utiliser un serveur de temps (serveur NTP). On utilise donc un client NTP, ntpdate étant installé par défaut. Vérifier les informations suivantes dans le fichier « /etc/default/ntpdate » : 
+<file>
+# serveur source à vérifier
+NTPSERVERS="ServeurNTP.MonDomaine"
+# options supplémentaires pour ntpdate
+NTPOPTIONS="-u"
+</file>
+
+Pour synchroniser l'heure :
+  sudo /usr/sbin/ntpdate-debian
+
+Comme toute horloge, il y aura des dérives au fil du temps. Il faut donc synchroniser régulièrement l'heure ! On peut mettre la commande précédente dans une tâche cron qui s'exécutera tous les jours, surtout pas à minuit (si tout le monde choisi la même heure, surtout sur les serveurs publics, cela fait un pic de charge énorme: il vaut mieux choisir une heure "non ronde"). Pour cela éditez la crontab de l'utilisateur root :
+  sudo crontab -e
+et insérez
+<file>
+# m h  dom mon dow   command
+
+# SYNCHRO NTP
+18 1   *   *   *   /usr/sbin/ntpdate-debian
+@reboot   /usr/sbin/ntpdate-debian
+</file>
+
+
+**Remarque 1 :** par défaut, le client ntpdate se lance avec comme paramètre le serveur sur lequel synchroniser exemple : ntpdate serveur.mondomaine.tld. Dans l'exemple plus ci-dessus, on utilise ntpdate-debian qui est clone de ntpdate mais à la sauce debian : il n'y a pas de paramètre mais on passe par un fichier de configuration (/etc/defaut/ntpdate).
+
+**Remarque 2 :** La deuxième ligne permet de synchroniser le poste sur le serveur au démarrage de la machine. Cela évite ainsi le message "No logon server" et un délai allant parfois jusqu'à quelques minutes pour pouvoir ouvrir une session avec un compte du domaine AD quand la station reçoit sa configuration IP via un serveur DHCP.
+
+===== Nom de domaine pleinement qualifié =====
+
+Un FQDN est essentiel afin de faire fonctionner Kerberos. Dans « /etc/hosts » :
+<file>127.0.0.1 localhost.localdomain localhost slinux3001</file>
+
+===== Configurer Likewise =====
+
+==== Methode simplifiée ====
+
+  sudo apt-get update
+  sudo apt-get install likewise-open
+  sudo domainjoin-cli join fqdn.of.your.domain Administrator
+  sudo update-rc.d likewise-open defaults
+  sudo /etc/init.d/likewise-open start
+
+
+vous pouvez maintenant vous identifier en utilisant DOMAIN\user
+
+
+vous pouvez ajouter cette ligne :
+
+  winbind use default domain = yes
+
+dans le fichier :
+
+  /etc/samba/smb.conf
+
+afin de ne plus devoir préciser DOMAIN\ à chaque fois que vous vous identifiez
+
+
+source : http://anothersysadmin.wordpress.com/2008/04/06/howto-active-directory-authentication-in-ubuntu-804/
+
+==== Programmes requis ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>krb5-user]]**.
+
+Configurer Kerberos (//via// le fichier « /etc/krb5.conf ») n'est pas nécessaire, si les enregistrements du service DNS sont correctement configurés pour Kerberos.
+
+  * MONDOMAINE = Correspond au nom NETBIOS: EXAMPLE.COM
+  * MonDomaine = Correspond au suffixe DNS: exemple.com
+
+
+Fichier « /etc/krb5.conf » :
+<file>
+[logging]
+    default = FILE10000:/var/log/krb5lib.log
+
+[libdefaults]
+    ticket_lifetime = 24000
+    default_realm = MONDOMAINE
+    dns_fallback = no
+    default_tkt_enctypes = des3-hmac-sha1 des-cbc-crc
+    default_tgs_enctypes = des3-hmac-sha1 des-cbc-crc
+
+[realms]
+    MONDOMAINE = {
+        kdc = ServeurKRB.MonDomaine:88
+        admin_server = ServeurCD.MonDomaine:749
+        default_domain = MONDOMAINE
+}
+
+[domain_realm]
+    .MonDomaine = MONDOMAINE
+    MonDomaine = MONDOMAINE
+</file>
+
+
+
+
+
+==== Test ====
+
+Demander un TGT (//Ticket-Granting Ticket//, il n'est pas nécessaire d'être administrateur, chaque compte valide du domaine peut être utilisé, le nom de domaine doit être en majuscules) :
+
+<code>
+sudo kinit Utilisateur@MONDOMAINE
+Password for Utilisateur@MONDOMAINE: ****
+</code>
+
+<note>Il semble qu'il y ait des problèmes au niveau de la résolution de noms quand on execute cette commande, la commande 'kinit' utilise 'avahi-daemon' pour résoudre le nom, et cette résolution se fait avec le protocole MDNS (port 5353) (si je ne m'abuse c'est un protocole apprécié par MAC (apple), faire des recherches sur Zeroconf). Or la recherche doit se faire avec le protocole DNS (port 53) si elle espère une réponse.
+
+Je propose de modifier le fichier /etc/nsswitch.conf (ce n'est peut-être pas très propre mais au moins ça fonctionne) :
+
+à la ligne " hosts: files mdns4_minimal [NOTFOUND=return] dns mdns4 "
+remplacer par : " hosts: dns ".
+
+
+Cette info me vient de launchpad : [[https://bugs.launchpad.net/ubuntu/+source/avahi/+bug/94940]]
+</note>
+
+
+Dans certains cas plusieurs erreurs peuvent apparaitre :
+<code>
+kinit(v5): KDC has no support for encryption type while getting initial credentials
+
+</code>
+Il faut « rafraichir » votre mot de passe administrateur. Modifiez-le depuis votre contrôleur de domaine. Changez-le ou remettez le même, **l'important est de forcer une mise à jour pour le mot de passe de ce compte.**
+
+<code>
+kinit(v5): Clock skew too great while getting initial credentials
+</code>
+Il y a un décalage trop important (> 5min) entre l'heure de la machine et celle du CD. La communication est de ce fait impossible. [[comment_ajouter_machine_ubuntu_dans_domaine_active_directory#reglage_de_l_heure|Réglage de l'heure]]
+
+==== Vérification de la validité du ticket ====
+
+<code>
+sudo  klist
+Ticket cache: FILE:/tmp/krb5cc_0
+Default principal: Utilisateur@MONDOMAINE
+
+Valid starting     Expires            Service principal
+01/21/05 10:28:51  01/21/05 20:27:43    krbtgt/MONDOMAINE@MONDOMAINE (C\'est la partie à vérifier)
+        renew until 01/21/05 20:28:51
+</code>
+
+===== Joindre un domaine AD =====
+
+==== Programme requis ====
+
+Pour vous connecter à Windows 2003 SP1, la version 3.0.14a de Winbind est nécessaire. Les [[:tutoriel:comment_installer_un_paquet|paquets à installer]] sont **[[apt://winbind|winbind]]** et **[[apt://samba|samba]]**.
+
+
+==== Joindre le domaine ====
+
+Dans « /etc/samba/smb.conf » :
+<file>
+[global]
+        security = ADS
+        realm = MONDOMAINE
+        password server = ServeurCD.MonDomaine
+        workgroup = MonDomaine
+        winbind separator = /
+        idmap uid = 10000-20000
+        idmap gid = 10000-20000
+        winbind enum users = yes
+        winbind enum groups = yes
+        template homedir = /home/%D/%U
+        template shell = /bin/bash
+        client use spnego = yes
+        winbind use default domain = yes
+        # empêche le client de devenir maitre explorateur
+        domain master = no
+        local master = no
+        preferred master = no
+        os level = 0
+</file>
+
+On redémarre le service pour prendre en compte les nouveaux paramètres.
+
+  sudo service smbd restart
+
+
+Effectuer une requête de TGT Kerberos valide, ce dernier étant autorisé à joindre des machines au domaine AD.
+
+<code>
+sudo net ads join -U Administrateur -S ServeurCD.MonDomaine
+Using short domain name – MONDOMAINE
+Joined 'MaMachine' to realm 'MONDOMAINE'
+</code>
+
+Si l'authentification Kerberos est valide, aucun mot de passe ne doit vous être demandé //(si lors de votre demande ticket kerberos vous vous être connecté en administrateur)//. Si non, le mot de passe administrateur vous sera demandé.
+
+Si vous recevez une erreur du genre:
+
+<code>
+Failed to join domain: failed to find DC for domain mondomaine.LOCAL
+</code>
+
+Avahi-deamon est probablement la cause du problème. Pour le désactiver veuillez inscrire la commande ci-dessous.
+
+<code>
+sudo update-rc.d -f avahi-daemon remove
+</code>
+
+ou encore
+<code>
+sudo /etc/init.d/avahi-daemon stop
+</code>
+
+plus de détail sur l'erreur avec -d 3
+<code>
+sudo net join ads -U Administrateur -S ServeurCD.MonDomaine -d 3
+</code>
+
+==== Redémarrer Winbind ====
+
+  sudo /etc/init.d/winbind restart
+
+Souvent, winbind est démarré automatiquement après l'installation. Il convient donc de le redémarrer pour prendre en compte les modifications apportées à la configuration de SaMBa.
+S'il n'avait pas été démarré, Ubuntu n'arrivera pas à l'arrêter, mais le démarrera tout simplement !
+
+==== Test ====
+
+Pour obtenir une liste des utilisateurs du domaine :
+
+  wbinfo -u
+
+Et une liste des groupes :
+
+  wbinfo -g
+
+
+===== Configurer l'authentification =====
+
+==== Le fichier « nsswitch.conf » ====
+
+Dans « /etc/nsswitch.conf » :
+<file>
+passwd:   compat winbind
+group:    compat winbind
+shadow:   compat
+
+hosts:       files dns
+networks:    files dns
+ 
+services:    db files
+protocols:   db files
+rpc:         db files
+ethers:      db files
+netmasks:    files
+netgroup:    files
+bootparams:  files
+ 
+automount:   files
+aliases:     files
+</file>
+
+
+==== Test ====
+
+Tester le module 'nsswitch' Winbind à l'aide de **getent** :
+<code>
+sudo getent passwd
+
+root:x:0:0:root:/root:/bin/bash
+...
+LAB+administrator:x:10000:10000:Administrator:/home/LAB/administrator:/bin/bash
+LAB+gast:x:10001:10001:Gast:/home/LAB/gast:/bin/bash
+...
+</code>
+
+<code>
+sudo getent group
+
+root:x:0:
+daemon:x:1:
+bin:x:2:
+...
+LAB+organisations-admins:x:10005:administrator
+LAB+domänen-admins:x:10006:manuel,administrator
+LAB+domänen-benutzer:x:10000:
+LAB+domänen-gäste:x:10001:
+LAB+linux-admins:x:10004:manuel
+</code>
+
+
+==== PAM ====
+
+Avec cette configuration, vous pouvez accéder à la machine à l'aide d'un compte local ou un compte du domaine. À la première connexion d'un utilisateur, un répertoire « home » sera créé.
+
+Dans « /etc/pam.d/common-account » :
+<file>
+account sufficient      pam_winbind.so
+account sufficient      pam_unix.so
+</file>
+
+Dans « /etc/pam.d/common-auth » :
+<file>
+auth sufficient pam_winbind.so
+auth sufficient pam_unix.so nullok_secure use_first_pass
+auth required pam_deny.so
+</file>
+
+Dans « /etc/pam.d/common-session » :
+<file>
+session required pam_unix.so
+session required pam_mkhomedir.so umask=0022 skel=/etc/skel
+</file>
+<note tip>Si vous voulez que les utilisateurs n'aient pas le droit d'écrire dans le répertoire qui leur sera assigné, mettre :
+<file>umask=0000</file></note>
+
+===== Configuration finale =====
+
+Chaque domaine a besoin d'un répertoire dans « /home » :
+
+  sudo  mkdir /home/MONDOMAINE
+
+Mais il faut attribuer des droits au dossier :
+
+  sudo  chmod 755 /home/MONDOMAINE
+===== Utilisation =====
+
+Connexion avec [Domain] [Winbind separator] [Nom_d_utilisateur] :
+<code>
+login: Utilisateur
+Password: *****
+...
+</code>
+Pour obtenir :
+  Utilisateur@MaMachine:~$
+
+
+<note tip>En ajoutant le paramètre « winbind use default domain = yes » dans la configuration de Samba, il n'est plus nécessaire de spécifier le domaine lors de la connexion sur le domaine par défaut.</note>
+
+Penser a autoriser les sessions de domaine dans LightDM (http://doc.ubuntu-fr.org/lightdm)
+par l'ajout dans le fichier /etc/lightdm/lightdm.conf des lignes suivantes:
+[SeatDefaults]
+greeter-show-manual-login=true
+
+
+
+
+===== Résolution de problème =====
+
+Si le module PAM Winbind dans « /var/log/auth.log » dit que l'utilisateur AD n'existe pas, redémarrez Winbind.
+
+  sudo  /etc/init.d/winbind restart
+
+Il est possible aussi que le linux perde la connectivité lors de la mise en veille et ne retrouve pas le compte de l'utilisateur par la suite.
+Pour résoudre le problème :
+
+Passer en root :
+
+  sudo su
+
+Interroger la base de compte :
+
+  sudo getent passwd
+
+Puis taper :
+
+  login {USERNAME}
+
+Fermer la session et vous devriez voir le nom de l'utilisateur dans la liste des connexions disponible.
+===== Utiliser le compte utilisateur AD en mode hors connexion =====
+
+Pour que le compte utilisateur puisse se connecter sans accéder à l'Active Directory. Par exemple, pour un utilisateur nomade qui se connecte en dehors des locaux de l'entreprise. Il faut effectuer les modifications suivantes
+
+[[:tutoriel:comment_editer_un_fichier|Ajouter]] la ligne suivante dans le fichier **smb.conf** :
+
+<file>
+winbind offline logon = yes
+</file>
+
+[[:tutoriel:comment_editer_un_fichier|Créer ou modifier le fichier]] **/etc/security/pam_winbind.conf** :
+
+<file>
+#
+# Fichier de configuration pam_winbind
+#
+# /etc/security/pam_winbind.conf
+#
+[global]
+# (nécessite "winbind offline logon = yes" dans smb.conf)
+cached_login = yes
+</file>
+
+Il faut ouvrir une session en étant connecté à l'Active Directory pour charger le cache. La connexion sans l'Active Directory est alors possible.
+
+----
+
+//Contributeurs principaux : [[:utilisateurs:OStaquet]], [[:utilisateurs:Ner0lph]] (mise en forme), [[:utilisateurs:Bob Philomene]], [[:utilisateurs:pouchat]].//, 007m

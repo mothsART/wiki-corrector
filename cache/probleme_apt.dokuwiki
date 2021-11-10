@@ -1,0 +1,380 @@
+
+{{tag>apt paquet dépôts}}
+----
+
+====== Problèmes avec les gestionnaires de paquets ======
+
+Cette page est destinée à alléger la page principale [[APT]], si vous avez besoin d'informations générales sur APT consultez-la.
+
+<note important>Pensez à effectuer une copie de [[:tutoriel:comment_sauver_et_restaurer_un_fichier|sauvegarde]] du ou des fichier(s) que vous allez modifier voire supprimer!</note>     
+
+\\
+
+===== Impossible de verrouiller /var/lib/dpkg/lock=====
+
+<code>E: Impossible de verrouiller /var/lib/dpkg/lock - open (11 Ressource temporairement non disponible)
+E: Unable to lock the administration directory (/var/lib/dpkg/), is another process using it?
+</code>
+
+Ce message indique qu'un autre processus utilise très probablement [[:APT]].
+
+Sur Ubuntu toutes les interfaces de gestion de paquets ou de logiciels telles que [[:gnome-software|GNOME Logiciels]], [[:Synaptic]], [[:gnome-packagekit|GNOME paquets]], [[:apt-cli|apt]], [[:apt-get]], [[:Aptitude]], ou les [[:gestionnaire_de_mises_a_jour|gestionnaires de mises à jour]] reposent sur le même système : [[:APT]].
+
+Afin d'éviter des conflits, une seule instance d'APT peut être utilisée en même temps, voilà pourquoi APT utilise un fichier ''/var/lib/dpkg/lock'' : afin de bloquer les autres tentatives d'utilisation simultanées d'APT.
+
+Ce message d'erreur indique donc que ce fichier ''/var/lib/dpkg/lock'' existe et bloque la suite des opérations. Cela peut être le cas pour deux raisons différentes :
+
+  * Soit un autre [[:gestionnaire de paquets]] (ou de mise à jour) est ouvert. Si c'est le cas, fermez-le proprement puis relancez votre commande.
+  * Soit l'un de ces gestionnaires a "planté", ou l'ordinateur a été éteint sauvagement pendant une opération, et le gestionnaire n'a pas terminé normalement ses opérations en supprimant ce fichier. Dans ce cas (si vous êtes absolument certain·e qu'aucun autre gestionnaire ne tourne), vous pouvez supprimer ce fichier au moyen d'un [[:terminal]] :
+<code>cd /var/lib/dpkg/ && sudo rm -v lock</code>
+<note warning>Il est **impératif** que tous les gestionnaires de paquets soient fermés au moment d'exécuter la commande ci-dessus !
+
+Vous pouvez lister la liste des processus utilisant le fichier ''/var/lib/dpkg/lock'' au moyen de la commande suivante :
+<code>sudo lsof /var/lib/dpkg/lock</code>
+</note>
+'===== Dpkg was interrupted =====
+
+Si un [[gestionnaire de paquets]] vous dit quelque chose comme ça :
+<code>
+E: dpkg was interrupted, you must manually run 'dpkg --configure -a' to correct the problem. 
+E: _cache->open(!) failed, please report.
+</code>
+Enfin en tous cas quelque chose qui dit **dpkg %%--%%configure -a** dans le texte.
+
+  * Faites : <code>
+sudo dpkg --configure -a </code>
+
+  * Si ça ne marche toujours pas faites : <code>
+sudo apt install -f </code>
+
+  * Si ça ne marche toujours pas (encore... cas rare) : <code>
+sudo dpkg --force-all --configure -a </code>
+
+  * Sinon : <code>
+sudo dpkg -P --force-all 'le paquet qui bloque' </code>
+
+<note>
+Pour connaître le paquet qui bloque, quand vous faites un **sudo dpkg %%--%%configure -a**, c'est simplement le premier paquet qui apparaît.
+
+Exemple :
+<code>
+dudumomo@dudumomo-laptop:~$ sudo dpkg --configure -a
+dpkg: dependency problems prevent configuration of skype:
+ skype depends on libqt4-core (>= 4.2.1); however:
+  Package libqt4-core is not installed.
+ skype depends on libqt4-gui (>= 4.2.1); however:
+  Package libqt4-gui is not installed.
+dpkg: error processing skype (--configure):
+ dependency problems - leaving unconfigured
+Setting up initramfs-tools (0.85eubuntu19) ...
+update-initramfs: deferring update (trigger activated)
+
+Setting up lm-sensors (1:2.10.4-1ubuntu1) ...
+/usr/bin/ucf: line 351: getopt: command not found
+dpkg: error processing lm-sensors (--configure):
+ subprocess post-installation script returned error exit status 127
+Setting up libpaper1 (1.1.22ubuntu1) ...
+/usr/bin/ucf: line 351: getopt: command not found
+dpkg: error processing libpaper1 (--configure):
+ subprocess post-installation script returned error exit status 127
+dpkg: dependency problems prevent configuration of libpaper-utils:
+ libpaper-utils depends on libpaper1; however:
+  Package libpaper1 is not configured yet.
+dpkg: error processing libpaper-utils (--configure):
+ dependency problems - leaving unconfigured
+Processing trigers for initramfs-tools ...
+update-initramfs: Generating /boot/initrd.img-2.6.22-12-generic
+/usr/sbin/mkinitramfs: 13: getopt: not found
+Terminating...
+update-initramfs: failed for /boot/initrd.img-2.6.22-12-generic
+dpkg: subprocess post-installation script returned error exit status 1
+</code>
+
+Là le paquet en question c'est **skype**
+</note>
+
+===== Dpkg: error processing archive =====
+
+Si vous voyez l'erreur "dpkg : error processing archive" lors d'une mise à jour ou de l'installation d'un paquet, comme le montre l'exemple ci-dessous, cette erreur est provoquée par un paquet "mal fait" (provenant probablement d'un ppa) voulant écraser (dans le sens de l'overwrite) des fichiers appartenant à d'autres paquets. Dpkg se termine alors avec l'erreur mentionnée et l'installation ou la mise à jour s'interrompt. Dans la plupart des cas, une telle erreur arrive quand un fichier est déplacé d'un paquet vers un autre avec une version plus récente. 
+
+Exemple: 
+<code>
+Préparation du décompactage de .../ubuntu-mate-default-settings_0.3.9~trusty2_all.deb ...
+Décompactage de ubuntu-mate-default-settings (0.3.9~trusty2) ...
+dpkg: error processing archive /var/cache/apt/archives/ubuntu-mate-default-settings_0.3.9~trusty2_all.deb (--unpack):
+ tentative de remplacement de « /var/lib/polkit-1/localauthority/10-vendor.d/org.ubuntu-mate.desktop.pkla », qui appartient aussi au paquet policykit-desktop-privileges-ubuntu-mate 0.3.6~trusty3
+Sélection du paquet ubuntu-mate-core précédemment désélectionné.
+Préparation du décompactage de .../ubuntu-mate-core_1.118~trusty4_amd64.deb ...
+Décompactage de ubuntu-mate-core (1.118~trusty4) ...
+E: Sub-process /usr/bin/dpkg returned an error code (1)
+</code>
+
+Afin de fixer cette erreur, il faut tout d'abord localiser le fichier du paquet qui l'a causée. Le répertoire dans lequel le logiciel apt télécharge les paquets est, par défaut, /var/cache/apt/archives/. Dans l'exemple du haut, le fichier qui a causé l'erreur est /var/cache/apt/archives/ubuntu-mate-core_1.118~trusty4_amd64.deb.
+Une fois le fichier est localisé, ouvrez un terminal et tapez la commande suivante:
+<code>
+sudo dpkg -i --force-overwrite /var/cache/apt/archives/ubuntu-mate-core_1.118~trusty4_amd64.deb
+</code>
+Si, l'option %%--%%force-overwrite ne résout pas le problème, essayez avec %%--%%force-all.
+
+Dans la commande ci-dessus, remplacez "/var..." avec le chemin exact du fichier ".deb" qui a causé l'erreur. Si vous avez téléchargé le fichier manuellement, le fichier ".deb" n'est pas localisé dans "/var/cache/apt/archives" mais dans le répertoire où vous l'aviez téléchargé (~/Téléchargements/). Cette commande va permettre à dpkg de forcer l'installation en écrasant les fichiers qui existent dans les 2 paquets. Finalement, pour être sûr que tous les paquets sont bien installés, tapez cette commande :
+<code>
+sudo apt install -f
+</code>
+
+===== Erreur de sortie d'état 1 =====
+
+=== Cas 1 ===
+
+<code>
+dpkg : erreur de traitement de 'le paquet qui bloque' (--purge) :
+le sous-processus post-removal script a retourné une erreur de sortie d'état 1
+Des erreurs ont été rencontrées pendant l'exécution :
+'le paquet qui bloque'
+E: Sub-process /usr/bin/dpkg returned an error code (1)
+</code>
+
+  * [[:tutoriel:comment_éditer_un_fichier|Éditez le fichier]] **/var/lib/dpkg/info/'le paquet qui bloque'.postrm**
+  * Puis remplacez "exit 1" par "exit 0" et s'il n'y a pas "exit 1" mettez "exit 0" à la fin. (ou l'inverse, etc.)
+  * Si le fichier est vide, ajoutez-y :<file>
+#!/bin/sh
+set -e
+exit 0
+</file>   
+
+<note>
+Si cela ne fonctionne toujours pas, remplacez le contenu de **/var/lib/dpkg/info/'le paquet qui bloque'.postrm** par :
+<file>
+#!/bin/bash
+/bin/true
+</file>
+Veillez aussi à ce que le fichier soit bien exécutable, notamment si vous avez dû créer le fichier.
+</note>
+
+<note important>
+Dans ce cas, le script bloquant était le **le sous-processus post-removal** donc nous avons édité le ficher **.postrm**.\\
+Si nous avions eu : **le sous-processus post-installation**, nous aurions dû éditer le fichier **.postinst**
+</note>
+
+Si cela ne marche toujours pas, essayez de remplacer le fichier **/var/lib/dpkg/status** par **/var/lib/dpkg/status-old** (vérifier la présence de ce fichier avant).\\
+Il peut exister également des sauvegardes du fichier status dans **/var/backups** (compressées ou non).\\ 
+Si ce n'est pas mieux éditer le fichier **/var/lib/dpkg/status** et retirer chaque section comportant le paquet bloquant suivi des commandes :
+<code>
+sudo dpkg --configure -a
+sudo apt update
+sudo apt full-upgrade
+</code>
+
+=== Cas 2 ===
+
+Un problème retournant la même erreur survient si vous rajoutez un disque contenant une partition bootable avec [[:grub-pc]] (grub2).\\
+Essayez dans ce cas la solution proposée dans le forum [[http://forum.ubuntu-fr.org/viewtopic.php?pid=3642612#p3642612|ici]].
+
+===== Erreur de sortie d'état 2 =====
+Si vous obtenez ce message d'erreur :
+<code>E: Sub-process /usr/bin/dpkg returned an error code (2)</code>
+la commande qui va vous sauver est toute simple :
+<code>sudo apt clean </code>
+
+Puis réinstaller le ou les paquets qui posaient problème :
+<code>sudo apt install nom_du_paquet </code>
+
+Si cela ne fonctionne pas, forcer la désinstallation du paquet qui pose problème :
+<code>sudo mv /var/lib/dpkg/info/nom_du_paquet.* /tmp/
+sudo dpkg --remove --force-remove-reinstreq nom_du_paquet</code>
+
+
+===== Erreur de sortie d'état 127 =====
+
+<code>
+le sous-processus post-installation script a retourné une erreur de sortie d'état 127
+Des erreurs ont été rencontrées pendant l'exécution : 'le paquet qui bloque'
+</code>
+Faites : 
+<code>gksu gedit /var/lib/dpkg/info/lepaquetquibloque.postrm</code>
+Supprimer tout jusqu'au [[http://fr.wikipedia.org/wiki/Shebang|Shebang]] Bash, et ajouter juste après le [[http://fr.wikipedia.org/wiki/Shebang|Shebang]] Bash ceci :
+<code>/bin/true</code>
+Vous devez donc avoir dans votre fichier .postrm ceci et rien de plus :
+<code>#!/bin/bash
+/bin/true</code>
+Veuillez sauvegarder vos modifications, et ensuite, dans un terminal, veuillez taper :
+<code>sudo dpkg -r --force-remove-reinstreq 'le paquet qui bloque'</code>
+
+===== Erreur libapt-pkg.so.4.12 =====
+
+Après un crash de Ubuntu, le système de mise à jour affiche un sens interdit, dans la zone de notification.
+Impossible de lancer la logithèque, synaptic ou le système de mise à jour en mode graphique.
+
+Dans un terminal, la commande :
+<code>sudo synaptic </code>
+affiche
+<code>synaptic: error while loading shared libraries: libapt-pkg.so.4.12: cannot open shared object file: No such file or directory </code>
+
+Pour résoudre le problème, saisir dans un terminal :
+<code>sudo dpkg-reconfigure libapt-pkg4.12 </code>
+
+===== Erreur du busistes de paquets =====
+
+Si //apt update// vous renvoie :
+<code>Erreur du busistes de paquets... 0% </code> ou <code>Erreur du bus (core dumped)</code>
+supprimez les fichiers **/var/cache/apt/pkgcache.bin** et **/var/cache/apt/srcpkgcache.bin** :
+<code>
+sudo mv /var/cache/apt/pkgcache.bin ~/pkgcache.bin
+sudo mv /var/cache/apt/srcpkgcache.bin ~/srcpkgcache.bin
+</code>
+Puis refaites :
+<code>sudo apt update</code>
+
+===== Le paquet installé n’apparaît pas dans la liste de Synaptic =====
+
+__Problème rencontré :__\\
+L'installation de paquets .deb avec //**[[:gdebi]]**// se passe sans souci mais ces paquets n'apparaissent pas dans [[:Synaptic]] et [[:apt-cli|apt]] ne les trouve pas non plus (par exemple pour les supprimer).\\
+Ils sont pourtant installés car lorsqu'on appelle les programmes correspondants, ils se lancent sans problème.
+
+__La solution consiste à :__
+
+  - Localiser le binaire <code>
+dpkg -S /chemin/binaire
+aptitude show nompaquet
+</code>
+  - ouvrir [[:Synaptic]] et vérifier la présence des paquets.
+
+//Merci à PK pour la solution.//
+
+===== Erreurs dans le fichier /etc/apt/sources.list =====
+
+Les erreurs de type : 
+
+<code>
+'E:Ligne 56 mal formée dans la liste des sources /etc/apt/sources.list (analyse de l'URI), E:La liste des sources ne peut être lue.'
+</code>
+indiquent une erreur dans le fichier **/etc/apt/sources.list.**
+
+Il suffit d'[[:tutoriel:comment_editer_un_fichier|éditer]] avec les [[:sudo|droits d'administration]] le fichier **/etc/apt/sources.list** pour supprimer ou commenter (c'est à dire ajouter un # au début de la ligne) les lignes mal formées de ce fichier (à noter que le message d'erreur peut n'indiquer qu'une seule ligne alors que plusieurs lignes sont à supprimer).
+
+Les lignes mal formées se reconnaissent facilement : elles ne sont pas commentées et ne respectent pas la syntaxe du sources.list (on trouve des exemples de lignes correctes [[sources.list|ici]]).
+
+Une fois la modification effectuée, il faut sauver puis quitter, et faire :
+<code>sudo apt update</code>
+
+En cas de doute, on peut également régénérer complètement son sources.list, par exemple à partir de [[http://sources-list.ubuntu-fr-secours.org/|ce site]].
+
+===== E: Encountered a section with no Package: header =====
+
+Un bug semble parfois empêcher l'accès aux applications de la [[:software-center|logithèque]] (idem avec [[:Synaptic]]), lors d'une mise à jour de la liste des paquets (via ''apt update''), la console retourne une erreur de ce type :
+<code>
+E: Encountered a section with no Package: header
+E: Problem with MergeList /var/lib/apt/lists/[...]
+</code>
+La suppression du contenu du dossier /var/lib/apt/lists/ règle souvent le problème :
+<code>
+sudo rm /var/lib/apt/lists/* -vf
+sudo apt update
+</code>
+[[http://forum.ubuntu-fr.org/viewtopic.php?id=481901|Discussion à propos de ce problème sur le forum ubuntu-fr]].
+
+===== Erreur de Signature =====
+
+FIXME Informations à  croiser avec [[:ppa#erreur_du_serveur_de_cles]] et/ou [[:apt-key]]\\
+
+Les dépôts utilisent des clés publiques pour authentifier leur contenu. Si vous avez ajouté un dépôt non officiel (Medibuntu, ppa.launchpad ...) à votre liste de canaux logiciels, il vous faut l'authentifier.\\
+Consultez le site du dépôt en question, ou la documentation Ubuntu, afin de pouvoir récupérer la clé et l'installer.
+
+<note tip>Ces messages d'erreurs ne sont qu'un avertissement. En effet, vous pouvez tout à fait ne pas en tenir compte et continuer vos mises à jours ou installations</note>
+
+==== Erreur GPG ====
+
+<code>
+W: Erreur de GPG : http://archive.canonical.com oneiric Release : Les signatures suivantes ne sont pas valables : BADSIG 40976EAF437D05B5 Ubuntu Archive Automatic Signing Key <ftpmaster@ubuntu.com>
+W: Une erreur s'est produite lors du contrôle de la signature. Le dépôt n'est pas mis à jour et les fichiers d'index précédents seront utilisés. Erreur de GPG : http://extras.ubuntu.com oneiric Release : Les signatures suivantes ne sont pas valables : BADSIG 16126D3A3E5C1192 Ubuntu Extras Archive Automatic Signing Key <ftpmaster@ubuntu.com>
+
+W: Impossible de récupérer http://extras.ubuntu.com/ubuntu/dists/oneiric/Release  
+
+W: Le téléchargement de quelques fichiers d'index a échoué, ils ont été ignorés, ou les anciens ont été utilisés à la place.
+</code>
+
+Si vous avez ce message d'erreur et que vous avez tenté la commande [[:apt-key]] comme ceci qui au final ne résout pas le problème :
+
+<code>sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 40976EAF437D05B5</code>
+
+Lancez cette série de commande :
+
+<code>sudo rm -r /var/lib/apt/lists
+sudo mkdir -p /var/lib/apt/lists/partial
+sudo apt update</code>
+
+==== Signature non vérifiée ====
+
+<code>
+W: GPG error: 'adresse d'un dépôt' Release: Les signatures suivantes n'ont pas pu être vérifiées car la clé publique n'est pas disponible : NO_PUBKEY 'XXXXXXXXXXXXXX'
+</code>
+
+L'erreur est parfois bloquante, il semblerait que ce soit un problème de proxy. Il est possible de le régler en [[:tutoriel:comment_editer_un_fichier|éditant le fichier]] **/etc/apt/apt.conf.d/90no-cache** :
+<file>
+Acquire
+{
+http
+{
+No-Cache "true";
+};
+};
+</file>
+
+FIXME Vous pouvez également essayer <code>sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com XXXX</code> où XXXX est la série de chiffre après NO_PUBKEY.
+
+Si ça ne marche pas avec keyserver.ubuntu.com remplacer par :
+[[hkp://subkeys.pgp.net]] ou
+[[hkp://pgp.mit.edu]] ou 
+[[hkp://pool.sks-keyservers.net]] (serveurs aléatoires)
+[[hkp://keys.nayr.net]] ou encore
+[[http://keys.gnupg.net]] //exemple://<code>sudo apt-key adv --recv-keys --keyserver hkp://subkeys.pgp.net XXXX</code>
+
+===== Impossible de verrouiller /var/lib/dpkg/status =====
+
+<code>
+E: Impossible de verrouiller /var/lib/dpkg/status - open (2 Aucun fichier ou répertoire de ce type)
+E: Les listes de paquets ou le fichier « status » ne peuvent être analysés ou lus. 
+</code>
+Soit le fichier "status" est corrompu, soit il a été effacé. Ce fichier contient l'ensemble des informations relatives aux paquets installés sur votre système et toutes les manipulations que vous avez effectuées. Sans ce fichier apt et dpkg sont bloqués. Le fonctionnement de votre système est alors fortement compromis.
+
+  * Solution simple, utiliser le fichier status.old généré automatiquement par le système et le renommer en status :<code>
+cp /var/lib/dpkg/status.old /var/lib/dpkg/status</code>Attention, si il y a trop de différence entre le fichier status et le old, la solution devient aléatoire.\\ Processus complet à suivre dans tous les cas, au delà de la récupération du fichier status.old :<code>
+## au cas ou un gestionnaire de paquets est encore lancé
+sudo rm /var/lib/apt/lists/lock
+## un petit backup au cas ou, prudence
+sudo cp -arf /var/lib/dpkg /var/lib/dpkg.backup
+## on remplace
+sudo cp /var/lib/dpkg/status-old /var/lib/dpkg/status
+sudo cp /var/lib/dpkg/available-old /var/lib/dpkg/available
+## on purge
+sudo rm -rf /var/lib/dpkg/updates/*
+sudo rm -rf /var/lib/apt/lists
+sudo mkdir /var/lib/apt/lists
+sudo mkdir /var/lib/apt/lists/partial
+sudo rm /var/cache/apt/*.bin
+## et on relance
+sudo apt clean
+sudo apt autoclean
+sudo apt update
+sudo dpkg --clear-avail
+sudo dpkg --configure -a
+sudo apt install -f
+sudo apt update
+sudo apt upgrade
+</code>
+  * Si le fichier status.old(ou status-old) n'est plus disponible, le plus sûr, hélas, va consister à réinstaller votre système (ou a le laisser en l'état, sans mise à jour possible ni aucune installation de nouveau paquets possible. 
+
+===== "W: Failed to fetch gzip:/var/lib/apt/lists/partial/..." lors d'une mise à jour =====
+     
+ Voici la solution trouvée sur [[http://www.kubuntuforums.net/showthread.php?57567-Ubuntu-problems-on-update|ce forum]] (en) :
+     
+<code>
+cd /var/lib/apt 
+sudo mv lists lists.old 
+sudo mkdir -p lists/partial 
+sudo apt clean 
+sudo apt update
+</code>
+
+
+----
+//Contributeurs: [[:utilisateurs:Fabien26]], [[:utilisateurs:на_краю]], [[:utilisateurs:sheep]], [[:utilisateurs:BeAvEr]], [[:utilisateurs:krodelabestiole]]//

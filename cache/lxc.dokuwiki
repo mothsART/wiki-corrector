@@ -1,0 +1,510 @@
+
+{{tag> Xenial virtualisation}}
+----
+{{ :lxd:containers.png?100nolink|}}
+
+====== LXC ======
+
+**LXC** est l'acronyme de l'anglicisme **LinuX Containers**, est un système de [[virtualisation|virtualisation]], utilisant l'isolation comme méthode de cloisonnement au niveau du système d'exploitation. Il est utilisé pour faire fonctionner des environnements Linux isolés les uns des autres dans des conteneurs partageant le même noyau. Le conteneur apporte une virtualisation de l'environnement d'exécution (processeur, mémoire vive, réseau, système de fichier…) et non pas de la machine. Pour cette raison, on parle de « conteneur » et non de « machine virtuelle ». 
+Veillez à ne pas confondre **LXC** et [[:LXD|LXD]], en effet, [[:LXD|LXD]] est une surcouche logicielle à **LXC**. [[:LXD|LXD]] est développé par Canonical pour simplifier la manipulation de vos conteneurs.
+
+----
+
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>lxc|lxc]]**.
+
+----
+
+===== Création de notre premier container LXC (root) =====
+<note warning>Attention, bien que vos processus soient isolés de votre [[wpfr>Hôte_(informatique)|machine hôte]], via ce procédé, votre container [[apt>lxc|LXC]] nécessitera d'utiliser [[:sudo|sudo]] pour être fonctionnel. Si vous avez une faille de sécurité dans votre container, une [[wp>Privilege_escalation|escalade des privilèges]] peut être intenté sur votre container, pour accéder à votre [[wpfr>Hôte_(informatique)|machine hôte]]. L'utilisation de [[:sudo|sudo]] pourrait donc compromettre votre [[wpfr>Hôte_(informatique)|système hôte]] !.</note>
+
+
+Pour créer un container avec pour nom((Option -n.)) **container_xenial**, pour la distribution((Option -d.)) **Ubuntu**, sous la release((Option -r.)) **Xenial**, ayant une architecture((Option -a.)) **amd64**, nous utiliserons cette commande :
+
+<code bash>sudo lxc-create -t download -n container_xenial -- -d ubuntu -r xenial -a amd64</code>
+<code bash>
+(...)
+Download complete
+Copy /var/cache/lxc/container_xenial/rootfs-amd64 to /var/lib/lxc/container_xenial/rootfs ... 
+Copying rootfs to /var/lib/lxc/container_xenial/rootfs ...
+Generating locales (this might take a while)...
+  fr_FR.UTF-8... done
+Generation complete.
+Creating SSH2 RSA key; this may take some time ...
+2048 SHA256:oZjCPZs+eRqXx2y3WCX3sNR+fnxQypD1887jGnQ0jD8 root@home (RSA)
+Creating SSH2 DSA key; this may take some time ...
+1024 SHA256:fCNCpbXq4Z7KYZ0Xdztu9ti+u4rijgWg/nZ46M0A3HY root@home (DSA)
+Creating SSH2 ECDSA key; this may take some time ...
+256 SHA256:AT1ceBEITRDgga9czOlupGrRUT7T1DKl3PD0k9ZXlyU root@home (ECDSA)
+Creating SSH2 ED25519 key; this may take some time ...
+256 SHA256:BPcu2IHpyQoHIvpjIgzPMgaGDrz1TAaUlUnLrwznGXs root@home (ED25519)
+invoke-rc.d: could not determine current runlevel
+invoke-rc.d: policy-rc.d denied execution of start.
+
+Current default time zone: 'Etc/UTC'
+Local time is now:      Sun Jul 22 09:54:56 UTC 2018.
+Universal Time is now:  Sun Jul 22 09:54:56 UTC 2018.
+
+
+##
+# The default user is 'ubuntu' with password 'ubuntu'!
+# Use the 'sudo' command to run tasks as root in the container.
+##
+</code>
+
+Pour lister notre container fraîchement créé on utilisera :
+
+<code bash>sudo lxc-ls --fancy</code>
+<code bash>beaver@mysweethome:~$ sudo lxc-ls --fancy
+     NAME         STATE  AUTOSTART GROUPS IPV4      IPV6 
+container_xenial STOPPED     0       -   10.0.3.58   -
+
+beaver@mysweethome:~$ cat /etc/lxc/default.conf 
+lxc.network.type = veth
+lxc.network.link = lxcbr0
+lxc.network.flags = up
+lxc.network.hwaddr = 00:16:3e:xx:xx:xx
+
+beaver@mysweethome:~$ dpkg -l bridge-utils
+Souhait=inconnU/Installé/suppRimé/Purgé/H=à garder
+| État=Non/Installé/fichier-Config/dépaqUeté/échec-conFig/H=semi-installé/W=attend-traitement-déclenchements
+|/ Err?=(aucune)/besoin Réinstallation (État,Err: majuscule=mauvais)
+||/ Nom                                     Version                  Architecture             Description
++++-=======================================-========================-========================-===================================================================================
+ii  bridge-utils                            1.5-9ubuntu1             amd64                    Utilities for configuring the Linux Ethernet bridge
+
+</code> 
+
+<note>Sous Ubuntu, on notera une attribution automatique d'IP privée((**10.0.3.58**, dans notre cas.)) à notre container portant le nom de **container_xenial**. Cela est dû à l'installation du package **bridge-utils**, qui est noté comme une [[wpfr>Dépendance_logicielle|dépendance logicielle]] à [[apt>lxc|lxc]]. Le fichier **/etc/lxc/default.conf** est automatiquement renseigné, pour utiliser comme interface **lxbr0**.</note>
+
+Pour démarrer notre container portant le nom de **container_xenial** nous utiliserons :
+
+<code bash>sudo lxc-start -n container_xenial</code>
+
+On vérifie l'état de notre container :
+
+<code bash>beaver@mysweethome:~$ sudo lxc-ls --fancy
+  NAME            STATE  AUTOSTART GROUPS IPV4      IPV6 
+container_xenial RUNNING   0        -   10.0.3.58    -  
+</code>
+
+----
+
+==== Accéder à son container LXC (root) ====
+
+=== Méthode SSH (root) ===
+
+Deux solutions s'offrent maintenant à nous pour accéder à notre container, nous pouvons utiliser la commande **lxc-console**, ou bien, nous pouvons utiliser la commande [[ssh|ssh]] :
+
+
+
+<code bash>##
+# The default user is 'ubuntu' with password 'ubuntu'!
+# Use the 'sudo' command to run tasks as root in the container.
+##
+</code>
+
+<code bash>beaver@mysweethome:~$ ssh ubuntu@10.0.3.58 
+ubuntu@10.0.3.58 password: mot de passe **ubuntu** par défaut.
+Welcome to Ubuntu 16.04.5 LTS (GNU/Linux 4.4.0-130-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/advantage
+Last login: Sun Jul 22 12:07:48 2018
+ubuntu@container_xenial:~$ 
+</code>
+
+=== Méthode lxc-console (root) ===
+
+Deux solutions s'offrent maintenant à nous pour accéder à notre container, nous pouvons utiliser la commande [[ssh|ssh]], ou bien, nous pouvons utiliser la commande **lxc-console** :
+
+<code bash>##
+# The default user is 'ubuntu' with password 'ubuntu'!
+# Use the 'sudo' command to run tasks as root in the container.
+##
+</code>
+
+<code bash>
+beaver@mysweethome:~$ sudo lxc-console -n container_xenial
+[sudo] Mot de passe de beaver : 
+Connected to tty 1
+Type <Ctrl+a q> to exit the console, <Ctrl+a Ctrl+a> to enter Ctrl+a itself
+container_xenial login : ubuntu
+Mot de passe : ubuntu par défaut
+Dernière connexion : dimanche 22 juillet 2018 à 12:20:18 UTC de 10.0.3.1 sur pts/4
+Welcome to Ubuntu 16.04.5 LTS (GNU/Linux 4.4.0-130-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/advantage
+ubuntu@container_xenial:~$ 
+</code>
+----
+
+<note>**__//Conclusion//__** : Vous voilà maintenant en possession d'un container [[apt>lxc|LXC]] **Ubuntu 16.04** ayant pour nom **container_xenial** !.</note>
+
+Le [[wpfr>Chemin_d%27accès|chemin absolu]] de votre container **container_xenial** se trouve dans :
+<code bash>/var/lib/lxc/container_xenial/rootfs</code>
+La configuration de votre container **container_xenial** se trouve dans :
+<code bash>/var/lib/lxc/container_xenial/config</code>
+Et non dans :
+<code bash>/etc/lxc/default.conf</code>
+
+-----
+
+==== Destruction de votre container LXC (root) ====
+
+Rien de plus simple, vous devez déjà stopper votre container **container_xenial** :
+
+<code bash>sudo lxc-stop -n container_xenial</code>
+
+Et ensuite, nous passons à la destruction : 
+
+<code bash>sudo lxc-destroy -n container_xenial</code>
+
+----
+
+===== Configuration de LXC pour une utilisation unprivileged =====
+
+Pour pouvoir utiliser [[apt>lxc|LXC]] sans [[sudo|sudo]], et donc par conséquent, minimiser le risque qu'un attaquant arrive à avoir accès à votre [[wpfr>Hôte_(informatique)|hôte système]] à cause de l'utilisation de [[sudo|sudo]], nous allons déjà récupérer le sub**g**id ainsi que le subg**u**id de notre utilisateur courant :
+<code bash>
+cat /etc/sub{g,u}id | grep $USER
+</code>
+
+Retournera :
+<code bash>
+beaver:100000:65536
+beaver:100000:65536
+</code>
+
+Veillez de garder en tête ces deux lignes, maintenant, nous allons devoir stopper les services **lxcfs.service**, **lxc-net.service**, **lxc.service** :
+
+<code bash>sudo systemctl stop lxcfs.service lxc-net.service lxc.service</code>
+
+Veuillez maintenant créer dans le [[wpfr>Fichier_et_répertoire_caché|dossier caché]] **.config/** un dossier portant le nom **lxc** :
+
+<code bash>mkdir -p ~/.config/lxc</code>
+
+Puis nous [[:tutoriel:comment_modifier_un_fichier|créons]] un fichier **default.conf** :
+
+<code bash>touch ~/.config/lxc/default.conf</code>
+
+Veuillez maintenant [[:tutoriel:comment_modifier_un_fichier|éditer]] le fichier **~/.config/lxc/default.conf**, et y ajouter ces lignes :
+<code bash>
+lxc.network.type = veth
+lxc.network.link = lxcbr0
+lxc.network.flags = up
+lxc.network.hwaddr = 00:16:xx:xx:xx:xx ## À modifier par une adresse MAC fictive !.
+lxc.id_map = u 0 100000 65536 ## À modifier par votre propre subguid !.
+lxc.id_map = g 0 100000 65536 ## À modifier par votre propre subgid !.
+</code>
+
+Ou bien dans un [[terminal|terminal]] :
+
+<code bash>echo -e 'lxc.network.type = veth\nlxc.network.link = lxcbr0\nlxc.network.flags = up\nlxc.network.hwaddr = 00:16:xx:xx:xx:xx ## À modifier par une adresse MAC fictive !.\nlxc.id_map = u 0 100000 65536 ## À modifier par votre propre subguid !.\nlxc.id_map = g 0 100000 65536 ## À modifier par votre propre subgid !.' | tee --append ~/.config/lxc/default.conf</code>
+
+Maintenant, nous [[:tutoriel:comment_modifier_un_fichier|modifions]] le fichier **lxc-usernet** dans **/etc/lxc**, et on y insère ça :
+
+<code bash>nom_de_votre_utilisateur_hôte veth lxcbr0 10</code>
+
+Ou bien dans un [[terminal|terminal]]:
+
+<code bash>echo $USER veth lxcbr0 10 | sudo tee --append /etc/lxc/lxc-usernet</code>
+
+[[:tutoriel:comment_modifier_un_fichier|Créons]] maintenant l'emplacement où on va recevoir nos containers LXC, et attribuons y les bonnes [[permissions|permissions]] :
+
+<code bash>mkdir -p ~/.local ~/.local/share</code>
+<code bash>chmod -R a+rx ~/.local</code>
+
+Nous devons maintenant [[:tutoriel:comment_modifier_un_fichier|créer]] un fichier **80-lxc-userns.conf** dans **/etc/sysctl.d/**, pour se faire, dans un [[terminal|terminal]] :
+
+<code bash>sudo touch /etc/sysctl.d/80-lxc-userns.conf</code>
+
+Ensuite, nous ajoutons à notre fichier **80-lxc-userns.conf** :
+
+<code bash>kernel.unprivileged_userns_clone=1</code>
+
+Ou bien dans un [[terminal|terminal]] :
+
+<code bash>echo 'kernel.unprivileged_userns_clone=1' | sudo tee --append /etc/sysctl.d/80-lxc-userns.conf</code>
+
+Ensuite, vous risquez d'avoir ce type d'erreur au démarrage de votre container :
+
+<code bash>lxc-start: start.c: print_top_failing_dir: 102 Permission denied - could not access /home/$USER.  Please grant it 'x' access, or add an ACL for the container root.
+lxc-start: sync.c: __sync_wait: 51 invalid sequence number 1. expected 2
+lxc-start: start.c: __lxc_start: 1172 failed to spawn 'nom_de_votre_container'</code>
+
+Pour y remédier :
+
+<code bash>chmod a+x /home/$USER/</code>
+
+Ou :
+
+FIXME Dans notre exemple, le sub**u**id est **100000**. Veuillez le remplacer par le votre. Pour le récupérer, veuillez saisir :<code bash>cat /etc/subuid | grep $USER</code>
+
+Et :
+
+<code bash>cd $HOME && sudo setfacl -m u:100000:x . .local .local/share</code>
+
+À ce stade, il est préférable de redémarrer votre machine pour être certain, que les modifications apportées soient effectives :
+
+<code bash>sudo reboot</code>
+
+----
+
+===== Création de notre premier container LXC (unprivileged) =====
+
+Essayons maintenant, après avoir redémarré notre machine, de créer un container **unprivileged** :
+
+<code bash>lxc-create -t download -n container_unprivileged -- -d ubuntu -r xenial -a amd64</code>
+
+Retournera :
+
+<code bash>
+
+beaver@mysweethome:~$ lxc-create -t download -n container_unprivileged -- -d ubuntu -r xenial -a amd64
+Using image from local cache
+Unpacking the rootfs
+
+---
+You just created an Ubuntu xenial amd64 (20180722_07:42) container.
+
+To enable SSH, run: apt install openssh-server
+No default root or user password are set by LXC.
+
+</code>
+
+Pour lister notre container récemment créé, veuillez ouvrir un [[terminal|terminal]] avec pour contenu :
+
+<code bash>lxc-ls --fancy</code>
+
+<code bash>beaver@mysweethome:~$ lxc-ls --fancy
+NAME                   STATE   AUTOSTART GROUPS IPV4      IPV6 
+container_unprivileged STOPPED 0         -      10.0.3.58 - 
+</code>
+
+Vous noterez qu'il y'a ni mot de passe attribué, ni rien, impossible donc de se connecter à notre container **container_unprivileged** ni via la méthode [[ssh|ssh]], ni via la méthode **lxc-console**. Voici un moyen pour attribuer un mot de passe à l'utilisateur **ubuntu**. Nous allons déjà démarrer notre container fraîchement installé :
+
+<code bash>lxc-start -n container_unprivileged</code>
+
+Ensuite, nous exécutons cette commande :
+
+<code bash>lxc-attach -n container_unprivileged</code>
+
+Ensuite :
+
+<code bash>root@container_unprivileged:/# passwd ubuntu
+Enter new UNIX password: 
+Retype new UNIX password: 
+passwd: password updated successfully
+</code>
+
+À ce stade, vous allez pouvoir utiliser la commande **passwd ubuntu** et ainsi, définir le mot de passe que vous voulez à votre utilisateur **ubuntu** ! ;-).
+
+Le [[wpfr>Chemin_d%27accès|chemin absolu]] de votre container **container_unprivileged** se trouve dans :
+<code bash>/home/$USER/.local/lxc/container_unprivileged/rootfs</code>
+
+Et non plus dans :
+<code bash>/var/lib/lxc/container_name/rootfs</code>
+
+La configuration de votre container **container_unprivileged** se trouve dans :
+<code bash>/home/$USER/.local/lxc/container_unprivileged/config</code>
+
+Et non plus dans :
+<code bash>/var/lib/lxc/container_name/config</code>
+
+La configuration de votre [[apt>lxc|LXC]] **unprivileged** se trouve dans :
+
+<code bash>
+/home/$USER/.config/lxc/default.conf
+</code>
+
+Et non plus dans :
+
+<code bash>/etc/lxc/default.conf</code>
+
+----
+
+==== Accéder à son container LXC (unprivileged) ====
+
+=== Méthode lxc-console (unprivileged) ===
+
+Une solution s'offre maintenant à nous pour accéder à notre container, la commande **lxc-console**. Nous devons d'abord démarrer notre container :
+
+<code bash>lxc-start -n container_unprivileged</code>
+
+Puis ensuite :
+
+<code bash>lxc-console -n container_unprivileged</code>
+
+<code bash>
+beaver@mysweethome:~$ lxc-console -n container_unprivileged
+Connected to tty 1
+Type <Ctrl+a q> to exit the console, <Ctrl+a Ctrl+a> to enter Ctrl+a itself
+container_unprivileged login : ubuntu
+Mot de passe : mot de passe qu on a pu définir toute à l heure.
+Dernière connexion : dimanche 22 juillet 2018 à 12:20:18 UTC de 10.0.3.1 sur pts/4
+Welcome to Ubuntu 16.04.5 LTS (GNU/Linux 4.4.0-130-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/advantage
+ubuntu@container_unprivileged:~$ 
+</code>
+
+----
+
+<note>**__//Conclusion//__** : Vous voilà maintenant en possession d'un container [[apt>lxc|LXC]] **Ubuntu 16.04**, le tout en "mode" **unprivileged**, ayant pour nom **container_unprivileged** !. Pour le reste, la syntaxe reste la même, veillez surtout à ne plus utiliser : <code bash>sudo lxc-trucmuche</code> mais juste : <code bash>lxc-trucmuche</code>.</note>
+
+
+
+==== Destruction de votre container LXC (unprivileged) ====
+
+Rien de plus simple, vous devez déjà stopper votre container **container_unprivileged** :
+
+<code bash>lxc-stop -n container_unprivileged</code>
+
+Et ensuite, nous passons à la destruction : 
+
+<code bash>lxc-destroy -n container_unprivileged</code>
+
+----
+
+===== Backup de votre container LXC =====
+
+==== Création de votre backup via tar ====
+
+Il est relativement aisé, de backup un container LXC, pour se faire, veuillez ouvrir un [[:terminal|terminal]]. 
+
+Ensuite nous devons déjà stopper notre container [[apt>lxc|LXC]] :
+
+<code bash>sudo((Container unprivileged ou non ?)) lxc-stop -n nom_de_mon_container</code>
+
+Ensuite, on se déplacera dans le dossier **/var/lib/lxc/nom_de_votre_container/** ou bien, si vous êtes sur un container **unprivileged**, dans: **/home/$USER/.local/lxc/nom_de_votre_container/** :
+
+<code bash>sudo -i && cd /var/lib/lxc/nom_de_votre_container/</code>
+
+Ou bien :
+
+<code bash>sudo -i && cd /home/$USER/.local/lxc/nom_de_votre_container/</code>
+
+Ensuite, nous utilisons la commande [[tar|tar]] avec son option **--numeric-owner**, qui est ici très importante. Elle va permettre de garder les **uid/gid** intactes lors de l'extraction. Nous utilisons aussi l'outil [[apt>gzip|gzip]] et son option **-9((--best-compression.))**, qui vous offrira, une compression maximale.
+
+<code bash>GZIP=-9 tar --numeric-owner -czvf mon_container.tar.gz ./*</code>
+
+Vous voilà maintenant en possession d'un backup de votre container, passons maintenant à sa restauration.
+
+==== Restauration de votre backup via tar ====
+
+=== Pour une utilisation root ===
+
+Nous allons devoir stopper les services **lxcfs.service**, **lxc-net.service**, **lxc.service**. Pour se faire, veuillez ouvrir un [[:terminal|terminal]], avec pour contenu :
+
+<code bash>sudo -i && systemctl stop lxcfs.service lxc-net.service lxc.service</code>
+
+Il vous faudra ensuite [[:tutoriel:comment_modifier_un_fichier|créer un dossier]] portant le nom de votre container. 
+
+Pour se faire, veuillez saisir :
+
+<code bash>mkdir -p /var/lib/lxc/nom_de_votre_container</code>
+
+Nous y attribuons les [[permissions|permissions]] adéquates :
+
+<code bash>chmod a+rx /var/lib/lxc/nom_de_votre_container</code>
+
+Ensuite, nous nous déplaçons dans le dossier fraîchement créé :
+
+<code bash>cd /var/lib/lxc/nom_de_votre_container</code>
+
+Nous passons à l'extraction de notre archive, portant le nom **mon_container.tar.gz** :
+
+<code bash>tar --numeric-owner -xzvf mon_container.tar.gz</code>
+
+C'est terminé, il y'a plus qu'à redémarrer **lxcfs.service**, **lxc-net.service**, **lxc.service** :
+
+<code bash>systemctl start lxcfs.service lxc-net.service lxc.service && exit</code>
+
+Et démarrer ensuite votre container :
+
+<code bash>sudo lxc-start -n nom_de_votre_container</code>
+
+=== Pour une utilisation unprivileged ===
+
+<note tip>Nous n'aborderons ici, que la restauration de votre backup précédemment créé. 
+Pour la configuration d'un container [[apt>lxc|LXC]] **unprivileged**, merci de suivre le chapitre [[lxc#configuration_de_lxc_pour_une_utilisation_unprivileged|configuration de lxc pour une utilisation unprivileged]].
+</note>
+
+Nous allons devoir stopper les services **lxcfs.service**, **lxc-net.service**, **lxc.service**. Pour se faire, veuillez ouvrir un [[:terminal|terminal]], avec pour contenu :
+
+<code bash>sudo systemctl stop lxcfs.service lxc-net.service lxc.service</code>
+
+[[:tutoriel:comment_modifier_un_fichier|Créons]] maintenant l'emplacement où on va recevoir notre container LXC, et attribuons y les bonnes [[permissions|permissions]] :
+
+<code bash>mkdir -p ~/.local/share/lxc/nom_de_votre_container</code>
+<code bash>chmod a+rx ~/.local/share/lxc/nom_de_votre_container</code>
+
+Passons maintenant à l'extraction de notre archive, portant le nom **mon_container.tar.gz** :-).
+
+Nous allons déjà nous déplacer dans notre dossier fraîchement créé :
+
+<code bash>
+cd ~/.local/share/lxc/nom_de_votre_container
+</code>
+
+Et ensuite, nous passons à l'extraction de notre archive, portant le nom **mon_container.tar.gz** :
+
+<code bash>tar --numeric-owner -xzvf mon_container.tar.gz</code>
+
+C'est terminé, il y'a plus qu'à redémarrer **lxcfs.service**, **lxc-net.service**, **lxc.service** :
+
+<code bash>sudo systemctl start lxcfs.service lxc-net.service lxc.service</code>
+
+Et démarrer ensuite votre container :
+
+<code bash>lxc-start -n nom_de_votre_container</code>
+
+
+==== Méthode lxc-snapshot ====
+
+Il existe un outil dédié à [[apt>lxc|LXC]] pour backup votre container, il se prénomme [[apt>lxc-snapshot|lxc-snapshot]].
+
+Il faut tout d'abord, éteindre notre container :
+
+<code bash>sudo((container unprivileged ou non ?)) lxc-stop -n nom_de_mon_container</code>
+
+Ensuite nous utilisons [[apt>lxc-snapshot|lxc-snapshot]] :
+
+<code bash>sudo((container unprivileged ou non ?)) lxc-snapshot -n nom_de_mon_container</code>
+
+<code bash>beaver@mysweethome:~$ sudo lxc-snapshot -n container_xenial
+lxc-snapshot: lxccontainer.c: do_lxcapi_snapshot: 3405 Snapshot of directory-backed container requested.
+lxc-snapshot: lxccontainer.c: do_lxcapi_snapshot: 3406 Making a copy-clone.  If you do want snapshots, then
+lxc-snapshot: lxccontainer.c: do_lxcapi_snapshot: 3407 please create an aufs or overlayfs clone first, snapshot that
+lxc-snapshot: lxccontainer.c: do_lxcapi_snapshot: 3408 and keep the original container pristine.
+</code>
+
+Pour connaitre le [[wpfr>Chemin_d%27accès|chemin absolu]] de votre snapshot, vous utiliserez :
+
+<code bash>sudo((container unprivileged ou non?)) lxc-snapshot -L -n nom_de_mon_container</code>
+<code bash>beaver@mysweethome:~$ sudo lxc-snapshot -L -n container_xenial
+snap0 (/var/lib/lxc/container_xenial/snaps) 2018:07:28 10:25:48
+</code>
+
+Pour restaurer un container depuis votre snapshot vous utiliserez :
+
+<code bash>sudo((container unprivileged ou non?)) lxc-snapshot -r snapX -n nom_de_mon_container</code>
+
+----
+
+===== Voir aussi =====
+  * [[https://www.youtube.com/watch?v=caXHwYC3tq8|3 premières minutes de cette vidéo explique ce qu'est LXC]]
+  * https://wiki.debian.org/LXC
+  * https://wiki.debian.org/EvgeniGolov/LXC
+  * https://askubuntu.com/questions/340055/lxc-container-no-outgoing-traffic
+  * https://lxc-webpanel.github.io/
+
+----
+
+Contributeur(s): [[:utilisateurs:beaver|BeAvEr]].

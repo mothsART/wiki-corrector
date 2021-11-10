@@ -1,0 +1,428 @@
+
+{{tag>gnome tutoriel programmation environnements personnalisation extensions_GNOME BROUILLON}}
+-----
+
+====== Tutoriel : programmer une extension GNOME Shell ======
+
+Ce tutoriel concerne les personnes intéressées dans la **programmation** d'extensions GNOME Shell.
+
+Les informations présentées ici sont normalement valables au moins pour les versions 3.18 à 3.26 de GNOME Shell.
+
+<note important>Je partage ici mon expérience personnelle, mais je ne suis pas programmeur ni informaticien.
+
+J'ai appris à faire des extensions "en autodidacte" et mes conseils sont sans aucun doute perfectibles, je ne suis en aucun cas une autorité en la matière.</note>
+
+===== Introduction =====
+==== Qu'est GNOME Shell ? ====
+Le vocabulaire autour de [[:GNOME]]/GNOME 3/[[:GNOME Shell]] est parfois confus. \\
+GNOME est un ensemble de logiciels libres formant un environnement de bureau. Depuis la version 3 de cet environnement, GNOME Shell constitue le //shell graphique// de l'[[:environnements|environnement]] GNOME, c'est-à-dire qu'il fournit l'interface graphique venant se greffer autour du [[:gestionnaire de fenêtres]] (nommé [[:Mutter]]).
+
+Tous les 6 mois, aux alentours de l'équinoxe, une version stable de GNOME est diffusée, numérotée 3.xx, où xx est un numéro pair. Les distributeurs (les personnes qui mettent à disposition les paquets des distributions) mettent alors quelques jours à quelques mois avant de proposer ces paquets aux utilisateurs.
+
+<note>Il est possible, notamment avec les Ubuntu antérieurs à mi-2017, que les versions des logiciels GNOME utilisés ([[:Nautilus]], ...) ne correspondent pas aux versions de GNOME Shell.</note>
+
+Vous pouvez connaître votre version de GNOME Shell en tapant <code>gnome-shell --version</code>
+
+==== Le code source de GNOME Shell ====
+L'interface GNOME Shell a la particularité d'être codée en javascript. Ce code est ensuite interprété par un moteur de rendu nommé **Gjs** (basé sur le moteur de rendu javascript de Firefox).
+
+Vous le savez peut-être, javascript a la particularité d'autoriser le //monkeypatching//, c'est-à-dire qu'une fonction du code peut être réécrite à un autre endroit du code, dynamiquement. On peut donc modifier l'aspect et le comportement de la quasi-totalité des composants de l'interface GNOME Shell !
+
+On va d'abord se procurer le code source de l'interface par défaut :
+
+Rendez-vous à l'adresse ''https://github.com/GNOME/gnome-shell/tree/gnome-3-xx'' où xx est votre version de GNOME Shell, cliquez sur le bouton vert pour télécharger le code source au format .zip et décompressez-le avec un gestionnaire d'archives.
+
+La partie du code qui nous intéresse est dans le dossier ''./js/ui'', vous pouvez ne conserver que ce dossier là si le reste vous encombre. Je vous conseille d'ailleurs de changer les permissions de ce dossier pour le mettre en lecture seule : nous n'allons jamais ni le modifier ni l'exécuter.
+
+==== Javascript ====
+
+Ce tutoriel n'est pas un cours sur le javascript, il est conseillé de se familiariser préalablement avec ce langage, qui n'est heureusement pas le plus compliqué en ce monde.
+
+Ce n'est pas ici que vous apprendrez la syntaxe des conditionnelles et des affectations, ceci dit les explications fournies devraient vous suffire à suivre même si vous débutez.
+
+===== Pré-requis =====
+
+==== Les crashs ====
+On va ici "jouer" avec GNOME Shell lui-même. Il est très très probable qu'on le fasse crasher à un moment ou à un autre, et il va donc falloir sérieusement améliorer la résilience aux crashs de votre installation.
+
+Voici quelques pistes, idées ou astuces pour cela :
+
+=== Ne pas utiliser Wayland ===
+Au moindre bug un peu brutal, avec Wayland, la session se ferme. De plus, Wayland n'autorise pas le rechargement à chaud de la session, ce qui empêche de tester le code !
+
+On va donc plutôt utiliser Xorg pour le développement.
+
+<note>N'oubliez pas de tester le résultat final avec Wayland quand même !</note>
+
+=== En cas de crash du gestionnaire de fenêtre ===
+Utilisez des applications avec des boutons de fenêtre "CSD", de manière à ce que vous ne perdiez pas totalement le contrôle sur vos fenêtres en cas de disparition des barres de fenêtres.
+
+Un terminal comme [[:Tilix]] peut être utile par exemple.
+
+=== En cas de crash de GNOME Shell ===
+Tout d'abord, ayez des icônes sur le bureau.
+
+Dans ''~/.local/share/nautilus/scripts'', créez un fichier "Remplacer GNOME Shell" contenant seulement les lignes suivantes :
+<file bash>
+#!/bin/bash
+
+gnome-shell -r
+</file>
+
+Vous pouvez maintenant entièrement recharger GNOME Shell à partir du menu "clic-droit" fournit par Nautilus sur les fichiers, et donc notamment sur le bureau.
+
+<note important>N'utilisez pas ce script à la légère : **si l'écran se verrouille** alors que vous venez d'utiliser ce script, cela vous obligerait à redémarrer l'ordinateur pour pouvoir accéder de nouveau à votre session.</note>
+
+=== En cas de crash total de la session graphique ===
+Avec ''Ctrl+Alt+F2'', vous pouvez vous accédez à une console (tty2) où vous pouvez vous connecter en ligne de commande et par exemple annuler la manipulation ayant généré le crash en 1er lieu.
+
+Si vous n'êtes pas à l'aise en ligne de commande, installez [[:Wayland#Weston|Weston]], il vous servira d'environnement de secours pouvant être lancé sur tty2 (par exemple) avec la commande ''weston'' (cela utilise Wayland, et peut donc être lancé en parallèle d'un environnement sur [[:Xorg]]).
+
+==== Tester et débugguer ====
+<note help>J'admets ne pas être un grand expert en débuggage, il existe probablement mieux que ce que je suggère ici.</note>
+
+Avec ''Alt+F2'', on trouve une fenêtre pour lancer des commandes. Cette fenêtre accepte des commandes "spéciales" internes à GNOME Shell.
+
+<note>Vous vous souvenez du code source téléchargé tout à l'heure ? La boîte de dialogue lancée par ''Alt+F2'' est codée par ''runDialog.js'', vous pouvez essayer d'y analyser son fonctionnement si ça vous amuse.</note>
+
+=== Recharger ===
+<note>Incompatible avec Wayland.</note>
+La commande spéciale ''r'' recharge GNOME Shell, cela peut prendre quelques instants.
+
+Les extensions notamment sont rechargées depuis le début, comme si l'ordinateur venait d'être allumé.
+
+=== Looking Glass ===
+La commande spéciale ''lg'' ouvre //Looking Glass//, un outil dont on reparlera plus tard.
+
+=== Voir les logs "en direct" ===
+
+<note>Incompatible avec Wayland.</note>
+<note important>**LA SESSION NE DEVRA PAS SE VERROUILLER durant tout le temps que durera cette manipulation.**
+
+Vous pouvez désactiver le verrouillage de l'écran dans //Paramètres -> Confidentialité//, ou encore installer l'extension **Caffeine** (activez-la __tout le temps__ que durera la manipulation ci-dessous).
+
+Si votre session se verrouille, vous ne pourrez pas la déverrouiller.</note>
+
+Pour voir en direct les logs, et ainsi tester le fonctionnement de l'extension, entrez dans un terminal la commande 
+<code>gnome-shell -r</code>
+C'est beaucoup plus "violent" que de simplement recharger GNOME Shell, et donc plus long. Toutes les erreurs émises entre autres par les extensions, mais aussi les messages ou les avertissements relatifs à d'autres librairies, apparaissent maintenant dans le terminal.
+
+Pour pouvoir quitter le terminal, utilisez simplement le script qu'on a créé plus haut, puis fermez la session. Une fois reconnecté, vous pourrez réactiver le verrouillage si vous le souhaitez.
+
+===== Un premier exemple =====
+On peut créer une extension en partant de zéro ou en //forkant// une extension existante, mais pour commencer, nous allons utiliser la méthode "classique" en lançant la commande
+<code>gnome-shell-extension-tool --create-extension</code>
+
+On vous demande un nom, une description et un identifiant ("uuid"). L'identifiant est souvent au format ''nom-extension@votre-pseudo'', inspirez-vous des identifiants d'extensions existants dans ''~/.local/share/gnome-shell/extensions/'' (mettez ce dossier dans vos signets Nautilus d'ailleurs ;-) ).
+
+L'extension qui vous est proposée pour débuter est un //Hello, World//, analysons les fichiers de son code source (situés dans ''~/.local/share/gnome-shell/extensions/''//votre-uuid//''/'') :
+
+==== metadata.json ====
+
+Ce fichier est **obligatoire** pour qu'une extension soit reconnue par GNOME Shell.
+
+Entre 2 accolades, on a une liste de propriétés au format ''"clef": valeur'' séparées par des virgules.
+
+Pour l'instant, il y a les clefs :
+  * ''uuid'' : obligatoire, doit correspondre au nom du dossier ;
+  * ''name'' : obligatoire, apparaît dans [[:gnome-tweak-tool]] ;
+  * ''description'' : obligatoire, apparaît dans [[:gnome-tweak-tool]] ;
+  * ''shell-version'' : un tableau (array) de valeurs entre guillemets, séparées par des virgules. Ce sont les versions de GNOME Shell que vous déclarez supporter. Cela aide les utilisateurs à faire leur "tri" sur le site officiel, mais avec les réglages d'Ubuntu par défaut, une extension peut être installée même sur une version non supportée.
+
+==== stylesheet.css ====
+
+Ce fichier n'est pas obligatoire. Il gère le style de l'extension en utilisant le langage CSS.
+
+==== extension.js ====
+Ce fichier est **obligatoire** pour qu'une extension soit reconnue par GNOME Shell.
+
+<note>Je le recopie entièrement le fichier, mais par petits bouts et dans le désordre pour pouvoir l'expliquer au fur et à mesure.</note>
+Le fichier commence par l'importation de ce dont on va se servir dans l'extension.
+<file javascript>
+const St = imports.gi.St;
+</file>
+St (Shell Toolkit) fournit un certain nombre de composants graphiques très utiles (des entrées de texte, des labels, des icônes, des boutons, ...).
+
+De plus, tous les fichiers javascript correspondant au code source de l'interface (''ui'') de GNOME Shell sont importables dans le code : ici, on rend accessibles le contenu de main.js et tweener.js (qui correspond aux animations).
+<file javascript>
+const Main = imports.ui.main;
+const Tweener = imports.ui.tweener;
+</file>
+<file javascript>
+let text, button;
+
+function init() {
+    button = new St.Bin({ style_class: 'panel-button', reactive: true, can_focus: true, x_fill: true, y_fill: false, track_hover: true });
+    let icon = new St.Icon({ icon_name: 'system-run-symbolic', style_class: 'system-status-icon' });
+    button.set_child(icon);
+    button.connect('button-press-event', _showHello);
+}</file>
+Le code ci-dessus est appelé au démarrage de GNOME Shell, **même si l'extension est désactivée**. La fonction init ne doit donc JAMAIS modifier l'interface graphique ni son comportement. Ici, la variable ''button'' précédemment créée a simplement été initialisée (voir [[https://developer.gnome.org/st/|la documentation de St]] pour plus de détails sur la signification des paramètres), et connectée à la fonction ''_showHello'' qu'on verra plus loin : '''button-press-event''' correspond à un clic sur bouton, chaque clic sur le bouton appellera donc le code de ''_showHello'', mais remarquez qu'on n'a pas encore ajouté le bouton à l'interface.
+
+<file javascript>
+function enable() {
+    Main.panel._rightBox.insert_child_at_index(button, 0);
+}
+
+function disable() {
+    Main.panel._rightBox.remove_child(button);
+}
+</file>
+La fonction ''enable'' est appelée si l'extension est activée. Elle apporte les modifications à l'interface. Toutes ces modifications doivent être annulées par la fonction ''disable'', qui est appelé quand on désactive une extension.
+
+Ici, la modification consiste à ajouter un bouton en forme d'engrenage dans le panneau supérieur, le bouton étant celui qu'on a initialisé tout à l'heure. Cliquer sur le bouton déclenche la fonction suivante :
+<file javascript>
+function _showHello() {
+    if (!text) {
+        text = new St.Label({ style_class: 'helloworld-label', text: "Hello, world!" });
+        Main.uiGroup.add_actor(text);
+    }
+    text.opacity = 255;
+    let monitor = Main.layoutManager.primaryMonitor;
+    text.set_position(monitor.x + Math.floor(monitor.width / 2 - text.width / 2), monitor.y + Math.floor(monitor.height / 2 - text.height / 2));
+    Tweener.addTween(text, { opacity: 0, time: 2, transition: 'easeOutQuad', onComplete: _hideHello });
+}</file>
+
+Ici, on a plusieurs concepts intéressants : celui d'acteur, qui est lié à [[https://fr.wikipedia.org/wiki/Clutter|la bibliothèque Clutter]].
+
+<note help>St est en fait une "surcouche" qui permet de rendre Clutter plus facile d'utilisation pour les usages courants de GNOME Shell, et d'uniformiser la manière d'y appliquer des thèmes.</note>
+
+Clutter fonctionne par la manipulation d'objets en 2D, nommés "acteurs", à l'intérieur d'un espace simulé en 3D. La classe de base d'un acteur est "ClutterActor", et tous les acteurs peuvent être positionnés, redimensionnés et tournés dans l'espace en 3D. La transparence est aussi gérée. Une transformation appliquée à l'acteur "parent" sera appliquée à ses acteurs "enfants". Voir la [[https://developer.gnome.org/clutter/stable/|vraie documentation]] pour plus de détails.
+
+Remarquez qu'on a appliqué à ''text'' une propriété relative au style : vous trouverez une classe ''helloworld-label'' dans le fichier ''stylesheet.css''
+
+Tweener concerne les animations, ici, on a une animation de disparition en fondu qui dure 2 secondes (d'ailleurs, si dans [[:gnome-tweak-tool]] on désactive les animations, le bouton n'a plus aucun effet visible puisque le label disparaît sitôt apparu), animation à la fin de laquelle on appelle ''_hideHello''
+
+<file javascript>
+function _hideHello() {
+    Main.uiGroup.remove_actor(text);
+    text = null;
+}
+</file>
+
+C'était donc le fonctionnement de l'extension "Hello, World". Maintenant, on va chercher à faire une extension utile.
+
+===== Créons une vraie extension =====
+
+==== Une idée ====
+On ne crée par une extension pour le plaisir de créer une extension !
+
+Une extension **rajoute une fonctionnalité là où elle manque** selon vous (ou des personnes avec qui vous parlez) ; exemples :
+  * Pas envie d'ouvrir la vue "activités" pour voir les icônes du dash ? -> [[:Dash to Dock]]
+  * Pas envie d'un logiciel tiers pour gérer le presse-papier ? -> Clipboard Indicator
+  * Pas envie d'utiliser la recherche ni de parcourir la liste des applications ? -> des extensions proposant des menus avec les applications par catégories (Arc Menu, Gno-menu, etc.)
+  * Pas envie de passer par la logithèque pour organiser vos //appfolders// ? -> Appfolders Management Extension
+
+Ici, voilà qu'un [[https://forum.ubuntu-fr.org/viewtopic.php?id=1989116|problème récurrent embête les amateurs de films et séries sous-titrées]] !
+
+C'est vrai ça, impossible de bouger la petite "fenêtre" qui indique le changement du niveau de son ou de luminosité, donc chaque changement de volume ou de luminosité interrompt donc la compréhension de mon épisode passionnant de //Quan Zhi Gao Shou// ou toute autre chinoiserie dont j'aimerais pouvoir lire les sous-titres (à défaut de comprendre les acteurs de la version originale).
+
+Mais que vois-je dans [[#le code de GNOME Shell]] ? un fichier ''osdWindow.js'' qui contient précisément le code pour ces petites "fenêtres" gênantes ! Une extension peut donc résoudre ce problème ! De plus, ce n'est pas un problème très complexe, on va pouvoir le résoudre sans faire appel à des choses très compliquées.
+
+Notre identifiant unique pour cet exemple sera ''move-osd-windows@maestrochan.fr''
+<note tip>Le code final complet est installable sur le [[https://extensions.gnome.org/extension/1220/move-osd-windows/|site officiel]] des extensions GNOME Shell si vous désirez disposez des vrais fichiers complets.</note>
+
+Voici son fichier metadata.json :
+<file javascript>
+{
+  "_generated": "Generated by SweetTooth, do not edit", 
+  "description": "Change the position of OSD windows (sound & luminosity popups).", 
+  "gettext-domain": "move-osd-windows", 
+  "name": "Move OSD Windows", 
+  "shell-version": [
+    "3.18", 
+    "3.20",
+    "3.22", 
+    "3.24",
+    "3.26"
+  ], 
+  "url": "https://github.com/Maestroschan/Move-OSD-Windows-GNOME-Extension", 
+  "uuid": "move-osd-windows@maestroschan.fr", 
+  "version": 1
+}
+</file>
+
+<note>Ne vous préoccupez pas du numéro de version, il sera géré automatiquement par extensions.gnome.org ;-)</note>
+
+==== Première ébauche ====
+
+Commençons avec une 1ère ébauche du code d'extension.js \\
+Comme tout à l'heure, le code est en entier mais fragmenté pour être expliqué.
+<file javascript>
+const Main = imports.ui.main;
+const OsdWindow = imports.ui.osdWindow;
+</file>
+On importe ce dont on va avoir besoin : ''osdWindow.js'' concerne la petite fenêtre dont on veut modifier la position, et ''main.js'' nous permettra d'accéder à des choses comme le moniteur (écran d'affichage) et ses propriétés.
+<file javascript>
+function init() { }
+</file>
+La fonction d'initialisation est vide, on fera tout dans le "enable".
+
+Avant tout, on va définir un //array// vide et deux fonctions :
+<file javascript>
+let injections=[];
+
+function injectToFunction(parent, name, func) {
+	let origin = parent[name];
+	parent[name] = function() {
+		let ret;
+		ret = origin.apply(this, arguments);
+			if (ret === undefined)
+				ret = func.apply(this, arguments);
+			return ret;
+		}
+	return origin;
+}
+
+function removeInjection(object, injection, name) {
+	if (injection[name] === undefined)
+		delete object[name];
+	else
+		object[name] = injection[name];
+}
+</file>
+Ces fonctions, ce n'est pas moi qui les invente, elles viennent directement d'**[[https://wiki.gnome.org/Projects/GnomeShell/Extensions/StepByStepTutorial#knowingJavascript-howExtends|ici]]**. Le but est de pouvoir injecter du code dans une fonction, puis de pouvoir le retirer.
+
+L'injection sera faite lors de l'exécution de la fonction ''enable'' :
+<file javascript>
+function enable() {
+	injections['show'] = injectToFunction(OsdWindow.OsdWindow.prototype, 'show',  function(){
+		let monitor = Main.layoutManager.monitors[this._monitorIndex];
+		let h_percent = 40;
+		let v_percent = -30;
+		
+		this._box.translation_x = h_percent * monitor.width / 100;
+		this._box.translation_y = v_percent * monitor.height / 100;
+	});
+}
+</file>
+Alors, que vient-on de faire ? Dans ''osdWindow.js'' (qu'on a importé dans la variable ''OsdWindow''), il existe l'objet ''OsdWindow'', dont le prototype définit une fonction ''show'', appelée quand on montre l'osdWindow à l'écran. On va injecter dans la fonction ''show'' de quoi modifier la position de l'osdWindow.
+
+En lisant la fonction ''_relayout'' de l'objet ''OsdWindow'' (que je ne vous copie pas au milieu du code de l'extension pour ne pas porter à confusion), on comprend que la position est définie par ''this._box.translation_x'' et ''this._box.translation_y'' ; où ''this'' désigne l'osdWindow qu'on veut placer. On assigne donc de nouvelles valeurs à ces variables.
+
+Si on avait mis 0 comme valeur pour ''h_percent'' et ''v_percent'', la fenêtre aurait été parfaitement centrée ; avec 40 et -30, la fenêtre sera dans le coin supérieur-droit.
+
+Avant de vouloir tester ce qu'on a fait, il faut coder de quoi le retirer :
+<file javascript>
+function disable() {
+	let arrayOSD = Main.osdWindowManager._osdWindows;
+	for (let i = 0; i < arrayOSD.length; i++) {
+		arrayOSD[i]._relayout();
+		arrayOSD[i]._box.translation_x = 0;
+	}
+	
+	removeInjection(OsdWindow.OsdWindow.prototype, injections, 'show');
+}
+</file>
+Ici, pour toutes les "osd windows" existantes, on va remettre les valeurs de ''this._box.translation_x'' et ''this._box.translation_y'' à leurs valeurs initiales (la fonction _relayout() modifie ''this._box.translation_y'').
+
+Ensuite, on retire nos injections.
+
+Redémarrez GNOME Shell (Alt+F2 -> r -> Entrée) puis activez l'extension via [[:GNOME-Tweak-Tool]] par exemple.
+
+Vous pouvez tester l'extension, et voir le résultat.
+
+==== S'adapter à l'utilisateur ====
+
+Cette 1ère ébauche ne fait que déplacer le problème : l'utilisateur préférerait sans doute, quitte à s'encombrer d'une extension pour bouger la fenêtre, pouvoir choisir où il la bouge !
+
+On va donc créer des paramètres, leur fenêtre de réglage (en anglais), et traduire le tout (en français).
+
+{{ http://i.imgur.com/fZY2jzV.png?400|L'arborescence complète une fois le projet terminé !}}
+
+Pour commencer, mettez dans votre dossier le fichier ''[[https://git.gnome.org//browse/gnome-shell-extensions/plain/lib/convenience.js|convenience.js]]'' ; étant proposé par les développeurs de GNOME Shell eux-mêmes, ce fichier est par défaut utilisé par beaucoup d'extensions, et est relativement standard : il fournit de quoi gérer facilement les aspects "paramétrage" et "internationalisation".
+
+=== Ajouter des paramètres ===
+
+Pour commencer, on va ajouter des paramètres. Dans un dossier ''schemas'', il faut avoir un fichier XML dont le nom soit ''org.gnome.shell.extensions.move-osd-windows.gschema.xml'' (remplacez bien sûr dans votre cas par votre propre nom d'extension).
+
+Ce fichier contient les lignes suivantes : TODO
+<file xml>
+</file>
+
+En ouvrant un terminal dans le dossier ''schemas'', compilez le fichier XML avec la commande
+<code>glib-compile-schemas .</code>
+
+On aura maintenant des //clés// dans [[:dconf-editor|dconf]] qui nous seront spécifiques (elles n'apparaissent pas dans //dconf-editor// tant qu'elles n'ont pas été explicitement réécrites).
+
+<note>Les types possibles pour les clés de paramètres sont : FIXME
+  * "s", une chaîne de caractères 
+  * "as", un tableau de chaînes de caractères
+  * "b", un booléen (true/false)
+  * "i", un entier
+  * "ai", un tableau d'entiers
+  * ...
+</note>
+
+=== Ajouter des langues ===
+
+Il faut maintenant ajouter une traduction en français à notre extension.
+<note help>"Je suis nul en anglais, pourquoi ne pas avoir fait directement en français ?", direz-vous. Même si vous n'êtes pas polyglotte, je suggère quand même de faire l'extension en anglais puis de traduire en français, pour que des contributeurs débutants puissent ensuite traduire dans leur propre langue en prenant appui sur les fichiers adéquats proposés pour le français.</note>
+
+== Pré-requis ==
+
+Installez un logiciel comme [[:Poedit]] ou [[:GNOME-Translate]] afin de pouvoir facilement éditer et compiler les fichiers de traduction.
+
+== Modifications du code ==
+
+ Pour gérer facilement les langues et les clés dconf, on va modifier le code ainsi :
+  * le ''_''
+  * le get truc
+  * lien vers la version finale du code
+  * +gros warning sa race à ce stade parce que c'est risqué hein
+
+==== prefs.js ====
+
+Jusqu'à présent, notre code Javascript modifiait GNOME Shell, les erreurs ou avertissements apparaissaient dans la console si besoin, et il fallait tout recharger pour voir les modifications.
+
+Ici, nous allons faire une fenêtre avec des éléments graphiques GTK+ 3, dont le code sera rechargé à chaque fois que vous cliquerez sur le petit "engrenage" en face du nom de l'extension dans l'Outil de personnalisation GNOME. Les seules erreurs qu'on verra sont celles qui bloqueront le chargement initial de la fenêtre, et on ne les verra pas dans la console, mais à la place du contenu de la fenêtre.
+
+On commence par les importations nécessaires :
+<file javascript>
+</file>
+<file javascript>
+</file>
+<file javascript>
+</file>
+
+===== Autres exemples de code =====
+
+N'hésitez pas à lire les codes d'autres extensions, pour les comprendre, s'en inspirer, voire copier ou adapter des petits bouts de code (citez leurs auteurs quand même hein) si la licence utilisée le permet((pas de souci normalement, les extensions de extensions.gnome.org sont toutes compatibles GPLv2)). \\
+Il est par exemple possible qu'il existe déjà des extensions modifiant déjà en partie l'interface presque comme vous aimeriez le faire, comprendre leur fonctionnement est donc intéressant. Imaginons qu'on veuille ajouter un raccourci clavier pour ouvrir un menu : plusieurs extensions le proposent, analysez les fonctions utilisées en lisant leur code source !
+
+[[#Le code de GNOME Shell]] lui-même est aussi bourré d'idées intéressantes même si elles sont souvent un peu compliquées à comprendre dans leur intégralité.
+
+===== Ce dont j'ai peu parlé ici =====
+
+Parce que je préfère ne parler que de ce que je comprends, j'ai très peu abordé certains aspects du développement d'extensions pourtant très puissants. En voici quelques uns :
+ TODO
+==== Clutter ====
+==== Tweener ====
+==== DBus ====
+==== Bash ====
+
+===== Publier l'extension =====
+
+==== Un site de partage de code ====
+
+Il est conseillé de publier le code sur une plateforme comme [[https://github.com|GitHub]] ou BitBucket, afin que d'autres personnes puissent collaborer au code source.
+
+Le dépôt GitHub peut faire office de page de présentation de votre extension, l'onglet "Issues" permet de discuter des bugs ou des idées d'amélioration avec les utilisateurs de votre extension, et il est probable que des //pull requests// contenant notamment des traductions soient soumises à votre approbation.
+
+==== La plateforme officielle ====
+
+Quelques passionnés découvriront sans doute votre extension sur GitHub à un moment donné, mais pour que tous les utilisateurs trouvent votre extension si ils en ont besoin, il vous sera nécessaire de vous inscrire sur extensions.gnome.org et de cliquer sur "Add yours".
+
+Le site vous demande un fichier ''votre@uuid.zip'' contenant directement au minimum les fichiers ''extension.js'' et ''metadata.json'' ; soyez bien conscient que le code sera relu, et qu'il faut donc qu'il soit propre et compréhensible. Après validation (généralement, ça prend moins d'une semaine, vous serez averti par mail), vous pourrez ajouter une capture d'écran et un icône à la page de votre extension. La description est celle présente dans ''metadata.json'', il est préférable qu'elle soit en anglais.
+
+Pour mettre à jour l'extension, ne vous préoccupez pas du numéro de version dans ''metadata.json'' (il change automatiquement), contentez-vous de ré-uploader un fichier ''votre@uuid.zip'' selon exactement la même méthode. Si l'identifiant de l'extension est le même, le site sait qu'il faudra mettre à jour la page existante, et la mise à jour de l'extension sera proposée aux utilisateurs.
+
+===== Voir aussi =====
+  * https://wiki.gnome.org/Projects/GnomeShell/Extensions/StepByStepTutorial
+  * https://developer.gnome.org/clutter/
+  * https://developer.gnome.org/st/stable/
+  * https://wiki.gnome.org/Projects/GnomeShell/DebuggingJavaScript
+  * http://hosted.zeh.com.br/tweener/docs/en-us/
+
+  * https://developer.gnome.org/gnome-devel-demos/stable/beginner.js.html.fr
+  * https://developer.gnome.org/gnome-devel-demos/stable/js.html.fr

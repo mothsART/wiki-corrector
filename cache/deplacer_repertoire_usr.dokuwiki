@@ -1,0 +1,130 @@
+
+{{tag>système administration}}
+
+----
+
+====== Déplacer son répertoire /usr ======
+
+Cet article s'adresse à ceux qui ont besoin de déplacer leur répertoire usr. Ce répertoire est dans la partition principale du système Linux (/). 
+
+Le /usr est volumineux, il contient les programmes accessibles à tout utilisateur; sa structure reproduit celle de la racine (/).
+
+===== Pourquoi déplacer son répertoire /usr =====
+
+La principale raison de déplacer son répertoire /usr est de gagner de la place dans la partition (/). Cette opération peut être utile,  par exemple, lorsqu'il vous manque de la place pour installer vos applications après avoir installé Ubuntu sur votre disque dur.
+
+===== Mode opératoire =====
+
+La procédure de déplacement du répertoire /usr/ consiste en 5 étapes :
+
+  - Créer une nouvelle partition en ext4 s'il vous reste de l'espace libre non partitionné sur votre/vos disque/s dur/s (ou sur un autre support, si besoin)
+  - Copier les fichiers de l'ancien répertoire /usr à la nouvelle partition ("new").
+  - Modifier les fichiers de gestion de partition (/etc/fstab).
+  - Renommer l'ancien répertoire /usr/.
+  - Effacer l'ancien répertoire après avoir vérifié que la nouvelle configuration de partition dédiée au répertoire /usr/ fonctionne correctement.
+
+===== Pré-requis =====
+
+  * Posséder un live CD/USB afin de pouvoir manipuler vos répertoires de l'extérieur.
+
+===== Déplacer son /usr =====
+
+==== Créer une nouvelle partition ====
+
+Vous devez utiliser une partition vide et la formater en ext4. Si vous n'avez pas déjà cette partition vous devez la créer. Pour modifier, créer ou supprimer vos partitions vous pouvez utiliser le logiciel [[GParted]]. Dans mon exemple je crée une partition primaire sur une carte SD de 16GB.
+
+==== Copier sa partition /usr ====
+
+Maintenant qu'une nouvelle partition a été créée, il faut copier les fichiers de l'ancienne vers la nouvelle. 
+
+  * Monter la partition
+Vous devez monter la nouvelle partition sur laquelle on va copier le contenu du répertoire /usr. Nous allons utiliser le fichier /dev/sdb1 pour identifier la nouvelle partition qui accueillera le répertoire /usr, vous devez adapter les lignes de commande à votre cas.
+
+Sur un émulateur de terminal tapez:
+  sudo mkdir /media/new
+  sudo mount /dev/sdb1 /media/new
+
+  * Copie des fichiers  
+Cette commande va lancer la copie de tous les fichiers de l'ancienne partition vers la nouvelle. En fonction de la quantité de données, cela peut prendre plus ou moins de temps.
+
+  sudo cp -a /usr/. /media/new/
+
+==== Modifier les fichiers de gestion du disque ====
+
+Il reste à modifier :
+  * le fichier de gestion des partitions ([[mount_fstab#Le fichier fstab|fstab]]) pour indiquer au système la nouvelle organisation du système de fichier.
+
+<note important>
+Avant toute manipulation du fichier fstab pensez à en faire une sauvegarde dans un coin de votre ordinateur afin de pouvoir, le cas échéant, le restaurer</note>
+
+=== Le fichier fstab ===
+
+Il n'y a qu'une ligne à ajouter dans le fichier /etc/fstab pour indiquer où est monté le répertoire /usr. Pour cela il faut indiquer le répertoire /usr après le montage du répertoire racine (/). Nous allons utiliser le UUID pour des raisons pratiques au lieu d'utiliser le fichier /dev/sdb1.
+<note>
+Pour obtenir l'UUID d'une partition, tapez :
+  sudo blkid -c /dev/null -s UUID -o value /dev/sdb1
+ou dans les anciennes version de Ubuntu
+  sudo vol_id /dev/sdb1
+On prend la valeur ID_FS_UUID=XXX.
+Dans mon exemple ID_FS_UUID=e4b27c02-a8d9-4e99-b9d9-ffd2e08309ab
+</note>
+
+On va ajouter dans le fichier /etc/fstab les lignes (n'oubliez pas sudo avant votre commande):
+  # /dev/sdb1
+  UUID=XXX /usr		  ext4	  defaults        0       2
+
+Exemple:
+  # /etc/fstab: static file system information.
+  #
+  # <file system> <mount point>   <type>  <options>       <dump>  <pass>
+  proc            /proc           proc    defaults        0       0
+  # /dev/sda1
+  UUID=f3fed55a-f811-4353-b572-d949e6f3c253 /               ext4    relatime,errors=remount-ro 0       1
+  # /dev/sdb1
+  UUID=e4b27c02-a8d9-4e99-b9d9-ffd2e08309ab /usr		  ext4	  defaults        0       2
+  # /dev/sda2
+  UUID=5888742c-ead8-414a-980d-d771d0379a9a none            swap    sw              0       0
+
+
+=== Suppression de l'ancien /usr ===
+
+**Redémarrer** votre ordinateur sur un live CD ou un clé USB **bootable** (live USB). Monter la partition principale Ubuntu (/) dans /media/ubuntu/.
+
+Renommer le répertoire /media/ubuntu/usr/ en /media/ubuntu/usr.0/ pour cela tapez sur un terminal:
+
+  sudo mv /media/ubuntu/usr /media/ubuntu/usr.0
+
+Créer un nouveau répertoire vide sur lequel sera monté la nouvelle partition /usr à parti du prochain démarrage. Tapez sur un terminal:
+
+  sudo mkdir /media/ubuntu/usr
+
+Redémarrer sur votre disque où est installé votre ubuntu. Tapez la commande suivante pour vérifier les systèmes de fichiers:
+
+  df -hT
+
+Vous obtenez ceci entre autre:
+  Sys. de fich.         Tail. Occ. Disp. %Occ. Monté sur
+  /dev/sda1             3,7G  1,3G  2,3G  36% /
+  /dev/sdb1             4,9G  2,4G  2,3G  52% /usr
+
+Notez que dans mon exemple sda1 est la partition où est installé Ubuntu.
+
+Si tout fonctionne correctement, on va supprimer le dossier de sauvegarde (usr.0). Ouvrir un terminal et tapez:
+
+  sudo rm -rf /usr.0
+
+Il existe sans doute d'autres méthodes pour déplacer son /usr. Dans mon cas j'ai gagné pas loin de 2 GO sur la partition (/) de mon eeepc 701.
+
+===== Voir aussi =====
+  * [[:deplacer_root|Déplacer son /]]
+  * [[:tutoriel:deplacer_home|Déplacer son /home]]
+  * [[repartitionner|Comment repartitionner]]
+
+
+----
+//Contributeurs :
+  [[utilisateurs:Fatahou]]
+//
+
+
+

@@ -1,0 +1,229 @@
+
+{{tag>tutoriel administration système partitions}}
+-----
+
+====== Montage : les bases pour rendre accessible partitions et unités de stockage ======
+Pour être utilisée (en lecture et écriture), une unité de stockage ([[partitions|partition]] de disque dur, clé USB, cartes, CD-ROM, unités distantes, etc ...) doit être accessible au système d'exploitation, c'est-à-dire avoir un chemin d'accès dans [[https://doc.ubuntu-fr.org/arborescence|l'arborescence du système]].
+
+L’action qui consiste à rendre une unité de stockage accessible s’appelle le **montage**. Elle est réalisée par la commande "**mount**". Le montage utilise un répertoire déjà existant et y crée un **point de montage**. 
+
+Le point de montage étant un répertoire, il dispose ( avant le montage ) d'un chemin d'accès dans l'arborescence du système (par exemple /media/fred). Une fois le montage effectué, ce chemin d'accès __devient celui de l'unité de stockage__. \\
+Le contenu du répertoire "point de montage" ( si ce dossier n'était pas vide ) devient inaccessible ( masqué ) pendant la durée du montage, mais sans être altéré ( il redeviendra accessible à la fin du montage ). Pour éviter les problèmes d'accès au contenu du répertoire, il est fortement conseillé d'utiliser des répertoire __vides__ comme point de montage.\\
+Ainsi le répertoire /media/fred, ou /home/fred/montage, si on y monte une partition ( par exemple sda2 ) devient le chemin temporaire ( pendant la durée du montage ) vers cette partition sda2.
+
+L'opération inverse, le démontage, libère le point de montage, ce qui rend inaccessible l'unité de stockage / [[partitions|partition]] et rend de nouveau accessible le __contenu__ du répertoire que le montage avait masqué. Cette opération est effectuée par la commande "**umount**".
+
+Une unité (ou volume, ou [[partitions|partition]]) non montée / démontée est visible par Ubuntu (au gestionnaire de fichier par exemple), mais __Ubuntu ne peut accéder à son contenu__ (c'est à dire ni lire ni écrire dessus).
+
+La plupart des unités de stockage sont montées automatiquement au démarrage ou au branchement (clé USB), mais ce n’est pas toujours le cas.\\
+Le présent document a pour but de vous informer **des bases** (il existes de nombreuses options non abordées ici) concernant le montage / démontage des unités de stockage (ou volumes, ou [[partitions|partition]]).
+
+<note>L'action de démontage correspond à //"Retirer un périphérique en toute sécurité et éjecter le média"// de Microsoft(r) Windows (r) ou pour Apple(r) Mac OS(r), à glisser un périphérique dans la corbeille. 
+
+Peu importe l'OS que vous utilisez, vous devez __toujours__ démonter vos périphériques avant de les retirer / débrancher. Ceci évite de corrompre vos données et protège votre matériel.</note>
+
+===== connaître vos partitions =====
+Pour monter une [[partitions|partition]] en **ligne de commande**, il faut connaître son identifiant au format **/dev/sda2** (ce n'est pas nécessaire pour un montage graphique), où :
+  - **/dev/** désigne un périphérique (//device//), 
+  - **sd** désigne un périphérique de type **disque** ou **clé**, 
+  - **a** est l'ordre de démarrage du disque dans le BIOS (**a** est le 1er disque lancé, **b** le second, etc ...).
+  - **2** est le N° de la partition sur le disque : ici la seconde.
+  - Donc **/dev/sda2** = la seconde partition du 1er disque dur.
+
+**__Graphiquement__**, on peut obtenir cette information via des logiciels comme [[gparted|Gparted]] ou [[gnome-disk-utility|Gnome-disk-utility]]. 
+
+Ci-dessous, la zone encadrée de rouge dans Gnome-disks donne les informations concernant la partition "**GS**" sélectionnée (reconnaissable à sa couleur bleue). La ligne surlignée en jaune est la zone importante pour le montage (**/dev/sda2**).
+{{ :disks:gnome-disks_info_partition.png?800 |Info sur une partition}}
+
+**__Au terminal__**, on peut aussi taper la commande :
+  sudo blkid
+
+qui donnera (ici sur Ubuntu 19.04) quelque chose comme cela :
+
+  /dev/loop0: TYPE="squashfs"
+  /dev/loop1: TYPE="squashfs"
+  /dev/loop2: TYPE="squashfs"
+  /dev/loop3: TYPE="squashfs"
+  /dev/loop4: TYPE="squashfs"
+  /dev/loop5: TYPE="squashfs"
+  /dev/sda1: LABEL="principal" UUID="5e56449c-22d7-4819-86d6-78c8078a3580" TYPE="ext4" PARTUUID="6d0959ec-01"
+  /dev/sda2: LABEL="GS" UUID="7a121975-abae-4ae4-a001-30181d207834" TYPE="ext4" PARTUUID="6d0959ec-02"
+  /dev/sdb1: LABEL="Mint" UUID="d9c75347-4640-4d6b-9ff6-312dfa4c4719" TYPE="ext4" PARTUUID="0001c505-01"
+  /dev/sdb2: LABEL="data" UUID="bdd52f68-10f8-4d3d-8175-aad1fc6cf82b" TYPE="ext4" PTTYPE="dos" PARTUUID="0001c505-02"
+  /dev/sdb3: UUID="e343d413-46e1-4c44-824a-558b39c3e65f" TYPE="ext4" PARTUUID="0001c505-03"
+  /dev/sdc1: LABEL="Sauvegardes" UUID="abbd0971-7729-4469-ba03-1558429aa04d" TYPE="ext4" PARTUUID="0003c319-01"
+
+Si vous en avez, ne tenez pas compte de **/dev/loopx**, ce sont des pseudo-périphériques techniques (souvent utilisés par la technologie [[snap|snap]]).\\
+Ou limitez //blkid// aux périphériques dont le nom commence par //sd// via
+
+    sudo blkid /dev/sd*
+
+De nouveau on trouve l'information recherchée (de type **/dev/sda2**), ici au début de chaque ligne.
+
+**__Autre commande__ plus agréable à lire** et sans //sudo// - élargissez au préalable la fenêtre du terminal :
+  lsblk -fe7 -o +size
+  
+qui donnera sous 20.04 quelque chose comme
+  NAME   FSTYPE LABEL     UUID                                 FSAVAIL FSUSE% MOUNTPOINT    SIZE
+  sda                                                                                     931,5G
+  └─sda1 ext4   DATA      b19322e6-8a6d-4e24-b87f-4b0155b41963  306,1G    62% /media/DATA 930,8G
+  sdb                                                                                     111,8G
+  ├─sdb1 ext4   Budgie    25c341fb-320d-4a4a-9d64-b08c5fe55540   12,6G    61% /            37,3G
+  ├─sdb2                                                                                      1K
+  ├─sdb5 ext4   System_02 384c7fbb-8785-4c06-9053-790ad27cc3bf                             37,3G
+  └─sdb6 ext4   System_03 c3e7a588-524b-4a46-bbf9-cc63cdc5db28                             37,3G
+  sr0 
+  
+Ici on a tout ce qu'il faut ( nom, type de syst. de fichiers, étiquette, uuid, etc ) pour préparer un montage, \\
+sans les /dev/loop et autre tmpfs ( l'option //e7// les exclut ).
+===== Montage ponctuel d’une unité de stockage =====
+Ce chapitre traite du montage __ponctuel__ d'une partition (ou volume), montage __valide seulement pour la session en cours__. Une clé USB est considérée comme une partition.
+
+====Clé USB====
+Une clé se monte normalement tout seule lors de sa connexion au PC.
+
+Pour démonter la clé avant de la retirer du PC (démonter protège la clé), allez dans votre [[gestionnaire_de_fichiers|gestionnaire de fichier]] ou votre **poste de travail**. Clic droit sur la clé puis **démonter** ou **éjecter**. Votre version d'Ubuntu fournit aussi normalement un utilitaire dédié.
+
+Éteindre le PC donne le même résultat.
+
+====Partition montée graphiquement====
+
+Dans votre gestionnaire de fichiers, les [[partitions|partitions]] même démontées sont normalement visibles (en général en gris clair, ou sans symbole indiquant le montage). 
+
+//Dans l'exemple ci-dessous ([[nautilus|nautilus]] 3.32) les partitions sont accessibles en cliquant sur "**+ Autres emplacements**". On voit au symbole en fin de ligne que "Data" est montée, mais pas "Mint".//
+{{ :montage:montage_partitions_nautilus.png?600 |Monter une partition avec Nautilus}}
+
+Dans le gestionnaire de fichiers :
+  - Cliquer sur une partition pour la monter. 
+  - pour la démonter : clic droit puis **démonter** ou **éjecter** ; ou clic sur le symbole du montage. Votre version d'Ubuntu peut aussi fournir un utilitaire dédié.
+
+Éteindre le PC donne le même résultat.
+
+Pour des raisons de praticité, utilisez quand c'est possible le montage / démontage graphique. Néanmoins un montage en ligne de commande peut-être nécessaire, par exemple pour rendre une partition accessible au début d'un script.
+
+====Partition montée en ligne de commande====
+Monter ponctuellement une partition consiste à lier un __volume__ (partition) à un __répertoire existant__, lequel devient ainsi le __point de montage__. Ce montage rend le volume (la partition) accessible à votre système. Il pourra ainsi y lire et y écrire, ce qu'il ne peut pas faire sans ce montage.
+
+Potentiellement, n'importe quel répertoire (vide ou avec des fichiers) peut devenir un __point de montage__. En pratique on utilise des répertoires __vides__ dans  **/media** ou **/mnt**. N'utilisez pas un répertoire avec des fichiers car ils seront __inaccessibles__ pendant le montage.
+
+La commande classique pour faire un montage ponctuel est **mount**, mais il existe aussi la commande **udisksctl mount -b**, qui est un peu plus simple :
+
+**__udisksctl__**
+
+Pour monter la 2e [[partitions|partition]] du 1er disque dur (sda2) :
+  udisksctl mount -b /dev/sda2
+Pour monter la partition nommé Sauvegardes :
+  udisksctl mount -b /dev/disk/by-label/Sauvegardes
+Pour démonter 
+  udisksctl unmount -b /dev/sda2  
+  udisksctl unmount -b /dev/disk/by-label/Sauvegardes
+  
+Avantages de **udisksctl mount -b** sur mount : 
+  - pas besoin de définir un répertoire de montage (le montage de la partition se fait automatiquement dans un répertoire / point de montage créé par udsksctl => /media///user///identifiant_partition).
+  - pas besoin de **sudo** ni de mot de passe.
+  - la partition montée est visible dans le panneau gauche de votre gestionnaire de fichiers, dans la partie "Périphériques" ([[thunar|Thunar]], [[nemo|Nemo]]) ou "autres emplacements" ([[nautilus|Nautilus]]). Ce qui n'est pas toujours le cas avec mount.
+
+Attention pour démonter il faut taper u**n**mount(avec un **n**), alors que le démontage d'une commande mount, ci-dessous, s'écrit umount (sans **n**).
+
+On peut également démonter graphiquement par le poste de travail ou le gestionnaire de fichier (les partitions montées avec udisksctl y sont toujours visibles) via un clic droit > démonter.\\
+Éteindre le PC donne le même résultat. 
+
+**__mount__**
+
+C'est la commande classique.
+
+Depuis quelques versions (16.04 ?), il existe un point de montage dédié à ces montages ponctuels dans le répertoire **/media**, et il porte votre nom. Ainsi, si vous avez choisis comme nom utilisateur **fred**, il existe un répertoire **/media/fred**.\\
+Il est intéressant d'utiliser ce répertoire (ou un répertoire dans votre compte utilisateur normal), car les montages qui ne sont pas faits dans votre compte /home///user// ou dans **/media///user//** ne sont __pas visibles__ dans votre gestionnaire de fichiers (mais ils fonctionnent).\\
+Mieux vaux donc utiliser **/media///vous//**. C'est d'ailleurs ce que fait la commande **udisksctl** (voir plus haut).
+
+Pour monter la 2e partition du 1er disque dur (sda2) de l'utilisateur fred (nécessite le mot de passe) :
+  sudo mount /dev/sda2 /media/fred
+
+Pour démonter (nécessite le mot de passe) : 
+  sudo umount /dev/sda2
+ou
+  sudo umount /media/fred
+
+On peut également démonter graphiquement par le poste de travail ou le gestionnaire de fichier (quand la [[partitions|partition]] y est visible) via un clic droit > démonter.\\
+Éteindre le PC donne le même résultat.
+
+Vous pouvez très bien bien créer votre propre répertoire pour "point de montage" par un **sudo mkdir /home/fred/montage** (par exemple). C'est d'ailleurs nécessaire si vous envisagez plusieurs montages (vous créez alors /home/fred/montage**1**, /home/fred/montage**2**, etc ...), mais pour un seul montage ponctuel et temporaire, **/media/fred** existe déjà et peut suffire.
+
+La [[partitions|partition]] est montée et est donc désormais accessible en lecture et écriture aux commandes ou aux logiciels. Elle est également visible dans votre gestionnaire de fichiers __si__ vous avez fait le montage dans /media/fred (adaptez /fred à votre ///user//).
+
+__Quelques options de la commande mount__ :
+Il existe de [[http://www.linux-france.org/article/man-fr/man8/mount-8.html|nombreuses options]] pour la commande mount, mais en voici quelques unes pouvant être utile dans une utilisations courante :
+
+**Label** : Une partition peut recevoir un "label" (un nom), grâce à des logiciels comme [[gparted|gparted]] ou [[gnome-disk-utility|gnome-disks]]. Dans ce cas, on peut faire un montage par le label (grâce à l'option **-L**). Si /dev/sda2 a pour nom "**Mint**", on fera donc :
+  sudo mount -L Mint /media/fred
+Par contre pas de démontage par le label, donc démontage classique :
+  sudo umount /media/fred
+
+**Lecture seule** : pour éviter les erreurs, vous pouvez souhaitez que la partition ne soit accessible qu'en lecture, mais pas en écriture (donc sans modification / suppression des fichiers). C'est l'option **-r** (//read//) :
+  sudo mount -r -L Mint /media/fred
+ou
+  sudo mount -r /dev/sda2 /media/fred
+===== Montage permanent d’une unité de stockage =====
+Un montage permanent monte la [[partitions|partition]] (ou volume, ou unité de stockage) à __chaque démarrage__ de la session.
+L'avantage est de ne paramétrer l'opération qu'une seule fois.
+
+====Graphiquement==
+**Gnome-disk-utility** étant installé par défaut sur Ubuntu, le plus simple est de l'utiliser.
+
+Ouvrez Gnome-disks, puis :
+  - **choisir le disque** avec la partition à monter (à gauche) ;
+  - puis **choisir la partition** à monter en cliquant dessus (à droite de la fenêtre) ;
+  - puis **cliquez sur le menu des partitions** (3e bouton en dessous des partitions) puis **cliquez sur "Modifier les options de montage"** ;
+{{ :disks:gnome_disk_montage1.png?500 |Comment choisir la partition à monter}}
+  - puis dans la fenêtre qui apparaît, décochez l'option "**réglages par défaut de la session utilisateur**".
+{{ :disks:gnome_disk_montage2.png?600 |Décochez le réglage par défaut de la session utilisateur}}
+
+Votre montage automatique est normalement actif (vérifiez juste que les options "Monter au démarrage" et "Afficher dans l'interface utilisateur" sont bien cochées, et à défaut, cochez-les).
+
+Cliquez sur "valider", et tapez votre mot de passe.
+
+Redémarrez la session puis votre gestionnaire de fichier pour vérifier que la [[partitions|partition]] choisie est bien montée.
+
+//Sur les versions avant disk 3.28 (donc avant Ubuntu 18.04), le nom de l'option à décocher était "Options de montage automatique"//
+
+Pour en savoir plus, [[gnome-disk-utility#monter_une_partition_automatiquement_au_demarrage|voir le chapitre dédié]] de l'aide Gnome-disk. 
+
+====En ligne de commande==
+Le fichier **/etc/fstab** est le fichier système où est sauvegardé le montage automatique réalisé via Gnome-disk. On peut directement modifier ce fichier à la main, sans passer par un logiciel. 
+<note warning>Manipuler les fichiers système **peut être dangereux**. Ne le faite **pas** si vous ne maitrisez pas techniquement le sujet.</note>
+Pour ouvrir **fstab** en mode administrateur (nécessite le mot de passe) :
+
+  gedit admin:///etc/fstab
+
+**Ne rien enlever ou modifier des lignes existantes**. Ajouter à la fin du fichier ces 2 lignes :
+  #Montage de sda2 (le commentaire saisie ici est libre)
+  /dev/sda2      /media/data	ext4	defaults     0     2
+
+Ajustez en fonction de vos besoins :
+  - A la place de **sda2**, saisissez la [[partitions|partition]] que vous souhaitez monter. Vous pouvez aussi remplacer l'identifiant **/dev/sda2** par l'identifiant **UUID=xxx**, ce qui est plus sûr car l'ordre des disques et des partitions peut-être changé dans le bios, ce qui rend alors le **fstab** inopérant. L'**UUID**, lui, ne change jamais. On trouve l'UUID via le **sudo blkid** présenté plus haut, ou via des programmes graphiques comme Gparted ou Gnome-disk.
+  - Vous pouvez remplacer **/media/data** par le point de montage qui vous convient. Par contre ce point de montage (ce répertoire) __doit exister__ et être __vide__. Créez le par un **sudo mkdir /media/data** (ou un autre nom). Traditionnellement, on crée les points de montage dans **/media/** ou **/mnt/**, mais c'est libre.
+  - **ext4** est le format de fichier de la partition montée. Si votre partition est en ntfs, saisissez **ntfs**
+  - **defaults** est l'option de montage. Il en existe beaucoup d'autre, mais celle-ci devrait suffire. Pour un disque ntfs, choisissez plutôt **rw,permissions**. 
+  - **0** et **2** sont des options à laisser telles que.
+
+Sauvegardez le **fstab** et redémarrez votre session (ou le PC) pour tester que la partition se monte désormais automatiquement.
+
+Pour en savoir plus sur le **fstab**, [[mount_fstab|consultez l'aide dédiée]].
+
+=====Monter une image disque =====
+Il est possible de créer (par exemple avec [[gnome-disk-utility|Gnome-disk-utility]]) une image disque copiant et regroupant toutes les partitions d'un disque. Ce sont ce type d'images qui sont utilisées pour cloner des disques. On peut aussi les utiliser pour faire une sauvegarde intégrale d'un disque.
+
+Si on ne souhaite pas la cloner, Gnome-disks peut monter (donc rendre accessible) graphiquement cette image (voir [[gnome-disk-utility#attacher_monter_l_image_disque|le chapitre dédié]] sur la documentation du logiciel).
+
+En ligne de commande, la commande "mount" ne peut pas être utilisée pour monter l'image. Il est plus approprié d'utiliser la commande **[[apt>kpartx]]** avec les options a et v :
+
+  sudo kpartx -a -v /chemin/de/mon/image/disque.img
+
+===== Aller plus loin =====
+  * [[http://www.linux-france.org/article/man-fr/man8/mount-8.html|Les options de la commande mount]].
+  * [[gnome-disk-utility#monter_une_partition_automatiquement_au_demarrage|monter une partition automatiquement au demarrage]] avec Gnome-disk.
+  * [[:mount_fstab|Monter automatiquement des partitions au chargement d'Ubuntu (/etc/fstab)]]
+  * [[:mount_fstab#la_commande_mount|Monter manuellement des partitions et d'autres unités de stockage en ligne de commande (mount)]]
+  * [[autofs|Monter automatiquement des partitions en fonction de l'utilisation (AutoFS)]]
+
+-----

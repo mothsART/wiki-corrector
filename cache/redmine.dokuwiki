@@ -1,0 +1,744 @@
+
+{{tag>programmation travail_collaboratif gestion_de_projet}}
+
+----
+
+====== Redmine ======
+
+**Redmine** est un système Open Source de gestion de projet en mode web. Il est développé en ruby grâce au framework ruby on rails.
+
+Les fonctionnalités :
+    * gestion multi-projets ;
+    * gestion fine des droits utilisateurs définis par des rôles ;
+    * rapports de bogues, demandes d'évolutions ;
+    * Wiki multi-projets ;
+    * forums multi-projets ;
+    * news accessibles par RSS / ATOM ;
+    * notifications par courriel ;
+    * gestion de feuilles de route, GANTT, calendrier ;
+    * historique ;
+    * intégration avec divers suivis de versions : [[subversion|SVN]], [[CVS]], Mercurial, Git, Bazaar & Darcs ;
+    * identification possible via LDAP ;
+    * multilingue (25 langues disponibles pour la 0.7.0) ;
+    * prise en charge de plusieurs bases de données : [[MySQL]], [[PostgreSQL]] ou SQLite.
+
+===== Installation =====
+ 
+Pour installer ce logiciel, il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>redmine|redmine]]**.
+ 
+Selon la base de données utilisée, on installera :
+  * **[[apt>redmine|redmine-sqlite]]**  pour [[sqlite|SQLite]] ; 
+  * **[[apt>redmine|redmine-pgsql]]** pour [[postgresql|PostgreSQL]] ;
+  * **[[apt>redmine|redmine-mysql]]** pour [[mysql|MySQL]].
+
+== Créer un utilisateur spécifique ==
+Pour des raisons de sécurité, il est préfèrable de créer un utilisateur spécifique à Redmine pour utiliser la base :
+
+  sudo addgroup redmine
+  sudo adduser redmine --no-create-home --ingroup redmine
+  
+== Créer les répertoires nécessaires au fonctionnement de redmine ==
+  
+  sudo mkdir -p /usr/share/redmine/tmp /usr/share/redmine/public/plugin_assets /usr/share/redmine/log /usr/share/redmine/files
+  
+== Définition des droits ==
+  
+  cd  /usr/share/redmine
+  sudo chown -R redmine:redmine files log tmp public/plugin_assets
+  sudo chmod -R 755 files log tmp public/plugin_assets
+
+
+<note important>Si vous intallez depuis les dépôts, l'application redmine est installée dans **/usr/share/redmine** et non **/opt/redmine**. Tenez-en compte pour les paramétrages et autre actions sur les fichiers à partir de la section 3. </note>
+
+
+<note important>Après l'installation, il faudra également lancer la commande ''sudo chown -R redmine:users /etc/redmine''. </note>
+===== Installation depuis les sources =====
+==== Pré-requis ====
+
+Pour installer Redmine vous aurez besoin de //Ruby//, son framework //Ruby on Rails// et un //système de base de données//.
+
+=== Ruby ===
+
+Redmine nécessite Ruby. [[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt://build-essential,ruby-dev,rubygems,rake|build-essential ruby-dev rubygems rake]]**.
+
+L'installation de Rails est précisée ci-dessous, car la version à installer est importante suivant la version de Redmine.
+
+=== Ruby on Rails et sources de Redmine ===
+
+La dernière version stable de Redmine à ce jour est la version **1.3.0** (2011-12-10). Elle nécessite la version 2.3.14 de Rails et la version 1.1.x de Rack.
+
+<note important>Les versions 1.2.x nécessitent la version 2.3.11 de Rails et la version 1.1.1 de Rack
+(voir sur [[http://www.redmine.org/projects/redmine/wiki/RedmineInstall|le site de Redmine]])</note>
+
+Installez donc ces dépendances à l'aide des commandes :
+  sudo gem install rack -v=1.1.3
+  sudo gem install rails -v=2.3.14
+
+Télécharger les sources de Redmine dans votre répertoire personnel :
+
+  cd ~
+  wget http://rubyforge.org/frs/download.php/75597/redmine-1.3.0.tar.gz
+
+Extrayez les sources :
+
+  tar zxf redmine-1.3.0.tar.gz
+
+==== Base de données ====
+
+Plusieurs types de base de données sont supportés par Redmine. Dans les plus communs, on note MySQL, PostgreSQL ou SQLite. Utilisez celui que vous préferez.
+
+=== MySQL ===
+
+Pour MySQL, [[:tutoriel:comment_installer_un_paquet|installez les paquets]] **[[apt://mysql-server,libmysqlclient-dev|mysql-server libmysqlclient-dev]]**.
+
+Durant l'installation de MySQL, il sera demandé un mot de passe pour le compte d'administration de MySQL ("//root//").
+
+Installez l'adaptateur MySQL pour Ruby avec :
+
+  sudo gem install mysql
+
+<note>Pour la suite de la documentation, nous considérerons que le mot de passe de l'utilisateur redmine est "//password//".</note>
+
+== Créer la base de données de Redmine ==
+
+  mysql -u root -p
+
+Entrez le mot de passe pour le compte d'administration de MySQL (demandé à l'installation).
+
+Tapez les requêtes SQL correspondantes :
+
+<code SQL>
+CREATE DATABASE redmine DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;
+</code>
+
+<code SQL>
+GRANT ALL PRIVILEGES ON redmine.* TO 'redmine'@'localhost' IDENTIFIED BY 'password' WITH GRANT OPTION;
+</code>
+
+La base de données de redmine est créée. Sortez avec :
+
+<code SQL>
+exit
+</code>
+
+=== PostgreSQL ===
+
+Pour PostgreSQL, [[:tutoriel:comment_installer_un_paquet|installez les paquets]] **[[apt://libpq-dev|libpq-dev]]**.
+
+Installez l'adaptateur PostgreSQL pour Ruby avec :
+
+  sudo gem install postgres
+
+== Création d'un utilisateur spécifique et de la base de données ==
+
+Pour des raisons de sécurité, il est préfèrable de créer un utilisateur spécifique à Redmine pour utiliser la base :
+
+  su postgres
+  createuser redmine --no-superuser --no-createdb --no-createrole --login --pwprompt --encrypted
+  createdb --owner=redmine --encoding=utf-8 redmine
+  exit
+
+<note help>Si l'erreur 'Unknown id' est survenue à la ligne "su - postgres", il suffit alors de se référer à la page [[:postgresql|postgresql]] </note>
+
+Un mot de passe sera demandé pour l'utilisateur redmine.
+
+<note>Pour la suite de la documentation, nous considérerons que le mot de passe de l'utilisateur redmine est "//password//".</note>
+
+==== Installation ====
+
+Vous devez vous trouver dans le répertoire des sources de Redmine pour la suite des opérations :
+
+  cd ~/redmine-1.3.0
+=== Configuration de Redmine ===
+
+Copier le fichier de configuration :
+
+  cp config/database.yml.example config/database.yml
+
+Puis [[:tutoriel:comment_editer_un_fichier|éditez le fichier]] **config/database.yml** pour adapter la partie ''production'' suivant la base de données à utiliser (ici, MySQL ou PostgreSQL) :
+
+  * Fichier d'accès à la base pour MySQL :
+
+  production:
+    adapter: mysql
+    socket: /var/run/mysqld/mysqld.sock 
+    database: redmine
+    host: localhost
+    username: redmine
+    password: password
+    encoding: utf8
+
+<note>L'option //socket: /var/run/mysqld/mysqld.sock// est spécifique à Ubuntu et debian.</note>
+
+  * Fichier d'accès à la base pour PostgreSQL :
+
+  production:
+    adapter: postgresql
+    database: redmine
+    host: localhost
+    username: redmine
+    password: password
+    encoding: utf8
+    schema_search_path: public
+    
+== Créer un ''session store'' ==
+
+Depuis la version 0.8.7 de Redmine, cette commande est nécessaire :
+
+  rake generate_session_store
+
+== Créer la structure de la base ==
+
+  RAILS_ENV=production rake db:migrate
+  
+<note important>Si vous obtenez l'erreur : 
+rake aborted ! no such file to load -- net/https. Il vous suffit d'installer  [[apt://libopenssl-ruby1.8]] </note>
+<note important>Si vous obtenez l'erreur : 
+
+  A key is required to write a cookie containing the session data. Use config.action_controller.session = { :key => "_myapp_session", :secret => "some secret phrase" } in config/environment.rb
+  
+Il vous suffit de lancer la commande :
+
+  rake config/initializers/session_store.rb 
+
+puis de créer la structure de la base. (ref: [[http://www.redmine.org/issues/4848]] )</note>
+
+== Insérer les données par défaut ==
+
+  RAILS_ENV=production rake redmine:load_default_data
+
+La langue sera demandée, indiquez donc ''fr'' pour du français.
+
+=== Finir l'installation proprement ===
+
+L'installation consiste grossièrement à télécharger les sources dans votre dossier personnel.
+
+Afin de respecter la philosophie GNU/Linux sur l'installation des logiciels (au niveau arborescence), vous ne devez pas laisser un simple dossier de sources dans votre dossier personnel.
+
+Le principe est de déplacer ce dossier dans **/opt/**. D'autres parts, ceci rendra le logiciel installé pour tous les utilisateurs du système et non seulement pour vous.
+
+== Copie vers /opt/ ==
+
+Créer le dossier **/opt/redmine** :
+
+  sudo mkdir /opt/redmine
+
+Copier les sources vers ce répertoire :
+
+  sudo cp -r ~/redmine-1.3.0/* /opt/redmine
+
+Un dossier ''tmp'' et ''public/plugin_assets'' doit être présent par convention dans les sources (si ce n'est pas déjà le cas) :
+
+  sudo mkdir -p /opt/redmine/tmp /opt/redmine/public/plugin_assets
+
+Un dossier ''pids'' doit être présent également pour permettre à mongrel de démarrer.
+
+  sudo mkdir /opt/redmine/tmp/pids
+
+== Définition des droits ==
+
+L'utilisateur qui lance Redmine doit avoir les droits d'écriture sur les dossiers ''files'', ''log'', ''tmp'' et ''public/plugin_assets'' des sources. Nous allons prendre ici l'utilisateur //redmine// précédement créé :
+
+  cd /opt/redmine
+  sudo chown -R redmine:redmine files log tmp public/plugin_assets
+  sudo chmod -R 755 files log tmp public/plugin_assets
+
+== Nettoyage ==
+
+Redmine étant proprement installé, on peut maintenant supprimer les sources du dossier personnel :
+
+  rm -rf ~/redmine-1.3.0*
+
+
+
+===== Automatiser le lancement de Redmine =====
+
+<note important>
+Cette méthode est optionnelle et utilise le serveur Web **Mongrel**. Si vous avez l'intention d'utiliser **Apache** pour héberger Redmine, il n'est pas utile de mettre en place ce qui suit. Passez directement à la section [[#servir_redmine_via_apache|Servir Redmine via Apache]].
+</note>
+
+Pour pouvoir démarrer, redémarrer, arrêter facilement Redmine et l'ajouter au démarrage de la machine, nous devons :
+
+  * [[:tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt://mongrel|mongrel]]** ;
+
+Mongrel est un serveur HTTP écrit en Ruby et en C. Il a été conçu pour être léger, rapide et sécurisé. C'est ce serveur qui sera désormais utilisé pour exécuter Redmine.
+
+  * Puis il faut créer un script exécutable **/etc/init.d/redmine** contenant :
+
+<code bash>
+#!/bin/sh
+
+set -e
+
+REDMINE_PATH=/opt/redmine/
+REDMINE_PID=/tmp/mongrel.pid
+REDMINE_PORT=3000
+REDMINE_INTERFACE=127.0.0.1
+
+if [ -x /usr/bin/mongrel_rails ] ; then
+        HAVE_MONGREL=1
+else
+        echo "Mongrel not installed."
+        exit 0
+fi
+
+. /lib/lsb/init-functions
+
+case "$1" in
+  start)
+        log_action_begin_msg "Starting Redmine server"
+        mongrel_rails start -c $REDMINE_PATH -d -e production -p $REDMINE_PORT -P $REDMINE_PID -a $REDMINE_INTERFACE
+        log_action_end_msg $?
+        ;;
+  stop)
+        log_action_begin_msg "Stopping Redmine server"
+        mongrel_rails stop -c $REDMINE_PATH -P $REDMINE_PID
+        log_action_end_msg $?
+        ;;
+  force-reload|restart)
+        $0 stop
+        $0 start
+        ;;
+  *)
+        echo "Usage: /etc/init.d/redmine {start|stop|restart|force-reload}"
+        exit 1
+        ;;
+esac
+
+exit 0
+</code>
+
+  * Ne pas oublier de rendre le script exécutable :
+
+  sudo chmod +x /etc/init.d/redmine
+
+À ce point vous pouvez respectivement démarrer, redémarrer et arrêter Redmine à l'aide des commandes :
+
+  sudo /etc/init.d/redmine start
+  sudo /etc/init.d/redmine restart
+  sudo /etc/init.d/redmine stop
+
+  * Pour ajouter Redmine au démarrage de la machine :
+
+  sudo update-rc.d redmine defaults
+  
+Redmine sera désormais lancé à chaque démarrage de la machine.
+
+Vous pouvez y accédez à présent via l'adresse : http://localhost:3000/
+
+<note tip>
+Pour changer le port d'écoute de Mongrel (3000 par défaut), il suffit d'[[:tutoriel:comment_editer_un_fichier|éditer le script]] **/etc/init.d/redmine** précédement créé et de changer la valeur de //REDMINE_PORT//.
+</note>
+
+===== Servir Redmine via Apache =====
+
+On a deux manières de configurer Apache :
+  * vous pouvez placer Redmine **dans un dossier**, aussi appelé //sub-URI//, d'un site déjà créé (par exemple : http://localhost/redmine ou http://monsite.com/redmine). Voir la [[#methode_1_dans_un_dossier|méthode 1]];
+  * vous pouvez **attribuer un domaine** à Redmine (comme http://monsite-redmine.com, http://redmine.monsite.com, ...) consistant à créer un VirtualHost. Voir la [[#methode_2_via_un_domaine|méthode 2]].
+
+<note important>
+La méthode 1 utilise seulement Apache (Mongrel pourra être supprimé) alors que pour l'instant, la méthode 2 utilise Mongrel en parallèle avec Apache et son module proxy.
+Sauf adaptation de la méthode 2, préférez la méthode 1 du sous-dossier.
+</note>
+
+==== Méthode 1 : Dans un dossier ====
+
+=== Pré-requis ===
+
+Si ce n'est pas le cas, mettez à jour votre système.
+
+Vous devez disposer des paquets de construction essentiels, de développement Apache, nécessaires au déploiement.
+
+[[:tutoriel:comment_installer_un_paquet|Installez donc les paquets]] : [[apt://apache2-prefork-dev,libapr1-dev,libaprutil1-dev|apache2-prefork-dev libapr1-dev libaprutil1-dev]].
+
+=== Installation de Passenger ===
+
+Il faut à présent installer Passenger (alias //mod_rails//), le module d'Apache permettant de faire tourner une application Ruby on Rails sur Apache.
+
+  sudo gem install passenger
+
+Lancer le script d'installation du module (commande à adapter suivant la version de Passenger bien sur) :
+
+  sudo ruby passenger-install-apache2-module
+  
+<note important>
+Si vous obtenez l'erreur «ruby: No such file or directory -- passenger-install-apache2-module (LoadError)», il vous faudra repérer la version de passenger lors de son installation un peu plus haut (pour l'exemple, version 3.0.8) et lancer le script suivant (avec une version de gems = 1.8) : 
+  
+  /var/lib/gems/1.8/gems/passenger-3.0.11/bin/passenger-install-apache2-module
+
+</note>
+
+Ce script vous guidera dans le déploiement d'une application Rails (détaillée ci-dessous). Suivez ses instructions.
+
+== Configuration d'Apache ==
+
+Éditez les configurations comme indiqué dans l'installation de Passenger, à commencer par le module.
+
+[[:tutoriel:comment_editer_un_fichier|Créez (ou éditez) le fichier]] **''/etc/apache2/mods-available/passenger.load''**, pour y indiquer le chemin du module comme suit :
+
+  LoadModule passenger_module /var/lib/gems/1.8/gems/passenger-3.0.11/ext/apache2/mod_passenger.so
+
+[[:tutoriel:comment_editer_un_fichier|Créez (ou éditez) ensuite le fichier]] **''/etc/apache2/mods-available/passenger.conf''** pour y adapter le chemin de Passenger et Ruby comme suit :
+
+  PassengerRoot /var/lib/gems/1.8/gems/passenger-3.0.11
+  PassengerRuby /usr/bin/ruby1.8
+  
+<note>Il se peut que **passenger** ne soit pas installé dans ''/var/lib/gems/1.8/gems/passenger-3.0.11'', mais dans '' /usr/lib/gems/1.8/gems/passenger-3.0.11'' par exemple, suivant la distribution. Dans ce cas, adaptez simplement les chemins précédents.</note>
+
+Activez les modules d'Apache nécessaires :
+
+  sudo a2enmod passenger
+  sudo a2enmod rewrite
+
+Il faut à présent configurer l'URI.
+
+Faites une copie de votre fichier de configuration (par soucis de sauvegarde) :
+
+  sudo cp /etc/apache2/sites-available/default /etc/apache2/sites-available/default.bak
+
+[[:tutoriel:comment_editer_un_fichier|Puis éditez]] **''/etc/apache2/sites-available/default''** pour y mettre le contenu suivant (vous pouvez adapter ou tout remplacer) :
+
+<code>
+<VirtualHost *:80>
+	ServerAdmin webmaster@localhost
+	ServerName localhost
+
+	DocumentRoot /var/www
+	RailsEnv production
+	RailsBaseURI /redmine
+	
+	<Directory /var/www/redmine>
+		Options FollowSymLinks
+		AllowOverride None
+		Order deny,allow
+		Allow from all
+                RailsBaseURI /redmine
+		PassengerResolveSymlinksInDocumentRoot on
+	</Directory>
+
+	ErrorLog /var/log/apache2/error.log
+	LogLevel warn
+	CustomLog /var/log/apache2/access.log combined
+</VirtualHost>
+</code>
+
+Faites un lien vers les sources de Redmine (plus précisément de son dossier ''public/'') dans la racine de votre serveur Web :
+
+  sudo ln -s /opt/redmine/public /var/www/redmine
+
+Définissez l'utilisateur de Redmine comme propriétaire des sources de l'application :
+
+  sudo chown -R redmine:users /opt/redmine
+
+<note>
+Il se peut que Redmine ne se lance pas à cause d'un bug de Ruby. L'utilisateur de Redmine peut avoir besoin d'un dossier personnel (Pour plus de détails, [[http://rubyforge.org/tracker/index.php?func=detail&aid=23105&group_id=126&atid=577|voir ici]]). Si ce n'est pas le cas (comme ça l'est surement si vous avez suivi ce tutoriel du début), définissez lui en un :
+
+  sudo usermod -d /var/www/redmine redmine
+</note>
+
+<note tip>
+Si vous aviez suivi ce tutoriel et utilisé **Mongrel**, vous avez surement instauré le démarrage de Redmine de façon automatique. Vous pouvez à présent supprimer ce service :
+
+  sudo update-rc.d -f redmine remove
+  sudo rm /etc/init.d/redmine
+
+Le serveur Web Mongrel n'a plus d'intérêt à tourner sur votre machine, vous pouvez donc [[:tutoriel:comment_supprimer_un_paquet|supprimer le paquet]] **''mongrel''**.
+</note>
+
+Redémarrez Apache :
+
+  sudo /etc/init.d/apache2 restart
+
+Votre application est désormais accessible depuis **http://localhost/redmine** !
+
+<note>
+Au lancement de Redmine, il est possible d'obtenir une erreur de ce type :
+<code>
+Web application could not be started
+
+cannot load such file -- bundler/setup (LoadError)
+  /usr/lib/ruby/1.9.1/rubygems/custom_require.rb:36:in `require'
+  /usr/lib/ruby/1.9.1/rubygems/custom_require.rb:36:in `require'
+  /usr/lib/ruby/vendor_ruby/phusion_passenger/loader_shared_helpers.rb:245:in `block in run_load_path_setup_code'
+  /usr/lib/ruby/vendor_ruby/phusion_passenger/loader_shared_helpers.rb:348:in `running_bundler'
+  /usr/lib/ruby/vendor_ruby/phusion_passenger/loader_shared_helpers.rb:243:in `run_load_path_setup_code'
+  /usr/share/passenger/helper-scripts/rack-preloader.rb:100:in `preload_app'
+  /usr/share/passenger/helper-scripts/rack-preloader.rb:158:in `<module:App>'
+  /usr/share/passenger/helper-scripts/rack-preloader.rb:29:in `<module:PhusionPassenger>'
+  /usr/share/passenger/helper-scripts/rack-preloader.rb:28:in `<main>'
+</code>
+Cela  peut provenir du fait que bundler n'est pas installé. La correction est simple et rapide : l'installer et relancer Apache.
+<code>
+sudo gem install bundler
+sudo service apache2 restart
+</code>
+source : [[https://www.redmine.org/boards/2/topics/42399?r=42428#message-42428]]
+</note>
+<note>
+Les logs de Redmine sont dans /var/log/redmine/default/ et le plus important dans une utilisation normale est production.log.
+Il peut arriver que l'application n'ait pas les droits d'écriture et ne puisse pas remplir correctement ce fichier de log. Dans ce cas, les informations sont renvoyées vers /var/log/apache2/error/log et on trouve le message d'erreur suivant :
+<code>
+Rails Error: Unable to access log file. Please ensure that /var/log/redmine/default/production.log exists and is chmod 0666. The log level has been raised to WARN and the output directed to STDERR until the problem is fixed.
+</code>
+Solution :
+<code>
+sudo chown -R redmine:users /var/log/redmine/
+sudo chmod 666 /var/log/redmine/default/*
+sudo service apache2 restart
+</code>
+Les messages d'erreur de Redmine sont de retour dans /var/log/redmine/default/production.log.
+</note>
+<note>
+Il arrive que l'accès aux pages /my/account, settings et users/1/edit ne soit pas possible
+<code>
+Internal error
+
+An error occurred on the page you were trying to access.
+If you continue to experience problems please contact your Redmine administrator for assistance.
+
+If you are the Redmine administrator, check your log files for details about the error.
+</code>
+et que l'on trouve un message de ce type dans /var/log/redmine/default/production.log
+<code>
+ActionView::Template::Error (Permission denied - /var/cache/redmine/default/cache/900):
+    16:   <p><%= f.text_field :firstname, :required => true %></p>
+    17:   <p><%= f.text_field :lastname, :required => true %></p>
+    18:   <p><%= f.text_field :mail, :required => true %></p>
+    19:   <p><%= f.select :language, lang_options_for_select %></p>
+    20:   <% if Setting.openid? %>
+    21:   <p><%= f.text_field :identity_url  %></p>
+    22:   <% end %>
+  lib/redmine/i18n.rb:95:in `languages_options'
+  app/helpers/application_helper.rb:962:in `lang_options_for_select'
+  app/views/my/account.html.erb:19:in `block in _app_views_my_account_html_erb__1203571593285091717_37874920'
+  app/helpers/application_helper.rb:977:in `labelled_form_for'
+  app/views/my/account.html.erb:9:in `_app_views_my_account_html_erb__1203571593285091717_37874920'
+</code>
+Dans ce cas, il s'agit de mauvais droits d'accès au répertoire /var/cache/redmine/ (voir le chemin indiqué dans le message).
+
+Solution :
+<code>
+sudo chown -R redmine:redmine  /var/cache/redmine/
+sudo service apache2 restart
+</code>
+Et recharger la page web.
+</note>
+
+<note>
+**L'ajout de fichiers de marche pas !**
+-> problème de droits sur le dossier /var/lib/redmine/
+
+Solution moche (sécurité) mais qui marche :
+<code>
+sudo chmod go+rw -R /var/lib/redmine/
+sudo service apache2 restart
+</code>
+On donne les droits de lecture/écriture à tout le monde et on redémarre le serveur.
+</note>
+==== Méthode 2 : via un domaine ====
+
+<note important>
+Cette méthode implique que vous avez installé Redmine avec Mongrel, comme décrit dans la section [[#automatiser_le_lancement_de_Redmine|Configuration]].
+Il s'agit d'un complément permettant d'en simplifier l'utilisation.
+</note>
+
+Par souci de centralisation ou de simplicité, on peut vouloir utiliser Apache pour servir Redmine. Cela se fait très simplement à l'aide des fonctions de Proxy fournies par [[apache2|Apache]].
+
+On commence donc par activer les modules Apache pour le proxy si ce n'est déjà fait. Il s'agit des modules **proxy** et **proxy_http** que l'on active à l'aide de **a2enmod** :
+  sudo a2enmod proxy
+  sudo a2enmod proxy_http
+
+<note warning>
+Si vous rencontrez des problèmes d'**erreur 403** (Forbidden Access) avec les méthodes décrites, [[:tutoriel:comment_editer_un_fichier|éditez le fichier]] **/etc/apache2/mods-available/proxy.conf** et remplacez :
+<code>
+Order deny,allow
+Deny from all
+</code>
+Par :
+<code>
+Order allow,deny
+Allow from all
+</code>
+
+et rechargez la config d'Apache :
+  sudo /etc/init.d/apache2 reload
+</note>
+
+Si vous voulez utiliser un domaine spécifique pour Redmine, la méthode la plus simple consiste à créer un VirtualHost. Dans l'exemple, on utilisera le domaine local **redmine.lan**. Consultez la page sur [[bind9]] pour configurer un serveur DNS en local.
+
+== Création du VirtualHost ==
+
+On donc créer un nouveau site dans Apache en [[:tutoriel:comment_editer_un_fichier|créant le fichier]] **/etc/apache2/sites-available/redmine.lan**.
+
+Il s'agit d'un fichier de configuration, donc veillez à utiliser les droits d'administration (sudo) :
+<code><VirtualHost *:80>
+  ServerName redmine.lan   # On indique à Apache que le domaine du site est "redmine.lan"
+  
+  # On paramètre le proxy pour transmettre les requêtes adresées à tracker.lan soient transmises à
+  # Redmine (Mongrel est installé en local sur le port 3000)
+  ProxyPreserveHost Off
+  ProxyPass        /  http://127.0.0.1:3000/
+  ProxypassReverse /  http://127.0.0.1:3000/
+  
+  # On définit les fichiers de log
+  ErrorLog /opt/redmine/log/apache-error.log
+  CustomLog /opt/redmine/log/apache-access.log combined
+</VirtualHost></code>
+
+<note help>Le nom du fichier (ici **redmine.lan**) n'a pas besoin d'être identique au domaine. Vous pouvez le nommer comme vous voulez. Si vous utilisez beaucoup de domaines sur une même installation d'Apache, c'est une bonne manière de toujours savoir à quoi corresond quel fichier.</note>
+
+=== Fichiers de log ===
+
+On va créer les fichiers de log pour y stocker les accès et les erreurs propres au VirtualHost, afin de bien les dissocier des autres domaines :
+<code>$ sudo touch /opt/redmine/log/apache-error.log
+$ sudo touch /opt/redmine/log/apache-access.log</code>
+
+Pour que Apache puisse y accéder, on va les faire appartenir à celui-ci :
+<code>$ sudo chown www-data:www-data /opt/redmine/log/apache-error.log
+$ sudo chown www-data:www-data /opt/redmine/log/apache-access.log</code>
+
+=== Activation du site ===
+
+Il ne reste plus qu'à activer le site dans Apache. Cela se fait simplement avec la commande **a2ensite** suivie du nom du fichier que l'on a créé.
+<code>$ sudo a2ensite redmine.lan</code>
+
+<note warning>Le nom du site **n'est pas** le nom de domaine de celui-ci. Il s'agit seulement du nom du fichier créé plus haut dans **/etc/apache2/sites-available/**.</note>
+
+On recharge la configuration de Apache :
+<code>$ sudo /etc/init.d/apache2 reload</code>
+
+Vous pouvez dorénavant accéder à Redmine en tapant **http://redmine.lan/** dans votre navigateur.
+
+<note important>Le domaine n'est pas créé par la manipulation : il doit déjà avoir été enregistré (sur votre serveur DNS, chez un Registar, ...) et pointer sur l'IP de votre serveur.</note>
+
+=== Désactivation ===
+
+Si, pour une raison ou pour une autre, vous souhaitiez désactiver le site, utilisez **a2dissite** :
+<code>$ sudo a2dissite redmine.lan</code>
+
+Il en va de même pour les modules de proxy avec la commande **a2dismod** :
+<code>$ sudo a2dismod proxy_http
+$ sudo a2dismod proxy</code>
+
+Ensuite, on recharge la config d'Apache, et tout est désactivé :
+<code>$ sudo /etc/init.d/apache2 reload</code>
+
+===== Notifications par courriel =====
+
+==== Gmail ====
+
+Placez-vous dans le dossier des sources de Redmine :
+
+  cd /opt/redmine
+
+Gmail a besoin de TLS pour envoyer des e-mails. Installez donc le plugin pour Redmine avec :
+
+  sudo ruby script/plugin install git://github.com/collectiveidea/action_mailer_optional_tls.git
+
+Copiez l'exemple de configuration de Redmine :
+
+  sudo cp config/email.yml.example config/email.yml
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **''config/email.yml''** pour l'adapter comme suit :
+
+<code>
+production:
+  delivery_method: :smtp
+  smtp_settings:
+    tls: true
+    enable_starttls_auto: true
+    address: "smtp.gmail.com"
+    port: '587'
+    domain: "smtp.gmail.com"
+    authentication: :plain
+    user_name: "votre_login@gmail.com"
+    password: "votre_mot_de_passe"
+</code>
+
+<note important>
+N'utilisez que des espaces dans ce fichier, sinon Redmine n'arrivera pas à le lire correctement !
+</note>
+
+Redémarrez à présent Redmine selon votre configuration (Par exemple, si vous servez Redmine via Apache, utilisez donc ''sudo /etc/init.d/apache2 restart'').
+
+Redmine est prêt à envoyer les notifications par courrier électronique. Pour la configuration de vos notifications, rendez-vous dans Redmine > //Administration// > //Configuration// > //Notifications par mails//.
+
+===== Utilisation =====
+==== Lancer Redmine ====
+
+Pour lancer Redmine, vous pouvez exécuter le script ruby des sources :
+
+  sudo ruby /opt/redmine/script/server -e production
+
+L'option -d permet de le lancer en démon :
+
+  sudo ruby /opt/redmine/script/server -d -e production
+
+Par défaut, Redmine écoute sur le port 3000 et utilise WEBrick. WEBrick est un serveur web libre intégré à Ruby depuis la version 1.8 et utilisé par Ruby on Rails.
+
+Une fois Redmine lancé, vous pouvez y accéder via http://adresse_de_votre_serveur:3000/. Vous devez à présent voir la page d'accueil de l'application.
+
+<note>
+**N'utilisez cette méthode (WEBrick) seulement pour tester Redmine et non pour la production.**
+
+
+Pour l'utilisation en production de Redmine, préférez soit :
+  * utiliser Mongrel et automatiser le lancement de Redmine. Voir la section [[#automatiser_le_lancement_de_Redmine|Configuration]];
+  * utiliser Apache pour servir Redmine. Voir la section [[#servir_redmine_via_apache|Servir Redmine via Apache]].
+</note>
+<note tip>Par défaut le mode administrateur est :
+  * Identifiant : admin
+  * Mot de passe : admin
+</note>
+
+==== Redémarrer Redmine ====
+
+=== Si installé avec mongrel ===
+Relancer le daemon:
+  sudo /etc/init.d/redmine restart
+
+=== Si installé avec Apache ===
+[[:tutoriel:comment_modifier_un_fichier|Modifiez (ou créez) le fichier]] /opt/redmine/tmp/restart.txt
+  sudo touch /opt/redmine/tmp/restart.txt
+  
+<note tip>Dans certain cas, redémarrer le serveur est le meilleur moyen d'être sûr que redmine redémarre bien.</note>
+
+
+==== Lier un dépôt à un projet ====
+
+Pour lier un dépôt ([[subversion|Subversion]] ou autre) il suffit, dans l'interface de Redmine, de se rendre dans votre projet (en étant administrateur bien entendu), puis dans //Configuration// > Onglet //Dépôt// :
+
+ajoutez un nouveau dépôt en précisant le type, son adresse et un identifiant et mot de passe si l'authentification est requise.
+
+Redmine interprètera ainsi les logs et reportera sur l'interface de votre projet toutes les modifications effectuées sur les sources.
+
+<note tip>Concernant les dépôts [[git|GIT]], si ces derniers sont sur un autre serveur *nix, il est possible de les exploiter directement via un simple partage [[nfs|nfs]] et de paramétrer votre projet en lui donnant le chemin de montage (ex.: ''/mnt/depots/monProjet.git''), simple et efficace ;-)</note>
+
+=== Gitolite ===
+
+Si vous utilisez [[:gitolite|Gitolite]] pour gérer vos dépôts [[:git|Git]] et que vous voulez permettre à Redmine de parcourir vos dépôts, l'utilisateur de Redmine doit avoir le droit de lecture sur ces fichiers.
+
+Par défaut, [[:gitolite|Gitolite]] ne permet qu'à l'utilisateur //git// de lire la plupart des fichiers. La solution la plus propre consiste à ajouter l'utilisateur de Redmine dans le groupe //git// et d'attribuer le droit de lecture au groupe sur le dépôt.
+
+Commencez par [[:gitolite#changer_le_masque_des_depots|changer le masque de permissions des dépôts]] de Gitolite.
+
+Ajouter l'utilisateur de Redmine au groupe //git// :
+
+  sudo usermod -G git redmine
+
+Redémarrez à présent Redmine selon votre configuration (Par exemple, si vous servez Redmine via Apache, utilisez donc ''sudo /etc/init.d/apache2 restart''), et ajouter votre dépôt Git à votre projet comme décrit plus haut.
+
+===== Désinstallation =====
+
+La désinstallation de Redmine consisterait à supprimer les sources de Redmine (**/opt/redmine**), la base de données MySQL ''redmine'', le script de démarrage de Redmine (**/etc/init.d/redmine**, s'il existe) ainsi que l'utilisateur et le groupe **redmine**. Il faut aussi supprimer l'éventuelle configuration d'**Apache**.
+
+===== Liens =====
+
+  * **(fr, en)** [[http://www.redmine.org|Site officiel du projet Redmine]]
+  * **(fr, en)** [[http://www.redmine.org/wiki/redmine/FrGuide|Le guide officiel de Redmine]] : installation, mise à jour, utilisation, etc.
+  * **(en)** [[http://demo.redmine.org/|Démo en ligne de Redmine]]
+  * **(fr)** [[http://www.projet-plume.org/fr/fiche/redmine|Une fiche descriptive de Redmine]] 
+
+----
+
+//Contributeurs : [[:utilisateurs:v0n]], Rohja, Respawner. yquenechdu//

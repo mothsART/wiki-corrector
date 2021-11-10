@@ -1,0 +1,555 @@
+
+{{tag>sauvegarde tutoriel VÉTUSTE}}
+
+------
+
+
+====== Sauvegarder "/home" avec rsync ======
+
+Si vous, ou un de vos agents, êtes capturés en  mission, le Département d’État nierait...
+Heu non, ce n'est pas ça. Recommençons.
+Ces manipulations ne sont pas triviales, vous les faites donc à vos risques et périls. Si ça plante, ne vous en prenez qu'à vous-même !!
+
+Tout de suite ça met dans l'ambiance, non ? ;-)
+
+Autrement dit, il vous faut comprendre ce que vous faites avant de le réaliser ; il est recommandé de faire d'abord des tests avec des dossiers artificiellement créés pour l'occasion, avant de lancer la sauvegarde générale.
+
+Allez hop, c'est parti !!
+
+<note tip>Si vous voulez utiliser rsync avec une interface graphique, voir la documentation [[:tutoriel/sauvegarder_home_avec_grsync|Sauvegarder "home" avec grsync]]</note>
+==== Présentation de rsync ====
+
+Inutile de revenir sur l'importance de faire des sauvegardes régulières de ses données.
+C'est en général au moment d'un crash que l'on bénit le jour où l'on a mis en place ses sauvegardes... Ou au contraire que l'on se maudit de ne pas avoir pris le temps d'en faire.
+
+Voici donc un tutoriel pour vous éviter de vous auto-traiter de toutes les injures possibles si un jour, malheureusement, vous crashez votre disque dur.
+
+Le programme **rsync** fonctionne en ligne de commande. Une interface graphique existe, **[[:tutoriel:sauvegarder_home_avec_grsync|Grsync]]**, mais elle n'offre pas les mêmes possibilités.
+On peut dire que rsync convient tout à fait pour obtenir une sauvegarde intégrale de son "Home" que l'on peut lancer lorsqu'on le désire, et que l'on peut aussi automatiser.
+
+Ce tuto détaille donc toutes les étapes pour disposer d'une bonne méthode de sauvegarde de /home. Plusieurs méthodes vous sont proposées. A chacun de choisir celle qui lui convient le mieux selon son usage.
+
+**Deux possibilités de sauvegarde "manuelle"** avec un clic pour lancer une sauvegarde quand on l'estime nécessaire :
+  * [[:tutoriel:sauvegarder_home_avec_rsync#sauvegarde_par_un_lanceur_sur_le_bureau_ou_dans_la_barre_des_taches|Un lanceur dans la barre des tâches ou sur le bureau]].
+  * [[:tutoriel:sauvegarder_home_avec_rsync#sauvegarde_accessible_par_le_menu_applications|Une entrée dans le menu "Applications"]].
+
+**Deux possibilités de sauvegarde automatique :**
+  * [[:tutoriel:sauvegarder_home_avec_rsync#sauvegarde_lancee_regulierement_avec_cron|Avec cron]], ce qui convient aux ordinateurs tournant 24h/24.
+  * [[:tutoriel:sauvegarder_home_avec_rsync#sauvegarde_automatique_a_l_arret_de_l_ordinateur|A l'arrêt de l'ordinateur]], ce qui convient aux ordinateurs qui sont éteints une ou plusieurs fois par jour.
+
+<note help>Il existe une troisième possibilité, à mi-chemin entre les deux, c'est [[:anacron|anacron]] qui permet de mettre en place une sauvegarde lancée régulièrement comme pour cron
+mais qui s'exécute au démarrage si le PC était éteint lorsque la tâche devait être exécutée.</note>
+
+Avant de commencer voici quelques infos sur ce programme, en direct de Wikipédia :
+
+rsync est un programme très similaire à rcp, mais possède bien plus d'options et utilise un protocole de mise à jour à distance plus efficace afin d'accélérer significativement le transfert de fichiers lorsque le fichier de destination existe déjà.
+Le protocole de mise à jour à distance rsync lui permet de ne transférer que la différence entre deux jeux de fichiers à travers le réseau, en utilisant un algorithme de recherche de somme de contrôle.
+
+En clair cela signifie que rsync transfère de la "source" vers la "destination" tous les fichiers lors de la première sauvegarde. Celle-ci prend donc un certain temps en fonction du volume de vos données.
+Ensuite il ne sauvegarde sur la "destination" que les fichiers qui ont été modifiés sur la "source" depuis la sauvegarde précédente. En utilisant l'option %%--%%**del**, il élimine également les fichiers sur la "destination" qui ne seraient plus présents sur la "source".
+En utilisant les bonnes options, tous les fichiers sont copiés en conservant leurs permissions respectives.
+
+Au final, après chaque sauvegarde, on retrouve une copie conforme de son source.
+
+
+
+
+
+==== Conseils ====
+
+Il est possible d'effectuer une sauvegarde de /home sur une autre partition du même disque dur. Mais c'est imprudent : si le disque grille, la sauvegarde est perdue en même temps que /home... et ne sert à rien. 
+
+Il est donc recommandé d'effectuer la sauvegarde sur un autre disque dur (interne ou externe).
+
+D'autre part, dans l'installation de Ubuntu par défaut, le répertoire /home est installé sur une partition formatée en ext4.
+Il est recommandé que la partition de sauvegarde soit aussi formatée en ext4, pour conserver correctement les permissions et les réattribuer lors de la restauration.
+
+<note help> Pour conserver les droits, il **faut éviter** les partitions formatées avec les systèmes de fichiers //fat, FAT32, ntfs, NFS (?)//. 
+Cependant, il est possible d'utiliser du //ext2, ext3, ext4, BtrFS, ReiserFS//.
+
+FIXME: Par contre, pas de certitude pour les compatibilités des fichiers avec des noms accentués entre ReiserFS et ext4, ext3 ou ext2
+</note>
+
+<note important>Pour réaliser une sauvegarde sans erreur vers une partition de sauvegarde formatée en ext3 ou ext4, il faut être propriétaire de cette partition. Voir la note intitulée "Les problèmes de droits ou de permissions (disques de sauvegarde partitionnés en ext3)" sur [[:tutoriel/sauvegarder_home_avec_grsync#problemes_de_droits_ou_de_permissions|cette page]].</note>
+
+==== Points de repère pour faire bon usage de ce tutoriel ====
+
+Dans tous les exemples et explications de ce tutoriel, pour faire usage de tel ou tel élément comportant le texte "votre_identité", remplacez celui-ci par votre véritable identité sur votre ordinateur (le login que vous indiquez lors de l'ouverture de votre session Ubuntu).
+
+De même, en vous inspirant des exemples proposés, soyez particulièrement attentifs à adapter correctement les chemins des dossiers ou partitions "source" et "destination" à ce que vous voulez faire.
+
+
+
+===== Choisir la ligne de commande à utiliser =====
+
+Normalement, une sauvegarde avec rsync d'une partition ext4 vers une partition ext4 ne nécessite pas de droits root. Nous n'avons donc pas besoin de faire précéder "rsync" par "sudo" dans les lignes de commandes ; et donc, pas besoin de mot de passe.
+
+
+
+
+==== Plusieurs exemples de lignes de commande pour la sauvegarde de /home/ ====
+
+<note important>
+**Attention** : l'indication d'un répertoire de destination nouveau, vide (ou ne contenant que la précédente sauvegarde de /home), dédié exclusivement à la sauvegarde de /home et ne contenant rien d'autre, est indispensable si vous ne voulez pas effacer tout ce que contient la partition de destination.
+
+Vous noterez donc dans les trois exemples ci-dessous que le répertoire de destination porte un nom qui évoque sa destination de sauvegarde "/mnt/SAV/" dans l'exemple de soupaloignon, "/media/Sauve_home/SauvHomeLieu/" dans l'exemple de Sorbus, "/media/save_homes/" dans l'exemple de poupoul2.
+
+L'utilisation de l'option %%--%%del ou de l'option %%--%%delete, indispensable pour une sauvegarde de /home à l'identique, efface en effet dans le répertoire de destination tout ce qui n'est pas conforme au répertoire /home de la source.
+</note>
+
+== Proposition soupaloignon ==
+
+<code>rsync -rltgoDv --del --ignore-errors --force /home/votre_identité/ /mnt/SAV/</code>
+
+
+  *rsync : appelle le programme rsync
+  *-r : parcours le dossier indiqué et tous ses sous-dossiers
+  *-l : copie les liens symboliques comme liens symboliques
+  *-t : préserve les dates
+  *-g : préserve le groupe
+  *-o : mettre le propriétaire du fichier de destination identique à celui du fichier source
+  *-D : préserve les périphériques
+  *-v : plus loquace
+  *%%--del%% : permet de supprimer les fichiers sur "destination" qui n'existent plus sur "source"
+  *%%--ignore-errors%% : efface même s'il y a eu des erreurs E/S
+  *%%--force%% : force la suppression de répertoires même non-vides
+  */home/votre_identité/ : répertoire source
+  */mnt/SAV/ : répertoire destination
+
+Cette ligne de commande va donc transférer le contenu de "votre_identité" (qui est sur /home) vers le disque dur de destination, monté dans /mnt avec comme nom "SAV".
+
+== Proposition Sorbus ==
+
+<code>rsync -av --del --stats /home/ /media/Sauve_home/SauvHomeLieu/</code>
+
+  *-a : équivalent à -rlptgoD. C'est un moyen rapide de dire que vous voulez la récursion et de préserver pratiquement tout
+
+Par rapport aux options choisies par soupaloignon, la proposition de Sorbus ajoute les options :
+  *-p : provoque la mise à jour des permissions sur la destination pour qu'elles soient identiques aux permissions sur la source.
+  *%%--stats%% : affiche quelques statistiques de transfert de fichiers, ce qui permet de vérifier l'efficacité de la sauvegarde.
+
+Mais les options %%--ignore-errors%%  et  %%--force%%   ne sont pas utilisées.
+
+  */home/ : répertoire source
+  */media/Sauve_home/SauvHomeLieu/ : répertoire destination
+
+== Proposition poupoul2 ==
+<code>rsync -a --stats --progress --delete /home/ /media/save_homes/</code>
+
+Proposition similaire à celle de Sorbus, avec cependant deux différences par rapport aux propositions de Sorbus et de soupaloignon :
+
+  *le choix de l'option %%--%%progress plutôt que de l'option -v
+  *le choix de l'option %%--%%delete plutôt que de l'option %%--%%del
+
+  *%%--%%progress : montre l'avancement pendant le transfert.
+  *%%--%%delete : efface avant le transfert les fichiers qui n'existent pas sur la source.
+  *%%--%%del : efface au cours du transfert (pas avant) les fichiers qui n'existent pas sur la source.
+
+  */home/ : répertoire source
+  */media/save_homes/ : répertoire destination
+
+
+== À vous ! ==
+
+À vous d'adapter les chemins des "source" et "destination" en fonction de votre configuration.
+
+Il existe un grand nombre d'options que l'on peut passer dans rsync. Les propositions ci-dessus, éventuellement associées à des filtres, conviennent bien  pour une sauvegarde de /home. Mais si vous voulez creuser d'avantage, vous pouvez choisir les options qui vous conviennent le mieux, en fonction de ce que vous voulez faire en consultant [[http://man.developpez.com/man1/rsync.1.php#L22|la traduction du manuel de rsync en français]] ou en lançant "man rsync" en console (en anglais, mais version du manuel plus récente que la traduction française actuellement disponible).
+
+
+
+==== Les filtres ====
+Un certain nombre de fichiers ou répertoires sont inutiles pour une sauvegarde de /home/
+Il s'agit notamment des fichiers images .iso, des fichiers temporaires, des répertoires "cache", des miniatures images "thumbnails", de la corbeille (.Trash), du répertoire lost+found.
+On peut utiliser l'option %%--%%filter pour exclure ces fichiers de la sauvegarde, comme dans l'exemple suivant :
+<code>sudo rsync -av --del --stats --filter "- .thumbnails/" --filter "- .Trash/" --filter "- *.tmp" --filter "- *.iso" --filter "- lost+found/" --filter "- .cache/" --filter "- .beagle/" /home/ /sauvegarde/SauvHome/ </code>
+
+Ou encore comme dans cet autre exemple :
+
+<code>rsync -a --stats --progress --filter "- .iso" --filter "- .tmp" --filter "- klibido/" --filter "- lost+found/" --filter "- .Trash/" --filter "- .beagle/" --filter "- cache/" --filter "- CACHE/" --filter "- Cache/" --filter "- .thumbnails/" --delete?? /home/ /media/save_homes/</code>
+
+
+Pour ceux qui se posent des questions sur la rédaction de leur commande Rsync, [[http://forum.ubuntu-fr.org/viewtopic.php?id=336213|ce post du forum]] peut éventuellement apporter quelques réponses à leurs questions. 
+
+Un peu long pour cette partie, mais nous avons préféré bien détailler ce qui se passait, et vous offrir plusieurs choix.
+Pour la réalisation c'est beaucoup plus rapide par contre : un simple copier/coller de la ligne de commande de votre choix dans la console (après avoir modifié vos chemins d'accès).
+
+
+Maintenant c'est bien sympa, mais retaper cette ligne dans le terminal à chaque sauvegarde, cela risque d'être un peu lourd.
+Ça tombe bien, c'est le but du paragraphe suivant...
+
+
+
+===== La création du script de sauvegarde de /home =====
+
+Ce script va permettre de lancer la sauvegarde d'un double-clic.
+Créez un fichier où vous voulez, copiez/collez le contenu ci-dessous, enregistrez-le avec un nom du genre «sauvegarde-home.sh».
+Une fois que c'est fait, donnez les droits d'exécution au propriétaire du fichier (soit en console, soit par un clic droit sur le fichier/propriétés/permissions).
+L'option «read»  permet de garder la console ouverte une fois que la sauvegarde est terminée. Toujours utile si on veut voir ce qui s'est passé. Si vous voulez mieux comprendre comment fonctionne un script shell, vous pouvez consulter [[:tutoriel:script_shell|la page de la documentation à ce sujet]].
+
+Exemple de script avec la ligne de commande proposée par soupaloignon :
+
+<code>
+#!/bin/bash
+rsync -rltgoDv --del --ignore-errors --force /home/votre_identité/ /mnt/SAV/
+read
+</code>
+
+Un script un peu plus développé permet la vérification préalable du montage du disque de sauvegarde, ce qui est utile si le disque de sauvegarde est un disque externe. Exemple avec la ligne de commande proposée par Sorbus (et les filtres) :
+<code>
+#!/bin/bash
+REPERTOIRE_SOURCE="/home/"
+REPERTOIRE_DESTINATION="/sauvegarde/SauvHomeLieu/"
+  
+# Détecter la présence du volume de destination et interrompre l'opération si nécessaire
+if [ ! -e "$REPERTOIRE_DESTINATION" ]
+then
+echo "Attention, le disque de sauvegarde n'est pas présent"
+exit
+fi
+  
+rsync -av --del --stats --filter "- .thumbnails/" --filter "- .Trash/" --filter "- *.tmp" --filter "- *.iso" --filter "- lost+found/" --filter "- .cache/" --filter "- .beagle/" $REPERTOIRE_SOURCE "$REPERTOIRE_DESTINATION"
+  
+echo "La commande de sauvegarde a terminé son travail..."
+echo "Vérifiez dans le terminal s'il n'y a pas eu d'erreur !"
+</code>
+
+Et voilà, d'un simple double-clic (eh oui, facile le jeu de mots ;-)) vous avez réalisé votre sauvegarde.
+
+Ok, c'est bien joli, mais il y a une fenêtre qui s'affiche, il faut valider par «Lancer dans un terminal», il n'y aurait pas quelque chose de plus esthétique ?
+
+Et bien c'est justement le but des paragraphes qui suivent, ça tombe bien non ?
+
+
+<note tip>  Voici [[http://forum.ubuntu-fr.org/viewtopic.php?id=327586|une proposition commentée]] de script de sauvegarde de /home sur le forum. Vous y trouverez de la sécurité (étant lancé par root), la possibilité de mettre des arguments afin de sauvegarder d'autres répertoires et obtenir de l'aide. Le disque de destination est monté et démonté automatiquement. Il permet de raccourcir le temps de la sauvegarde en se basant sur la dernière sauvegarde effectuée. Il est interactif et prévient en cas d'erreurs. Cependant, malgré les différents tests effectués, il peut contenir quelques erreurs que vous pouvez signaler sur le topic du forum. Sur la page vous obtiendrez des explications, et un <code>/chemin/du/script/Nom_du_script -h</code> vous donnera une explication détaillée. 
+Concernant le lanceur sur le bureau, il faut y ajouter un argument pour la destination qui peut être un dossier, une partition nommé par son chemin (dans /dev/) ou par son label.</note>
+
+
+
+
+===== Sauvegarde par un lanceur sur le bureau ou dans la barre des tâches =====
+
+Il faut d'abord ranger votre fichier «sauvegarde-home.sh» à un endroit quelconque de votre disque dur ; par exemple dans un dossier «scripts» de votre «home».
+
+[[:raccourci-lanceur#creation_d_un_lanceur_sur_le_bureau_de_facon_graphique|Créez un raccourci]] pour lancer votre script de sauvegarde d'un clic sur une icône de votre bureau.
+
+Commande : utilisez le bouton "parcourir" pour indiquer le chemin exact de votre fichier de sauvegarde. Exemple :
+<code>/home/scripts/sauvegarde-home.sh</code>
+
+Vous pouvez faire précéder ce chemin d'une autre commande, par exemple :
+<code>xterm -geometry 170x60 -sb -rightbar -hold -e</code>
+
+Cette commande ouvre une fenêtre de terminal permettant de visualiser la sauvegarde en cours et son résultat. //Vous pouvez régler la taille du terminal xterm "-geometry 170x60" en fonction de la taille de votre écran. Pour faire défiler les données avec l'ascenseur : utiliser clic droit/clic gauche//.
+
+Vous aurez alors dans la ligne "Application" du lanceur :
+<file>xterm -geometry 170x60 -sb -rightbar -hold -e /home/scripts/sauvegarde-home.sh</file>
+
+De la même façon, vous pouvez créer un lanceur dans la barre des tâches.
+
+
+===== Sauvegarde accessible par le menu "Applications" =====
+
+[[:raccourci-lanceur#creation_d_un_lanceur_dans_le_menu_de_facon_graphique|Créez un raccourci]] pour lancer votre script de sauvegarde d'un clic dans le menu.
+
+Bien choisir l'endroit où vous voulez le  mettre : soit dans un dossier déjà existant, soit en créant un nouveau menu. On peut par exemple créer un menu "Sauvegarde", dans lequel on rajoute un élément "Sauvegarde home".
+
+Menu principal/Nouvel élément.
+Donner un nom significatif, un commentaire si vous le désirez. Et maintenant le plus important, dans le champ «Commande» entrez le chemin complet vers votre fichier. Par exemple : "/home/votre_identité/03\ outils/00scripts/sav-home.sh" ou bien "/home/scripts/sauvegarde-home.sh").
+Important : Si un ou plusieurs de vos noms de dossiers comportent des espaces, il faut mettre un «\ » devant l'espace.
+Pour éviter toute erreur dans la rédaction du chemin, utilisez le bouton "parcourir".
+Valider l'option "Exécuter dans un terminal".
+Mettre une icône pour que cela fasse beau ;-)
+Cliquer sur "Fermer".
+
+Et voilà, direction menu Applications maintenant. C'est pas mignon ça ?
+
+
+
+
+===== Sauvegarde lancée régulièrement avec cron =====
+
+=== Sauvegarde de luxe ===
+Par exemple pour sauver REPERTOIRE_A_SAUVER dans REPERTOIRE_DE_SAUVEGARDE avec  
+
+* une sauvegarde chaque jour de la semaine qui n'est écrasée que la semaine suivante et
+
+* une sauvegarde chaque semaine qui est conservée un an. 
+
+
+== Créer les dossiers nécessaires aux sauvegardes ==
+Se placer dans REPERTOIRE_DE_SAUVEGARDE. On peut les créer à la main. Il est également possible d'utiliser le petit script suivant qu'il faut enregistrer dans REPERTOIRE_DE_SAUVEGARDE et exécuter :
+<code>
+#!/bin/bash
+for x in lundi mardi mercredi jeudi vendredi samedi dimanche {1..52}
+do
+mkdir $x
+done
+</code>
+**Remarque :** ma configuration est en français c'est pourquoi les dossiers sont lundi, mardi, etc. Pour savoir si vous êtes en français ou en anglais tapez ''date +%A'' dans un terminal est voyez si c'est en français. Si vous avez installé linux en anglais remplacer le fichier ci-dessus par
+<code>
+#!/bin/bash
+for x in monday tuesday wednesday thursday friday saturday sunday {1..52}
+do
+mkdir $x
+done
+</code>
+
+== Sauvegarde quotidienne ==
+Maintenant enregistrez le script suivant dans /etc/cron.daily :
+<code>
+#!/bin/bash
+###################################
+#  Jour
+###################################
+jour=$(date +%A)
+source="REPERTOIRE_A_SAUVER"
+destination="REPERTOIRE_DE_SAUVEGARDE"
+###################################
+#  Sauvegarde des fichiers de REPERTOIRE_A_SAUVER
+###################################
+rsync -aRbcxv --progress --delete --stats $source $destination/$jour
+</code>
+Ce script va sauver tous les jours votre REPERTOIRE_A_SAUVER dans REPERTOIRE_DE_SAUVEGARDE/nom_du_jour_de_la_semaine. La semaine suivante le fichier sera écrasé par le rsync suivant.
+
+== Sauvegarde hebdomadaire ==
+Maintenant enregistrez le script suivant dans /etc/cron.weekly :
+<code>
+#!/bin/bash
+###################################
+#  Jour
+###################################
+semaine=$(date +%V)
+source="REPERTOIRE_A_SAUVER"
+destination="REPERTOIRE_DE_SAUVEGARDE"
+###################################
+#  Sauvegarde des fichiers de REPERTOIRE_A_SAUVER
+###################################
+rsync -aRbcxv --progress --delete --stats $source $destination/$semaine
+</code>
+Ce script va sauver <del>tous les jours</del> chaque semaine votre REPERTOIRE_A_SAUVER dans REPERTOIRE_DE_SAUVEGARDE/numero_de_la_semaine_de_l_annee.
+
+== Automatiser les sauvegardes ==
+
+Dans un terminal lancer ''sudo crontab -e'' puis copier ces deux lignes :
+
+<code>0 23 * * * sudo sh /root/script/sauvegarde_www_daily.sh >/dev/null 2>&1 # JOB_ID_1
+30 23 * * 5 sudo sh /root/script/sauvegarde_www_weekly.sh >/dev/null 2>&1 #JOB_ID_2</code>
+
+
+
+===== Sauvegarde automatique à l'arrêt de l'ordinateur =====
+
+Cette méthode présente l'avantage de réaliser la sauvegarde juste avant l'arrêt de l'ordinateur... et non au redémarrage comme on pourrait le faire avec des outils comme **at** ou **anacron**. En cas d'impossibilité de redémarrer, on dispose ainsi de la sauvegarde la plus récente.
+
+La mise au point de cette méthode se fait en quatre étapes assez simples. Au final, elle permet, d'un seul clic sur un bouton de la barre des tâches, d'arrêter l'ordinateur en faisant précéder cet arrêt d'une sauvegarde de tous les éléments nouveaux ou modifiés sur /home. La solution idéale pour toujours disposer d'une sauvegarde totalement à jour.
+Objectif : disposer d'une sauvegarde à l'identique (avec option %%--del%%) de '/home'... et en plus une sauvegarde en double du bureau (Desktop) et du dossier "Documents", (sans l'option %%--%%del) pour ne pas avoir à regretter de ne disposer que d'une sauvegarde ayant fidèlement effacé des documents qui auraient été effacés par erreur du bureau ou du dossier "Documents".
+
+==== 1ère étape : créer le script de sauvegarde. ====
+
+En voici un modèle. À vous de l'adapter selon vos besoins :
+<code>
+#!/bin/bash
+# Vérifie la présence du volume : le script effectue la vérification du montage de la partition "Sauve_home" du disque dur externe usb.
+# Si cette partition est montée, l'autre partition de ce même disque externe (qui sert dans ce script
+# à la sauvegarde du contenu d'une partition fat32), est forcément montée aussi.
+if [ ! -e "/media/Sauve_home/" ]
+then
+echo "Erreur, le volume de sauvegarde est absent."
+exit
+fi
+#titre de lancement de la sauvegarde générale
+echo
+echo "LA SAUVEGARDE GENERALE EST EN COURS D'EXECUTION AVANT ARRET DE L'ORDINATEUR"
+echo
+# pour donner un nom "raccourci" (incluant le chemin) au fichier donnant l'historique des installations,
+# mises à jour et désinstallations de paquets, fichier nommé "historique_inst_maj_desinst.log" :
+  histor=/home/votre_identité/Documents/Sauvegardes/historique_inst_maj_desinst.log
+  
+# pour mettre à jour le fichier actualisé de l'historique des installations, mises à jour et désinstallations de paquets :
+zgrep -h " installed \| upgrade \| remove " /var/log/dpkg.log* | sort | uniq > $histor
+  
+# pour donner un nom "raccourci" (incluant le chemin) au fichier backuperror.log :
+backup=/home/votre_identité/Documents/Sauvegardes/backuperror.log
+# à noter l'usage des ">" : un seul ">" renvoie le contenu du terminal dans le fichier indiqué en écrasant tout ce que contient déjà ce fichier.
+# ">>" renvoie le contenu du terminal sans écraser ce que contient déjà le fichier.
+# Le chiffre "2" suivi d'un seul ">" renvoie seulement les messages d'erreurs générés par le processus dans le fichier indiqué
+# en écrasant le contenu de ce fichier. "2>>" renvoie les erreurs sans écraser le contenu du fichier.
+  
+# Sauvegarde de '/home' vers la partition ext4 du disque dur externe :
+rsync -av --del --stats  --filter "- .thumbnails/" --filter "- .Trash/" --filter "- *.tmp" --filter "- *.iso" --filter "- lost+found/" --filter "- .cache/" --filter "- .beagle/"  /home/ /media/Sauve_home/SauvHomeLieu/ 2> $backup
+  
+# Sauvegarde du bureau (/home/votre_identité/Desktop) vers la partition ext4 du disque dur externe :
+rsync -av --stats --filter "- *.iso" /home/votre_identité/Desktop/ /media/Sauve_home/SauvHomeLieuDesktop/ 2>> $backup
+  
+# Sauvegarde du dossier 'Documents' (/home/votre_identité/Documents) vers la partition ext4 du disque dur externe :
+rsync -av --stats --filter "- *.iso" /home/votre_identité/Documents/ /media/Sauve_home/SauvHomeLieuDocuments/ 2>> $backup
+  
+# Insertion de la date à la fin de la liste d'erreur si le fichier backuperror n'est pas vide (c'est à dire s'il y a des erreurs),
+# ce que vérifie l'option "-s" :
+if [ -s $backup ]; then
+{
+  date >> $backup
+}
+fi
+  
+# Arrêt de l'ordinateur :
+# Sous LUCID :
+dbus-send --print-reply --dest=org.gnome.SessionManager /org/gnome/SessionManager org.gnome.SessionManager.RequestShutdown
+# Sous Intrepid (?) :
+#gnome-power-cmd.sh shutdown
+# Sous JAUNTY :
+#gnome-power-cmd shutdown
+# Sous KARMIC :
+#/usr/lib/indicator-session/gtk-logout-helper --shutdown
+</code>
+
+<note important>Pour les ordinateurs qui sont éteints chaque jour... ou plusieurs fois par jour, l'idéal est de pouvoir lancer les sauvegardes à l'arrêt de l'ordinateur. Les commandes d'arrêt du script précédent ne sont pas universelles sous Linux. Elles fonctionnent sous Ubuntu (gnome), Xubuntu (xfce)... et sans doute pour Kde4 (ce que nous n'avons pas vérifié)... Mais elles peuvent ne pas être fonctionnelles sous certains environnements. Dans ce cas, il faut la remplacer par la commande suivante :
+  sudo shutdown -P now
+et suivre les indications de l'étape 3 ci-dessous.</note>
+
+<note tip>
+Note : d'autres éléments de sauvegarde, en plus de /home, peuvent être intégrés dans un script comme celui-ci, par exemple des sauvegardes de documents d'une partition Fat32 vers une partition de sauvegarde Fat32 :
+
+
+<code># Sauvegarde de "Mes Documents" de hda2 vers la partition FAT32 du disque dur externe :
+rsync -av --stats --filter "- *.tmp" --filter "- *.iso" /media/hda2/Mes_documents_Lieu/ /media/disk/SauvMesDocsLieu/ 2>> $backup
+  
+# Sauvegarde des profils TB et FF de hda2 vers la partition FAT32 du disque dur externe :
+rsync -av --stats --filter "- Trash" --filter "- Junk" --filter "- *.msf" --filter "- Cache/" /media/hda2/ProfilsTBFF/ /media/disk/SauvProfilsTBFFLieu/ 2>> $backup
+</code>
+</note>
+
+==== 2ème étape : créer le lanceur ====
+
+Ajouter au tableau de bord un "lanceur d'application personnalisé" (clic droit sur celui des tableaux de bord où se trouve l'icône d'arrêt de l'ordinateur)...
+Nom du lanceur : "Sauvegarde Générale + Arrêt"
+
+Commande :
+<code>xterm -geometry 170x60 -sb -rightbar -hold -e /home/votre_identité/Documents/Sauvegardes/sauvegarde_generale</code>
+//Vous pouvez régler la taille du terminal xterm "-geometry 170x60" en fonction de la taille de votre écran. Pour faire défiler les données avec l'ascenseur : utiliser clic droit/clic gauche.//
+
+On peut utiliser une icône semblable à celle d'arrêt de l'ordinateur... et signifiant en même temps la sauvegarde. Il est judicieux de placer l'icône de ce lanceur juste à côté de celle commandant l'arrêt du PC (pour association d'idée).
+
+On a ainsi le choix pour arrêter l'ordinateur :
+  * sans sauvegarde, clic sur l'icône d'arrêt de l'ordinateur :{{tutoriel:stop.png|}}\\ (ce qui permet d'accéder aux autres choix habituels : Redémarrer, Hibernation, etc.)
+  * avec sauvegarde, clic sur l'icône :{{tutoriel:sauv_and_stop.png|}}\\ (avec dans ce cas obligatoirement l'arrêt de l'ordinateur).
+
+
+
+==== 3ème étape : permettre le lancement du shutdown sans mot de passe ====
+
+<note important>Cette étape est nécessaire seulement si la commande que vous utilisez pour l'arrêt de l'ordinateur à la fin du script est :
+  sudo shutdown -P now
+Dans, le cas contraire, vous pouvez directement passer à la 4ème étape.
+En effet, si à la fin du script, la commande que vous utilisez pour arrêter l'ordinateur est (Jusqu'à Hardy) :
+  gnome-power-cmd.sh shutdown 
+ou bien sous Jaunty :
+  gnome-power-cmd shutdown
+ou bien sous Karmic :
+  /usr/lib/indicator-session/gtk-logout-helper --shutdown
+il est inutile de modifier le fichier "/etc/sudoers".
+Ces commandes "gnome-power-cmd.sh shutdown" ou "gnome-power-cmd shutdown" ou "/usr/lib/indicator-session/gtk-logout-helper %%--%%shutdown" sont donc à préférer si l'une d'elle est fonctionnelle dans votre environnement.</note>
+
+Ceci est nécessaire pour que le script puisse arrêter l'ordinateur après réalisation de la sauvegarde, si vous utilisez pour cela la commande "sudo shutdown -P now" dans le script.
+
+<note>Cette petite manipulation est aussi nécessaire si vous utilisez "sudo shutdown" dans Grsync.</note>
+
+[voir le manuel 'man shutdown', en français]
+
+Cette commande doit être lancée par "sudo"... et exige donc le mot de passe à l'arrêt de l'ordinateur, ce qui n'est pas très pratique.
+
+Il suffit de modifier les autorisations du fichiers /etc/sudoers via la commande visudo :
+
+<code>sudo visudo</code>
+
+A la fin du fichier, on ajoute ceci :
+
+<code># Autorisation du shutdown par l'utilisateur "votre_identité"
+  votre_identité ALL=NOPASSWD:/sbin/shutdown</code>
+
+<note important>Depuis Hardy, "sudo visudo" fonctionne avec l'éditeur de texte **vi**. Pour ceux qui ne maîtrisent pas l'utilisation de vi, il est possible d'éditer le fichier /etc/sudoers avec **nano** :
+  export EDITOR=nano && sudo -E visudo
+ou avec **gedit** :
+  export EDITOR=gedit && sudo -E visudo
+//
+L'option-E préserve les variables d'environnement de l'utilisateur.//
+</note>
+
+==== 4ème étape : créer un script nommé "signalement_erreurs" ====
+
+Ce script, lancé au démarrage, affiche le fichier backuperror au démarrage de l'ordinateur si ce fichier backuperror n'est pas vide.
+
+Contenu de ce script :
+<code>#!/bin/bash
+# ce script est destiné à être exécuté en tâche de fond lors du démarrage de l'ordinateur... Il a pour objet de signaler les éventuelles erreurs de la sauvegarde lancée lors de l'arrêt précédent de l'ordinateur.
+#
+# Pour donner un nom abrégé au fichier en indiquant le chemin correspondant.
+# ("backuperror.log" est le fichier destiné à enregistrer les éventuelles erreurs de sauvegarde.)
+backup=/home/votre_identité/Documents/Sauvegardes/backuperror.log
+# Indique une action (l'édition par "gedit") si le fichier n'est pas vide (ce que vérifie l'option -s) :
+if [ -s $backup ]; then
+{
+  gedit $backup
+}
+# efface le fichier pour qu'il ne soit ouvert au démarrage suivant de l'ordinateur que s'il a été recréé avec mention d'erreurs lors du déroulement de la sauvegarde suivante.
+rm $backup
+fi
+</code>
+
+N.B. : dans ce script, remplacez si besoin "gedit" par l'éditeur de fichier disponible sur votre version d'Ubuntu, Kubuntu, Xubuntu ou Edubuntu...
+
+Pour que ce script soit lancé au démarrage :
+**Système->Préférences->Sessions->Onglet "Programmes au démarrage"->Ajouter->Parcourir (pour indiquer le chemin du script "signalement_erreurs")->Valider**
+
+Alors, la sauvegarde se fait juste avant l'arrêt de l'ordinateur. Au démarrage : RAS s'il n'y a eu aucune erreur lors de la sauvegarde...
+... mais s'il y a eu la moindre erreur lors de la sauvegarde, le fichier "backuperror" est ouvert par gedit (ou autre éditeur de fichier).
+
+===== Vérifier le bon déroulement de l'opération de sauvegarde =====
+
+Le paragraphe qui précède explique comment savoir s'il y a eu des erreurs au cours du processus de sauvegarde dans le cas d'une sauvegarde associée à l'arrêt de l'ordinateur. Il est possible aussi, si vous n'associez pas la sauvegarde à l'arrêt de l'ordinateur, d'être informé dans le terminal du plus ou moins bon déroulement du processus de sauvegarde.
+
+Pour obtenir dans le terminal un message indiquant la réussite du processus de sauvegarde, ou au contraire la présence d'erreurs, inspirez-vous [[:tutoriel:sauvegarder_home_avec_rsync#ere_etape_creer_le_script_de_sauvegarde|du script précédent]].
+
+A la fin de ce script, remplacez la commande "sudo shutdown -P now" par :
+
+  # Retour sur la qualité de la sauvegarde :
+  if [ -s $backup ]; then
+  {
+  echo "Il y a eu des erreurs : consultez le fichier /home/votre_identité/Documents/Sauvegardes/backuperror.log"
+  }
+  else echo "Sauvegardes réussies"
+  fi
+  echo "Processus terminé"
+  read
+
+... en adaptant comme il convient le chemin de votre fichier "backuperror.log".
+
+Si vous obtenez le message "Sauvegardes réussies", cela signifie que le processus s'est déroulé sans erreur. Lors des premières utilisations de votre script, vérifiez cependant la qualité de vos sauvegardes en effectuant les tests qui conviennent.
+
+
+===== Se resservir de la sauvegarde en tant que /home en cas de crash =====
+
+En cas de crash du disque dur qui contient /home il suffirait, à priori, de remplacer le disque dur du /home par celui de la sauvegarde, et de faire certainement quelques manipulations au niveau du /etc/fstab pour que tout reparte.
+
+<note> En cas de crash physique du /home, au lieu d'intervertir les disques, il est possible d'en racheter un neuf. Une fois Ubuntu réinstallé, il suffit de reprendre la ligne de commande de rsync, mais en inversant source et destination.</note>
+
+===== Autres pages de la documentation francophone ou du forum sur les sauvegardes (applications et tutoriels) =====
+
+  * **[[:sauvegarde|Pages de la documentation francophone Ubuntu traitant de la sauvegarde]]**
+
+  * **[[http://forum.ubuntu-fr.org/viewtopic.php?id=85695 | Sauvegardez votre système avec G4L. (Ghost for Linux 0.21)]]**
+
+  * **[[http://forum.ubuntu-fr.org/viewtopic.php?id=124152 | backup de /home avec mkisofs]]**
+
+
+
+===== Références =====
+
+  * **[[http://www.delafond.org/traducmanfr/man/man1/rsync.1.html | Manuel de rsync en français]]**
+  * **[[http://man.developpez.com/man1/rsync.1.php|Manuel rsync en français sur le site du "Club des développeurs"]]**
+  * **[[:tutoriel:sauvegarder_home_avec_grsync|Sauvegarder home avec Grsync]]**
+  * **[[http://forum.ubuntu-fr.org/viewtopic.php?id=82232|Fil de discussion du forum associé à cette page de la documentation]]**
+  * Tutoriel [[:tutoriel:sauvegarder_home|Comment sauvegarder son dossier utilisateur]]
+
+------
+//Page réalisée par : [[utilisateurs:Sorbus]] et [[utilisateurs:soupaloignon]] avec les contributions de [[utilisateurs:poupoul2]], jrev, Micnight, yanemail... et des autres participants au fil de discussion dédié (31 décembre 2007)//
+------]

@@ -1,0 +1,455 @@
+
+{{tag>carte_graphique amd-ati}}
+----
+
+====== Pilote AMD Catalyst™ ======
+
+===== Présentation =====
+
+==== Introduction ====
+
+Le pilote **Catalyst** est le pilote officiel proposé par [[:AMD-ATI]]. Il permet d'activer une accélération complète de la 3d et d'obtenir de bonnes performances sur votre carte graphique.\\
+En effet, le pilote [[wpfr>Logiciel_libre | libre]] **[[:Radeon]]**, installé par défaut,  peut ne pas couvrir tout vos besoins, car même si son [[ http://cgit.freedesktop.org/mesa/mesa/log/ | développement progresse rapidement ]] certaines fonctionnalités peuvent être manquantes.\\
+De plus, si les pilotes libres sont en parfaite adéquation avec la [[wpfr>Linux#Principes_et_id.C3.A9ologie|philosophie Linux]], les pilotes propriétaires ont souvent l'avantage d'être plus performants.
+
+>Le code source des pilotes [[wpfr>Logiciel_propri%C3%A9taire | propriétaires]] n'est pas librement accessible et modifiable par les développeurs de Ubuntu. Leur utilisation est risquée car la société qui produit ces pilotes ne les a conçus que pour certains types de matériels, et des mises à jour de sécurité qui y sont apportées dépendent uniquement de son bon vouloir. Ubuntu ne peut pas réparer ou améliorer ces pilotes.
+
+
+==== Pilotes AMD-ATI préparés par Ubuntu ====
+À chaque nouvelle version d'Ubuntu, une nouvelle version du pilote Catalyst préparée par l'équipe de développement d'Ubuntu est proposée. Elle s'installe très facilement en allant dans les //Paramètres Système -> Pilotes Additionnels//. Pour cette méthode veuillez vous référez à la page [[:amd-ati#pilotes_proprietaires | AMD-ATI]].
+
+==== Pilotes sur le site officiel ====
+AMD qui à racheté ATI, fournit aussi une version chaque mois sur son site internet et disponible [[http://support.amd.com/us/gpudownload/linux/Pages/radeon_linux.aspx|ici]].\\
+Le logiciel d'installation fournit par AMD se nomme de la sorte: **amd-driver-installer-12.6-legacy-x86.x86_64.run**
+  * le //12.6// étant la numérotation Catalyst, qui se rapproche de [[:versions#numero_de_version|celle d'Ubuntu]], //12.6// signifiant donc ici Juin 2012. 
+  * le //x86.x86_64// indique que le pilote prend en charge les [[:architecture_materielle|architectures]] 32 et 64 bits. 
+    
+==== Cartes plus supportées par AMD ====
+
+Bien que l'appellation des pilotes propriétaires AMD-ATI soit unifiée sous le terme **fglrx** (pour "//FireGL Radeon for X (server)//"), il existe en réalité deux versions différentes :
+  - le pilote [[:Catalyst]] (**fglrx** version 8.43 et suivantes) qui prend en charge les:
+       * //Radeon// 8500 et suivantes (en [[wpfr>Accelerated_Graphics_Port|AGP]] et [[wpfr>Pci_express|PCI express]])
+       * //ATI FireGL// 8700 et suivantes
+  - le pilote "ancienne version" appelé simplement "//ATI proprietary driver//" (**fglrx** version 8.42.3 et antérieures)
+        * Les cartes graphiques "plus anciennes" ne sont pas officiellement supportées par le pilote //Catalyst//; aussi, il est nécessaire d'installer une ancienne version de **fglrx**.
+
+==== Connaître sa carte ====
+
+Si vous ne le savez pas déjà, pour savoir quelle carte graphique est installée sur votre machine, tapez dans un [[:terminal]] la [[:commande_shell|commande]] suivante:
+<code>lspci | grep VGA</code> 
+Le nom de la carte graphique que l'on possède devrait apparaître entre les crochets.
+<code>
+01:00.0 VGA compatible controller: Advanced Micro Devices [AMD] nee ATI RV670 [Radeon HD 3870]
+</code>
+
+Pour plus d'informations, reportez-vous à la page << [[:carte_graphique#identifier_sa_carte_graphique|Carte graphique]] >>.
+
+===== Installation manuelle des pilotes =====
+
+==== Pré-requis ====
+
+Pour installer les pilotes, et ce de manière automatique à chaque changement de [[:kernel|noyau]] grâce à [[wp>Dynamic_Kernel_Module_Support|dkms]], ceux-ci vont devoir passer par une phase de [[:compilation]].\\ 
+Mais avant tout:
+  * Vérifiez que vous avez [[:tutoriel:comment_modifier_sources_maj|activé]] les [[:dépôts]] ''main'', ''universe'' et ''restricted'';
+  * Faites une mise à jour complète de votre système;
+  * Faites une [[:amd-ati#important_sauvegarder_son_fichier_xorgconf | sauvegarde du fichier]] **/etc/X11/xorg.conf** si celui-ci existe;
+  * Si un pilote propriétaire a déjà été précédemment installé, [[:amd-ati#desinstallation_complete_des_pilotes_proprietaires|supprimez-le]].
+
+Lors de la première installation, les pilotes vont installer d'eux mêmes toutes les dépendances nécessaires.
+
+==== Téléchargement ====
+
+Le dernier pilote ATI Catalyst™ est disponible [[http://support.amd.com/fr/gpudownload/linux/Pages/radeon_linux.aspx|sur cette page]]. 
+
+  * Pour les //Radeon HD 2000 Series// ou plus, téléchargez le dernier pilote Catalyst [[http://support.amd.com/fr/gpudownload/linux/Pages/radeon_linux.aspx?type=2.4.1&product=2.4.1.3.36&lang=English|ici]].
+  * Sinon les drivers en version 9.3 sont [[https://a248.e.akamai.net/f/674/9206/0/www2.ati.com/drivers/linux/ati-driver-installer-9-3-x86.x86_64.run|ici (Lien direct)]].
+
+Placez-le dans le dossier **Téléchargements** de votre //Dossier Personnel//
+
+<note important>
+  * Le pilote doit se trouver une [[:paritions|partition]] de type "linux" (ext4 ou autre). En effet, celui-ci ne pourra pas être extrait dans une partition de type FAT32 parce qu'elle ne supporte pas les liens symboliques.
+  * __N'utilisez pas__ de nom de dossier contenant des espaces: le script d'installation ne sait pas les gérer.
+</note>
+
+==== Installation Rapide ====
+
+<note> Sachez qu'avec cette méthode le pilote doit être réinstallé à chaque fois que vous mettrez à jour votre noyau et cela en ligne de commande</note>
+
+  * Modifiez les [[:permissions]] du pilote [[#Téléchargement|précédemment téléchargé]] pour le rendre exécutable.
+  * Dans un [[:terminal]], lancez le script d'installation avec les [[:sudo|droits d'administration]]: <code>sudo sh -c ~/Téléchargements/amd-driver-installer-**-*-x86.x86_64.run</code>
+
+L'interface graphique de l'installeur devrait se lancer automatiquement. Lorsqu'elle apparait:
+  * Sélectionnez : //Install Driver [numéro de release] on X.org 7.x// et faites **Continue**.
+  * Lisez la licence et, à moins que vous soyez contre, faites **I Agree** 
+  * Sélectionnez **automatic** et cliquez sur **Continue**. Le pilote s'installera tout seul comme un grand.
+
+Lorsque l'installation sera terminée et que la fenêtre se sera fermée, entrez cette commande dans le terminal pour configurer automatiquement votre fichier [[:xorg|xorg.conf]]:
+<code>sudo aticonfig --initial -f</code>
+
+Redémarrez votre ordinateur pour qu'il puisse prendre en compte le nouveau pilote
+
+ 
+==== Installation en créant les paquets .deb pour Ubuntu ====
+
+Cette solution a l'avantage de permettre des mises à jour du [[wpfr>X_Window_System|serveur X]] sans réinstallation du pilote graphique, ce dernier se reconfigurant ensuite tout seul.
+
+<note important>Si vous disposez d'une version précédente du pilote Catalyst ou même de l'ancien ATI Proprietary Linux Driver, il est préférable de le désinstaller avant de débuter l'installation du nouveau pilote.\\
+Pour ce faire, entrez cette commande dans le [[:terminal]]
+<code>sudo apt-get remove fglrx*</code></note>
+
+<note important>Avant l'installation, attention de décocher les effets de bureau (mettre sur aucun) pour éviter de se trouver avec un écran blanc par la suite et les problèmes qui vont avec...</note>
+
+  *  Modifiez les [[:permissions]] du pilote [[#Téléchargement|précédemment téléchargé]] pour le rendre exécutable
+  * Dans un [[:terminal]] :
+    * déplacez-vous jusqu'au dossier dans lequel vous avez téléchargé le pilote: <code>cd ~/Téléchargements</code>
+    * puis lancez le script avec les [[:sudo|droits d'administration]]: 
+      * pour générez les [[:paquets]] et les installer: <code>sudo sh ./amd-driver-installer-**-*-x86.x86_64.run --buildandinstallpkg</code>
+      * pour générer uniquement les paquets: <code>sudo ./amd-driver-installer-**-*-x86.x86_64.run --buildpkg </code> Vous les installerez ensuite par <code>sudo dpkg -i *.deb</code> 
+<note tip> Si on vous demande d'installer des dépendances, acceptez.</note> 
+Votre mot de passe vous sera demandé lorsque la procédure d'installation des paquets débutera.\\
+Lorsque l'installation sera terminée et que la fenêtre se sera fermée, entrez cette commande dans le terminal pour configurer automatiquement votre fichier [[:xorg|xorg.conf]]:
+<code>sudo /usr/bin/aticonfig --initial  </code>
+
+Redémarrez votre ordinateur pour qu'il puisse prendre en compte le nouveau pilote.
+
+====Désinstaller proprement le pilote Catalyst====
+Depuis un [[:terminal]] lancez le script de désinstallation
+<code>sudo sh /usr/share/ati/fglrx-uninstall.sh</code>
+puis
+<code>sudo apt-get remove --purge fglrx fglrx_* fglrx-amdcccle* fglrx-dev*</code>
+  
+Si vous prévoyez d'utiliser les pilotes libres, vous devez réinstaller certains paquets parce que Catalyst écrase ou modifie certaine librairie 3D.
+Pour plus d'information, rendez-vous sur cette page Ubuntu en anglais: [[https://wiki.ubuntu.com/X/Troubleshooting/VideoDriverDetection| ici]]
+<code>
+sudo apt-get remove --purge xserver-xorg-video-ati xserver-xorg-video-radeon
+sudo apt-get install xserver-xorg-video-ati
+sudo apt-get install --reinstall libgl1-mesa-glx libgl1-mesa-dri xserver-xorg-core
+sudo mv /etc/X11/xorg.conf /etc/X11/xorg.conf.backup
+</code>
+ Mais si vous tombez  sur cette erreur:
+<code>$ E: Internal Error, No file name for libgl1-mesa-dri</code>
+Changer la troisième ligne par celle là:
+<code>sudo apt-get install --reinstall libgl1-mesa-glx:i386 libgl1-mesa-glx:amd64 libgl1-mesa-dri:i386 libgl1-mesa-dri:amd64 xserver-xorg-core </code>
+
+===== Tester =====
+Il vous est possible de :
+  * tester si l'[[:acceleration graphique]] pour la 3D est disponible grâce à l'outil [[#GLXINFO]]
+  * connaitre le nombre d'images par seconde que votre carte peut calculer grâce à l'outil [[#GLXGEARS]]
+  * connaitre le nombre d'images par seconde que votre carte peut calculer grâce à l'outil d'AMD [[#FGL_GLXGEARS]]
+
+==== GLXINFO ====
+Tapez la commande:
+<code>glxinfo | grep rendering</code>
+Si le prompt vous retourne un beau YES , c'est que l'accélération 3d est disponible. Elle est indispensable pour faire fonctionner [[:compizconfig-settings-manager|Compiz]]
+<code>direct rendering: Yes</code>
+
+==== GLXGEARS ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>mesa-utils]]** puis tapez dans un terminal:
+<code>glxgears</code>
+Une fenêtre avec des roues crantées devrait apparaître ainsi que le nombre d'image par seconde que votre carte peut calculer.\\
+Un classement est disponible [[classement_glxgears | ici]] si vous voulez savoir où se situe votre carte.
+
+{{:glxgears.png?200|GLXGEARS en action}}
+
+====FGL_GLXGEARS====
+Le logiciel est installé automatiquement avec les pilotes propriétaires.
+
+Tapez dans un terminal.
+<code>fgl_glxgears</code>
+{{:fgl_glxgears.png?200|FGL_GLXGEARS en action}}
+
+===== Configuration =====
+
+==== Panneau de contrôle ====
+
+Le pilote Catalyst est fourni avec un panneau de contrôle, le "AMD Catalyst Control Center", destiné à vous permettre de personnaliser la configuration par défaut.\\
+Un raccourci dans la liste des applications permet de le lancer facilement, un autre raccourci permet de le démarrer en mode administrateur. En effet certains changements ne sont possibles qu'en mode administrateur.
+
+Le panel peut aussi être lancé depuis un terminal:
+  * En mode normal:<code>amdcccle</code>
+  * En mode [[:sudo|administrateur]] qui permet de tout modifier:<code>sudo amdcccle</code>
+
+=== Quelques-unes des fonctions accessibles via ce panneau de contrôle ===
+| {{:ati_information.png?200|Fenêtre d'informations dans l'interface Catalyst}} | {{:catalyst_screen.png?200|Les paramètres d'affichage}} |
+| {{:catalyst_color.png?200|Le réglages des couleurs}} | {{:catalyst_aa.png?200|Les réglages d'anti-aliasing}} |
+
+==== Options principales ====
+
+<note important>Certaines options peuvent n'avoir aucun effet sur certaines anciennes cartes (qui ne supportent pas le filtrage par exemple).</note>
+
+=== Synchronisation verticale ===
+
+Dans //Catalyst Control Center > 3D > Plus de paramètres//, il est conseillé de fixer //Attendre le rafraîchissement vertical// sur **Toujours activé**, qui permet de synchroniser l'affichage sur la fréquence verticale de l'écran. Cette option est prise en compte immédiatement lors du clic sur la case à cocher.
+
+Cela a deux effets bénéfiques :
+  * si l'écran est à 60Hz, pas besoin de dessiner 1300 images par secondes et faire tourner les ventilos à fond, 60 suffisent ;
+  * sans cette option,  il arrive que l'écran dessine réellement l'image alors que la carte graphique est en train d'écrire une nouvelle image, ce qui provoque des effets de "déchirements" :
+
+{{:tearing-effect.png|Effet de déchirement}}
+
+
+Cependant, activer cette option ne résout pas TOUS les problèmes de déchirements : lors de la rotation du cube de **compiz**, chaque image est bien synchronisée, les déchirements ont disparu ; par contre, lors du déplacement d'une fenêtre, [[:compizconfig-settings-manager|compiz]] ne demande pas la synchronisation, donc des déchirements resteront visibles (Vérifié en 2560x1600 avec une HD4870 et **Sync to VBlank** activé, toujours vrai).\\
+
+Vous pouvez alors essayer d'activer le bureau sans déchirement dans //Options d'affichage > Sans déchirement// pour palier ce problème.
+
+=== Anticrénelage (ou antialiasing) ===
+
+L'antialiasing permet de réduire les effets "escalier" __sur les contours__ des objets 3D.
+
+Voici la différence de rendu **avec** et **sans** antialiasing (à gauche, l'antialiasing est désactivé, à droite, il est activé au maximum) :
+
+{{:antialiasing-off.png|Antialiasing désactivé}} {{:antialiasing-on.png|Antialiasing activé}}
+
+
+Pour l'activer, dans //Catalyst Control Center > 3D > Anticrénelage//, cochez //Remplacer le réglage de l'application// et réglez la puissance du filtre. Un filtre plus fort sera plus efficace, mais demandera plus de ressources au système.
+Une fois valisée, l'option est immédiatement prise en compte.
+
+Vous pouvez également changer la technique d'anticrénelage utilisée dans //3D > Mode d'anticrénelage//. Ici aussi, le mode choisi influe sur la qualité du filtre et du même coup sur les performances du système.
+
+=== Filtre anisotrope (ou anisotropic) ===
+
+Le filtrage anisotrope permet de réduire les effets "escalier" __à l'intérieur des fenêtres__ (sur les textures). Son effet est d'autant plus visible que l'on regarde l'objet 3D (une fenêtre sur une face du cube par exemple) avec un angle proche de 90°.
+
+Voici la différence de rendu **avec** et **sans** filtrage anisotrope (à gauche, l'anisotropie est désactivé, à droite, il est activé au maximum) :
+
+{{:anisotropic-off.png|Anisotropie désactivé}} {{:anisotropic-on.png|Anisotropie activé}}
+
+Pour l'activer, dans //Catalyst Control Center > 3D > Filtrage anisotrope//, il suffit de cocher //Remplacer le réglage de l'application// et de régler la puissance du filtre. Cette option sera prise en compte au prochain démarrage de **compiz** (ou autre application 3D).
+
+
+==== Température de la carte ====
+Les commandes qui suivent demandent au préalable un lancement de aticonfig en mode root :
+<code>sudo aticonfig --initial</code>
+Pour connaître la température de sa carte graphique tapez:
+<code>aticonfig --adapter=0 --od-gettemperature</code>
+Pour obtenir:
+<code>Adapter 0 - AMD Radeon HD 6700 Series
+            Sensor 0: Temperature - 44.00 C</code>
+
+Les séries des Radeon 4xxx ont tendance à chauffer énormément car le ventilateur tourne à 20% par défaut. Pour contrôler la vitesse du ventilateur une simple commande suffit :
+<code>aticonfig --pplib-cmd "set fanspeed 0 40"</code>
+40 correspond au % de la vitesse maximum du ventilateur de la carte graphique.
+Sur une HD4850 on passe de 80°C à 56°C en poussant le ventilateur à 40%.
+Jusqu'à 40% le ventilateur tourne silencieusement.
+(Une fois cette commande entrée le changement est immédiat.)
+
+En revanche, sur la série des 36xx, le ventilateur est à vitesse trop élevée pour ce que l'on demande au GPU, entraînant des nuisances sonores inutiles. Si vous êtes possesseur de ce type de carte, vous pouvez baisser la vitesse à 30%, réduisant considérablement le niveau de décibels. La carte ne monte pas à plus de 30°C
+
+Vous pouvez ajouter votre commande dans  "Applications au démarrage" pour que la carte graphique soit bien ventilée automatiquement à chaque démarrage.
+
+===== Des problèmes ? =====
+
+====Avant propos:====
+   * Utiliser les journaux machines (logs) pour mieux identifier votre problème:
+       *Consultez la sortie de //dmesg | grep fglrx//. Vous trouverez les logs des messages d'erreurs dans les fichiers  ///var/log/kern.log// et ///var/log/Xorg.0.log//. 
+   * Chercher sur Internet:
+       *   Essayer de rentrer le message d'erreur qui s'affiche dans un moteur de recherche internet. La plupart du temps, quelqu'un aura eu le même problème et laissé un début de solution sur un forum ou dans un rapport de bug.
+       * La section [[http://forum.ubuntu-fr.org/viewforum.php?id=27 | "affichage et cartes graphiques" ]] du forum de ubuntu-fr.org, regorge elle aussi de solution. Si vous ne trouvez pas votre cas, et que vous ouvrez un nouveau sujet, pensez à donner le maximum  d'information en vous aidant de la section [[carte_graphique#identifier_sa_carte_graphique | identifier sa carte graphique]].
+    * Vérifier votre câblage:
+        * Vérifier que vos câbles sont correctement connectés, une fiche mal vissée peut faire scintiller votre écran.
+        * Essayer de changer de type de connexion en passant du VGA au DVI par exemple.
+  * Carte graphique trop ancienne:
+       * Carte précédent la Radeon 9500: Inutile de compter sur le pilote propriétaire, désinstallez le pour revenir au pilote libre installé par défaut. 
+       * Carte comprise entre les Radeon 9500 et les Radeon HD 1000: Assurez vous de bien utiliser les pilotes Catalyst 9.3 et pas un plus récent
+   * Carte trop récente
+       * Si la puce de votre carte a été fabriqué après la sortie de votre Ubuntu actuel, il y a de forte chance pour que le support de la carte ne soit pas actif ou complet. Essayez peut être d'installer les derniers pilotes [[#installation_manuelle_des_pilotes | depuis le site web d'AMD.]]
+  
+ 
+==== Problème de résolution au démarrage et à l'arrêt ====
+
+Avec les pilotes propriétaires et à partir de Lucid Lynx 10.04, la résolution au démarrage et à l'arrêt est très faible.
+Le problème vient de [[Plymouth]]. Toute la manœuvre à faire pour corriger ce problème est décrite [[http://www.clapico.com/2010/05/02/logo-baveux-ubuntu-dans-lucid-lynx-par-le-joli/| dans cet article]].
+
+
+==== Écran figé====
+===Passer en mode console===
+L'installation du pilote Catalyst s'est bien passée mais l'interface se fige,  ou alors se lance avec une résolution de 320x200. Avant de reprendre le Cd pour tout installer à nouveau, ouvrez une session en mode terminal avec CTRL+ALT+F1, vous pouvez aller jusqu’à F6, F7 étant l'interface graphique classique. 
+<note>Il est aussi possible de passer en mode console, en sélectionnant le "mode de dépannage" depuis le sélecteur [[GRUB]]. S'il n'est pas visible, il est accessible en appuyant sur SHIFT ou ECHAP au démarrage</note>
+
+Tapez votre nom d'utilisateur et votre mot de passe.
+<code>sudo killall  lightdm</code> ou
+<code>sudo killall gdm </code> pour tuer complétement l'interface graphique encore chargé en F7
+
+
+=== Réparer avec une interface graphique:===
+Puis lancez l'interface de configuration du [[wpfr>X_Window_System|serveur X]].
+<code>sudo dpkg-reconfigure xserver-xorg </code> 
+
+  *Vous pouvez sélectionner le pilote de serveur X nommé **ati** ou même **vesa** au lieu du **fglrx** lors du 2ème écran. 
+
+Si cela ne fonctionne toujours pas vous pouvez essayer d’éditer le fichier de configuration xorg.conf directement
+<note>Pour que les manipulations qui suivent puissent être prise en compte, un redémarrage complet est souvent nécessaire. </note>
+=== Ou réparer en modifiant directement le fichier de configuration xorg.conf:==
+Tapez //sudo nano /etc/X11/xorg.conf//  et vous pourrez éditer le fichier. Rendez vous à la section //device//, à la ligne //Driver// et vous changez //"fglrx"// pour //"ati"//. 
+
+Quand c'est fait, vous faites **Ctrl+X** sur le clavier pour quitter. Tapez **O** pour oui ou **Y** pour Yes pour enregistrer les modifications.
+
+=== Ou réparer en rétablissant le fichier xorg.conf d'origine===
+Vous pouvez aussi rétablir le fichier de configuration d'origine en tapant:
+<code>sudo cp /etc/X11/xorg.conf.failsafe /etc/X11/xorg.conf</code>
+
+
+
+//**Si vous n'avez pas accès au mode sans échec **//(grub n’apparaît pas malgré la touche ESC ou SHIFT):
+Tout d'abord reprenez votre cd d'installation et démarrez dessus, cliquez sur essayer ubuntu. une fois arrivé sur le bureau montez votre système de fichier '/' puis afin de rétablir le fichier de configuration d'origine tapez dans un terminal:
+    sudo cp /point_de_montage/etc/X11/xorg.conf.failsafe /point_de_montage/etc/X11/xorg.conf
+
+===Désinstaller le pilote Catalyst en cas d'échec===
+ Puisque vous êtes en ligne de commande, pensez à [[#desinstaller_proprement_le_pilote_catalyst | désinstaller proprement le pilote Catalyst]].
+
+
+==== Compiz ne se lance pas ====
+
+Si vous n'arrivez pas à activer les effets 3D du bureau éditez le fichier xorg.conf : 
+
+Pour ce faire, entrez cette commande dans le termimal (Applications/Accessoires/Terminal).
+<code>sudo nano /etc/X11/xorg.conf</code>
+Ou bien :
+<code>gksudo gedit /etc/X11/xorg.conf</code>
+
+Puis, copier/coller les lignes suivantes à la fin du fichier :
+<code>Section "Extensions"
+	Option	    "Composite" "1"
+EndSection
+</code>
+
+
+==== DRI ou accélération 3D ====
+
+Si vous avez des problèmes relatifs au DRI ou à l'accélération 3D et que les lignes suivantes apparaissent dans votre fichier ''/var/log/Xorg.0.log''.
+
+<code>
+(WW) fglrx(0): Kernel Module version does *not* match driver.
+(EE) fglrx(0): incompatible kernel module detected - HW accelerated OpenGL will not work
+</code>
+
+Alors, vérifiez que le paquet ''linux-restricted-modules'' contenant les modules non libres est bien installé pour votre noyau. Pour l'installer, vous pouvez utiliser la commande suivante :
+<code>
+  sudo apt-get install linux-restricted-modules-$(uname -r)
+</code>
+<note> La commande ''uname -r'' renvoie le numéro de version de votre noyau. Par défaut, il se peut que vous ayez une version de votre noyau qui ne soit pas optimisée, il est possible en ce cas d'installer un noyau mieux optimisé.</note>
+
+==== Droits d'accès ====
+
+Si fglrxinfo vous indique bien les pilotes ATI mais uniquement en root, vérifiez que le chemin d'accès aux modules DRI soit accessibles par vos utilisateurs. Pour cela, indiquer que les utilisateurs du groupe "video" ont le droit d'y accéder :
+<code>
+# chown root:video /usr/X11R6/lib/modules/dri -R
+# chmod 750 /usr/X11R6/lib/modules/dri -R
+</code>
+
+ou
+
+<code>
+# chown root:video /usr/lib/xorg/modules/dri -R
+# chmod 750 /usr/lib/xorg/modules/dri -R
+</code>
+
+selon l'existence du dossier.
+
+==== Réglage de la luminosité impossible ====
+
+Sous Lucid Lynx 10.04 AMD64, il se peut que les touches de fonction du portable soient sans effet, idem avec l'applet de réglage de la luminosité.
+
+Ce problème a été répertorié avec des cartes Mobility Radeon HD 4300 Series / Mobility Radeon HD 4600 Series
+Une solution de remplacement est ce script :
+
+<code>
+#!/bin/bash
+# corrigez le dossier en fonction du contenu de /proc/acpi/video/ : DGFX sur un HP ProBook 4710s
+brightfile="/proc/acpi/video/DGFX/LCD/brightness"
+# choix de la nouvelle valeur
+level=$(zenity --title "Brightness" --text="Choose brightness level :" --scale --value=`grep  $brightfile -e "current: " | sed -e "s/current: //"` --step=10)
+# arrondi au multiple de 10 le plus proche
+level=$(( (($level+4)/10)*10 ))
+# fixe la valeur et corrige les droit sur le fichier si necessaire
+echo $level > $brightfile || gksudo chmod 666 $brightfile || echo $level > $brightfile
+</code>
+n'oubliez pas de rendre votre script exécutable (chmod +x chemin/vers/votre/fichier/script)
+
+==== Pas de son avec la sortie HDMI ====
+
+Si vous n'avez aucun son émis depuis la sortie HDMI de la carte graphique, assurez vous d'abord que le bon périphérique audio est sélectionné et actif. Pour cela, ouvrez le panneau "Préférences du son" et ensuite dans l'onglet "Matériel", sélectionnez "HDMI audio" et dans le menu déroulant, choisissez "Digital stéréo"(ou supérieur). Dans l'onglet "Sortie", cochez également le même périphérique.
+
+Si malgré cela vous n'avez toujours aucun son, pensez à désactiver la carte son intégré dans les paramètres du BIOS.
+
+=== l'audio HDMI est désactivé par défaut dans le noyau Linux 3.0 ===
+
+Pour ceux qui n'ont pas de son sur la sortie HDMI avec un Ubuntu 11.10 (noyau 3.0) et une puce  "RS880 Audio Device", rendez vous sur cette page": [[http://forum.ubuntu-fr.org/viewtopic.php?id=722991]].
+
+==== Écran noir en sortie de veille  ====
+
+Pour ceux qui ont des problèmes avec Compiz activé, et ce à la sortie de veille, téléchargez une solution :
+ [[https://github.com/dabrahams/fglrx-support | ici]]
+
+  *Copiez dans /etc/pm/config.d/ copiez le fichier **50compiz-fglrx-noclear** 
+  *Dans /etc/pm /sleep.d/ copiez le fichier **00compiz-fglrx**, pensez à le rendre  **exécutable** 
+
+  sudo chmod +x /etc/pm /sleep.d/00compiz-fglrx
+
+Note : solution inefficace sur Ubuntu 11.04, Samsung NP305U1A, driver fglrx  Catalyst 12.1 AMD Radeon HD 6320 Graphics. Ne se rallume correctement ni en veille, ni en hibernation.
+
+==== Wine et certaines applications 3D ====
+
+Il peut arriver que Wine,certains logiciels de virtualisations et d'autres applications 3D ne reconnaissent pas l'accélération matérielle de votre carte graphique. Une réinstallation du pilote peut corriger ce problème.
+
+==== Problèmes avec certains jeux =====
+Avec certains jeux basés sur Quake 3 ([[:Tremulous]], [[:OpenArena]], …), 
+vous pourrez également rencontrer quelques problèmes de contrôles au clavier (précédés d'une sorte de flash discret sur l'écran) ou encore un affichage pas très beau sous [[:Planeshift]]. L'astuce pour résoudre ces problèmes consiste à ajouter dans le fichier ''xorg.conf'', section "Module" :
+
+    SubSection "extmod"
+        Option          "omit xfree86-dga"
+    EndSubSection
+    #Load "extmod"
+
+N'oubliez pas de commenter/enlever le Load "extmod".
+
+==== Applications utilisant Gstreamer ====
+
+Par exemple Totem.
+
+Si Totem affiche une erreur "Resource or device busy" dès qu'on le lance, il faut ajouter deux paramètres dans /etc/X11/xorg.conf, dans la section "Device" :
+<code>
+ Option  "VideoOverlay" "on"
+ Option  "OpenGLOverlay" "off"
+</code>
+Voir d'autres infos en français [[http://forum.ubuntu-fr.org/viewtopic.php?id=2487&p=5|ici]].
+
+==== Mauvaises couleurs avec les applications utilisant Gstreamer ====
+
+Si les couleurs de vos vidéos ne sont pas correctes par rapport à l'original, il suffit de modifier un paramètre dans gstreamer-properties.
+
+Assurez-vous d'avoir [[:tutoriel:comment_installer_un_paquet|installé le paquet]] **gstreamer0.10-ffmpeg**.
+
+Lancez les propriétés de Gstreamer:
+
+  gstreamer-properties
+
+Dans l'onglet Vidéo, parmi la liste des greffons de sortie par défaut, sélectionner Personnalisé
+
+Dans la case Pipeline, remplacez le contenu par:
+<file>
+ffmpegcolorspace ! video/x-raw-yuv,format=(fourcc)YV12 ! xvimagesink
+</file>
+
+==== Vidéos ne s'affichant pas correctement (noir) Gstreamer ====
+Lancez les propriétés de Gstreamer:
+
+  gstreamer-properties
+Puis dans l'onglet tableau vidéo changer "Autodetect" par "X windows system sans XV"
+
+
+
+ 
+=====Liens externes : =====
+
+  * **(fr)** [[wpfr>Radeon]]
+  * **(fr)** [[http://www.amd.com/fr/Pages/AMDHomePage.aspx | AMD]] Fournit les spécifications détaillées des cartes ainsi que les derniers pilotes [[Catalyst]]
+  * **(en)** [[http://wiki.cchtml.com/index.php/Ubuntu | Wiki AMD ]] , non officiel, mais riche en informations utiles
+  * **(fr)** [[http://forum.ubuntu-fr.org/viewtopic.php?id=248679|Installation du pilote pour ati 9800 Pro]]
+  * **(fr)** [[http://forum.ubuntu-fr.org/viewtopic.php?pid=2750364#p2750364|Problème minimisation des fenêtres (ati+compiz)]]
+  * **(en)** [[http://wiki.cchtml.com/index.php/Troubleshooting#System_freezes_after_logout_with_GDM_or_KDM.07UNIQd6a6a33609b2809-nowiki-00000010-QINU2.07UNIQd6a6a33609b2809-nowiki-00000011-QINU|Autre page d'aide à la résolution des problèmes sur les cartes ATI]]
+  * **(en)** [[https://wiki.ubuntu.com/X/Troubleshooting/VideoDriverDetection | Page du site Ubuntu anglais dédié au problème de détection des pilotes]]
+-----
+
+//Contributeurs : [[utilisateurs:pierluc|Pier Luc CR]], [[utilisateurs:theozzfancometh|Theozzfancometh]], [[utilisateurs:Kao_chen]]: Refonte juillet 2012 //

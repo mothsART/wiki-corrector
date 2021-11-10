@@ -1,0 +1,89 @@
+
+{{tag>Trusty matériel carte_graphique intel}}
+
+----
+
+====== Poulsbo ======
+===== Introduction =====
+[[wpfr>Intel]] est un fabriquant de microprocesseurs qui propose aussi des chipsets graphiques nommés [[wpfr>intel GMA]]. Cette page traite du GMA500 (aussi appelé «Poulsbo») sous Ubuntu (pour les autres, voir [[:intel_graphics]]). Malheureusement le support de ce matériel est extrêmement limité sous Linux. Actuellement le pilote graphique pour ces cartes est le **gma500_gfx**.\\
+**La GMA 500** n'est pas une puce graphique d'origine Intel. Elle a été //achetée// à **Imagination Technologies** : c'est en fait //une copie// de [[wpfr>PowerVR|"PowerVR SGX"]] et les mises à jour des pilotes sont assez rares et c'est semble-t-il la même chose pour Windows...\\
+Depuis sa version 2.6.39, un nouveau module (**psb_gfx**) apparaît dans le noyau Linux pour le support du matériel Poulso. 
+Avec le noyau 3.3.1, **Psb_gfx** est rebaptisés **gma500_gfx** et le pilote est fonctionnel par défaut sous [[:precise]] et les versions plus récentes.
+Le **gma500_gfx** ne supporte pas encore la 3D.\\
+\\
+Intel a publié un pilote  qui fonctionne dans toutes les distributions linux. Il est très imparfait (il fait planté cinnamon) et semble ne plus être mis a jour [[https://downloadcenter.intel.com/download/19158/Intel-Graphics-Media-Accelerator-Driver-for-Linux-?product=81506]]
+
+{{sch.gif|Source: Intel's website }}
+
+
+{{installation:logo_puce_3d.png?48 }}
+<note warning>Si vous utilisez une vielle version de [[Precise]] faites une mise à niveau vers une version plus récente, soit 12.04.5 soit [[:Trusty]].</note>
+===== Vérifier  si la carte graphique est de type Poulsbo =====
+En tapant la commande suivante :<code>lspci | grep VGA</code>
+On doit obtenir quelque chose comme :<code>00:02.0 VGA compatible controller: Intel Corporation System Controller Hub (SCH Poulsbo) Graphics Controller (rev 07)</code>
+
+=====Lecture de Vidéos=====
+En raison du manque de support du matériel d'accélération vidéo, il se peut que celle-ci soit très lente, qu'elle gèle, ou que le son se désynchronise de l'image. Pour résoudre cela vous avez trois solutions.
+  - Vous installez **Mplayer** logiciel de lecture de vidéo. Cette application permet de faire fonctionner des vidéos en plein écran avec les pilotes poulsbo. Pour l'utiliser, suivez ces instructions:
+    * [[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>mplayer,smplayer]]**,
+    * Lancez l'application en faisant une recherche dans votre [[:unity#tableau_de_bord_dash|tableau de bord]] avec le mot clé  "smplayer",
+    * Aller à **options/préférences et Général** : Décochez toutes les cases cochées dans "Captures d'écran" (décocher Activer les captures d'écran),
+    * Choisissez l'onglet vidéo. Prenez comme pilote de sortie 'vaapi',
+    * Choisissez à gauche en bas: "avancé", puis l'onglet "options pour Mplayer" : indiquer dans la case option "va vaapi".
+  - Une autre solution consiste après l'installation de **SMplayer** à:
+    * Se déplacer dans le dossier contenant votre vidéo en entrant dans un [[:terminal]] la commande suivante:<code>cd /chemin_vers_votre_video</code>
+    * Puis lancer la commande suivante:<code>mplayer -lavdopts threads=4 -framedrop votre_fichier_video.avi</code>
+  - Vous générez un fichier [[:xorg|xorg.conf]] et au lieu du pilote Xorg "uxa", pour la méthode d'accélération vous mettez le pilote "glamor". Vous trouverez [[http://meets.free.fr/Downloads/BentoVillageProject/Configurations/System/xorg.conf-eeepc_1101HA.txt |ici]] le fichier //xorg.conf// que vous pouvez [[:tutoriel:comment_modifier_un_fichier|enregistrer]] avec les [[:sudo|les droits d'administration]] dans ///etc/X11//.
+Si l'on désire **l'ouverture automatique de ses vidéos par mplayer-vaapi**:
+    * Cliquez avec le bouton droit sur votre vidéo,
+    * Choisissez 'ouvrir avec' et sélectionner "smplayer'.
+
+Pour installer la dernière version de **Smplayer** par le [[:ppa]] suivez les instructions de la page [[:smplayer#installation|Smplayer]].
+
+=====Problème de mise en veille=====
+Si la mise en veille ne fonctionne pas, vous pouvez essayer plusieurs options. 
+  - Ouvrez un [[:terminal]] et entrez ces commandes: <code>sudo pm-suspend --quirk-vbemode-restore</code> Ceci devrait vous permettre de mettre en veille votre système. Si tel est le cas il ne vous reste plus qu'à configurer Ubuntu pour utiliser cette option à chaque mise en veille. Pour cela, [[:tutoriel:comment_modifier_un_fichier|ouvrez le fichier]] **/etc/pm/config.d/gma500** avec [[:sudo|les droits d'administration]] dans un [[:terminal]] et ajoutez-y les lignes suivantes: <file>ADD_PARAMETERS='--quirk-vbemode-restore'</file> La veille devrait fonctionner.
+  - Si cela ne fonctionne toujours pas, vous pouvez essayer de modifier la résolution de 1366x768 à 1360x768 avant la mise en veille, puis revenir à 1366x768 après. Vous pouvez automatiser cela avec ce script: 
+    * [[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/etc/pm/sleep.d/01_survive_modeswitch** avec [[:sudo|les droits d'administration]] dans un [[:terminal]],
+    * Et copiez/collez dedans ce qui suit: <file>#!/bin/bash
+
+case "$1" in
+    hibernate | suspend)
+        { xrandr --output LVDS-0 --mode 1360x768 ; }
+        ;;
+    thaw | resume)
+        { xrandr --output LVDS-0 --mode 1366x768 ; }
+        ;;
+esac </file>
+    * Sauvegardez et fermez votre fichier,
+    * Enfin dans un [[:terminal]] donnez les droits d'éxécution à votre fichier avec cette commande:<code>sudo chmod a+x /etc/pm/sleep.d/01_survive_modeswitch</code>
+Votre ordinateur devrait se mettre en veille.
+
+=====Optimisation de l'allocation mémoire=====
+Il est possible d'améliorer les performances de votre machine, en limitant la RAM utilisée par le système et de la rendre ainsi disponible pour la carte vidéo.    
+  * [[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/etc/default/grub** avec [[:sudo|les droits d'administration]] dans un [[:terminal]] et ajoutez les paramètres comme suit, si vous avez par exemple 1GB de RAM:<file>GRUB_CMDLINE_LINUX="mem=896mb"</file> Ou avec 2GB de RAM:<file>GRUB_CMDLINE_LINUX="mem=1920mb"</file>
+  * Mettez grub à jour:<code>sudo update-grub</code>
+
+=====Touches de luminosité (hotkeys)=====
+Les problèmes liés aux touches de luminosité dépendent souvent de la marque de votre pc et du bios.
+Dans le cas d'un Acer:
+  * [[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/etc/default/grub** avec [[:sudo|les droits d'administration]] dans un [[:terminal]] et ajoutez les paramètres comme suit:<file>GRUB_CMDLINE_LINUX="acpi_osi=Linux acpi_backlight=vendor"</file> Pour le Acer AO751h, essayez de blacklister //acer_wmi// comme suit:<file>GRUB_CMDLINE_LINUX_DEFAULT="acpi_backlight=vendor acpi_osi=Linux acer_wmi.blacklist=yes"</file>
+  * Mettez grub à jour:<code>sudo update-grub</code>
+Après cela les touches multimédia devraient fonctionner.
+
+=====Machines concernées=====
+Voici la liste des pages contenant le "tag" //poulsbo// : 
+
+{{backlinks>poulsbo}}
+
+Liste potentiellement beaucoup plus longue : //Acer Aspire One 751H, Asus EeePC S121, Asus EeePC T91 (tablette tactile), MSI Wind U115 hybride, Packard Bell Dot M, Abit (USI) MID-100, Archos 9, ASUS R50A, BenQ S6,  Fujitsu UMPC U2010, Lenovo IdeaPad U8, MSI Wind U110,Clevo TN70M/WeSurf, DELL Mini 10// ...
+
+===== Voir aussi =====
+  * **(en)** [[https://wiki.ubuntu.com/HardwareSupportComponentsVideoCardsPoulsbo|Page Wiki de Ubuntu sur la carte Poulsbo]]
+  * **(en)** [[http://ubuntuforums.org/showthread.php?t=1229345&page=94|Discussion « Guide to Get the Best Performance from the GMA 500 »]] à propos de l'implémentation de la carte.
+  * **(en)** [[http://www.facebook.com/group.php?gid=62711517402|Groupe de pression sur Facebook]] **pour qu'Intel fasse en sorte que des pilotes convenables soient mis à disposition.**
+  * **(en)** [[https://andre.blaatschaap.be/tag/gma500/]] ** solution pour Ubuntu 14.04 (fonctionne également pour Ubuntu 16.04!)** utilisation des drivers d'Intel par un ppa
+  
+----
+
+//Contributeurs: [[:utilisateurs:Escé]], [[:utilisateurs:zobi8225]], [[:utilisateurs:Nizou]], [[:utilisateurs:l_africain|L'Africain]], [[:utilisateurs:BeAvEr|BeAvEr]]//.

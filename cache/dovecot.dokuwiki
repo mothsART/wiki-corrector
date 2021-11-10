@@ -1,0 +1,239 @@
+
+{{tag>serveur réseau mail messagerie mda courriel pop3 imap dovecot BROUILLON}}
+
+====== Dovecot =====
+Dovecot(([[wpfr>dovecot]])) est une application d'agent de distribution des courriels MDA. Pour voir ce qu'est un agent de distribution de courriels lire [[comment_fonctionne_le_courriel_sous_linux|Comment fonctionne le courriel sous Linux ?]]
+
+C'est un logiciel sous licence libre serveur de distribution de courriels par IMAP et POP3 pour Linux / UNIX, écrit avec comme première préoccupation la sécurité.
+
+Dovecot convient tant pour des petites que pour des grandes structures.
+
+Rapide, simple à installer, il ne nécessite pas une charge d'administration extraordinaire et utilise très peu de mémoire. 
+
+===== Configuration des enregistrements DNS =====
+Avant de procéder à l'installation proprement dite de Dovecot, assurez-vous que les enregistrements de domaine sont correctement définis.
+
+[[configuration_serveur_dns_bind9_pour_son_poste_de_travail|Pour configurer un serveur DNS local avec Bind9 pour votre poste de travail]].
+
+[[configuration_serveur_dns_pour_son_poste_de_travail|Pour configurer un serveur DNS local avec Dnsmasq pour votre poste de travail]].
+
+En supposant que vous possédiez le domaine domaine-perso.fr, la première chose à faire est de créer un enregistrement de troisième niveau A nommé "courriel" et de le pointer vers la même adresse. Ensuite, pour recevoir des e-mails sur votre serveur, créez un enregistrement de type MX qui pointe vers le domaine de troisième niveau que vous venez de créer.
+
+<file>
+NOM DE MACHINE TYPE VALEUR
+courriel       A    [SERVER_IP]
+               MX   courriel.domaine-perso.fr
+</file>
+
+===== Installation =====
+Il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>dovecot-core]]**.
+
+==== Configuration ====
+FIXME Cette partie devra être reprise…
+
+[[:tutoriel:comment_editer_un_fichier|On édite]] ensuite le fichier de configuration **/etc/dovecot/dovecot.conf** et on modifie les lignes :
+<file shell /etc/dovecot/dovecot.conf>
+mail_location = mbox:/var/spool/mail/%u
+disable_plaintext_auth = no
+</file>
+
+<note tip>Éditez mail_location comme cela pour avoir une boite aux lettres locale à l'utilisateur avec la boite postale :
+<file>
+mail_location = mbox:~/mail:INBOX=/var/mail/%u
+</file></note>
+
+===== Serveur POP3 =====
+==== Installation du POP3 ====
+
+Il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>dovecot-pop3d]]**.
+
+==== Configuration ====
+[[:tutoriel:comment_editer_un_fichier|On édite]] ensuite le fichier de configuration **/etc/dovecot/dovecot.conf** et on modifie les lignes :
+<file shell /etc/dovecot/dovecot.conf>
+protocols =  pop3
+pop3_uidl_format = %08Xu%08Xv
+</file>
+
+Du coté poste client, configurer votre logiciel de mail favori pour que votre serveur Linux soit le serveur POP (il suffit de rajouter le nom du poste en question dans le champ qui va bien), et puis c'est tout, les courriers seront récupérés dans /var/mail/%u du serveur.
+
+===== Serveur IMAP =====
+==== Installation d'IMAP ====
+
+Il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>dovecot-imapd ]]**.
+
+==== Configuration ====
+[[:tutoriel:comment_editer_un_fichier|On édite]] ensuite le fichier de configuration **/etc/dovecot/dovecot.conf** et on modifie les lignes :
+<file shell /etc/dovecot/dovecot.conf>
+protocols =  imap
+</file>
+
+Du coté poste client, configurer votre logiciel de mail favori pour que votre serveur Linux soit le serveur imap (il suffit de rajouter le nom du poste en question dans le champ qui va bien), et puis c'est tout, les courriers seront récupérés dans /var/mail/%u du serveur.
+
+===== Filtrage des courriels avec Dovecot =====
+[[filtrage_des_courriels_avec_dovecot|Filtrage des courriels avec Dovecot]]
+
+===== Paramétrage du pare-feu =====
+
+En cas de pare-feu sur votre système, configurez-le pour activer le trafic de messagerie. Lors de l'utilisation du pare-feu UFW, des profils préinstallés pour Dovecot sont fournis. 
+
+Voyons donc comment les activer.
+
+Pour vérifier les profils disponibles installés dans le pare-feu UFW, exécutez cette commande
+<code bash>
+$ sudo ufw app list
+</code>
+
+Une liste similaire à la suivante s'affichera à l'écran :
+<code bash>
+Applications disponibles :
+   Dovecot IMAP
+   Dovecot POP3
+   Dovecot Secure IMAP
+   Dovecot Secure POP3
+   Nginx Full
+   Nginx HTTP
+   Nginx HTTPS
+   OpenSSH
+   Postfix
+   Postfix SMTPS
+   Postfix Submission
+</code>
+
+Pour autoriser le trafic de messagerie, activez les profils Dovecot.
+
+Pour vérifier les informations de profil :
+
+<code bash>
+$ sudo ufw app info "Dovecot IMAP"
+</code>
+
+Après avoir vérifié les profils, vous êtes prêt à les activer :
+
+<code bash>
+$ sudo ufw allow "Dovecot POP3"
+</code>
+
+<code bash>
+$ sudo ufw allow "Dovecot IMAP"
+</code>
+
+<code bash>
+$ sudo ufw allow "Dovecot Secure IMAP"
+</code>
+
+<code bash>
+$ sudo ufw allow "Dovecot Secure POP3"
+</code>
+===== Vérification du fonctionnement =====
+Pour vérifier le bon fonctionnement de votre serveur Dovecot POP3, utilisez telnet. 
+S'il n'est pas installé sur votre système, faites-le en exécutant cette commande :
+
+<code bash>
+$ sudo apt install telnet
+</code>
+Pour commencer à tester le serveur de messagerie, lancez telnet :
+
+<code bash>
+$ sudo telnet localhost 110
+</code>
+
+Si tout fonctionne correctement, la sortie suivante devrait s'afficher à l'écran :
+
+<code bash>
+Connected to localhost.
+
+Escape character is '^]'.
+
++OK Dovecot ready.
+</code>
+
+Saisissez ensuite le nom d'utilisateur et le mot de passe à l'aide de la commande user and pass :
+
+<code bash>
+user utilisateur
+
+pass motdepasse
+</code>
+
+Une fois la connexion terminée, le serveur enverra la sortie suivante :
+
+<code bash>
++OK Logged in.
+</code>
+
+Pour essayer de recevoir un vrai message, utilisez la commande mail fournie par le package mailutils.
+
+<code bash>
+$ 
+echo "TEST" |  mail -s "TEST" utilisateur
+</code>
+
+Une fois l'e-mail envoyé, avec les commandes ci-dessus, utilisez à nouveau telnet comme ci-dessus pour accéder à la boîte aux lettres :
+
+<code bash>
+$ telnet localhost 110
+
+Trying ::1...
+
+Connected to localhost.
+
+Escape character is '^]'.
+
++OK Dovecot ready.
+
+user utilisateur
+
++OK
+
+pass test
+
++OK Logged in.
+</code>
+
+Une fois connecté, pour obtenir une liste des messages reçus, exécutez la commande list :
+
+<code bash>
+list
+
++OK 1 messages:
+
+1 533
+
+.
+</code>
+
+Comme vous pouvez le voir, vous avez un message non lu : utilisez la commande RETR pour accéder au contenu :
+
+<code bash>
+etr 1
+
++OK 533 octets
+
+Return-Path: <root@domaine-perso.fr>
+
+To: utilisateur@domaine-perso.fr
+
+Subject: Test
+
+User-Agent: Heirloom mailx 12.5 7/5/10
+
+MIME-Version: 1.0
+
+Content-Type: text/plain; charset=us-ascii
+
+Content-Transfer-Encoding: 7bit
+
+Message-Id: <20190701140840.437C1852@courriel.domaine-perso.fr>
+
+From: root@domaine-perso.fr (root). 
+</code>
+
+===== Voir aussi =====
+  * [[filtrage_des_courriels_avec_dovecot|Filtrage des courriels avec Dovecot]]
+  * **(en)** [[https://www.dovecot.org/]]
+  * **(en)** [[https://wiki2.dovecot.org/FrontPage]]
+  * **(fr)** [[https://help.ubuntu.com/lts/serverguide/dovecot-server.html]]
+  * [[http://lists.debian.org/debian-user-french/2011/04/msg00147.html]]
+
+----
+//Contributeurs principaux : ...//

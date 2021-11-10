@@ -1,0 +1,216 @@
+
+{{tag>système administration}}
+
+----
+
+====== Programmer des tâches avec CRON ======
+
+
+
+
+
+===== Qu'est-ce que Cron ? =====
+**Cron** est un programme pour exécuter automatiquement des scripts, des commandes ou des logiciels à une date et une heure spécifiée précise, ou selon un cycle défini à l’avance. Chaque utilisateur a un fichier **crontab**, lui permettant d'indiquer les actions à exécuter.
+Cron est parfois appelé « planificateur de tâches » ou « gestionnaire de tâches planifiées ».
+
+
+
+===== Comment fonctionne Cron ? =====
+
+Les tâches planifiées cron sont définies au niveau du système dans le fichier /etc/crontab et dans le dossier /etc/cron.d/\\
+Il est déconseillé de modifier directement le fichier /etc/crontab. Les tâches qui y sont définies sont implicitement exécutées par //root//
+
+Voici une courte description de la structure d'une entrée dans un fichier crontab.\\
+Les champs, dans l'ordre(( Le mois et le jour de la semaine permettent une abréviation (suivant les jours et mois en anglais), telle que **jan** pour janvier, **thu** pour jeudi (Thursday).)) :
+    * //minute//,
+    * //heure//, 
+    * //jours dans le mois//,
+    * //mois//.
+    * //jour de la semaine//
+  * La commande à lancer.
+
+----
+Si __//jour du mois//__ et __//mois//__ sont définis, __//jour de la semaine//__ n'est pas nécessaire. Cependant, si le champ est indiqué en plus, la commande sera exécutée à la date //jour du mois// et //mois// mais AUSSI tous les  //jour de la semaine// définis.
+Exemple avec  <code>0 0 13 1 5 tâche</code>  la tâche sera exécutée le 13 janvier ET tous les vendredis.
+
+---- L'exemple ci-dessous exécutera ///usr/bin/apt-get update//, chaque jour, de chaque mois à 03:05 (le **cron** fonctionne sur 24 h) avec les droits de l'utilisateur **nomdutilisateur**.
+<code>
+5 3  * *  * nomdutilisateur /usr/bin/apt-get update
+</code>
+---- Vous pouvez faire tourner **cron** toutes les 5 minutes tout au long de la journée de travail (9am-5pm) avec un message :
+
+<code>
+*/5 9-17 * * mon,tue,wed,thu,fri wall "Où en es tu ?"
+</code>
+
+
+ou vous rappeler un anniversaire à 9h du matin le 10 janvier chaque année :
+
+<code>
+0 9 10 jan  * echo "C'est l'anniversaire de ta Maman aujourd'hui !" >>~/readme
+</code>
+
+----
+Il existe des raccourcis intéressants :
+
+    * @reboot # se lance au boot avec les droits utilisateurs, bien commode
+    * @yearly
+    * @annually
+    * @monthly
+    * @weekly
+    * @daily
+    * @midnight
+    * @hourly
+
+Cf. aussi :
+
+   man 5 crontab
+
+
+
+Vous pouvez générer le code grâce à ces outils en ligne :
+https://crontab.guru
+https://crontab-generator.org
+http://www.cronmaker.com
+===== Commandes pour gérer les tâches planifiées Cron =====
+
+Pour examiner les tâches planifiées de l'utilisateur courant (le contenu de votre **crontab**, tapez :
+
+<code bash>
+crontab -l
+</code>
+
+Pour modifier vos tâches planifiées tapez :
+
+<code bash>crontab -e</code>
+et pour modifier celles d'un autre utilisateur :
+<code bash>sudo crontab -e -u nom_utilisateur</code>
+
+Quand vous sortez de l'éditeur, le nouveau fichier **crontab** sera installé. Le fichier est stocké dans ///var/spool/cron/crontabs/<user>// mais doit seulement être modifié par l'intermédiaire de la commande **crontab**.
+
+Note : sur xubuntu, il faut auparavant indiquer que l'utilisateur a le droit d'utiliser crontab. Pour cela il faut créer un fichier ///etc/cron.allow// et y saisir le nom des utilisateurs autorisés à utiliser crontab.
+
+L'éditeur utilisé pour modifier la crontab peut être modifié par la commande :
+<code>
+sudo update-alternatives --config editor
+</code>
+ou par un :
+  select-editor
+  
+<note tip>  Lors du premier accès à « crontab -e » un menu apparaît et donne le choix de l'éditeur à utiliser.</note>
+
+Certains environnements de bureau, comme KDE dans sa « Configuration du système », offrent une interface graphique pour gérer les tâches cron.
+
+
+
+===== Lancement graphique =====
+Si vous avez besoin d'une interface graphique par exemple pour utiliser zenity, kdialog, dialog ou encore totem, vlc, ... Il vous faudra effectuer plusieurs choses :
+1° ajouter un DISPLAY=:0 devant la commande dans le cron.
+Exemple :
+<code>
+*/5 * * * * DISPLAY=:0 zenity --info --text="Toto va bien"
+</code>
+
+<note important>Il est parfois nécessaire de faire "xhost +" dans un terminal pour autoriser l'accès à X</note>
+
+2° Si vous utilisez un script nécessitant des caractères tels que des accents, n'oubliez pas d'ajouter un export LANG="fr_FR.UTF-8" ou LANG="fr_BE.UTF-8" au début de ce script. D'autre part il est grandement conseillé de mettre le chemin absolu vers les exécutables et fichiers.
+Exemple :
+<code>
+#!/bin/bash
+
+export LANG="fr_BE.UTF-8"
+
+/usr/bin/zenity --info --text="Toto va bien.\nReviens manger à la maison\!"
+</code>
+
+===== Utilisation des répertoires /etc/cron.hourly, daily, weekly, monthly  =====
+
+Si vous avez examiné le fichier /etc/crontab de votre système, vous avez remarqué qu'il contient des tâches pour exécuter toutes les heures, jours, semaines, mois les fichiers contenu dans les dossiers /etc/cron.hourly, daily, weekly, monthly.
+
+Si vous avez besoin qu'un script soit exécuté toutes les heures au niveau du système (par root), il suffit donc de le placer dans le dossier /etc/cron.hourly et de le rendre exécutable. De même s'il s'agit d'une tâche quotidienne (daily), hebdomadaire (weekly) ou mensuelle (monthly).
+
+
+===== Utilisation du répertoire /etc/cron.d  =====
+IL est possible d'éditer des services à exécuter automatiquement en rajoutant un fichier du nom que l'on souhaite dans le répertoire /etc/crond.d
+
+Attention contrairement aux lignes d'un fichier crontab, elles doivent préciser quel utilisateur (nom_utilisateur dans l'exemple ci dessous)  exécute le script : 
+<code>* * * * * nom_utilisateur /bin/touch /home/me/ding_dong</code>
+
+===== Autres Considérations =====
+
+Les commandes ci-dessus sont stockées dans un fichier **crontab** appartenant à votre compte d'utilisateur et exécutées avec votre niveau des permissions. Si vous voulez exécuter, régulièrement, une commande exigeant un plus haut niveau de permission (root), vous devez utiliser le fichier **crontab** root (ou racine) :
+
+<code>sudo crontab -e</code>
+
+Remarque : cette commande édite directement le fichier // /var/spool/cron/crontabs/root// 
+
+Une autre façon de créer une tâche planifiée devant être exécutée par root et d'ajouter une entrée au fichier /etc/crontab ou de créer un nouveau fichier dans /etc/cron.d (cf. point précédent) en précisant bien root comme nom d'utilisateur.
+
+==== Répertoires ====
+Une tâche cron est exécutée dans un shell non connecté (non-login) et non interactif. Les variables d'environnement habituelles et en particulier **PATH** ne sont pas connues.
+
+Il faut donc soit mettre les emplacements complets des exécutables dans les commandes et les scripts appelés par cron, soit définir PATH dans le fichier crontab :
+<code>
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+</code>
+Il peut être utile d'identifié le chemin où se trouve votre exécutable, exemple avec python :
+<code bash>
+which python3
+# peut retourné par exemple
+/home/mon-compte/miniconda3/bin/python3
+</code>
+
+De même, si le programm (script) exécuté doit sauvegarder des fichiers, il peut être utile de précéder l'exécution de votre script par un changement de répertoire :
+<code bash>
+* * * * * cd /home/mon-compte/wokspace/ && /home/mon-compte/miniconda3/bin/python3 mon_script.py
+</code>
+
+==== Tests ====
+
+Il est important de vérifier que vos travaux dans **cron** fonctionnent comme prévu. Une méthode pour faire un test est de paramétrer la tâche dans le **crontab** pour qu'elle s'exécute quelques minutes plus tard et contrôler le résultat, avant de mettre la synchronisation de cette tâche à la bonne heure. Vous pouvez également trouver utile d'envoyer les retours des commandes dans un fichier texte pour voir les succès ou les échecs, par exemple :
+
+<code>
+echo "Sauvegarde de nuit: $(date)" >>/tmp/mybackup.log
+</code>
+
+Une autre façon de contrôler la bonne exécution des tâches cron est d'utiliser sa capacité à envoyer des courriels.
+Pour cela il suffit de renseigner la variable MAILTO dans votre fichier crontab, exemple :
+<code>MAILTO:jean.dupont@example.com</code>
+**Attention**, pour que cela fonctionne il faut que votre machine soit capable d'envoyer des courriels.
+
+Pour plus d'informations, lisez les pages du //man// pour **cron** et **crontab** (le //man// est détaillé sur [[:tutoriel:console_ligne_de_commande|les commandes basiques]]). 
+Sur une machine qui n'est pas allumée en permanence**[[anacron|anacron]]** (installé par défaut) permet de s'assurer que les taches cron sont bien exécutées en vérifiant à intervalles régulier si un tâche n'est pas en retard.
+
+
+==== Log ====
+Par défaut on retrouve des log de commandes CRON dans ///var/log/syslog// mais ce n'est pas très pratique.\\
+Pour activer le log spécifique de CRON:\\
+Éditer le fichier ///etc/rsyslog.d/50-default.conf// qui est appelé par ///etc/rsyslog.conf// et décommenter la ligne
+<code bash>
+cron.*                         /var/log/cron.log
+</code>
+
+Relancer //rsyslog// et //cron//
+<code bash>
+sudo systemctl restart rsyslog
+sudo systemctl restart cron
+</code>
+Il ne reste plus qu'à surveiller les log de CRON:
+<code bash>
+sudo tail -f /var/log/cron.log
+</code>
+
+et si vous voulez des tâches silencieuses ((https://unix.stackexchange.com/questions/163352/what-does-dev-null-21-mean-in-this-article-of-crontab-basics)), ajouter à la fin de vos ligne CRON <code bash> > /dev/null 2>&1</code> pour rediriger les messages ET les erreurs vers le « trou noir ».
+===== Liens =====
+  * [[https://help.ubuntu.com/community/CronHowto]] (EN)
+  * [[http://www.math-linux.com/spip.php?article16|Programmation des tâches régulières : crontab]]
+  * [[:nano|Editeur de texte de Crontab : gnu nano]]
+  * [[incron]] : effectuer une action, commande(s), scripts, etc, en cas de modifications de fichiers ou de répertoires donnés
+  * [[https://www.easycron.com/|EasyCron - Cron Jobs Alternatives]]
+  * [[:Anacron]] : planificateur de commande « anachronique »
+  * [[fcron]] : programmer des tâches devant être exécutées/
+  * [[https://askubuntu.com/questions/23009/why-crontab-scripts-are-not-working|why crontab scripts are not working?]]
+
+----
+
+//Contributeurs : Martigo, [[:contributeurs|Les contributeurs d'Ubuntu-fr]], l'entreprise Simplistay.//

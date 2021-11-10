@@ -1,0 +1,136 @@
+
+{{tag>Trusty serveur sécurité}}
+
+----
+
+====== AppArmor : gestion des droits d'accès sur les applications ======
+
+
+AppArmor ("Application Armor") est un logiciel libre de sécurité pour Linux. AppArmor permet à l'administrateur système d'associer à chaque programme un profil de sécurité qui restreint les capacités de celui-ci.
+
+Il s'agit plus précisément d'un outil qui permet de verrouiller les applications en limitant strictement leur accès aux seules ressources auxquelles elles ont droit sans perturber leur fonctionnement.
+
+===== Installation =====
+
+AppArmor est installé par défaut sous Ubuntu.\\
+Vous pouvez ajouter de nouveaux profils en [[:tutoriel:comment_installer_un_paquet|installant le paquet]] **[[apt>apparmor-profiles]]**.
+Pour pouvoir contrôler Apparmor, vous devriez installer le paquet **[[apt>apparmor-utils]]** qui contient des utilitaires en ligne de commande que vous pouvez utiliser pour changer le mode d'exécution d'AppArmor, trouver l'état d'un profil, créer de nouveaux profils, etc.
+
+===== Utilisation =====
+
+Le répertoire **/etc/apparmor.d** est l'endroit où se situent les profils d'AppArmor. Il peut être utilisé pour manipuler le mode de l'ensemble des profils.\\
+Cette commande va lancer tous les profils en mode ''enforce'' :
+<code>
+sudo aa-enforce /etc/apparmor.d/*</code>
+Celle-ci va tous les mettre en mode ''complain'' (recommandation) : <code>sudo aa-complain /etc/apparmor.d/*</code>
+Pour mettre seulement le profil d'une application en marche:
+<code>
+sudo aa-enforce firefox
+</code>
+Les commandes d'AppArmor :
+  * Pour voir l'état actuel des profils d'AppArmor entrez la commande dans un [[:terminal]]: <code>sudo apparmor_status</code>
+  * Pour placer un profil en mode ''complain'' (réclamation) : <code>sudo aa-complain /chemin/vers/application</code>
+  * Pour placer un profil en mode ''enforce'' (imposé) :: <code>sudo aa-enforce /chemin/vers/application</code>
+  * ''apparmor_parser'' est utilisé pour charger un profil dans le noyau. Il peut aussi être utilisé pour recharger un profil déjà chargé en utilisant l'option -r. Pour charger un profil : <code>cat /etc/apparmor.d/profile.name | sudo apparmor_parser -a</code>
+Pour recharger un profil : <code>cat /etc/apparmor.d/profile.name | sudo apparmor_parser -r</code>
+  * ''service apparmor'' peut être utilisé pour recharger tous les profils: <code>sudo service apparmor reload</code>
+  * Le répertoire **/etc/apparmor.d/disable** peut être utilisé en même temps que l'option apparmor_parser -R pour désactiver un profil: <code>sudo ln -s /etc/apparmor.d/profile.name /etc/apparmor.d/disable/ 
+sudo apparmor_parser -R /etc/apparmor.d/profile.name</code> Afin de ré-activer un profil désactivé, supprimez le lien symbolique vers le profil dans **/etc/apparmor.d/disable/**, puis chargez le profil en utilisant l'option -a : <code>sudo rm /etc/apparmor.d/disable/profile.name
+cat /etc/apparmor.d/profile.name | sudo apparmor_parser -a</code>
+  * AppArmor peut être désactivé, et le module déchargé du noyau en entrant les lignes suivantes : <code>sudo service apparmor stop
+sudo update-rc.d -f apparmor remove</code>
+  * Pour réactiver AppArmor saisissez : <code>sudo service apparmor start
+sudo update-rc.d apparmor defaults</code>
+Remplacez ''nom.profil'' avec le nom du profil que vous souhaitez manipuler. Remplacez aussi **/chemin/vers/application** avec le chemin d'accès de l'exécutable en cours. Par exemple, pour la commande ping utilisez **/bin/ping**.
+
+=====Les profils=====
+Les profils AppArmor sont de simples fichiers texte qui se trouvent dans **/etc/apparmor.d/**. Les fichiers portent le nom du chemin d'accès entier de l'exécutable dont ils sont les profils en remplaçant "/" par ".". Par exemple **/etc/apparmor.d/bin.ping** est le profil AppArmor de la commande ''/bin/ping''.
+
+Il existe deux grands types de règles utilisées dans les profils :
+  * ''Path entries'' : les fichiers auxquels une application peut avoir accès dans le système de fichier.
+  * ''Capability entries'' : détermine les privilèges qu'un processus restreint est autorisé à utiliser.
+
+À titre d'exemple, regardez le fichier **/etc/apparmor.d/bin.ping** : <file> /etc/apparmor.d/bin.ping>
+#include <tunables/global>
+/bin/ping flags=(complain) {
+#include <abstractions/base>
+#include <abstractions/consoles>
+#include <abstractions/nameservice>
+
+capability net_raw,
+capability setuid,
+network inet raw,
+
+/bin/ping mixr,
+/etc/modules.conf r,
+}
+#include <tunables/global>: directives d'inclusion d'autres fichiers. Ceci permet de placer dans un fichier commun les directives dépendant de plusieurs applications.
+
+/bin/ping flags=(complain): chemin de l'exécutable et réglage du mode sur complain (réclamation).
+
+capability net_raw,: autorise l'application à accéder à la fonctionnalité Posix 1e CAP_NET_RAW.
+
+/bin/ping mixr,: donne à l'application les droits de lecture et d'exécution sur le fichier.
+</file>
+Après modification d'un fichier de profil, le profil doit être rechargé (Voir plus haut).
+
+====Création d'un profil====
+Il existe deux manières de créer de nouveaux profils. La première s'applique dans le cas d'un processus qui s'exécute simplement, pour une durée limitée. La seconde s'applique aux processus de type //daemon//, ou encore aux processus exécutés périodiquement ou sur une longue période.
+=== Processus à durée limitée ===
+
+Il suffit de lancer l'application à l'aide de la commande ''aa-genprof''. AppArmor détectera automatiquement les accès faits par l'application, générera le fichier profil approprié et le placera dans le répertoire ''/etc/apparmor.d''.
+<code>sudo aa-genprof /chemin/vers/mon/processus</code>
+
+=== Processus de type daemon ===
+
+On crée d'abord un profil temporaire à l'aide de la commande ''aa-autodep''. On laisse tourner le processus à confiner durant le temps nécessaire, puis on corrige le fichier de profil à l'aide des messages laissés dans les fichiers log, grâce à la commande ''aa-logprof''. Au besoin, on continue à laisser tourner le processus et on relance la commande ''aa-logprof'', jusqu'à ce que le fichier de profil soit adéquat. On peut alors placer ce fichier en mode //enforced// : <code>sudo aa-autodep /chemin/vers/mon/processus</code>
+<code>sudo aa-logprof</code>
+
+Pour plus de détails, vous pouvez vous reporter à la documentation sur [[http://www.novell.com/documentation/apparmor/book_apparmor21_admin/data/book_apparmor_admin.html|le site de Novell]] pour connaître les différentes options proposées par ''aa-logprof''.
+
+
+Pour la conception d'un plan de test, réfléchissez à la manière dont l'application doit être examinée. Le plan de test devrait être divisé en tests unitaires. Chaque test unitaire devrait avoir une courte description et énumérer les étapes à suivre.
+
+Quelques tests unitaires standard sont :
+  * Démarrage du programme,
+  * Arrêt du programme,
+  * Rechargement du programme.
+
+Test de toutes les commandes prises en charge par le script ''init''.
+
+Générer le nouveau profil : Utilisez ''aa-genprof'' pour générer un nouveau profil. Depuis un terminal :
+<code>sudo aa-genprof executable</code>
+Par exemple : <code>sudo aa-genprof slapd</code>
+
+
+====Mise à jour des profils====
+
+Lorsque le programme ne se comporte pas correctement, des messages d'audit sont journalisés. L'application ''aa-logprof'' peut être utilisée pour analyser les messages d'audit AppArmor dans les fichiers journaux. Examinez-les puis mettez à jour le profil. Dans un terminal :
+<code>sudo aa-logprof</code>
+
+
+==== Notifications de violations ====
+
+Le mode strict applique les règles et rapporte les tentatives de violation, alors que le mode relâché se contente d'enregistrer dans les journaux système les appels système qui auraient été bloqués, sans les bloquer réellement.\\
+''aa-genprof'' n'est en fait qu'un petit script intelligent qui utilise ''aa-logprof'' : il crée un profil vide, le charge en mode relâché, puis lance ''aa-logprof''. Ce dernier est un outil qui met à jour un profil en fonction des violations qui ont été enregistrées. On peut donc relancer cet outil plus tard, de manière à améliorer le profil nouvellement créé.
+Pour voir une notification sur votre bureau lorsqu'AppArmor entre un log "DENIED" log entry vous devez entrer cette commande :
+<code>sudo aa-notify -p --display $DISPLAY</code>
+qui doit être ajoutée à chaque boot.
+
+Une autre solution pourrait être l'installation du paquet **[[apt>logcheck]]** ( [[http://nyquist.life.free.fr/dotclear/index.php?post/2008/10/13/Logcheck|tutoriel-1]], [[https://home.demi-lune.org/brain/?page=display&section=articles&id=129|tutoriel-2]] ) , qui se chargera d'envoyer par courriel diverses informations contenues dans les logs, dont les violations signalées par AppArmor.
+
+
+
+===== Voir aussi =====
+
+  * [[https://code.launchpad.net/apparmor-profiles|Sur launchpad]]
+  * [[https://wiki.ubuntu.com/AppArmor|Wiki ubuntu Apparmor]]
+  * [[https://wiki.ubuntu.com/DebuggingApparmor|Wiki Ubuntu DebuggingApparmor]]
+  * [[http://fabianmoser.at/blog/2010/09/24/secure-firefox-with-apparmor/|Ajouter le support des profiles pulseaudio dans les profiles firefox]]
+  * [[http://www.mpipks-dresden.mpg.de/~mueller/docs/suse10.1/suselinux-manual_en/manual/bx5bmkm.html|Building Novell AppArmor Profiles with the YaST GUI]] ( une interface un peu plus évolué pour apparmor sur novell )
+  * [[:selinux]]
+  * [[:sécurité]]
+  * [[http://www.novell.com/linux/security/apparmor/|Apparmor par Novell]], plus spécifiquement la [[http://www.novell.com/documentation/apparmor/book_apparmor21_admin/data/book_apparmor_admin.html|documentation]].
+
+----
+//Contributeurs principaux: ..//

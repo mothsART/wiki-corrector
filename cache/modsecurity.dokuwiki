@@ -1,0 +1,92 @@
+
+{{tag>Trusty Apache mod}}
+----
+ 
+====== ModSecurity ======
+ 
+ModSecurity est un module d'Apache spécialisé dans la sécurité. Il permet donc de sécuriser la couche applicative avant l'arrivée des requêtes sur le site hébergé sur l'Apache en question. Même s'il s'agit d'un module, ses fonctionnalités sont vastes et permettent de toucher à tous les points de sécurité nécessaires. Comme utilisations possible, citons la détection de tentatives d'inclusions, la lutte anti-spam, l'utilisation d'exploits (il permet de cacher les numéros de versions utilisées sur les pages d'erreur renvoyées par le serveur Web), l'application d'une liste noire (ou blanche), etc...
+ 
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'un serveur Apache installé. [[apache2|Voir la page correspondante]]
+ 
+===== Installation =====
+ 
+
+Pour installer ce logiciel, il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>libapache2-mod-security2]]**
+Cela aura le résultat de créer:
+  * Les fichiers //mod-security.conf// et //mod-security.load// dans le dossier ///etc/apache2/mods-available//. Le lien symbolique (correspondant à la commande "a2enmod mod-security" sera automatiquement créé).
+  * Le dossier ///etc/modsecurity/.// Il contiendra toute la configuration à venir. Pour que la configuration soit prise en compte, il faudra que les fichiers contenant les directives disposent d'un suffixe// .conf//.
+  * Le dossier ///usr/share/modsecurity-crs/.// Il contient des exemples de fichier à utiliser selon les besoins de l'administrateur.
+ s
+===== Configuration générale =====
+ 
+Pour fonctionner, ModSecurity a besoin d'une configuration activée, non présente après l'installation du module. Pour ce faire, il est possible de simplement [[:tutoriel:learn_unix_in_10_minutes#deplacer_renommer_et_copier_des_fichiers|renommer le fichier]] ///etc/modsecurity/modsecurity.conf-recommended//, et lui enlever la partie "-recommended" pour qu'il soit reconnu par l'application....
+
+Il est nécessaire de comprendre que s'agissant d'un module, la configuration associée est ici séparée dans un dossier à part (/etc/modsecurity/), mais que cela est parfaitement optionnel. Il suffit que la configuration soit lue par le moteur Apache pour que les directives modsecurity soient reconnues. Par exemple, il est possible de placer directement les directives dans les fichiers de [[:apache2#creation_d_hotes_virtuels|VirtualHost]], ou alors pouvoir changer certains paramètres un à un selon le VirtualHost voulu....
+
+La configuration de ce fichier, via la directive "//SecRuleEngine DetectionOnly//", n'aura pas pour action de bloquer une requête. Elle se contentera de journaliser les détections (voir partie suivante). Si, à des fins de tests, ou quand votre configuration vous semble parée, vous pensez être prêt à bloquer les requêtes suspectes, alors il faut passer le paramètre //SecRuleEngine// à// On//....
+
+===== Afficher une signature serveur personnalisée =====
+
+Ceci a comme résultat d'afficher une signature serveur différente de l'habituelle, affichant les versions utilisées par les applications d'Apache. Cela est un problème de sécurité, car si votre serveur n'est pas à jour et qu'une faille existe sur un des applicatifs utilisés, le pirate peut facilement s'en rendre compte et l'exploiter. La signature est le plus souvent affichée sur les pages de code d'erreur (exemple: page 404).
+Pour ce faire, il faut placer dans la configuration (///etc/modsecurity/modsecurity.conf//) la directive "SecServerSignature" suivie du message désiré. 
+Exemple : //SecServerSignature "Microsoft IIS7"//
+
+Pour que cela fonctionne, il est nécessaire que le paramètre ServerTokens soit mis à "Full" (et non "OS"), dans le fichier de configuration ///etc/apache2/conf-available/security.conf//. S'il n'est pas présent dans la configuration, vous pouvez librement l'ajouter où il vous plaira...
+
+Il est aussi nécessaire de tester avec peu de caractères dans la signature, sous peine de rétablissement de l'ancien affichage. Pour faire vos tests, vous pouvez simplement utiliser un nom de page inexistant, qui vous menera vers un code d'erreur 404, ce qui aura pour finalité d'afficher votre signature telle que les pirates la verront.
+
+===== Journalisation (log) =====
+
+Deux fichiers de logs sont présents à l'activation de l'application:
+  * ///var/log/apache2/modsec_audit.log// - **Audit Log** : Permet un audit approfondi de chaque requête, avec tous les éléments nécessaires, classés selon le type de données (type d'header, pattern détecté, etc...) récoltée.
+  * ///var/log/apache2/modsec_debug.log// - **Debug Log** :  Permet un affichage bien plus condensé des informations, en ne gardant que les plus essentielles. Utile pour retrouver une requête bloquée sur un serveur en production.
+
+Les paramètres de la journalisation sont configurables dans n'importe quel fichier pris en compte par Apache.
+
+===== Règles de filtrage =====
+ 
+:!: Il faut savoir que les règles ayant été écrites pour l'application avant la version 2.5 sont désormais incompatibles. Ces règles utilisent la directive //SecFilter//, qui a été abandonnée depuis au profit de //SecRule//. Il s'agit là d'un moyen sûr d'estimer la compatibilité des règles trouvables sur la toile. En clair, vous ne pouvez pas utiliser des règles commençant par //SecFilter//.
+
+Les règles de filtrage utilisent les [[:projets/ecole/scripting/initiation_au_shell#les_expressions_regulieres|expressions régulières avancées]]. Il est ainsi alors possible de gérer énormément de possibilités de détection.
+
+Vous pouvez vous inspirer des règles présentes dans les fichiers fournis à l'installation, pour mettre en place vos propres fichiers de configuration correspondant à vos besoins. Les règles sont faites de deux éléments. Tout d'abord, la directive permet de détecter les éléments à bloquer, par le biais d'une expression régulière et un champ d'action. Ensuite, une action à effectuer après détection doit être déterminée. Elle permettra d'expliquer le comportement à adopter (deny, log...), le niveau de criticité (severity), le code d'erreur renvoyé (status) et d'autres actions optionnelles, comme par exemple la redirection à une page après détection (redirect).
+Au lieu d'écrire à chaque règle les mêmes comportement, il est conseillé d'écrire une fois pour toute en haut du fichier de configuration une ligne "SecDefaultAction" qui permettra de mettre en place un comportement par défaut, qui sera remplacé par les règles précisant de nouveaux comportements.
+Voici un exemple de ligne d'action par défaut à placer en haut du fichier pour une meilleure visibilité:
+
+<code> SecDefaultAction "log,deny,auditlog,phase:2,status:403,t:lowercase,t:replaceNulls"</code>
+
+Il est aisé de comprendre le comportement de cette action par défaut, pouvant elle même être concaténée d'autres actions selon le besoin.
+
+Voici deux exemples de commandes simples pour appréhender la puissance du moteur de modsecurity.
+
+* **Détection Antispam** : 
+<code>SecRule ARGS "(test)?[ \.-_]+detection" \
+"deny,severity:2,msg:'Spam',redirect:http://yourdomain/blocked.html"</code>
+
+Cette règle aura le rôle de bloquer toute tentative d'écriture (que ce soit par le biais des champs de recherche, d'envoi de commentaire, etc...) faisant appel aux mots clés "test detection", "test_detection", "detection", mais pas du mot "test" utilisé seul. On s’aperçoit alors du nombre de possibilités permises par l'utilisation d'expressions régulières.
+
+* **Mise en œuvre d'une Liste Noire** : 
+<code>SecRule ARGS "@pmFromFile /etc/modsecurity/blacklist.txt" \
+"deny,severity:2,msg:'Blacklisted',redirect:http://yourdomain/blocked.html"</code>
+
+Cette règle permet de bloquer tout mot correspondant aux mots inclus dans le fichier spécifié. Il s'agira là d'une liste noire avec un mot par ligne. Il peut s'agir bien entendu de noms de domaine, ou de fichiers critiques ne devant pas être accessibles.
+
+Dans ces deux cas, le comportement comprend la redirection de la page courante à la page blocked.html. Cette page doit bien entendu être accessible depuis Internet. Elle peut par exemple contenir un message expliquant la raison du blocage.
+
+
+===== Désinstallation =====
+
+Il suffit de désinstaller le paquet. Les fichiers de configuration ajoutés par l'utilisateur dans /etc/modsecurity/ seront conservés.
+
+===== Voir aussi =====
+ 
+  * **(en)** [[http://www.modsecurity.org|Site officiel du logiciel]]
+  * **(en)** [[http://sourceforge.net/apps/mediawiki/mod-security/index.php?title=Reference_Manual|Manuel de référence]]
+  * **(en)** [[http://www.gotroot.com/mod_security+rules|Règles de filtrage à télécharger]]
+  * **(fr)**  [[http://www.it-connect.fr/installation-de-mod_security-devant-un-serveur-web-apache/|Installation et configuration de mod_security devant Apache ]]sur IT-Connect
+ 
+----
+//Contributeurs principaux : [[utilisateurs:Amarokk|Guillaume Fenollar]], et bientôt vous?

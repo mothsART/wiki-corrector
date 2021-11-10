@@ -1,0 +1,365 @@
+
+{{tag>réseau nfs tutoriel}}
+
+----
+
+====== Un simple partage NFS ======
+
+Ce tutoriel propose une méthode qui se veut la plus simple possible pour accéder à distance aux documents enregistrés sur un ordinateur à partir d'un autre en utilisant [[:nfs|le protocole NFS]].
+
+
+
+===== Pré-requis =====
+
+
+==== Deux ordinateurs fonctionnant avec GNU/Linux ====
+
+**Serveur** sur lequel se trouvent les fichiers à partager, et **Client** qui doit pouvoir accéder aux fichiers de Serveur.
+<note>
+N'importe quel ordinateur peut être [[:serveur|serveur ou client]], ou les deux.
+</note>
+
+==== Avoir les droits d'administration sur les deux machines ====
+
+[[:sudo|Voir ici de quoi il est question et en particulier la commande « sudo »]].
+
+==== Ne pas avoir peur de la ligne de commande ====
+
+[[:terminal|Voir ici les bases du terminal]].
+
+==== Connaître les adresses IP locales de Serveur et de Client ====
+
+<note>
+Dans le terminal lancer « ifconfig », l'adresse est à la ligne « ''inet adr:'' », paragraphe « ''eth'' (ou enp2s0 ou enp3s0 ou enpxxxxx ) » si vous êtes connecté en Ethernet, « ''wlan''  ou "wlpxxx" » pour une connexion Wi-Fi.
+</note>
+
+Pour la suite de cet exemple, on considérera que Serveur et Client ont une adresse locale fixe :
+  * Serveur : **192.168.1.1**
+  * Client : **192.168.1.2**
+
+<note>
+On peut fixer l'IP locale
+  * Soit à partir de l'interface du routeur / de la *box. Ouvrez Firefox, et tapez dans la barre d'adresse celle donnée dans le mode d'emploi du routeur / de la *box (le login et le mot de passe y sont aussi). [[:modem_adsl_routeur_et_box|Plus d'infos]]. 
+  * Soit directement d'[[http://forum.ubuntu-fr.org/viewtopic.php?pid=1152502#p1152502|Ubuntu]] .
+</note>
+
+==== Se faire un aide-mémoire ====
+
+<note important>
+Pour la suite du tutoriel, les commandes seront données avec des informations fictives (en gras dans le tableau ci-dessous), vous les remplacerez par les données réelles de vos machines.
+</note>
+Serveur : 192.168.1.1
+^ Les machines        ^ IP locales              ^ Points de montage des fichiers                                ^
+| **alain-pc**         | **192.168.1.12**         | **/home/alain/partage**                          |
+
+| **m-therese-pc**          |** 192.168.1.15**         | **/home/m-therese/partage**                              |
+
+
+
+
+==== Installer NFS ====
+
+
+[[:tutoriel:comment_installer_un_paquet|Installer les paquets]] :
+  * Pour Serveur, **[[apt>nfs-kernel-server]]** et **[[apt>nfs-common]]**.
+  * Pour Client, seulement **[[apt>nfs-common]]**.
+=====Étape 1 - Serveur donne à Client le droit de lire et écrire sur ses fichiers=====
+
+
+Sur Serveur donc, il faut [[:tutoriel:comment_modifier_un_fichier|ouvrir ou créer]] le fichier **/etc/exports** et y saisir cette ligne :
+
+<file>
+# Dossier partagé :
+/Fichiers_à_partager_sur_Serveur/ 192.168.1.2(rw,all_squash,anonuid=1000,anongid=1000,sync)
+</file>
+
+
+[[:nfs#declaration_de_l_export_nfs|Explications sur les options de cette commande.]]
+
+__Attention : l'IP://192.168.1.2// est celle du client autorisé à recevoir le partage__
+
+<note important> 
+Ceci donne l'accès complet aux fichiers de Serveur, ce qui veut dire que Client (ou l'humain qui l'utilise) peut supprimer définitivement ce qu'il veut.
+
+Pour ne donner l'accès qu'en lecture seule, il suffit de supprimer l'option **//rw//** de **///etc/exports//**.
+</note>
+
+<note idée>Vous pouvez donner le droit d’accès à votre dossier à tous les postes d'un même réseau en utilisant cette configuration:
+  /Fichiers_à_partager_sur_Serveur/ 192.168.0.0/255.255.0.0(rw,all_squash,anonuid=1000,anongid=1000,sync)
+</note>  
+  
+<note>A noter que pour avoir les accès complets (lecture et écriture) sur tous les postes du réseau, il faut que les utilisateurs possèdent le même uid (ici 1000). Un fichier créé avec un uid utilisateur 1001 sera en lecture seule pour tous les utilisateurs du réseau ayant un uid différent, y compris pour les administrateurs.
+</note>
+
+<note>
+Il est également possible de sélectionner les dossiers à partager :
+  * [[:tutoriel:partage_nfs#creation_des_repertoires_partages|En créant un répertoire /home/agora et en y enregistrant les fichiers à partager.]]
+  * Ou en créant autant de lignes dans le fichier ///etc/exports// de Serveur que de dossiers à partager et en adaptant en conséquence la configuration de Client.
+</note>
+
+Il faut ensuite démarrer le serveur NFS (toujours sur Serveur) :
+
+  sudo /etc/init.d/nfs-kernel-server start
+
+<note>
+Si vous modifiez le fichier « /etc/exports » n'oubliez pas de relancer le serveur NFS par la commande suivante :
+  sudo /etc/init.d/nfs-kernel-server restart
+</note>
+
+
+
+=====Étape 2 - Client se prépare à recevoir les fichiers de Serveurs=====
+
+
+==1. D'abord créer un répertoire sur Client où vont s'installer les fichiers de Serveur :==
+
+  sudo mkdir /Point_de_montage_sur_Client
+
+[[:tutoriel:console_commandes_de_base#mkdir|Plus d'infos sur la commande mkdir.]]
+
+Par exemple :
+  sudo mkdir /home/Nom_d'Utilisateur_sur_le_Client/Partage
+
+
+
+==2. Ensuite déterminer ce répertoire comme point de montage sur Client :==
+
+
+[[:mount_fstab|Présentation de la notion de point de montage et du fichier fstab et ses options.]]
+
+
+[[:tutoriel:comment_modifier_un_fichier|Ajoutez]] cette ligne au fichier **/etc/fstab** de Client :
+
+<note warning> **Attention** :
+
+Le fichier //fstab// est un fichier très important pour le bon fonctionnement de votre ordinateur.
+
+Prenez bien soin d'ajouter simplement la ligne suivante (en l'adaptant) en bas du fichier **sans modifier ce qu'il contient déjà**.
+</note>
+
+<file>
+192.168.1.1:/Fichiers_à_partager_sur_Serveur   /Point_de_montage_sur_Client   nfs    user,noauto    0   0
+</file>
+
+L'option **//noauto//** interdit le montage automatique.
+L'option **//user//** autorise tous les utilisateurs à procéder au montage.
+
+
+Les options sont à choisir en fonction du mode d'accès souhaité pour le partage : [[:/tutoriel/console_commandes_de_base#mount|liste et usage des options de montage]].
+
+<note important>
+
+Dans le cadre de ce tutoriel, les options **//noauto//** et **//user//** sont obligatoires pour l'automatisation du montage à l'ouverture de la session, telle que détaillée dans un prochain chapitre.
+
+</note>
+
+
+<note important>
+Pour les versions 12.04 et supérieure, pensez à bien écrire les chemins du point de montage exactement comme c'est indiqué (sans les / à la fin). Pour les versions antérieures, les deux syntaxes sont possibles: 
+
+192.168.1.1:/Fichiers_à_partager_sur_Serveur     /Point_de_montage_sur_Client
+
+ou
+
+
+192.168.1.1:/Fichiers_à_partager_sur_Serveur/    /Point_de_montage_sur_Client/
+
+
+</note>
+=====Étape 3 - Serveur règle la sécurité du partage=====
+
+
+==1. D'abord interdire tout :==
+
+Sur Serveur donc, [[:tutoriel:comment_modifier_un_fichier|ouvrez ou créez]] le fichier **/etc/hosts.deny**, et copiez-y ces lignes :
+
+<file>
+# Tout interdire sur  portmap, nfsd et mountd
+portmap:ALL
+nfsd:ALL
+mountd:ALL
+</file>
+
+==2. Ensuite autoriser les échanges voulus :==
+
+Toujours sur Serveur, [[:tutoriel:comment_modifier_un_fichier|ouvrez ou créez]] le fichier **/etc/hosts.allow**, et enregistrez-y ces lignes (en adaptant bien sûr les IP) :
+
+<file>
+#Autoriser ce client à se connecter aux services (essentiellement : portmap, nfsd et mountd) :
+portmap: 192.168.1.2
+lockd: 192.168.1.2
+nfsd: 192.168.1.2
+mountd: 192.168.1.2
+rquotad: 192.168.1.2
+statd: 192.168.1.2 </file>
+
+<note>
+Il est possible d'autoriser plusieurs clients,
+  * En définissant une plage, par exemple : ''192.168.0.0/192.168.0.20''
+  * En listant les IP locales autorisées (séparées par des espaces), comme par exemple : ''192.168.0.1 192.168.0.3 192.168.0.8''
+  * Ou encore en utilisant la syntaxe ''192.168.'' qui autorise toutes les machines dont l'IP locale commence par 192.168. à se connecter.
+</note>
+
+Remarque : certaines installations (debian squeeze par exemple) limitent les accès portmap en local. Pour modifier cette configuration : dpkg-reconfigure portmap
+
+=====Étape 4 - Client automatise l'accès aux fichiers de Serveurs=====
+
+<note important>
+Pour que le montage de ///Point_de_montage_sur_Client// fonctionne, il faut bien sûr que Serveur soit allumé et que Client et Serveur soient connectés.
+</note>
+
+
+Sur Client donc, [[:/tutoriel/comment_modifier_un_fichier|créez]] le fichier **/usr/bin/Monter_le_partage_NFS** (où //Monter_le_partage_NFS// peut être remplacé par ce que vous voulez), et enregistrez-y ces lignes :
+
+<file>
+#!/bin/bash
+sleep 15
+mount /Point_de_montage_sur_Client
+</file>
+N'oubliez pas de rendre ce fichier exécutable, via l'interface graphique ou en ligne de commande dans un terminal:
+
+<file>
+$ sudo chmod 755 /usr/bin/Monter_le_partage_NFS
+</file>
+
+<note>
+La commande **//sleep//** sert à retarder l'action, de manière à ce que la connexion de Client ait le temps de s'activer, ce qui peut être pertinent, en particulier dans le cas d'une connexion sans fil.
+
+[[wpfr>Sleep_(Unix)|Vous pouvez adapter la valeur.]]
+</note>
+
+FIXME Pour que le montage soit vraiment automatique il suffit d'ajouter la commande ''/usr/bin/Monter_le_partage_NFS'' aux programmes qui sont lancés automatiquement à l'ouverture de session. Ce qui se fait en mode graphique de manières différentes selon les versions d'Ubuntu. À chercher donc dans les préférences du système ou de la session de Client.
+
+**Pour Lubuntu**
+
+<file>
+sudo leafpad /etc/xdg/lxsession/Lubuntu/autostart
+</file>
+
+Puis ajouter la ligne :
+
+<file>
+@/usr/bin/Monter_le_partage_NFS
+</file>
+
+** Pour Xubuntu**
+
+Allez dans le Gestionnaires de paramètres → Sytème / Session et démarrage → onglet Démarrage automatique → Ajouter
+
+Remplissez les champs ainsi :
+
+. Nom = Ce_que_vous_voulez
+
+
+. Description = //optionnel//
+
+
+. Commande = usr/bin/Monter_le_partage_NFS 
+
+
+Validez et au prochain démarrage, le partage doit se monter automatiquement.
+
+**Pour tous**
+
+Il existe aussi la possibilité d'utiliser [[:autofs|autofs.]]
+
+
+=====Résolution de problèmes====
+
+
+==1. La première chose à faire est de vérifier si vous avez bien suivi ce tuto sans faire d'erreur.==
+
+En particulier dans les fichiers de configuration qui sont [[wpfr>Sensible_à_la_casse|sensibles à la casse]].
+
+<note tip>
+C'est le moment de ressortir le pense-bête pour pointer toutes les actions, en reprenant pas à pas le tuto.
+</note>
+
+Quelques questions à se poser pour guider sa recherche d'erreur :
+
+  * N'ai-je pas oublié une majuscule ?
+  * N'y a-t-il pas eu échange de rôle entre Client et Serveur (//cause fréquente d'erreurs//) ?
+  * Ai-je bien mis tous les points des adresses IP ?
+  * N'ai-je pas échangé un 0 pour un 1 dans cette IP-là ?
+  * Ne manque-t-il pas une espace ici ?
+
+
+==2. Relancer le serveur NFS de Serveur.==
+
+//**À faire sur Serveur**//
+
+  sudo service nfs-kernel-server restart
+
+Si vous obtenez une erreur faites une recherche avec le message sur [[http://forum.ubuntu-fr.org/search.php|le forum Ubuntu.]]
+
+Vous pouvez ignorer un message de type :
+<file> exportfs: /etc/exports [1]: Neither 'subtree_check' or 'no_subtree_check' specified for export "192.168.1.2:/Fichiers_à_partager_sur_Serveur/ </file>
+il n'indique rien qui empêcherait le bon fonctionnement.
+
+
+==3. Vérifier si Client a bien accès aux fichiers de Serveur.==
+
+//**À faire sur Client**//
+
+  showmount -e 192.168.1.1
+
+Cette commande doit retourner quelque chose comme :
+
+<file>
+Export list for 192.168.1.1:
+/home/Fichiers_à_partager_sur_Serveur 192.168.1.2
+</file>
+
+Sinon vérifier tout particulièrement les fichiers « /etc/exports » et « /etc/hosts.allow » de Serveur.
+
+
+==4. Tester manuellement le montage sur Client.==
+
+//**À faire sur Client**//
+
+
+Lancez cette commande :
+
+  sudo mount -t nfs -o rw 192.168.1.1:/Fichiers_à_partager_sur_Serveur /Point_de_montage_sur_Client
+
+Si vous n'obtenez pas de message d'erreur, c'est que le montage se fait bien manuellement.
+Vérifier tout particulièrement les fichiers « /etc/fstab » et « /usr/bin/Monter_le_partage_NFS » de Client.
+Si vous obtenez une erreur, faites une recherche avec le message sur [[http://forum.ubuntu-fr.org/search.php|le forum Ubuntu.]]
+
+==5. Configurer le pare-feu.==
+
+Il arrive que sur certaines configurations, le pare-feu bloque les échanges nécessaires au bon fonctionnement de NFS. Cela ne devrait pas être le cas sur Ubuntu, sauf si vous avez personnalisé les règles du pare-feu. Cela peut également provenir du routeur (*box).
+
+Dans ces deux cas, [[http://smhteam.info/wiki/index.linux.php5?wiki=NFS#4-0-0|voici ce qu'il vous faut paramétrer.]]
+
+[[:modem_adsl_routeur_et_box|Et ici de l'aide pour configurer sa *box.]]
+
+
+==6. Ubuntu 16.04 ne réussis pas à s'arreter.==
+
+La version 16.04 a une petite anomalie sur client NFS. Si un dossier partagé est monté avant d’arrêter ou de redémarrer le client, alors la machine ne s’arrêtera pas. Il faut démonter les dossiers partagés avant.
+Voir ce sujet sur le forum pour la solution, qui utilise un script exécuté à l’arrêt pour démonter les dossiers partagés : [[https://forum.ubuntu-fr.org/viewtopic.php?pid=21746217#p21746217|lien forum]]
+
+==7. Demander de l'aide.==
+
+Si, malgré tout, votre partage NFS ne fonctionne toujours pas, vous pouvez [[http://forum.ubuntu-fr.org/viewtopic.php?id=2662|demander de l'aide sur le forum]], en suivant ces [[http://forum.ubuntu-fr.org/misc.php?action=rules|règles]] pour avoir de meilleures chances d'être secouru.
+
+<note>
+Dans le cas précis d'un problème avec NFS, donnez :
+  * Les IP du client et du serveur (précisez si elles sont fixes), le dossier à partager du serveur et le point de montage du client.
+  * Donnez en priorité le résultat des commandes qui aboutissent à des erreurs.
+  * Donnez également le contenu des fichiers ///etc/exports//, ///etc/hosts.deny// et ///etc/hosts.allow// de votre serveur, et le fichier ///etc/fstab// de votre client.
+</note>
+
+
+=====Et pour aller plus loin====
+
+Vous pouvez avoir envie de créer un partage NFS plus complexe :
+  * Par exemple décider que Serveur puisse aussi accéder aux fichiers de Client. Dans ce cas, il suffit de suivre ce même tuto en échangeant simplement les rôles ;-).
+  * Ou bien [[:tutoriel/partage_nfs| faire un partage symétrique entre trois machines linux]].
+
+D'autres informations encore [[:nfs?rev=1258038788|sur cette ancienne page de documentation Ubuntu.]]
+
+----
+
+//Contributeurs principaux : [[:utilisateurs:ploom|Pl°°m]], [[:utilisateurs:Missoire]].//

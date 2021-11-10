@@ -1,0 +1,80 @@
+
+{{tag>radio webradio}}
+
+====== LiquidSoap ======
+
+LiquidSoap est un logiciel qui permet d'automatiser votre Radio/Webradio
+
+===Pré-requis===
+
+Un serveur Icecast/Shoutcast.
+
+=== Installation ===
+
+<code>
+sudo apt-get install liquidsoap*
+</code>
+
+Une fois installé il vous faut créer un dossier avec les musiques, un autre avec les jingles et y déposer vos fichier .mp3
+
+Liquidsoap n'a pas de fichier de configuration propre pour votre radio, tout fonctionne via un script que vous pouvez soit taper manuellement dans un terminal (Fastidieux) soit dans un fichier .liq (Fichier script propre à liquidsoap)
+
+Voici un exemple de fichier de script qui couvre presque 90% des besoins d'une webradio dite "classique"
+
+<code>
+#!/usr/bin/liquidsoap
+# FICHIER DE LOG
+set("log.file.path","/tmp/basic-radio.log")
+
+# Musique (repertoire ou se trouve les musiques)
+myplaylist = playlist("/home/votreUtilisateur/Musiques/")
+
+# Ajout des jingles (Repertoire ou se trouve les jingles)
+jingles = playlist("/home/votreUtilisateur/Jingles/")
+
+# Si il y a un probleme alors on lance la musique ci-dessous
+security = single("/home/votreUtilisateur/Musiques/musique.mp3")
+
+# On creer une variable radio
+radio = myplaylist
+
+# On y ajoute les jingles
+radio = random(weights = [1, 4],[jingles, radio])
+
+# Et la securite
+radio = fallback(track_sensitive = false, [radio, security])
+
+# On creer une ecoute d'un live, si il y a du son il sera diffuse sinon la playlist reste en lecture
+live = fallback(track_sensitive=false,
+[input.http("http://localhost:8000/live"),
+radio])
+
+# On lance une ecoute pour voir si il y a un blanc pendant le live, si c'est le cas la playlist se relance
+stream = fallback(track_sensitive=false,
+[ strip_blank(max_blank=5.,live) , radio ])
+
+# Information de diffusion
+output.icecast(%mp3(bitrate=128),
+host = "127.0.0.1", port = 8000, 
+name = "Nom de la radio", description = "Description de la radio", genre = "Style", url = "Adresse de la radio",
+password = "Mot de passe", 
+mount = "listen", stream)
+</code>
+
+Pour lancer ce fichier vous ne devez pas être en mode root mais juste en tant q'utilisateur classique, voici la commande:
+<code>
+screen -S Radio
+liquidsoap radio.liq
+</code>
+
+Vous pouvez maintenant fermer le terminal liquidsoap diffuse bien sur le serveur paramétré
+
+A savoir:
+Sur ce script liquidsoap lance automatiquement la playlist, mais il garde une écoute sur le seconf flux (A savoir live.mp3) si il y a du son il coupera la playlist pour vous laisser prendre le direct.
+Si par contre il n'y a aucun son pendant 5 seconde il relancera la playlist
+
+Voilà bonne musique à vous ;)
+
+Site officiel: http://savonet.sourceforge.net
+
+Rédacteur: Jérémy C.

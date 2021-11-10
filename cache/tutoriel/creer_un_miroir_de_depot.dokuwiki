@@ -1,0 +1,434 @@
+
+{{tag>bionic tutoriel dépôts}}
+
+----
+
+====== Administration Système : Comment créer un miroir de dépôt sur un support USB ou via un serveur web ======
+La création d'un miroir pour les paquets accessibles par votre gestionnaire de paquets va vous permettre de créer et de maintenir la copie conforme de dépôts (officiels ou non) en local. La raison principale est de ne plus avoir besoin de connexion vers le net pour pouvoir installer un paquet ou bien faire des mises à jour. C'est donc une solution pratique et efficace pour une //install party//, la mise à jour d'un parc de machines (dans ce cas le miroir peut être couplé avec un serveur, un proxy, etc.) ou, pour en finir, la mise à jour ou l'installation chez une personne ne disposant pas d'une connexion vers le net, ou dont la connexion est trop lente. Cela est particulièrement utile pour certains pays africains avec un faible accès à internet et permet d'y vulgariser facilement Linux.
+
+Ce n'est donc pas une procédure à prendre à la légère, car vous allez aspirer complètement le contenu d'un ou plusieurs dépôts et les stocker dans un dossier. Ce dossier peut être sur un disque dur interne ou externe et il vous faudra une connexion internet conséquente. Pour l'exemple, toute une nuit à été nécessaire pour aspirer les plus de 100 Gio (sans les sources) des dépôts officiels pour la [[:bionic|18.04]]. Après cela vous pourrez installer une Ubuntu 16.04 sur un PC sans accès à Internet, le mettre à jour et ajouter n'importe quel paquet et ses dépendances du moment qu'il existe sur les dépôts officiels.
+
+<note>Si votre but n'est que de partager des paquets que vous avez déjà téléchargés, il vous faut regarder du coté de //apt-cacher//.</note>
+
+===== Installation de « apt-mirror » ======
+//Apt-mirror// est le logiciel qui vous permet de créer le miroir des dépôts, pour l'utiliser c'est très simple, il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>apt-mirror]]**.
+
+===== Préparation de votre sauvegarde =====
+Dans l'exemple qui suit, vous allez configurer un disque dur usb. Mais un autre emplacement est possible tant que vous en connaissez le chemin complet. Cela peut donc être un simple dossier dans votre compte utilisateur. Suivez les étapes suivantes:
+  * Avec [[:gparted]] par exemple, commencez par créer une partition en //ext4// sur votre disque, et donnez-lui l'étiquette //Depots//. Respectez bien la casse. Pensez à créer une partition avec une taille suffisamment grande pour recevoir tous les dépôts,
+  * Une fois la partition créée monter votre disque, et donnez-lui les droits comme suit: <code>sudo chown $USER /media/$USER/Depots</code>
+  * Créez un dossier //miroir// sur le disque //Depots//, avec cette commande par exemple: <code>mkdir /media/$USER/Depots/miroir</code>
+  * Dans celui-ci, nous avons besoin de créer 3 sous-dossiers afin que //apt-mirror// puisse fonctionner :<code>mkdir -p /media/$USER/Depots/miroir/{mirror,skel,var}</code>. Ces répertoires peuvent être tout aussi bien créés en utilisant [[:Nautilus]] et sa possibilité de créer des dossiers.
+
+  
+===== Configuration de « apt-mirror » =====
+Par défaut, //apt-mirror// utilise son propre fichier de configuration : **/etc/apt/mirror.list**.
+
+Soit vous modifiez ce fichier, ce qui me semble être la bonne solution dans le cas d'un serveur, soit vous en créez un nouveau que vous sauvegarderez dans votre miroir. Il vous faudra néanmoins dans ce cas, spécifier à //apt-mirror// d'utiliser votre propre fichier de configuration comme ceci : <code>sudo apt-mirror /media/$USER/Depots/miroir/apt-mirror-configuration</code>
+
+
+==== Création du fichier de configuration ====
+Tout d'abord copiez le fichier original dans votre répertoire : <code>sudo cp /etc/apt/mirror.list /media/$USER/Depots/miroir/apt-mirror-configuration</code>
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] « /media/$USER/Depots/miroir/apt-mirror-configuration » (votre fichier de configuration) afin que celui-ci contienne :
+<file>
+############# config ##################
+#
+set base_path /media/$USER/Depots/miroir
+## Dans le cas d'un serveur web gardez le chemin par défaut (celui qui suit) ##
+#set base_path    /var/spool/apt-mirror
+# if you change the base path you must create the directories below with write privileges
+#
+set mirror_path  $base_path/mirror
+set skel_path    $base_path/skel
+set var_path     $base_path/var
+set cleanscript $var_path/clean.sh
+## set defaultarch xxxx (votre architecture i386/hppa/powerPC/ia64...)
+set defaultarch  i386
+set postmirror_script $base_path/postmirror.sh
+set run_postmirror 0
+set nthreads     10
+set _tilde 0
+#
+############# end config ##############
+
+######################################################
+##        UBUNTU VERSION Bionic Beaver - 18.04      ##
+##                i386 - 32bits                     ##
+######################################################
+
+##  Dépôts officiels  ##
+deb http://fr.archive.ubuntu.com/ubuntu bionic main restricted
+deb http://security.ubuntu.com/ubuntu bionic-security main restricted
+
+## Major bug fix updates produced after the final release of the
+## distribution.
+deb http://fr.archive.ubuntu.com/ubuntu bionic-updates main restricted
+
+##  Dépôts Universe et Multiverse  ##
+deb http://fr.archive.ubuntu.com/ubuntu/ bionic universe
+deb http://fr.archive.ubuntu.com/ubuntu/ bionic-updates universe
+deb http://security.ubuntu.com/ubuntu bionic-security universe
+deb http://fr.archive.ubuntu.com/ubuntu/ bionic multiverse
+deb http://fr.archive.ubuntu.com/ubuntu/ bionic-updates multiverse
+deb http://security.ubuntu.com/ubuntu bionic-security multiverse
+
+##  Dépôts Backports  ##
+deb http://fr.archive.ubuntu.com/ubuntu/ bionic-backports main restricted universe multiverse
+
+## Dépôt commercial  ##
+deb http://archive.canonical.com/ubuntu bionic partner
+
+## Uncomment the following two lines to add software from Ubuntu's 'extras' repository.##
+deb http://extras.ubuntu.com/ubuntu bionic main
+
+####################################################
+##     UBUNTU VERSION bionic Beaver - 18.04       ##
+##                AMD-64 - 64bits                 ##
+####################################################
+
+##  Dépôts officiels  ##
+deb-amd64 http://fr.archive.ubuntu.com/ubuntu/ bionic main restricted
+deb-amd64 http://security.ubuntu.com/ubuntu bionic-security main restricted
+
+## Major bug fix updates produced after the final release of the
+## distribution.
+deb-amd64 http://fr.archive.ubuntu.com/ubuntu/ bionic-updates main restricted
+
+##  Dépôts Universe et Multiverse  ##
+deb-amd64 http://fr.archive.ubuntu.com/ubuntu/ bionic universe
+deb-amd64 http://security.ubuntu.com/ubuntu bionic-security universe
+deb-amd64 http://fr.archive.ubuntu.com/ubuntu/ bionic-updates universe
+deb-amd64 http://fr.archive.ubuntu.com/ubuntu/ bionic multiverse
+deb-amd64 http://security.ubuntu.com/ubuntu bionic-security multiverse
+deb-amd64 http://fr.archive.ubuntu.com/ubuntu/ bionic-updates multiverse
+
+##  Dépôts Backports  ##
+deb-amd64 http://fr.archive.ubuntu.com/ubuntu/ bionic-backports main restricted universe multiverse
+
+## Dépôt commercial  ##
+deb-amd64 http://archive.canonical.com/ubuntu bionic partner
+
+## Uncomment the following two lines to add software from Ubuntu's 'extras' repository.##
+deb-amd64 http://extras.ubuntu.com/ubuntu bionic main
+
+####################################################
+##     UBUNTU VERSION Bionic Beaver - 18.04       ##
+##               Sources                          ##
+####################################################
+
+#deb-src http://fr.archive.ubuntu.com/ubuntu/ bionic main restricted
+#deb-src http://fr.archive.ubuntu.com/ubuntu/ bionic-updates main restricted
+#deb-src http://fr.archive.ubuntu.com/ubuntu/ bionic universe
+#deb-src http://fr.archive.ubuntu.com/ubuntu/ bionic-updates universe
+#deb-src http://fr.archive.ubuntu.com/ubuntu/ bionic multiverse
+#deb-src http://fr.archive.ubuntu.com/ubuntu/ bionic-updates multiverse
+#deb-src http://fr.archive.ubuntu.com/ubuntu/ bionic-backports main restricted universe multiverse
+#deb-src http://security.ubuntu.com/ubuntu bionic-security main restricted
+#deb-src http://security.ubuntu.com/ubuntu bionic-security universe
+#deb-src http://archive.canonical.com/ubuntu bionic partner
+#deb-src http://extras.ubuntu.com/ubuntu bionic main
+
+
+############# clean ##############
+
+clean http://fr.archive.ubuntu.com/ubuntu/ bionic
+clean http://security.ubuntu.com/ubuntu bionic-security
+clean http://archive.canonical.com/ubuntu bionic
+clean http://extras.ubuntu.com/ubuntu bionic
+</file>
+
+
+Les lignes dont vous devez vous soucier sont :
+<file>set base_path /media/$USER/Depots/miroir</file>
+Elle est à adapter à votre cas. Si vous utilisez un serveur apache, gardez le chemin par défaut:<file>
+set base_path    /var/spool/apt-mirror</file>
+
+Cette ligne : <file>set defaultarch i386</file> précise que je ne désire récupérer que les paquets pour l'architecture i386. (Par défaut identique à l'architecture de la machine)
+
+Si vous voulez avoir plusieurs architectures dans votre miroir il suffit de le préciser dans les dépôts. Le fichier // apt-mirror-configuration// qui suit contient dépôts pour les architecture 32 et 64 bits. Les sources sont aussi présentes, elles ne seront téléchargées que si vous décommenter les lignes où vous avez //deb-src// (enlever les #).
+Quelques explications : **deb** seul revient à dire deb-i386, car c'est l'architecture de base dans la configuration, tandis que pour les autres, il faut le déclarer avec **deb-amd64** deb-'autre-architecture'.
+
+Viennent ensuite les lignes qui précisent quels sont les dépôts dont je souhaite faire une copie. Ces lignes sont celles par défaut pour l'installation d'une bionic, libre à vous de les modifier et/ou d'en ajouter. Il faudra cependant en tenir compte lors de l'intégration de votre miroir (voir la section « Utilisation de votre miroir »).
+Les lignes qui suivent la section "clean" vous permettront de supprimer les paquets obsolètes de votre miroir, il faut les rentrer pour chaque adresse voulue (idéalement toutes). Il faudra par la suite lancer le script //clean.sh// présent dans le dossier où sont téléchargé les paquets (dossier miroir) pour la suppression, ou bien passer par le script postmirror.sh (à créer). Toutes ces informations sont détaillées sur la sortie du terminal.
+
+Sauvegardez votre fichier. En principe dans «// /media/$USER/Depots/miroir// ».
+
+===== Récupération des paquets =====
+Lancez la création de votre miroir par :<code>sudo apt-mirror /media/$USER/Depots/miroir/apt-mirror-configuration</code>
+
+Rappellez-vous que si vous ne passez pas de fichier de configuration à la commande //apt-mirror//, c'est celui par défaut qui sera utilisé (« /etc/apt/mirror.list »), comme pour un serveur web avec apache, la commande est alors celle-ci:
+<code>su - apt-mirror -c apt-mirror</code>
+
+  * Dans un premier temps //apt-mirror// récupère la liste du contenu des miroirs demandés.
+  * Dans un second temps //apt-mirror// vous indique la taille totale des paquets qu'il lui faut télécharger (dans notre fichier d'exemple cela représente environ 100 Gio pour les dépôts officiels bionic sans les sources). Voilà ce que vous verrez dans votre [[:terminal]]: <code>
+ubuntu@ubuntu:~$ sudo apt-mirror /media/Depots/bionic/apt-mirror-config
+[sudo] password for ubuntu:
+Downloading 144 index files using 10 threads...
+Begin time: Tue Jun 24 10:29:28 2014
+[10]... [9]... [8]... [7]... [6]... [5]... [4]... [3]... [2]... [1]... [0]...
+End time: Tue Jun 24 10:29:34 2014
+
+Proceed indexes: [PPPPPPPPPPPPPPPPPPPPPPPP]
+
+90.8 GiB will be downloaded into archive.
+Downloading 63505 archive files using 10 threads...
+Begin time: Tue Jun 24 10:31:16 2014
+[10]... [9]... [8]... [7]... [6]... [5]... [4]... [3]... [2]... [1]... [0]...
+End time: Thu Jun 26 08:54:50 2014
+
+93.9 MiB in 267 files and 0 directories can be freed.
+Run /media/Depots/bionic/clean.sh for this purpose.</code>
+  * Vous pouvez aller boire plusieurs cafés, même manger et dormir… à moins de disposer d'une connexion de folie. ;-)
+
+Si vous voulez surfer sur le net en même temps vous devriez installer [[:qos#|wondershaper]] sur votre miroir.
+
+Vous pouvez également ajouter:<code> set limit_rate 500k</code> à votre fichier de configuration de apt-mirror
+
+Si vous passez par un proxy et que vous obtenez le message :
+<code>Proceed indexes: [Psh: cannot open archive.ubuntu.com/ubuntu//dists/bionic/main/binary-i386/Packages.gz: No such file
+  apt-mirror: can't open index in proceed_index_gz at /usr/bin/apt-mirror line 390.</code>
+Veuillez vérifier les lignes suivantes dans le fichier **wgetrc**:<code> vi /etc/wgetrc</code>
+<file>
+  http_proxy ==/pre>
+</file>
+
+===== Utilisation de votre miroir =====
+
+==== Directement ====
+Vous avez donc un disque dur externe contenant un miroir de nos dépôts préférés.  Comment le faire prendre en compte par le système afin que celui-ci utilise votre  miroir plutôt qu'en passant par le net ?
+
+Il faut modifier le fichier de configuration des sources du système (« /etc/apt/sources.list ») afin de lui indiquer d'utiliser notre miroir.
+Pour ce faire nous allons ouvrir un terminal et :
+  * Faites une sauvegarde de ce fichier :<code>sudo cp /etc/apt/sources.list /etc/apt/sources.list.ORIGINAL</code>
+  * [[:tutoriel:comment_editer_un_fichier|Ouvrez le fichier]] « /etc/apt/sources.list ».
+  * Supprimez-en tout le contenu,
+  * Ajoutez (en remplaçant //$USER// par votre nom d'utilisateur) :<file>
+deb file:/media/$USER/Depots/miroir/mirror/archive.ubuntu.com/ubuntu/ bionic main restricted multiverse universe
+deb file:/media/$USER/Depots/miroir/mirror/archive.ubuntu.com/ubuntu/ bionic-updates main restricted multiverse universe
+deb file:/media/$USER/Depots/miroir/mirror/archive.ubuntu.com/ubuntu/ bionic-security main restricted multiverse universe
+deb file:/media/$USER/Depots/miroir/mirror/archive.ubuntu.com/ubuntu/ bionic-backports main restricted universe multiverse
+</file>Ces 4 lignes sont celles des dépôts officiels, se trouvant dans le fichier de configuration de //apt-mirror// (« /media/$USER/Depots/miroir/apt-mirror-configuration »). Vous pouvez aussi ajoutez les autres dépôts, en respectant bien le chemin. 
+  * Sauvegardez votre fichier.
+  * Mettez à jour votre système de gestion de paquet :<code>sudo apt-get update</code>
+  * Désormais votre système utilise uniquement votre miroir. Vous pouvez donc faire vos manipulations, installations ou mises à jour de la manière dont vous le souhaitez.
+
+==== À distance, en passant par un serveur ====
+=== Côté serveur ===
+Un petit serveur HTTP vous suffit pour ce que vous avez à faire, inutile d'installer et configurer une artillerie lourde comme Apache2. Python est notre ami ! Cependant si vous souhaitez tout de même utiliser apache regardez [[#Par un serveur web apache|ci-dessous]].
+  * Ouvrez une [[:terminal]], placez-vous dans le dossier qui sera la racine de votre serveur: <code>cd /media/$USER/Depots/miroir/</code>
+  * Entrez la commande magique :<code>  python -m SimpleHTTPServer 80 &</code>
+  * Sous Focal Fossa (20.04) la commande est :<code> python3 -m http.server 80 &</code> 
+Le numéro en fin de commande (ici 80) est le port sur lequel tournera notre mini-serveur HTTP. Ce port doit être modifié (par exemple remplacé par 1234) si un autre serveur HTTP tourne sur la machine. 
+Sous Focal Fossa, le port par défaut est 8000.
+
+On peut tester son bon fonctionnement en se rendant sur [[http://localhost/]] si le port choisi est 80, ou sur [[http://localhost:1234/]] si le port choisi est 1234.
+On y découvre ses dossiers et fichiers présents dans le //miroir//.
+
+=== Côté client ===
+  * sauvegardez le fichier de configuration: <code>sudo cp /etc/apt/sources.list /etc/apt/sources.list.ORIGINAL</code>
+  * [[:tutoriel:comment_editer_un_fichier|Ouvrez le fichier]] « /etc/apt/sources.list » afin de le faire pointer vers notre serveur.
+Là où vous avez une ligne du style:
+<file>
+deb http://fr.archive.ubuntu.com/ubuntu/ bionic-updates main restricted multiverse universe
+</file>
+vous allez devoir remplacer l'adresse internet du serveur original par celui que vous avez spécialement installé. Si mon serveur est sur l'adresse 192.168.0.1 je modifie ma ligne et j'obtiens :
+<file>
+deb http://192.168.0.1/mirror/fr.archive.ubuntu.com/ubuntu/ bionic-updates main restricted multiverse universe
+</file>
+On fait cette manipulation pour chaque entrée ou ligne et on sauvegarde.
+<note tip>Remplacez 192.168.0.1 par 192.168.0.1**:1234** si votre serveur HTTP tourne sur le port 1234.</note>
+
+On fait prendre en compte le nouveau fichier de configuration par un :<code>sudo apt-get update</code>
+et vous voilà prêt à utiliser votre miroir et serveur local.
+
+==== Par un serveur web apache====
+La procédure est la même que [[#À distance, en passant par un serveur|ci-dessus]] à l'exception de ce qui suit. 
+=== Côté serveur ===
+Commencez par [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>apache2]]**.
+Puis créez un lien symbolique pour que le dépôt soit accessible via le serveur web :<code>ln -s /var/spool/apt-mirror/mirror/ /var/www/ubuntu</code>
+On peut tester le bon fonctionnement en se rendant via un navigateur web sur l'adresse IP de notre dépôt.
+
+===== Enlever votre miroir du système =====
+Avant de partir il vous faut restaurer la configuration initiale du système de paquet. Il vous faut donc remettre en état le système.
+  * Sauvegardez votre fichier modifié :<code>sudo cp /etc/apt/sources.list /etc/apt/sources.list.MIROIR</code>
+  * Remise en place du fichier original :<code>
+sudo rm /etc/apt/sources.list
+sudo cp /etc/apt/sources.list.ORIGINAL /etc/apt/sources.list
+</code>
+  * Prise en compte de celui-ci par le système :<code>sudo apt-get update</code>
+
+===== Mise à jour de votre miroir =====
+
+==== Manuellement ====
+Il suffit pour cela de relancer //apt-mirror// avec votre fichier de configuration et votre disque dur externe en place (ou votre miroir accessible selon le chemin indiqué dans la configuration de //apt-mirror//) :<code> apt-mirror /media/$USER/Depots/miroir/apt-mirror-configuration</code>
+
+==== Automatiquement ====
+Tout est prêt. Il suffit juste de [[:tutoriel:comment_modifier_un_fichier|décommenter une ligne dans le fichier]] **« /etc/cron.d/apt-mirror »**, pour cela on enlève le « # » de la ligne :
+<file>
+#0 4	* * *	apt-mirror	/usr/bin/apt-mirror > /var/spool/apt-mirror/var/cron.log
+</file>
+
+On ajoute le fichier de configuration si celui-ci n'est pas celui par défaut et on en profite pour modifier l'heure afin d'obtenir :
+<file>
+0 13	* * *	apt-mirror	/usr/bin/apt-mirror /media/$USER/Depots/miroir/apt-mirror-configuration > /var/spool/apt-mirror/var/cron.log
+</file>
+On sauvegarde et c'est tout. Tous les jours, à 13 heures, le miroir se mettra à jour. :-)
+
+Dans cet exemple, comme ///usr/bin/apt-mirror// est lancé en tant qu'utilisateur //apt-mirror// il faut que les répertoires du miroir soient modifiables par cet utilisateur :<code>sudo chown -R apt-mirror /media/$USER/Depots/miroir/{mirror,skel,var}</code>
+
+[[:cron|Plus d'informations sur Cron...]]
+
+===== Problèmes connus=====
+====Erreur : apt-mirror is already running====
+L'erreur suivante s'affiche dans votre terminal: <code>apt-mirror is already running, exiting at /usr/bin/apt-mirror line 187.</code>
+La solution est de supprimer le fichier ''apt-mirror.lock'': <code>rm -f /media/$USER/Depots/mirror/var/apt-mirror.lock</code>
+
+====Fichiers de traduction FR (entre autre)==== 
+
+Ce bug est répertorié sur le [[https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=932379|bug tracker]] debian en septembre 2019
+
+[[:tutoriel:comment_modifier_un_fichier|Éditer le fichier]] **/usr/bin/apt-mirror** avec les droits d'administration et aller à la ligne 523: <file bash>if ( $filename =~ m{^$component/i18n/Translation-[^./]*\.bz2$} )</file> pour la modifier comme suit: <file bash>if ( $filename =~ m{^$component/i18n/Translation-[^./]*\.(gz|bz2|xz)$} )</file>
+
+
+===== Cas d'une Install Party ou d'une installation par le réseau (netinstall) =====
+
+Dans le cas d'une Install Party, pensez à ajouter aussi les dépôts "debian-installer" nécessaires pour une [[:tutoriel:installer_ubuntu_par_internet|netinstall]]: 
+
+Pour information si vous souhaitez utiliser votre dépôt pour faire vos installation d’Ubuntu en local (netinstall) ajoutez ou ou remplacer ces lignes, pour toutes les architectures souhaités (dans notre exemple :  i386 et amd64 soit deb et deb-amd64):
+
+<file>
+## Dépôts officiels ##
+deb http://fr.archive.ubuntu.com/ubuntu bionic main/debian-installer restricted/debian-installer universe/debian-installer multiverse/debian-installer
+deb http://archive.ubuntu.com/ubuntu bionic-updates      main/debian-installer restricted/debian-installer universe/debian-installer
+deb http://archive.ubuntu.com/ubuntu bionic-backports    main/debian-installer
+deb http://archive.ubuntu.com/ubuntu bionic-security     main/debian-installer restricted/debian-installer universe/debian-installer
+
+
+## Dépôts officiels ##
+deb-amd64 http://fr.archive.ubuntu.com/ubuntu bionic main/debian-installer restricted/debian-installer universe/debian-installer multiverse/debian-installer
+deb-amd64 http://archive.ubuntu.com/ubuntu bionic-updates      main/debian-installer restricted/debian-installer universe/debian-installer
+deb-amd64 http://archive.ubuntu.com/ubuntu bionic-backports    main/debian-installer
+deb-amd64 http://archive.ubuntu.com/ubuntu bionic-security     main/debian-installer restricted/debian-installer universe/debian-installer
+</file>
+
+<note>//Apt-mirror// génère des fichiers de log. Ils se trouvent dans **/var** à la racine du dossier de votre dépôt. (dans le chemin que vous avez paramétré dans votre mirror.list : **set base_path /media/$USER/Depots/miroir**, dans le début du tuto).</note>
+
+===== Mise à niveau à partir du dépot local (dist upgrade) =====
+La dernière version d'Ubuntu est téléchargée sur le miroir, mais vos poste(s) client(s) ne voi(en)t pas qu´il y a à disposition une version de mise à jour de la distribution (Mise à jour de precise vers bionic par exemple).
+Avec une connexion permanente à internet, le logiciel de mise à jour (update-manager) propose la mise à disposition de la nouvelle version d'Ubuntu disponible **mais pas avec un dépôt local sans connexion à internet**. Ce qui suit va vous expliquer comment le faire fonctionner.
+
+====  Explications ====
+Le logiciel d´installation des paquets //update-manager// consulte les fichiers //meta-release//, //meta-release-lts// et //meta-release-proposed// situés à l'adresse [[http://changelogs.ubuntu.com/]] et affiche une fenêtre de mise à jour si une nouvelle version est disponible. 
+
+Dans le cas de votre miroir ces fichiers ne sont pas téléchargées lors des opérations précédentes, voilà pourquoi //update-manager// ne dit rien! Vous allez devoir récupérer les bons fichiers et configurer l´environnement de //update-manager// pour notre miroir.
+
+==== Les fichiers utilisés ====
+Voici le contenu du fichier //meta-release-lts-proposed//:
+<file>
+Dist: xenial
+Name: Xenial Xerus
+Version: 14.04.4 LTS
+Date: Thu, 26 Apr 2016 12:04:00 UTC
+Supported: 1
+Description: This is the 16.04.4 LTS release
+Release-File: http://archive.ubuntu.com/ubuntu/dists/xenial/Release
+ReleaseNotes: http://archive.ubuntu.com/ubuntu/dists/xenial-updates/main/dist-upgrader-all/current/ReleaseAnnouncement
+ReleaseNotesHtml: http://archive.ubuntu.com/ubuntu/dists/xenial-updates/main/dist-upgrader-all/current/ReleaseAnnouncement.html
+UpgradeTool: http://archive.ubuntu.com/ubuntu/dists/xenial-updates/main/dist-upgrader-all/current/precise.tar.gz
+UpgradeToolSignature: http://archive.ubuntu.com/ubuntu/dists/xenial-updates/main/dist-upgrader-all/current/xenial.tar.gz.gpg
+  
+Dist: bionic
+Name: Bionic Beaver
+Version: 18.04
+Date: Thu, 17 Apr 2018 14:04:00 UTC
+Supported: 1
+Description: This is the 16.04 release
+Release-File: http://archive.ubuntu.com/ubuntu/dists/bionic/Release
+ReleaseNotes: http://archive.ubuntu.com/ubuntu/dists/bionic/main/dist-upgrader-all/current/ReleaseAnnouncement
+ReleaseNotesHtml: http://archive.ubuntu.com/ubuntu/dists/bionic/main/dist-upgrader-all/current/ReleaseAnnouncement.html
+UpgradeTool: http://archive.ubuntu.com/ubuntu/dists/bionic/main/dist-upgrader-all/current/bionic.tar.gz
+UpgradeToolSignature: http://archive.ubuntu.com/ubuntu/dists/bionic/main/dist-upgrader-all/current/bionic.tar.gz.gpg</file>
+
+Concernant le fichier //meta-release//, le même principe est utilisé mais il contient en plus toutes les versions intermédiaires aux versions LTS.
+Ces fichiers indiquent pour chaque version d'Ubuntu, le nom, la version et où sont stockés les éléments de cette version.
+Si une nouvelle mise à jour d'Ubuntu est disponible ces fichier seront mis à jour.
+
+==== Paramétrage de l´outil update-manager ====
+Le logiciel de mise à jour utilise les données indiquées par le champ **UpgradeTool**. 
+
+Exemple: pour la distribution xenial on a  [[http://archive.ubuntu.com/ubuntu/dists/bionic/main/dist-upgrader-all/current/]].
+De plus, le logiciel de mise à jour contient dans son code cette adresse par défaut [[http://changelogs.ubuntu.com/]].
+Il est possible de préciser dans le fichier << ///etc/update-manager/meta-release// >> un nouveau chemin en renseignant les lignes des champs :  **URI** et **URI_LTS**.
+Dans le cas du dépôt local vous ferez la même chose.
+
+==== Réalisation ====
+=== Pré-requis ===
+Le miroir a déjà été mis à jour comme décrit par les chapitres ci-dessus.
+  * Créer un dossier temporaire pour accueillir nos fichiers avant modifications et déplacez-vous dedans, pour ce faire entrez dans un [[:terminal]] les commandes: <code>mkdir mon_tmp 
+cd mon_tmp</code>
+  * Téléchargez les fichiers meta-release-lts et meta-release-lts-proposed dans le répertoire temporaire: <code>wget http://changelogs.ubuntu.com/meta-release-lts 
+wget http://changelogs.ubuntu.com/meta-release-lts-proposed</code>
+  * Mettez à jour les fichiers meta-release*:
+En éditant les fichiers //meta-release-lts// et //meta-release-lts-proposed// afin de modifier l'adresse internet par l'adresse du dépôt local (dans notre cas  http://archive.ubuntu.com/ubuntu par http://192.168.0.1/mirror/fr.archive.ubuntu.com/ubuntu/ 192.168.0.1 étant l´adresse de notre serveur embarquant le miroir).
+
+Télécharger le dossier indiqué par la ligne **ReleaseNotes** de la version correspondante du fichier **meta-release** :
+ <file>
+Dist: bionic
+Name: bionic Xerus
+Version: 16.04
+Date: Thu, 17 Apr 2016 14:04:00 UTC
+Supported: 1
+Description: This is the 16.04 release
+Release-File: http://archive.ubuntu.com/ubuntu/dists/bionic/Release
+ReleaseNotes: http://archive.ubuntu.com/ubuntu/dists/bionic/main/dist-upgrader-all/current/ReleaseAnnouncement
+ReleaseNotesHtml: http://archive.ubuntu.com/ubuntu/dists/bionic/main/dist-upgrader-all/current/ReleaseAnnouncement.html
+UpgradeTool: http://archive.ubuntu.com/ubuntu/dists/bionic/main/dist-upgrader-all/current/bionic.tar.gz
+UpgradeToolSignature: http://archive.ubuntu.com/ubuntu/dists/bionic/main/dist-upgrader-all/current/bionic.tar.gz.gpg</file>
+
+Pour la bionic ReleaseNotes: http://archive.ubuntu.com/ubuntu/dists/bionic/main/dist-upgrader-all/current/**ReleaseAnnouncement** le répertoire à télécharger sera **0.87.30** et le répertoire cible dans le miroir sera **bionic/main/dist-upgrader-all/**.
+
+Récupérons tout d´abord le répertoire: <code>wget -r http://archive.ubuntu.com/ubuntu/dists/bionic/main/dist-upgrader-all/current</code>
+
+Maintenant vous devez avoir :<code>ls
+archive.ubuntu.com  meta-release-lts  meta-release-lts-proposed</code>
+
+Vous avez maintenant toutes les données pour mettre à jour notre miroir.
+
+===Mise à jour du dépôt===
+
+Mettre en place l´environnement de mise à jour dans le miroir, pour cela:
+  * Créer le dossier de description de la mise à jour (**Dist**-proposed/main/dist-upgrader-all) dans notre miroir:<code>mkdir -p  /media/$USER/Depots/miroir/mirror/archive.ubuntu.com/ubuntu/dists/bionic/main/dist-upgrader-all</code>
+  * Copiez dans le dépôt le dossier dist-upgrader-all en remplaçant << Votre-Distrib >> par la version Ubuntu cible ici bionic : <code>cp -r archive.ubuntu.com  /media/$USER/Depots/miroir/mirror/archive.ubuntu.com/ubuntu/dists/bionic/main/dist-upgrader-all/</code>
+
+Créer dans le dépôt un nouveau dossier //changelogs// visible par le client:<code>mkdir /media/$USER/Depots/miroir/mirror/archive.ubuntu.com/ubuntu/dists/changelogs</code>
+
+Copier les fichiers meta-release*:<code>cp -r meta-release* /media/$USER/Depots/miroir/mirror/archive.ubuntu.com/ubuntu/dists/changelogs/</code>
+ 
+Voilà c'est terminé pour le dépôt.
+
+=== Configuration du logiciel de mise à jour (update-manager) ===
+Il faut maintenant indiquer au logiciel de mise à jour où récupérer les informations de mise à jour.
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/update-manager/meta-release**: <file>
+# default location for the meta-release file
+  [METARELEASE]
+  URI =/meta-release
+  URI_LTS =/meta-release-lts
+  URI_UNSTABLE_POSTFIX = -development
+  URI_PROPOSED_POSTFIX = -proposed
+</file>
+Les lignes à modifier sont:<file>
+  URI =/meta-release 
+  URI_LTS =/meta-release-lts</file>
+
+Dans le cas de l'exemple remplacez ces deux lignes par :<file>
+  URI =/ubuntu/dists/changelogs/meta-release
+  URI_LTS =/ubuntu/dists/changelogs/meta-release-lts</file>
+
+Et voilà votre dépôt est prêt il ne reste plus qu'à mettre à jour le fichier <</etc/update-manager/meta-release >> sur tout les postes clients afin qu'il profite des mise à niveau au travers du logiciel update-manager comme avec une connexion à internet permanente.
+
+Nota : Il existe d'autres logiciels pour accomplir cette tâche : 
+[[https://help.ubuntu.com/community/Debmirror|Debmirror]] et d'autres encore.
+---------
+Contributeurs: [[:utilisateurs:Boolet]], [[:utilisateurs:Mimilus]], [[:utilisateurs:claudiux]], [[:utilisateurs:Mr_Djez]],  [[:utilisateurs:Biounator]], [[:utilisateurs:l_africain|L'Africain]].//

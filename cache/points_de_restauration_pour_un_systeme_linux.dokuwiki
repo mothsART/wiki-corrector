@@ -1,0 +1,300 @@
+
+{{tag>sauvegarde synchronisation paquet tutoriel}}
+
+----
+
+====== Points de restauration pour un système GNU/Linux ======
+
+===== Introduction =====
+
+Quand un système est modifié (installations de logiciels, mises à jour), il peut devenir instable. Il peut être alors intéressant de revenir à une précédente version d'Ubuntu, prise à un moment où le système était encore stable. 
+
+Pour ce faire, existe le concept de **Point de Restauration** (ou //snapshots//, ou instantanés). Il est question ici de conserver une copie de tout le système d'exploitation et des logiciels installés, copie qui peut être **restaurée**.
+
+Il existe un logiciel de référence, assez simple d'utilisation, le logiciel [[timeshift|Timeshift]].
+
+Il est également possible de pratiquer manuellement, avec l'avantage de pouvoir tout régler de façon très fine, mais l'inconvénient d'avoir besoin d'une certaine dose de compétence technique et de risquer des erreurs. Donc à éviter, sauf bonne compréhension du sujet.
+
+===== Méthode graphique et automatisée =====
+
+La méthode de référence pour prendre des points de restauration est l'utilisation du logiciel [[timeshift|Timeshift]]. Ces points de restauration peuvent être créés manuellement, ou mieux automatiquement, et ce au rythme choisi. Il est également possible de définir le nombre de **points de restauration** conservés (lesquels prennent de la place). Ainsi, Timeshift permet de restaurer un système devenu instable, en mode graphique ou en mode texte.
+
+Le **point de restauration** dont il est ici question comprend tout le système d'exploitation et tous les logiciels installés, mais pas les fichiers de l'utilisateur (ses documents).
+
+Pour en savoir plus, voire l'aide [[timeshift|Timeshift]].
+
+
+===== Sauvegarde des paquets logiciels =====
+
+Il ne s'agit pas ici de restaurer tout le système, mais seulement d'utiliser la liste des logiciels précédemment installés pour désinstaller ou réinstaller rapidement tous ces logiciels. 
+
+Via l'historique de votre gestionnaire de paquets ([[http://doc.kubuntu-fr.org/synaptic|Synaptic]] ou [[http://doc.kubuntu-fr.org/kpackagekit|KPackagekit]]...), il est possible de savoir quels paquets ont été installés récemment, mais il est difficile de les désinstaller rapidement en étant sûr que d'autres paquets ne sont pas surprimés par erreur via le jeu des dépendances, c'est pourquoi nous privilégierons la méthode qui suit.
+
+Voici une méthode simple et très rapide pour sauvegarder sa liste de paquets, et la restaurer, si besoin :
+  * Téléchargement des listes des sources des paquets disponibles.
+  * Téléchargement décompression et installation des mises à jour des paquets.
+  * Enregistrement de la liste des paquets installés comme point de restauration.
+  * Installer et tester le ou les logiciels.
+  * Si vous gardez le ou les logiciels installés, vous arrêtez ici, il n'y a rien d'autre a faire.
+  * Sinon, vous notez le nom du logiciel ou des logiciels que vous souhaitez garder.
+  * Marquage de tous les paquets pour la désinstallation.
+  * Marquage de tous les paquets à installer avec la liste des paquets installés comme point de restauration.
+  * Application des modifications effectuées sur la liste des paquets qui ont été marqués.
+  * Réinstaller que le ou les logiciels retenus.
+
+Dans cette section, nous vous proposons :
+
+  * [[#dans_une_console|Une méthode simple en ligne de commande.]]
+  * [[#avec_un_script_bash|Une méthode avec un script bash qui automatise les deux tâches principales !]]
+
+==== Création de la liste des paquets en ligne de commande ====
+
+Procédez à la mise à jour du système GNU/Linux avec les commandes suivantes :
+
+  sudo apt update
+  # Téléchargement des listes des sources des paquets disponibles.
+
+  sudo apt upgrade
+  # Téléchargement décompression et installation des mises à jour des paquets.
+
+Enregistrement de la liste des paquets installés avec la commande suivante (dans le nom du fichier texte, vous remplacez "**Date**" par la date du jour) :
+
+  dpkg --get-selections > listelogiciels-Date.txt
+  # Enregistrement dans le fichier texte "listelogiciels-Date.txt" de la liste des paquets déjà installés. Ou date est à remplacer par la date du jour. Vous pouvez ainsi avoir plusieurs listes, renvoyant à la situation d'un jour donné.
+
+Installer et tester le ou les logiciels.
+
+==== Restauration d'une liste de logiciels ====
+
+Pour revenir à une situation précédemment créée (dans le nom du fichier texte, vous remplacez "**Date**" par la date du jour du point de restauration que vous souhaitez récupérer) :
+
+  dpkg --clear-selections
+  # Marquage de tous les paquets pour la désinstallation.
+
+  dpkg --set-selections < listelogiciels-Date.txt
+  # Marquage de tous les paquets à installer avec le contenu du fichier texte "listelogiciels-date.txt".
+
+  sudo apt-get dselect-upgrade
+  # Application des modifications effectuer sur la liste des paquets précédemment marqués.
+
+Réinstaller le ou les logiciels retenus.
+
+Voilà, vous avez restauré la liste des logiciels dans la version qui existait à la date qui vous convient !
+
+==== Liens utiles et complémentaires ====
+
+[[http://contrib.linalis.com/content/astuce-dpkg-et-les-s%C3%A9lections-de-paquets
+|http://contrib.linalis.com/content/astuce-dpkg-et-les-s%C3%A9lections-de-paquets
+]]
+  * Astuce dpkg et les sélections de paquets : [[http://contrib.linalis.com/content/astuce-dpkg-et-les-s%C3%A9lections-de-paquets
+|http://contrib.linalis.com/content/astuce-dpkg-et-les-s%C3%A9lections-de-paquets
+]]
+
+  * (En anglais) 2 Ways Of Reinstalling All Of Your Current Installed Packages On A Fresh Ubuntu Installation :  [[http://www.webupd8.org/2010/03/2-ways-of-reinstalling-all-of-your.html|http://www.webupd8.org/2010/03/2-ways-of-reinstalling-all-of-your.html]]
+
+
+==== Sauvegarder la liste des paquets avec un Script bash ====
+Cette démarche plus automatisée.
+
+=== Algorithme ===
+
+Ce script est une automatisation des commandes précédentes en deux étapes, a exécuter dans une console.
+
+Il vérifie l'existence d'un dossier nommé « PointDeRestauration » à la racine du dossier de l'utilisateur.
+
+- S'il n'existe pas, le dossier est créé.
+
+- S'il existe, on passe à la prochaine action.
+
+On propose les actions suivantes :
+
+<code>
+1) Créer un point de restauration.
+
+2) Restaurer un point.
+
+3) Quitter.
+
+Taper le numéro de l'action que vous souhaitez ou CTRL-C pour quitter ce script :
+</code>
+
+Dans le cas 1, un point de restauration est créé dans le dossier « PointDeRestauration » portant comme nom la date du jour.
+
+Dans le cas 2, La liste des points de restauration du dossier apparaît et on vous demande d'entrer la date du point de restauration. Vous entrez au clavier la date au format AAAA-MM-JJ du fichier souhaité.
+
+Dans le cas 3, le script se termine.
+
+Si vous tapez CTRL-C, le script s'arrête.
+
+=== Créer et utiliser le script ===
+
+Créer le script avec la commande suivante dans une console :
+
+- Sous Kubuntu :
+
+  sudo kate ~/PointDeRestauration.sh
+
+- Sous Ubuntu :
+
+  sudo gedit ~/PointDeRestauration.sh
+
+Copier le contenu qui suit dans l'éditeur de texte et enregistrer le fichier, puis quitter l'éditeur de texte.
+
+<code>
+#!/bin/bash
+nomDossier=~/PointDeRestauration/
+clear
+mkdir -p $nomDossier
+echo ""
+echo "1) Créer un point de restauration."
+echo ""
+echo "2) Restaurer un point."
+echo ""
+echo "3) Quitter."
+echo ""
+echo "Taper le numéro de l'action que vous souhaitez ou CTRL-C pour quitter ce script : "
+echo ""
+read touche1
+
+case "$touche1" in
+1)
+    point=$(date +%F)
+    if dpkg --get-selections > $nomDossier/$point; then
+        echo "Le point de restauration « $point » a est créé avec succès !"
+    else
+        echo "La création du point de restauration a échoué !"
+    fi
+    ;;
+2)
+    echo "Taper la date « exacte », parmi les points de restaurations les suivants : "
+    echo
+    cd $nomDossier
+    ls
+    read point
+    if [ -f $nomDossier/$point ]; then
+        sudo dpkg --clear-selections
+        if sudo dpkg --set-selections < $nomDossier/$point; then
+            sudo apt-get dselect-upgrade
+            echo "Votre système a été restauré en date du « $point » avec succès !"
+        else
+            echo "La restauration a échoué !"
+        fi
+    else
+        echo "Le fichier pour la date de restauration « $point » n'existe pas !"
+    fi
+    ;;
+3)
+    echo "Fin du script sans exécuter de commande !"
+    ;;
+esac
+echo ""
+</code>
+
+Donner les droits d'exécution au nouveau fichier avec la commande suivante dans une console :
+
+  chmod +x PointDeRestauration.sh 
+
+Pour exécuter ce script dans une console avec la commande suivante et suivez les instructions :
+
+  ./PointDeRestauration.sh
+
+===== Sauvegarder les paramètres d'un utilisateur =====
+Cette fois, il s'agit de préserver les paramètres propres à un utilisateurs.
+
+==== Principes ====
+
+Les paramètres d'un utilisateur peut-être définit comme suit : **Ensemble des configurations des logiciels installés et de leurs données de bases**. Par exemple, tous les paramètres de configuration du bureau et des préférences de l'utilisateur, cela inclus, les paramètres de la souris, les couleurs du bureau, le font d'écran sélectionné, les préférences pour le sauve écran, etc. Toutes ces informations sont enregistrées dans de multiples endroits et fichiers et la sauvegarde de ces informations est laborieuse et fastidieuse !
+
+Ici, vous trouverez des méthodes pour corriger la situation. Elles consistent à créer des archives compressées contenant tous les fichiers de paramètres et de configuration et les données de base des logiciels utilisés et les méthodes permettant leur restauration.
+
+<note important>Il est recommandé de procéder périodiquement à cette sauvegarde en plus de le faire avant de procéder à des changements sur ces paramètres et configurations !</note>
+
+Dans cette section, nous vous proposons :
+
+  * [[#dans_une_console1|Une méthode simple en ligne de commande]]
+  * [[#avec_un_script_bash1|Une méthode avec un script bash qui automatise les deux tâches principales !]]
+  * [[#avec_un_logiciel_en_mode_graphique|Une méthode avec un logiciel en mode graphique.]]
+
+=== Prérequis ===
+
+  * Rien, sauf les [[sudo|droits d'administration]] du superutilisateur (root), car un système GNU/Linux de base a tout ce qu'il faut !
+
+==== Dans une console ====
+
+=== Création d'un point de restauration ===
+
+Lancer Konqueror ou Dolphin ou Nautilus.
+
+Appuyer sur la touche **F4** pour ouvrir une console 
+
+Je vous recommande de créer sur le périphérique de votre choix, un dossier qui contiendra tous les fichiers d'archives des utilisateurs de votre ordinateur.
+
+Par exemple, si nous souhaitons utiliser le dossier courant de l'utilisateur **rene**, qui se nommerait **ArchivesDesUtilisateurs**, copiez la commande suivante dans la console :
+
+  mkdir /home/rene/ArchivesDesUtilisateurs
+ 
+Pour créer une archive compressée de tous les paramètres de l'utilisateur **rene**, il faut archiver tous les dossiers cacher du **Home** de l'utilisateur vers le périphérique de votre choix, disons le dossier **ArchivesDesUtilisateurs** (prener soin de changer la partie date dans le nom de l'archive **AAAA-MM-JJ**).
+
+Pour notre exemple la commande sera :
+
+  sudo 7z a /home/rene/ArchivesDesUtilisateurs/rene-AAAA-MM-JJ /home/rene/.*
+
+Si votre mot de passe vous est demandé, entrer le mot de passe habituel pour l'utilisateur courant !
+
+Si nous étions le 14 mai 2010, la même commande deviendrait la suivante :
+
+  sudo 7z a /home/rene/ArchivesDesUtilisateurs/rene-2010-04-14 /home/rene/.*
+
+Cela prendra quelques minutes, soyer patient !
+
+== Liens ==
+
+[[:backup-manager]]
+
+[[:rdiff-backup]]
+
+=== Restauration d'un point ===
+
+== Cas numéro 1 ==
+
+Le cas d'une restauration dans l'ordinateur d'origine de la source de l'archive avec l'utilisateur **rene**, de notre exemple de la création d'archive (voir ci-haut).
+
+Pour décompresser l'archive en respectent l'arborescence des fichiers et l'extraire dans la même structure des dossiers que la source origine, copier la commande suivante dans la console :
+
+  sudo 7z x /home/rene/ArchivesDesUtilisateurs/rene-2010-04-14
+
+Cela prendra quelques minutes, soyer patient !
+
+== Cas numéro 2 ==
+
+Le cas d'une restauration dans l'ordinateur d'origine de la source de l'archive, mais dans le **home** d'un autre utilisateur que celui d'origine, par exemple à la suite de la création d'un nouvel utilisateur, pour lui donner une configuration standardisée, disons pour la nouvelle utilisatrice **annie**.
+
+Nous devons nous déplacer dans le dossier racine du **home** d'**annie**, avec la commande suivante :
+
+  sudo cd /home/annie
+
+Pour décompresser l'archive de **rene** sans respecter l'arborescence des fichiers et l'extraite dans le dossier du **home** d'**annie**, copier la commande suivante dans la console :
+
+  sudo 7z e /home/rene/ArchivesDesUtilisateurs/rene-2010-04-14
+
+La différence dans la commande est le paramètre **e** qui remplace le paramètre **x** !
+
+Cela prendra quelques minutes, soyer patient ! 
+
+==== Avec un logiciel en mode graphique ====
+
+[[:Areca Backup]]
+
+[[:HUBackup]]
+
+[[:SBackup]]
+
+
+===== Autres pages en lien avec les sujets =====
+
+{{topic>sauvegarde restauration paquet}}
+
+----
+
+//Contributeurs : [[utilisateurs:lami|L'ami René]] (L'auteur), [[utilisateurs:YannUbuntu]], [[utilisateurs:Deuxpi]].//
+

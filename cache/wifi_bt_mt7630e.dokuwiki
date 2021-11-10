@@ -1,0 +1,237 @@
+
+{{tag>Trusty Xenial matériel wifi bluetooth BROUILLON}}
+----
+
+====== Carte Wifi et Bluetooth MT7630e ======
+
+===== Présentation =====
+
+La carte MEDIATEK MT7630e permet à la fois d'obtenir un accès Wifi et Bluetooth. Présente sur certains HP et Asus (Je possède un Asus K551LN), à l'heure où j'écris cet article (03/07/2014, Ubuntu 14.04 noyau 1.13) elle n'est pas encore intégrée dans Ubuntu par défaut (idem en 2018). Nous verrons une méthode pour l'installer à partir des sources données par Mediatek.
+
+Attention, avant toute manipulation, vérifier que le secure boot est désactivé (voir [[desactiver secure boot]]). \\
+C'est nécessaire parce que depuis Ubuntu kernel 4.4.0-20, la configuration du noyau EFI_SECURE_BOOT_SIG_ENFORCE a été activée. Cela empêche de charger des modules tiers non signés si "UEFI Secure Boot" est activé.
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Etre sûr que l'on a bien la carte MT7630e. Pour le savoir lancer un <code>lspci</code> si vous voyez une ligne <code>MEDIATEK Corp. MT7630e 802.11bgn Wireless Network Adapter</code> c'est que vous possédez cette carte.
+
+===== Installation à partir d'un script =====
+Cette méthode est plus simple à mettre en œuvre. Si vous êtes un débutant c'est certainement cette méthode que vous devez privilégier.
+==== Installation du Wifi ====
+On commence par désactiver le secure boot qui bloque le wifi et le bluetooth : redémarrer le PC, rentrer dans le mode "System setup" avant qu'ubuntu se lance, naviguer dans les onglets pour trouver le "Secure boot" et le passer en "Disabled", sauvegarder, quitter le mode "System setup" et lancer ubuntu.
+
+Ensuite on installe les outils nécessaires à l'installation :
+  sudo apt-get install git build-essential
+On télécharge le code disponible sur github :
+  git clone https://github.com/neurobin/MT7630E.git
+  cd MT7630E/
+On donne les permissions d'exécution:
+  chmod +x install test uninstall
+Puis on lance le script d'installation qui s'occupe de tout :
+  sudo ./install
+(il vous faudra renseigner votre mot de passe root)
+
+==== Installation du Bluetooth ====
+Avant d'installer le bluetooth, vous devez avoir installé le wifi avec la méthode ci-dessus
+
+On active le dépôt correspondant aux codes sources d'ubuntu à l'aide du gestionnaire de paquet ([[https://doc.ubuntu-fr.org/tutoriel/comment_modifier_sources_maj#avec_une_interface_graphique|Modifier les sources]])
+
+On installe le paquet dkms :
+  sudo apt-get install dkms
+On donne les permissions d'exécution:
+  cd MT7630E/
+  chmod +x bpatch
+Puis on lance le script d'installation :
+  sudo ./bpatch
+(il vous faudra renseigner votre mot de passe root)
+
+Et voilà !
+
+<note> Driver alternatif https://github.com/poupougnac/MT7630E.git </note>
+
+==== Réinstallation après mise à jour des paquets d'Ubuntu  ====
+Lorsque le noyau (kernel) évolue lors d'une mise à jour des paquets d'Ubuntu, le wifi et le bluetooth ne fonctionnent plus. 
+Nous allons créer un script à lancer chaque fois que la connexion est perdue suite à une mise à jour.
+
+
+Créer un fichier "wifi.sh" dans le dossier utilisateur "home/nom_d_utilisateur". 
+Accédez aux propriétés du fichier (clic droit, propriétés), allez à l'onglet "Droits d'accès" et cochez "Est exécutable".
+Ouvrir le fichier "wifi.sh" avec un éditeur de texte (Gedit, kate) et copier les lignes suivantes :
+  cd MT7630E/
+  sudo ./uninstall
+  sudo ./bpatch -u
+  sudo make clean
+  sudo ./install
+  sudo ./bpatch
+
+Pour lancer le script, lancer la commande suivante dans la console :
+  sudo ./wifi.sh
+La réinstallation s'effectue ensuite automatiquement
+===== Installation complète avec DKMS (moins automatisé) =====
+
+Il est important de noter que cette méthode utilise DKMS et ainsi doit être renouvelée en partie à chaque changement de noyaux. Pour éviter ce problème préférez le script plus haut qui charge les modules avec insmod au démarrage.
+
+Commencez par aller chercher les sources sur la page http://www.mediatek.com/en/downloads/mt7630-pcie/ (vous devez donner une adresse mail, mais vous pouvez mettre une adresse quelconque il n'y a aucune vérification d'email). Décompressez la et allez dans le dossier nouvellement créé en console.
+
+Commencez par installer les paquets nécessaire à la compilation et à l'installation :
+  sudo apt-get install build-essential dkms
+  
+=== Installation du wifi ===
+Lancez ensuite, comme spécifié dans le ReadMe :
+  sudo su
+  sudo cp firmware/Wi-FI/MT7650E234.bin /lib/firmware
+  cd rt2x00/
+  make clean
+  make
+  
+Pour vérifier que ça marche :
+  chmod +x load.sh
+  ./load.sh
+  
+Si tout est fonctionnel vous voudrez certainement l'installer au démarrage. Pour cela la méthode la plus propre que j'ai trouvé est de passer par dkms (par contre je crois qu'il faut reproduire ces étapes quand on change de noyau... A confirmer, si c'est le cas je suis intéressé par une méthode plus propre)
+Commencez par revenir dans le dossier principal (celui que vous avez décompressé) :
+  cd ..
+Puis copier rt2x00 dans un nouveau dossier portant le nom du noyau :
+  cp rt2x00 "rt2x00-$(uname -r | egrep -o "[0-9]*\.[0-9]*" | head -1)" -r
+  cd "rt2x00-$(uname -r | egrep -o "[0-9]*\.[0-9]*" | head -1)"
+Puis créer dans ce dossier un fichier dkms.conf par exemple via
+  gedit dkms.conf
+contenant
+<code>
+PACKAGE_NAME="rt2x00"
+PACKAGE_VERSION="3.13"
+AUTOINSTALL="yes"
+OBSOLETE_BY=""
+BUILD_EXCLUSIVE_KERNEL=""
+POST_INSTALL=""
+POST_REMOVE=""
+ 
+BUILT_MODULE_NAME[0]="rt2x00lib"
+DEST_MODULE_LOCATION[0]="/updates"
+ 
+BUILT_MODULE_NAME[1]="rt2x00pci"
+DEST_MODULE_LOCATION[1]="/updates"
+ 
+BUILT_MODULE_NAME[2]="rt2x00mmio"
+DEST_MODULE_LOCATION[2]="/updates" 
+BUILT_MODULE_NAME[3]="rt2800lib"
+DEST_MODULE_LOCATION[3]="/updates" 
+BUILT_MODULE_NAME[4]="rt2800pci"
+DEST_MODULE_LOCATION[4]="/updates"
+</code>
+
+Il ne reste plus qu'à copier le dossier dans le système et à mettre à jour le noyau :
+
+<code>
+cd ..
+</code>
+
+<note>
+Cette note et les notes qui suivent pourront être supprimées après que la modification ait été testée par un autre utilisateur.--- //[[:utilisateurs:janove|janove]] Le 04/01/2015, 15:16//
+</note>
+<note>
+La version initiale proposait d’enchaîner avec la ligne de code suivante: cp "rt2x00-$(uname -r | egrep -o "[0-9]*\.[0-9]*" | head -1)" /usr/src/
+</note>
+<note>
+Cette ligne a été remplacée par celle ci-dessous.
+</note>
+
+<code>
+cp -r "rt2x00-$(uname -r | egrep -o "[0-9]*\.[0-9]*" | head -1)" /usr/src/
+</code>
+
+<code>
+cd /usr/src
+sudo dkms add -m rt2x00 -v $(uname -r | egrep -o "[0-9]*\.[0-9]*" | head -1)
+sudo dkms build -m rt2x00 -v $(uname -r | egrep -o "[0-9]*\.[0-9]*" | head -1)
+sudo dkms install -m rt2x00 -v $(uname -r | egrep -o "[0-9]*\.[0-9]*" | head -1) --force
+</code>
+ainsi qu'à charger les modules au démarrage en rajoutant dans le fichier /etc/modules :
+<code>
+eeprom
+eeprom_93cx6
+crc-ccitt
+cfg80211
+mac80211
+rt2x00lib
+rt2x00pci
+rt2x00mmio
+rt2800lib
+</code>
+
+Redémarrer et c'est bon !
+=== Installation du bluetooth ===
+
+Le principe est semblable à ce que l'on a fait plus haut, il y a juste moins de modules à charger.
+
+Lancez ensuite, comme spécifié dans le ReadMe :
+  sudo su
+  sudo cp ./firmware/BT/mt76x0.bin /lib/firmware
+  cd btloader/
+Il y a cependant une petite modification à faire dans le code pour rendre le bluetooth fonctionnel. Il faut éditer le fichier mt76xx.c en rajoutant les lignes avec les astérisques (*********, en les supprimant bien évidemment)
+<code>
+static struct usb_device_id mtk_bt_loader_tbl[] = {
+    /* Mediatek MT7650 */
+    { USB_DEVICE_AND_INTERFACE_INFO(0x0e8d, 0x7650, 0xe0, 0x01, 0x01) },
+    { USB_DEVICE_AND_INTERFACE_INFO(0x0e8d, 0x7650, 0xff, 0xff, 0xff) },
+    { USB_DEVICE_AND_INTERFACE_INFO(0x0e8d, 0x7630, 0xe0, 0x01, 0x01) },
+    { USB_DEVICE_AND_INTERFACE_INFO(0x0e8d, 0x7630, 0xff, 0xff, 0xff) },
+    { USB_DEVICE_AND_INTERFACE_INFO(0x0e8d, 0x763e, 0xe0, 0x01, 0x01) },
+    { USB_DEVICE_AND_INTERFACE_INFO(0x0e8d, 0x763e, 0xff, 0xff, 0xff) },
+    { USB_DEVICE_AND_INTERFACE_INFO(0x0489, 0xe069, 0xe0, 0x01, 0x01) }, ****************
+    { USB_DEVICE_AND_INTERFACE_INFO(0x0489, 0xe069, 0xff, 0xff, 0xff) },  *****************
+    /* Mediatek MT662 */
+    { USB_DEVICE_AND_INTERFACE_INFO(0x0e8d, 0x7662, 0xe0, 0x01, 0x01) },
+    { USB_DEVICE_AND_INTERFACE_INFO(0x0e8d, 0x7632, 0xe0, 0x01, 0x01) },
+    { }     /* Terminating entry */
+     };
+</code>
+Ensuite on reprend la procédure :
+  make clean
+  make
+  
+Pour vérifier que ça marche :
+  insmod mt76xx.ko
+  
+Si tout est fonctionnel vous voudrez certainement l'installer au démarrage. Pour cela la méthode la plus propre que j'ai trouvé est de passer par dkms (par contre je crois qu'il faut reproduire ces étapes quand on change de noyau... A confirmer, si c'est le cas je suis intéressé par une méthode plus propre)
+Commencez par revenir dans le dossier principal (celui que vous avez décompressé) :
+  cd ..
+Puis copier btloader dans un nouveau dossier portant le nom du noyau :
+  cp btloader "btloader-$(uname -r | egrep -o "[0-9]*\.[0-9]*" | head -1)" -r
+  cd "btloader-$(uname -r | egrep -o "[0-9]*\.[0-9]*" | head -1)"
+Puis créer dans ce dossier un fichier dkms.conf par exemple via
+  gedit dkms.conf
+contenant
+<code>PACKAGE_NAME="btloader"
+PACKAGE_VERSION="3.14"
+CLEAN="make clean"
+MAKE[0]="make all KVERSION=$kernelver"
+BUILT_MODULE_NAME[0]="mt76xx"
+DEST_MODULE_LOCATION[0]="/updates"
+AUTOINSTALL="yes"
+</code>
+Il ne reste plus qu'à copier le dossier dans le système et à mettre à jour le noyau :
+  cd ..
+  cp "btloader-$(uname -r | egrep -o "[0-9]*\.[0-9]*" | head -1)" /usr/src/
+  cd /usr/src
+  sudo dkms add -m btloader -v $(uname -r | egrep -o "[0-9]*\.[0-9]*" | head -1)
+  sudo dkms build -m btloader -v $(uname -r | egrep -o "[0-9]*\.[0-9]*" | head -1)
+  sudo dkms install -m btloader -v $(uname -r | egrep -o "[0-9]*\.[0-9]*" | head -1) --force
+ainsi qu'à charger les modules au démarrage en rajoutant dans le fichier /etc/modules :
+  mt76xx
+
+Redémarrer et c'est bon, votre bluetooth est fonctionnel !
+
+
+===== Sources =====
+  * **(en)** [[https://neurobin.org/projects/softwares/unix/MT7630E/|"Easy installation package for Mediatek MT7630E Wifi + Bluetooth Combo Linux Driver."]] (2015)
+  * **(en)** [[https://community.linuxmint.com/tutorial/view/1796|Autre méthode pour Kernel 4.4.x]] (2014)
+  * **(en)** [[https://bugs.launchpad.net/ubuntu/+source/linux/+bug/1220146]] ("Ralink Mediatek 14c3:7630 wi-fi card isn't supported out of the box", 2013)
+  * **(fr)** <del> [[http://forum.xubuntu-fr.org/viewtopic.php?id=1659661&p=1]] </del>
+  * **(fr)** Un [[https://lists.debian.org/debian-user-french/2015/04/msg00025.html|post]] à ce sujet (2015).
+  * **(fr)** Post au sujet des problèmes liés au secure boot : [[https://forum.ubuntu-fr.org/viewtopic.php?id=1988871]] 
+  * **(fr)** Documentation sur le secure boot : [[https://doc.ubuntu-fr.org/uefi#activerdesactiver_le_secure_boot]]
+----
+//Contributeurs principaux : [[utilisateurs:tobiasBora|tobiasBora]], [[utilisateurs:Adarien|Adarien]], [[utilisateurs:autre_identifiant|nom ou pseudo autre]]//

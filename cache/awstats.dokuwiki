@@ -1,0 +1,595 @@
+
+{{tag>serveur}}
+
+----
+
+====== AWStats ======
+
+**AWStats** est un logiciel libre sous licence GPL qui permet de générer des statistiques pour son serveur. Il offre des vues graphiques statiques mais aussi dynamiques des statistiques d'accès à vos serveurs web, FTP, courrier ou en continu (streaming).
+
+Consultez des [[http://awstats.sourceforge.net/#DEMO|captures d'écran]] montrant ses capacités.
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Un serveur [[:Apache]] déjà installé et fonctionnel.
+
+===== Installation =====
+
+Pour installer ce logiciel, il suffit d'[[:tutoriel:comment_installer_un_paquet#paquet_present_dans_les_depots|installer les paquets]] **[[apt://awstats,libmldbm-perl,libnet-xwhois-perl,libgeo-ipfree-perl|awstats, libmldbm-perl, libnet-xwhois-perl, libgeo-ipfree-perl]]**.
+
+Le répertoire d'installation se créé dans **/usr/share/awstats/**.
+
+
+===== Configuration =====
+
+Le(s) fichier(s) de configuration se trouve(nt) dans **/etc/awstats/**.
+
+Il faut en créer un par site ; dans un [[:terminal]] :
+<code>sudo cp awstats.conf awstats.ma_machine.mon_domaine.mon_pays.conf</code>
+où 'ma_machine.mon_domaine.mon_pays' correspond à l'url de la machine qui permettra de consulter les statistiques avec un navigateur à l'adresse : http://ma_machine.mon_domaine.mon_pays/cgi-bin/awstats.pl
+
+**N.B :** //ma_machine.mon_domaine.mon_pays// sera par exemple : //wikipedia.org//
+
+Réglez ce(s) fichier(s) de configuration(s) avec notamment dans le cas d'un serveur web apache :
+
+<file>
+LogType=W
+LogFormat=1
+LogFile="/var/log/apache2/access.log" # pour apache2
+SiteDomain="ma_machine.mon_domaine.mon_pays"
+</file>
+Voir les explications contenues dans le fichier **awstats.conf** pour les autres options.
+
+===== Utilisation =====
+AWStats est un script CGI, il se lance avec la [[:commande_shell|commande]] suivante :
+
+  /usr/lib/cgi-bin/awstats.pl
+
+
+==== Tester l'analyse des logs ====
+
+<code>sudo /usr/lib/cgi-bin/awstats.pl -config=ma_machine.mon_domaine.mon_pays -update</code>
+ ... quelques instants plus tard, si tout va bien ...
+<code>
+Update for config "/etc/awstats/awstats.stats.ma_machine.mon_domaine.mon_pays.conf"
+With data in log file "/var/log/apache/access.log"...
+Phase 1 : First bypass old records, searching new record...
+Searching new records from beginning of log file...
+Phase 2 : Now process new records (Flush history on disk after 20000 hosts)...
+Jumped lines in file: 0
+Parsed lines in file: 34782
+ Found 40 dropped records,
+ Found 0 corrupted records,
+ Found 0 old records,
+ Found 34742 new qualified records.
+</code>
+
+=== Ajouter l'analyse des logs archivés:  ===
+
+<code>
+cd /var/lib/awstats
+rm *
+cd /var/log/apache*
+for i in `ls -tr access.log.*.gz` 
+do
+ echo "Fichier traité: $i"
+ zcat $i | /usr/lib/cgi-bin/awstats.pl -config=ma_machine_mon_domaine.com -update -LogFile=-
+done
+</code> FIXME Le script doit être lancé avec sudo.
+
+
+=== Vérifier la production du fichier de statistiques ===
+
+<code>/var/lib/awstats/awstats052007.ma_machine.mon_domaine.mon_pays.txt</code>
+
+Il y a un fichier par mois et par site.
+
+<note tip>
+S'il y a des "trous" dans les stats, c'est que le cron est passé par là en cours traitement, solution :
+  * commenter les 2 lignes de /etc/cron.d/awstats (ajouter le caractère # devant)
+  * lancer le traitement
+  * decommenter les lignes (supprimer le #)
+</note>
+==== Voir les statistiques dans une belle interface web ====
+
+D'abord créez un alias pour apache.
+
+[[[[:tutoriel:comment_modifier_un_fichier|Créez le fichier]] **/etc/apache2/sites-available/awstats.conf** et ajoutez-lui ceci :
+
+<file>Alias /awstatsclasses "/usr/share/awstats/classes/"
+Alias /awstatscss "/usr/share/awstats/css/"
+Alias /awstats-icon "/usr/share/awstats/icon/"
+
+  <IfVersion < 2.3>
+     ScriptAlias /stats /usr/lib/cgi-bin/awstats.pl
+  </IfVersion>   
+  <IfVersion >= 2.3>
+      ScriptAlias /stats /usr/lib/cgi-bin/
+   </IfVersion>
+
+
+# mêmes paramètres que dans awstats.*.conf
+<Directory /usr/lib/cgi-bin/>
+  DirectoryIndex awstats.pl
+  UseCanonicalName off
+#  AuthName "Statistiques awstats"
+#  AuthType Basic
+#  Require valid-user
+#  AuthUserFile /che/min/.passwdstats
+  Options +ExecCGI
+  AllowOverride None
+  <IfVersion < 2.3>
+      Order allow,deny
+      Allow from all
+  </IfVersion> 
+ <IfVersion >= 2.3>
+      Require all granted
+   </IfVersion>
+</Directory>
+</file>
+Puis créez un lien symbolique dans **/etc/apache2/sites-enabled** vers ce fichier, ou directement en ligne de commande :
+<code>a2ensite awstats</code>
+
+Ajustez la gestion des droits d'accès selon votre besoin de confidentialité ;-)
+<note important>Attention : dans cet exemple, votre page de statistiques sera accessible pour n'importe quel utilisateur. Si vous ne souhaitez la rendre accessible que pour vous seul, pensez à modifier la ligne suivante : 
+<code>Allow from all</code> en <code>Allow from 127.0.0.1</code> 
+</note>
+
+Enjoy :
+
+http://ma_machine.mon_domaine.mon_pays/cgi-bin/awstats.pl
+et même si tout va bien :
+http://ma_machine.mon_domaine.mon_pays/stats/
+
+
+===== Ajouter des plugins à Awstats =====
+
+
+
+
+
+==== GeoIP ====
+Tous les mois sur le site de [[http://www.maxmind.com/app/geoip_country|MaxMind]] une base GeoIP gratuite est fournie.
+
+Ce fichier va permettre d'effectuer la correspondance entre les adresses IP et les pays correspondants. Un domaine en .com par exemple peut se trouver en France, en Australie ou au Zimbabwe. Ce traitement va nous permettre de différencier les origines des internautes et d'affecter le nombre de pages et de hits aux pays correspondants. En résumé, il faut installer la base GeoIP, le programme PurePerl, modifier le fichier de configuration du site et le plugin geoip.
+
+=== Installation ===
+
+  * Récuperer la base GeoIp [[http://www.maxmind.com/download/geoip/database/GeoLiteCountry/|à l'adresse suivante]]. Vous pourrez téléchargez cette base tous les mois (car MaxMind la met à jour mensuellement).
+
+  * Placez le fichier dans le répertoire **/usr/share/awstats/lib/**, puis dézippez le avec la commande //gunzip GeoIP.dat.gz//
+
+<note tip>Vous pouvez automatiser ces deux étapes en rajoutant par exemple dans [[cron]] (dans un terminal, tapez **sudo crontab -e**) la commande :
+  0 4 10 * * wget -O /usr/share/awstats/lib/GeoIP.dat.gz http://geolite.maxmind.com/download/geoip/database/GeoLiteCountry/GeoIP.dat.gz && gunzip -f /usr/share/awstats/lib/GeoIP.dat.gz
+</note>
+
+  * Ensuite, il vous faut récupérer le fichier **PurePerl.pm** que vous trouverez à l'adresse [[http://geolite.maxmind.com/download/geoip/api/pureperl/Geo-IP-PurePerl-1.25.tar.gz]] . Vous devrez désarchiver le fichier (version actuelle: **Geo-IP-PurePerl-1.25.tar.gz**) avec la commande //tar xzf Geo-IP-PurePerl-1.25.tar.gz//
+
+  * Copiez le fichier PurePerl.pm qui se trouve le répertoire lib/Geo/Ip dans le répertoire /usr/share/awstats/lib/
+
+  * Modifiez le fichier PurePerl.pm aux alentours de la ligne 213 (Fonction: //sub new//) en indiquant le chemin absolu d'accès à la base GeoIP.dat (/usr/share/awstats/lib/)
+
+  * Modifiez le fichier **geoip.pm** dans le répertoire /usr/share/awstats/plugins, à la ligne **if (!eval ('require "Geo/IP/PurePerl.pm")) {** (aux alentours de la ligne 21, entête de la fonction: # ENTER HERE THE USE COMMAND FOR ALL REQUIRED PERL MODULES) en remplaçant **Geo/IP/PurePerl.pm** par le chemin absolu du fichier **/usr/share/awstats/lib/PurePerl.pm** 
+
+  * Ensuite, il ne vous reste plus qu'à ajouter le code suivant à la fin de votre fichier de configuration de votre site :<file># Plugin: GeoIP
+# Perl modules required: Geo::IP or Geo::IP::PurePerl (from Maxmind)
+# Country chart is built from an Internet IP-Country database.
+# This plugin is useless for intranet only log files.
+# Note: You must choose between using this plugin (need Perl Geo::IP module 
+# from Maxmind, database more up to date) or the GeoIPfree plugin (need
+# Perl Geo::IPfree module, database less up to date).
+# This plugin reduces AWStats speed of 8% !
+#
+LoadPlugin="geoip GEOIP_STANDARD /usr/share/awstats/lib/GeoIP.dat"</file>
+
+<note help>Si après ceci vous obtenez :
+<code>Error: Plugin init for plugin 'geoip' failed with return code: Undefined subroutine &Geo::IP::GEOIP_STANDARD called at /usr/share/awstats/plugins/geoip.pm line 69. (A module required by plugin might be missing).</code> 
+Il faut aussi modifier le fichier **/usr/share/awstats/plugins/geoip.pm** à la ligne 17 <code>$type='geoip';</code> par <code>$type='geoippureperl';</code>
+</note>
+
+<note tip>Il y a d'autres modules GeoIP intéressants, par exemple GeoLiteCity. Il suffit alors d'adapter les instructions précédentes avec le fichier GeoLiteCity.dat.gz [[http://geolite.maxmind.com/download/geoip/database/|ici]] et en modifiant **geoip_city_maxmind.pm** au lieu de **geoip.pm**</note>
+
+==== Affichage du Top 20 des Téléchargements ====
+
+Si vous avez beaucoup de fichiers téléchargés sur votre site, ce plugin vous indiquera les 20 fichiers les plus téléchargés.
+Pour l'installer, il vous suffit d'ajouter ce bout de code à la fin de votre fichier de configuration de votre site :
+<file>#-----------------------------------------------------------------------------
+# EXTRA SECTIONS
+#-----------------------------------------------------------------------------
+
+# Affichage du Top 20 des T&eacute;l&eacute;chargements
+ExtraSectionName1="T&eacute;l&eacute;chargements (Top 20)"
+ExtraSectionCodeFilter1="200 304"
+ExtraSectionCondition1="URL,(.*((\.doc)|(\.exe)|(\.msi)|(\.pdf)|(\.rtf)|(\.swf)|(\.txt)|(\.vbs)|(\.xls)|(\.zip)))"
+ExtraSectionFirstColumnTitle1="T&eacute;l&eacute;chargements"
+ExtraSectionFirstColumnValues1="URL,(.*)"
+ExtraSectionFirstColumnFormat1="%s"
+ExtraSectionStatTypes1=HBL
+ExtraSectionAddAverageRow15=0
+ExtraSectionAddSumRow1=1
+MaxNbOfExtra1=20
+MinHitExtra1=1</file>
+
+
+
+
+
+
+
+
+
+
+
+
+
+===== ProFtpd =====
+
+Vous allez devoir créer un fichier de config pour chaque serveur :
+
+   cd /etc/awstats/
+   cp awstats.conf awstats.ftp.conf
+
+[[:tutoriel:comment_editer_un_fichier|Editez le fichier]] **/etc/awstats/awstats.ftp.conf**
+
+Changez les variables suivantes :
+
+   LogFile="/var/log/xferlog" 
+   LogType=F 
+   LogFormat="%time1 %host %logname %method %url %code %bytesd" 
+   LogSeparator="\t"  
+
+[[:tutoriel:comment_editer_un_fichier|Editez ensuite le fichier]]: **/etc/proftpd/proftp.conf**
+
+Ajoutez les lignes suivantes au fichier (à la suite des commandes identiques existants déja) :
+
+   LogFormat awstats "%t %h %u %m %f %s %b"     
+       #TRES IMPORTANT
+       # Remplacez tous les espaces par des tabulations dans la ligne du dessus
+  
+   ExtendedLog /var/log/xferlog read,write awstats     
+       # Peu fréquent
+       # Si vous utilisez les virtual hosts vous devriez peut être placer cette directive dans le bon "contexte"  
+   TransferLog none     
+       # Si vous utilisez les virtual hosts vous devriez peut être placer cette directive dans le bon "contexte"  
+
+
+Supprimez /var/log/xferlog et redémarrez votre serveur:
+
+   rm /var/log/xferlog && /etc/init.d/proftpd restart
+
+Créez un peu de trafic sur votre logiciel ftp, en téléchargeant un fichier par exemple.\\ Puis exécutez la commande:
+
+   /usr/lib/cgi-bin/awstats.pl -config=ftp ?update
+
+Tout devrait bien s'être déroulé.
+
+Si vous avez un message qui vous dit qu'il y a des "corrupted records", faites bien attention à la note concernant les tabulations, c'est source d'erreur !
+
+Voila, votre serveur proftpd est maintenant monitoré.
+
+Vous pouvez lire l'article suivant pour plus d'options:
+
+
+**(en)** [[http://awstats.sourceforge.net/docs/awstats_faq.html#FTP|FAQ-COM090 : SETUP FOR FTP SERVER LOG FILES (proftpd, vsftpd, ...)]]
+
+
+
+===== Automatiser la génération des statistiques =====
+
+
+
+==== Cron ====
+=== Solution 1 ===
+
+Le cron de awstats se trouve ici:
+
+<code>/etc/cron.d/awstats</code>
+
+Il est généré par défaut et ressemble à ça :
+
+<code>
+*/10 * * * * www-data [ -x /usr/lib/cgi-bin/awstats.pl -a -f /etc/awstats/awstats.conf -a -r /var/log/apache/access.log ] && /usr/lib/cgi-bin/aws
+tats.pl -config=awstats -update >/dev/null
+</code>
+
+En détail ça donne:
+
+<code>
+*/10 * * * *
+</code>
+
+Exécutez le cron toutes les dix minutes
+
+<code>
+www-data
+</code>
+
+avec l'utilisateur www-data
+
+<code>
+[ -x /usr/lib/cgi-bin/awstats.pl
+  -a -f /etc/awstats/awstats.conf
+  -a -r /var/log/apache/access.log ]
+</code>
+
+faites des vérifications sur Des fichiers. //man test// pour en savoir plus.
+
+<code>
+&& /usr/lib/cgi-bin/awstats.pl -config=awstats -update
+</code>
+
+Exécutez cette commande si les vérifications sont OK
+
+<code>
+>/dev/null
+</code>
+Ne pas loguer le résultat de la commande.
+
+A configurer en fonction de sa config mais, on peut habilement le changer par :
+
+<code>
+0 * * * * root /usr/lib/cgi-bin/awstats.pl -config=ma_machine.mon_domaine.mon_pays -update >/dev/null
+</code>
+
+
+=== Solution 2 ===
+Contrib: rapidos
+
+
+Allez dans le répertoire /etc/cron.daily et créez un nouveau fichier:
+
+   emacs /etc/cron.daily/awstats
+
+Copiez le script shell ci-dessous dans le fichier nouvellement créé.
+
+   #!/bin/bash
+   # Chemin de l'application awstats
+   AWS=/usr/local/awstats/wwwroot/cgi-bin/awstats.pl 
+   # Vos domaines
+   # Exemple: DOMAINS="www.monsite.com ftp"
+   DOMAINS="ma_machine.mon_domaine.mon_pays ftp"
+   # Petite boucle qui va bien
+   for d in ${DOMAINS}
+   do
+      ${AWS} -update -config=${d}
+   done
+Vous n'avez qu'a modifier le contenu de la variable domaines en fonctions de vos domaines.\\ Tous les jours le systeme se chargera de générer des statsitiques pour vous :-)
+
+
+=== Solution 3 ===
+Contrib: Pépou06
+
+Vérifier que vous avez bien l'editeur de texte nano installé : [[apt://nano]]
+
+Ouvrez un terminal :
+
+   sudo crontab -e
+
+Ajouter la ligne (ici la mise à jour se fera tous les jours à 2 heures du matin) :
+
+   0 2 * * * perl /usr/lib/cgi-bin/awstats.pl -config=votredomaine.tld -update
+
+Sauvergarder, et relancez crontab :
+
+   sudo /etc/init.d/cron restart
+
+Pour voir si le fichier a bien été modifié :
+
+   sudo crontab -l
+
+Vous avez ainsi la liste de toutes les tâches qui s'effectueront automatiquement.
+
+=== Solution 4 ===
+
+//(Ne connaissant ni emacs, ni nano, je propose **vi** qui est fourni de base :D )//
+
+Si vous avez respecte le format de noms de fichier de config : /etc/awstats///awstats.DOMAINE.TLD.conf//
+
+Alors il existe une solution pour mettre a jour l'ensemble de vos stats
+
+<code>
+vi /etc/cron.d/awstats
+</code>
+
+Par exemple pour une generation des stats toutes les dix minutes,
+sur l'ensemble de vos fichiers (verifiez le chemin des fichiers) :
+
+<code>
+*/10 * * * * root /usr/share/doc/awstats/examples/awstats_updateall.pl -awstatsprog=/usr/lib/cgi-bin/awstats.pl now > /dev/null
+</code>
+
+==== logrotate (rotation des logs) ====
+
+La rotation des logs a pour effet de supprimer les logs apaches. Si une rotation intervient avant que les stats aient été lancées, on risque de perdre une partie des statistiques. Pour éviter ce problème, il suffit de lancer le script de mise à jour des stats juste avant que la rotation ne s'effectue.
+
+Pour ce faire, il faut modifier le script de rotation des logs de la façon suivante :
+
+   cd /etc/logrotate.d
+
+   sudo gedit apache2
+
+Ajouter ces trois lignes juste avant postrotate :
+
+   prerotate
+   su - root -c "/usr/lib/cgi-bin/awstats.pl -config=votredomaine.tld -update > /dev/null"
+   endscript
+
+===== Remarques =====
+
+
+
+==== Adblock Plus ====
+
+Des scripts Adblock un peu trop virulents, blacklistent complètement awstats. Ne pas passer trois heures à se demander ce qui se passe (comme moi), alors qu'il suffit de désactiver Adblock.
+
+==== dans le cas de virtual host ====
+
+
+Pour analyser les logs de chaque vhost, apache doit être configuré. Voici donc un exemple de configuration de vhost:
+
+<code>
+<VirtualHost 212.11.36.52>
+		ServerAdmin email@site.com
+		DocumentRoot /var/www/site.com/www
+		ServerName www.site.com
+		ErrorLog /var/www/site.com/logs/www.error.log
+		CustomLog /var/www/site.com/logs/www.access.log combined
+</VirtualHost>
+</code>
+
+==== Dans le cas d'un serveur apache2 avec la directive ChrootDir ====
+
+Comme le serveur **apache2** fonctionne en environnemnt chrooté, awstats ne peux pas être installé en tant que script CGI, (Perl n'est pas présent dans le chroot). Il sera donc installé en dehors, avec une génération de pages statiques accessibles par le serveur **Apache**.
+
+=== Création du fichier d'un configuration awstats spécifique ===
+
+<code bash>
+sudo sh -c "zcat /usr/share/doc/awstats/examples/awstats.model.conf.gz > /etc/awstats/awstats.www.ubuntu-fr.org.conf"
+sudo chmod 644 /etc/awstats/awstats.www.ubuntu-fr.org.conf
+</code>
+
+Editez ensuite ce fichier et modifiez les lignes suivantes pour mettre les paramètres adapté à votre configuration :
+
+<code file>
+LogFile="/var/log/apache2/access_log"
+SiteDomain="www.ubuntu-fr.org"
+DNSLookup=1
+</code>
+
+<note>Vous pouvez aussi modifier le paramètre //HostAliases// si vous utilisez plusieurs VirtualHost.</note>
+
+Premier lancement : <code bash>sudo /usr/lib/cgi-bin/awstats.pl -config=www.ubuntu-fr.org -update</code> et vérifiez ainsi qu'il n'y a pas d'erreur dans la configuration.
+
+=== Génération des pages statiques et création du cron ===
+
+Génération des pages statiques :
+<code bash>
+sudo mkdir /web-chroot/www/awstats
+sudo cp -R /usr/share/awstats/icon/ /web-chroot/www/awstats/icones
+</code>
+
+<note>
+C'est un choix personnel de copier les icônes directement dans le dossier où seront placées les pages statiques générées.
+</note>
+
+Créez ensuite le fichier **/etc/cron.daily/awstats** contenant les lignes suivantes :
+
+<code bash>
+#!/bin/bash
+
+/usr/share/doc/awstats/examples/awstats_buildstaticpages.pl -config=www.ubuntu-fr.org -update -lang=fr -dir=/web-chroot/www/awstats/ -awstatsprog=/usr/lib/cgi-bin/awstats.pl -diricons=/icones
+</code>
+
+Changez lui ses droits : <code bash>sudo chmod 755 /etc/cron.daily/awstats</code> Puis exécutez le une première fois.
+
+=== Création d'un site pour accéder à ces pages générées ===
+
+Créez le fichier // /etc/apache2/sites-available/awstats // et ajoutez-lui ceci :
+
+<code file>
+<VirtualHost *:80>
+		ServerAdmin email@site.com
+		ServerName awstats.ubuntu-fr.org
+		DocumentRoot /web-chroot/www/awstats/
+		ErrorLog /var/www/ubuntu-fr.org/logs/error.log
+		CustomLog /var/www/ubuntu-fr.org/logs/.access.log combined
+</VirtualHost>
+</code>
+
+Puis lancer la ligne de commande : <code bash>sudo a2ensite awstats</code>
+
+Ajustez la gestion des droits d'accès selon votre besoin de confidentialité 
+
+=== Test final ===
+
+Dans votre navigateur préféré: taper l'URL: [[http://awstats.ubuntu-fr.org/]]
+
+=== Source === 
+
+  * [[http://nicolas.agius.pagesperso-orange.fr/linux/docs/awstats.htm]]
+===== Statistiques des mails (Postfix) =====
+
+==== Configuration classique =====
+
+**Procéder ainsi :**
+
+Rendez-vous dans le répertoire de configuration de awstats :
+
+   cd /etc/awstats
+
+Créez le fichier awstats.mails.conf
+
+   sudo cp awstats.conf awstats.mails.conf
+
+Modifiez les champs suivants :
+
+   LogFile="perl /usr/share/doc/awstats/examples/maillogconvert.pl standard < /var/log/mail.log |"
+
+   LogType=M
+   LogFormat="%time2 %email %email_r %host %host_r %method %url %code %bytesd"
+   LevelForBrowsersDetection=0
+   LevelForOSDetection=0
+   LevelForRefererAnalyze=0
+   LevelForRobotsDetection=0
+   LevelForWormsDetection=0
+   LevelForSearchEnginesDetection=0
+   LevelForFileTypesDetection=0
+   ShowMenu=1
+   ShowSummary=HB
+   ShowMonthStats=HB
+   ShowDaysOfMonthStats=HB
+   ShowDaysOfWeekStats=HB
+   ShowHoursStats=HB
+   ShowDomainsStats=0
+   ShowHostsStats=HBL
+   ShowAuthenticatedUsers=0
+   ShowRobotsStats=0
+   ShowEMailSenders=HBML
+   ShowEMailReceivers=HBML
+   ShowSessionsStats=0
+   ShowPagesStats=0
+   ShowFileTypesStats=0
+   ShowFileSizesStats=0
+   ShowBrowsersStats=0
+   ShowOSStats=0
+   ShowOriginStats=0
+   ShowKeyphrasesStats=0
+   ShowKeywordsStats=0
+   ShowMiscStats=0
+   ShowHTTPErrorsStats=0
+   ShowSMTPErrorsStats=1
+
+Lancer la mise à jour des statistiques : 
+
+   sudo /usr/lib/cgi-bin/awstats.pl -config=mails -update
+
+Pour la mise à jour automatique des statistiques, cf solution 3 en remplaçant :
+
+   "-config=votredomaine.tld -update"
+
+par
+
+   "-config=mails -update"
+
+==== Configuration multi-instance postfix =====
+
+Exemple de 2 files postfix: une pour le système et l'autre pour un service quelconque, nommées respectivement postfix et postfix-service. Les 2 instances génères des logs dans le fichier // /var/log/mail.log //.
+
+  * Rendez-vous dans le répertoire de configuration de awstats : <code bash>cd /etc/awstats</code>
+  * Créez le fichier **awstats.mails-service.conf**: <code bash>sudo cp awstats-mails.conf awstats.mails-service.conf</code>
+  * Modifiez le champ suivant :<code file>LogFile="grep postfix-service /var/log/mail.log | sed -e "s:postfix-service:postfix:" | perl /usr/share/doc/awstats/examples/maillogconvert.pl standard |"</code>
+  * Lancer la mise à jour des statistiques : <code bash>sudo /usr/lib/cgi-bin/awstats.pl -config=mails-service -update</code>
+  * Pour la mise à jour automatique des statistiques, cf solution 3 en remplaçant :<code file>-config=votredomaine.tld -update</code>par<code file>-config=mails -update</code>
+===== Voir aussi =====
+
+  * **(en)** [[http://awstats.sourceforge.net|Site officiel de AWStats]]
+  * [[http://www.system-linux.eu/index.php?post/2008/12/04/Statistique-pour-vos-sites-internet|Piwik]] - une alternative à Awstats qui n'utilise pas les logs apache, et qui produit des statistiques utilisant des graphiques en flash
+  * [[http://www.mrunix.net/webalizer/|Webalizer]] - une alternative à Awstats.
+  * [[http://pwet.fr/blog/statistiques_web_avec_awstats_sous_ubuntu_en_mode_cgi|Statistiques web avec AWStats sous Ubuntu en mode CGI]]
+  * [[http://www.baudelet.net/awstats-plugins.htm|Extras et plugins sur Baudelet]]
+  * [[http://dedibox.echosblogs.org/post/608/1754|Configurer sa Dédibox sous Ubuntu 6.06 LTS]]
+
+----
+//Contributeurs : ...//

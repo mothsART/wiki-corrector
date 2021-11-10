@@ -1,0 +1,470 @@
+
+{{tag>precise réseau administration tutoriel VÉTUSTE}}
+
+----
+
+====== Comment créer un terminal X ou recycler une vieille machine ? Serveur et client XDMCP ======
+
+<note attention> Cette page présente beaucoup d'informations dépassées et nécessite une complète refonte. Si vous avez les compétences pour reprendre le contenu de cette page n'hésitez pas à nous apporter votre aide.</note>
+
+===== Introduction =====
+
+==== Motivation ====
+Vous venez d'acquérir une bête de combat avec le processeur dernier cri et une carte graphique d'enfer capable à elle seule de faire fondre les dernières glaces du Groenland, avec un nombre de Giga de RAM dépassant le Google et des capacités de stockage (notez que pour ici il n'est pas nécessaire d'avoir la dernière bête de compet')... Vous aimeriez que les ressources de cet ordinateur ne soient pas sous-exploitées. Vous avez dans vos placards de vieux ordis et aimeriez les recycler. Cette page est alors faite pour vous!
+
+
+
+==== Terminal X? ====
+Le but de cette page est de permettre à une machine, généralement obsolète, d'utiliser les ressources (processeur, carte graphique, mémoire vive, disques, périphériques en tous genres) ainsi que la configuration (utilisateurs, programmes, données) d'une autre machine, généralement plus récente, au travers d'un réseau (ethernet/wifi). La machine obsolète, appelons-la //le client// ou encore //le vieil ordi//, affichera l'écran de login (kdm ou gdm) fourni par le //serveur//, //le nouvel ordi//. Vous pourrez ainsi vous loguer sous un utilisateur existant sur le serveur. Tout se passera comme si vous travailliez sur le serveur sauf que l'affichage se fait sur l'écran du client. Les programmes seront chargés dans la RAM du serveur, l'affichage sera calculé, compressé par le serveur, transmis au travers du réseau, puis décompressé par la carte graphique du client. Voilà pourquoi une configuration légère suffit pour le client.
+
+Voir une alternative : [[:xvnc|XVNC - Un Terminal Serveur X par Vnc]]
+
+==== Utilisation ====
+Sur le vieil ordi vous pourrez utiliser vos applications de bureautique, web, mail, chat, regarder des vidéos, écouter de la musique, retoucher des images avec GIMP, ... tout aussi vite que si vous étiez sur l'ordi rapide.
+Pratique pour une utilisation privée, pour les écoles, salle informatique. Même au bureau. En fonction du type d'applications utilisées, un serveur peut supporter une dizaine de clients. N'oubliez pas qu'en général le processeur d'un ordinateur de bureau est sous exploité (il est occupé en moyenne à 10%).
+
+==== Alternatives ====
+La solution proposée sur cette page nécessite qu'une distribution linux soit installée sur le client, il faut donc que cette machine possède un disque dur. Il existe une autre manière de recycler de vieilles machines et ce même si le client ne possède pas de disque dur. Il s'agit de LTSP (Linux Terminal Server Project). Néanmoins, il me semble que cette solution soit plus lourde à mettre en place (gestion du dhcp, de tftpboot, de nfs, des paquets, ... en ce qui concerne le serveur et netboot pour le client).
+
+
+==== Vocabulaire & Conventions ====
+
+  * **nouvel ordi**: le serveur.
+  * **serveur**: l'ordinateur qui partagera son //serveur X// sur lequel le client se connectera.
+  * **vieil ordi**: le client.
+  * **client**: l'ordinateur qui permettra d'afficher le //serveur X// du serveur (nouvel ordi).
+  * **XDMCP**: X Display Manager Control Protocol, protocole permettant à une machine d'utiliser le X d'une autre machine par l'intermédiaire d'un réseau.
+  * **BACKSPACE**: touche //correction// du clavier <- 
+
+  * Le masque de sous-réseau est 255.255.255.0
+  * Le serveur a comme adresse IP 192.168.1.2
+  * Le client a comme adresse IP 192.168.1.3
+
+===== Matériel =====
+
+Un réseau Ethernet (TCP/IP ou IP) entre les deux machines est nécessaire, soit une des trois possibilités suivantes :
+
+  * Un câble croisé pour relier les 2 ordinateurs directement
+  * Un hub ou mieux un switch (ou switch-hub). 
+  * Un router Internet avec plusieurs portes
+
+Suivant la méthode exposée ici, les communications entre les 2 ordinateurs ne sont pas cryptées et donc un quidam pourrait écouter les communications entre les deux ordinateurs. 
+
+**Option 1** : La vitesse maximale et la plus grande sécurité seront atteintes en consacrant une carte Ethernet du serveur au réseau de terminaux X et une à la connexion Internet.  Ainsi, le réseau Ethernet deviendra une sorte de câble VGA.  
+
+**Option 2** : créer un tunnel de communications avec SSH. (expliqué par la suite)
+
+==== Serveur ====
+  * Côté processeur, carte graphique: à vous de voir, cela dépend de vos exigences.
+  * Pour la RAM: il vous faut (1+1/2)*(valeur minimum) pour la distribution considérée. Au moment de rédiger cette page (janvier 2007) il vous faudra donc (1+1/2)*256Mo = 384Mo de RAM. Si vous désirez connecter plusieurs clients (disons n clients) au serveur  il faudra ... (1+n/2)*256Mo de RAM. 
+  * Carte réseau 10/100Mbps/Giga
+
+==== Client ====
+  * un Pentium 166 devrait suffire
+  * 32Mo de RAM
+  * disque de 3Go (cela dépend de la distribution linux que vous installerez)
+  * carte graphique avec 2Mo de VRAM
+  * Carte réseau 10/100Mbps/Giga
+  * un écran, un clavier, une souris bien entendu
+
+
+
+
+
+===== Configuration du serveur =====
+Une Ubuntu ou Kubuntu normale conviendra (pas la version //serveur// sinon il n'y aura pas de X).
+
+
+
+==== Méthode graphique ====
+
+=== Ubuntu ===
+Sous Gnome donc, allez dans le menu Système => Administration => Configuration de l'écran de connexion, puis activez le XDMCP.
+
+=== Kubuntu ===
+Pas de méthode graphique connue, voyez la méthode par la console, ce n'est pas compliqué.
+
+==== Autre méthode ====
+<note attention>Nous allons ici modifier directement les fichiers de configuration du système.</note>
+=== Ubuntu ===
+[[:tutoriel:comment_modifier_un_fichier|Modifier le fichier]] **/etc/lightdm/lightdm.conf** avec les droits [[:sudo|administrateur]] et ajouter les lignes suivantes à la fin du fichier puis enregistrer :
+<file>
+[XDMCPServer]
+enabled=true
+</file>
+Pour Ubuntu 18.04, le gestionnaire de session est GDM, il faut donc modifier le fichier /etc/gdm3/custom.conf, il faut ensuite faire la modification suivante :
+<file>
+[xdmcp]
+enabled=true
+</file>
+
+=== Kubuntu ===
+[[:tutoriel:comment_modifier_un_fichier|Modifier le fichier]] **/etc/kde3/kdm/kdmrc** avec les droits [[:sudo|administrateur]].
+
+Recherchez la section [Xdmcp] (vers la fin du fichier), mettez la variable //Enable// à true, cette partie du fichier devrait ressembler à ceci
+<file>
+(...)
+[Xdmcp]
+Enable=true
+Willing=/etc/kde3/kdm/Xwilling
+Xaccess=/etc/kde3/kdm/Xaccess
+Port=177
+</file>
+Ensuite [[:tutoriel:comment_modifier_un_fichier|modifier le fichier]] **/etc/kde3/kdm/Xaccess**  avec les droits [[:sudo|administrateur]] et y ajouter simplement l'adresse ip ou le hostname du client.
+<file>
+192.168.1.3
+</file>
+Si vous voulez que tous les postes de votre réseau puisse y accéder, ajoutez
+<file>
+192.168.1.*
+</file>
+Si vous désirez faire connaître aux autres postes de votre réseau qu'ils peuvent se connecter au serveur par XDMCP, ajoutez
+<file>
+192.168.1.* CHOOSER BROADCAST
+</file>
+
+Ces modifications seront prises en charge au prochain démarrage de votre ordinateur.
+
+==== Firewall ====
+
+Exemple de commande iptables (dans un script gérant iptables)
+
+  * Coté Serveur
+
+
+Décommentez la ligne suivante pour que des clients puissent se connecter à l'ordinateur par XDMCP)
+
+<code>
+#iptables -A INPUT -p udp --dport 177 -j ACCEPT''
+</code>
+
+  * Coté Client
+
+
+Décommentez la ligne suivante pour que l'ordinateur puisse se connecter par XDMCP à une machine distante)
+
+<code>
+#iptables -A INPUT -p tcp --dport 6001 -j ACCEPT''
+</code>
+
+à compléter
+
+
+
+
+===== Installation du client =====
+Il vous faut installer une distribution linux possédant un serveur X. Selon les ressources du client, vous vous orienterez vers l'une ou l'autre distribution:
+
+  * Ubuntu/Kubuntu: votre distribution préférée, facile à installer et à maintenir. Vous ne serez pas dépaysé. Optez pour une version LTS (Long Term Support): stable et supportée pendant longtemps. Rappelez-vous qu'il existe une version light pour les machines disposant de moins de 192Mo de RAM. Pourquoi pas une Xubuntu aussi.
+  * [[http://fr.wikipedia.org/wiki/Minislack | Zenwalk]]: anciennement MiniSlack   (PII, RAM 128 Mo, DD 2 Go)
+  * [[http://en.wikipedia.org/wiki/DeLi_Linux | Desktop Light Linux]]: DeLi linux (486, RAM 16 MB, DD jusqu'a 400MB)
+  * [[http://thinstation.sourceforge.net/wiki/index.php/ThIndex | ThinStation]]: particulièrement adapté, orienté client léger (thin client). ( x86, RAM 8 - 16 - 32 MB, kernel 2.4.x, Xfree86 4.3/3.3.6)
+
+14/10/2011 par Mégamodeste : pour les liens Thinstation voyez ci-dessous :
+http://www.epi.asso.fr/revue/96/b96p193.htm
+http://www.yannobi.com/2010/03/thinstation-client-leger-en-mode-pxe/
+http://www.thinstation.org/
+
+Si vous désirez réutiliser vos //vieux// mac G3, G4, G5 et les transformer en terminaux, optez pour (k)ubuntu ou Zenwalk. Vous pourrez vous connecter sans problème sur un serveur i386, i686, k7... bien évidemment. Cela vous évitera de devoir trouver des binaires pour les G3, G4, G5 (par exemple à ma connaissance il n'existe pas de version linux de Matlab ou de Mathematica pour les mac, évidemment il s'agit de logiciels propriétaires ... honte à moi).
+
+Par contre si vous désirez utiliser en parallèle la toute belle interface de Mac OS X et celle d'(k)ubuntu, pas de problèmes, jetez un oeil à la section Client sous Mac OS X.
+
+===== Connexion du client au serveur =====
+Pour cette section, placez-vous devant le client.
+
+
+==== A la demande ====
+Pour vous connecter //manuellement// au nouvel ordi.
+=== Méthode graphique ===
+Le ou les serveurs apparaissent alors dans une fenêtre. Sélectionner celui choisi puis se connecter avec le compte du second utilisateur créé sur le serveur. (Ceci est requis tant qu'une session est ouverte sous le login de l'administrateur. Si vous fermez la session administrateur du serveur pour vous retrouver à la fenêtre de login, vous pourrez vous connecter en tant qu'administrateur sur le client) Aucun paramétrage supplémentaire n'est requis pour fonctionner et on est connecté.
+Ce qui suit doit, je pense, concerner des versions antérieures.
+
+Sur l'écran de login, cliquez sur //Menu//, choisissez //Remote connection// ou //Connexion à distance//. Ajoutez l'adresse IP du serveur 192.168.1.2, connectez-vous :)  Si sur le serveur vous avez indiqué //CHOOSER BROADCAST// dans le fichier Xaccess alors, normalement, vous devriez voir dans cette fenêtre le nom/adresse IP du serveur.
+
+Pour Lucid, la connexion est possible par le menu "Terminal Server Client" mais 
+
+- elle ne se fait plus au login, mais après lancement de Lucid;
+
+- elle nécessite l'installation préalable du paquet xnest sur le terminal pour dégriser l'option xdmcp;
+
+- elle requiert une connexion par adresse ip (à corriger si nécessaire : je n'ai pas testé avec le nom du server)
+
+- il ne semble plus y avoir de système de découverte automatique comme dans gdm du voisinage disponible pour connexion. 
+
+Un message d'erreur survient suite à des déconnexions intempestives. Si il est fait mention "Could not init font path... cyrillic", ajouter le paquet xfonts-cyrillic. Pour les autres erreurs, à compléter.
+
+=== Par la console ===
+Fermez une éventuelle session graphique. Appuyez sur CTRL-ALT-F1, loguez-vous avec le compte d'installation puis
+<code>
+sudo /etc/init.d/kdm stop # si vous utilisez gdm (ubuntu) tapez sudo /etc/init.d/gdm stop
+X -query 192.168.1.2
+</code>
+:)
+Si vous désirez, sur la même machine (la vieille) avoir 2 écrans de connexions, l'une locale, l'autre distante (sur l'ordi rapide), tapez simplement dans une console (tjs sur le vieil ordi)
+<code>
+X -query 192.168.1.2 :1
+</code>
+Un écran de login devrait alors apparaître sur CTRL-ALT-F8, pour revenir à votre session locale, rendez-vous sur CTRL-ALT-F7.
+
+NB: a partir d'ubuntu karmic, cela peut etre CTRL-ALT-F9 en raison d'un terminal read-only sur CTRL-ALT-F8.
+
+Si vous avez une erreur du type
+<file>
+Fatal server error:
+XDMCP fatal error: Manager unwilling Host unwilling
+</file>
+alors il faut vérifier le fichier Xaccess sur le serveur et s'assurer que l'adresse IP du client y figure.
+<note tip>Rajouter "-once" à la commande "X -query 192.168.1.2 :1" permet de quitter la session et retourner au tty en évitant le respawn  par défaut de X</note>
+
+
+==== A chaque démarrage ====
+Sur le client. Je suppose qu'il s'agit d'une ubuntu/kubuntu\\
+Testez d'abord que le //X -query ...// fonctionne, dans une console (CTRL-ALT-F1) exécutez
+<code>
+sudo /etc/init.d/kdm stop   #si gdm: sudo /etc/init.d/gdm stop
+X -query 192.168.1.2
+</code>
+Créons un script. J'utilise vi comme éditeur de texte, remplacez vi dans les lignes de code suivantes selon vos préférences (nano, emacs, kate, gedit ...):
+<code>
+sudo vi /usr/bin/myxdmcp
+</code>
+Ecrivez-y
+<file>
+#!/bin/sh
+/usr/X11R6/bin/X -query 192.168.1.2 $@
+</file>
+Autorisons l'exécution de ce script
+<code>
+sudo chmod +x /usr/bin/myxdmcp
+</code>
+Faisons en sorte que ce script se lance lors d'un démarrage normal (non recovery) du vieil ordi. Si vous êtes sous kubuntu (ou si vous utilisez kdm comme gestionnaire de login), exécutez ces lignes
+<code>
+#kubuntu kdm
+sudo rm -f /etc/rc2.d/S13kdm
+sudo ln -s /usr/bin/myxdmcp /etc/init.d/xdmcp
+sudo ln -s /etc/init.d/xdmcp /etc/rc2.d/S13xdmcp
+</code>
+si vous utilisez ubuntu (ou si gdm est votre gestionnaire de login):
+<code>
+#ubuntu gdm
+sudo rm -f /etc/rc2.d/S13gdm
+sudo ln -s /usr/bin/myxdmcp /etc/init.d/xdmcp
+sudo ln -s /etc/init.d/xdmcp /etc/rc2.d/S13xdmcp
+</code>
+Redémarrez le vieil ordi et profitez :)
+
+=== Pour revenir en arrière ===
+Si vous voulez annuler ces dernières opérations et supprimer le lancement du X distant à chaque démarrage:
+<code>
+sudo rm -f /etc/rc2.d/S13xdmcp
+</code>
+Puis si kubuntu:
+<code>
+sudo ln -s /etc/init.d/kdm /etc/rc2.d/S13kdm
+</code>
+si ubuntu:
+<code>
+sudo ln -s /etc/init.d/gdm /etc/rc2.d/S13gdm
+</code>
+
+
+==== Respawn du serveur X (edgy sur le client) ====
+Ceci fonctionne pour Edgy, je ne sais pas comment cela fonctionne sur les autres distrib linux.\\
+Dans un environnement de production ou si les utilisateurs ne peuvent/ne doivent pas pouvoir relancer X en ligne de commande voici comment faire en sorte que le serveur X se lance s'il crash (par CTRL-ALT-BACKSPACE par exemple).
+
+Après avoir suivi les instructions de la section //A chaque démarrage//, dans une console
+<code>
+sudo vi /etc/event.d/xdmcp
+</code>
+Ecrivez-y
+<file>
+# xdmcp
+#
+# This service maintains a X by xdmcp from the point the system is
+# started until it is shut down again.
+
+start on runlevel-2
+#start on runlevel-3
+#start on runlevel-4
+#start on runlevel-5
+
+stop on shutdown
+
+respawn /usr/bin/myxdmcp
+</file>
+Redémarrez et testez avec des CTRL-ALT-BACKSPACE, le X distant devrait à chaque ("reboot du serveur?") se relancer.
+
+<note>Note : en essayant cette procédure sur un client Gutsy, pour que ça fonctionne, j'ai dû modifier le 
+<file>
+respawn /usr/bin/myxdmcp
+</file>en <file>
+respawn
+exec /usr/bin/myxdmcp
+</file>Le symptôme était un "unknown stanza" à propos de cette ligne de code dans mon /var/log/syslog. De plus la procédure "respawn du serveur X" est nécessaire au démarrage, la section //A chaque démarrage// ne suffisait pas dans mon cas. --- //[[utilisateurs:trapangle]] Le 03/05/2008, à  10:56//
+</note>
+=== Revenir en arrière ===
+<code>sudo rm -f /etc/event.d/xdmcp</code>
+
+
+===== A travers ssh =====
+Là ça se complique car il faudrait tunneliser une connexion UDP en plus d'une connexion TCP. 
+
+<note warning>A priori c'est impossible à ce jour car il est impossible de tunnelliser une connexion UDP via SSH1 ou SSH2</note>
+
+
+
+===== Alternative à SSH: Zebedee (edgy)=====
+Plus simple et communications aussi chiffrées.
+
+{{http://festcine.jexiste.fr/images/attention.gif}} Ce qui suit est tout à fait théorique et n'a pas été testé. D'ailleurs si vous pouviez donner un coup de main ... faites signe sur le forum (cf. lien en haut de la page).
+
+
+
+
+==== Sur le serveur ====
+Installez Zebedee (il faut configurer ce serveur pour qu'il n'accepte que des connexions de la part du client, ... à étudier)
+<code>
+sudo apt-get install zebedee
+</code>
+puis lancez le serveur Zebedee (-s) avec udp activé (-U) (sans doute le faire en sudo)
+<code>
+zebedee -s -U
+</code>
+
+
+
+==== Sur le client ====
+Installez aussi Zebedee (cf. ci-dessus). Créez les tunnels (à faire peut-être en sudo):
+<code>
+zebedee -U xdmcp:192.168.1.2:xdmcp
+zebedee x11:192.168.1.2:x11
+</code>
+Pour le dernier tunnel (x11), vous pouvez utiliser SSH, regardez la section ci-dessus. Lancez maintenant X
+<code>
+X -query localhost
+</code>
+Si vous placez le X sur :1 alors en ce qui concerne le 2e tunnel, utilisez plutôt
+<code>
+zebedee x11-1:192.168.1.2:x11-1
+</code>
+
+
+===== Le son =====
+
+**Attention**, sur les distributions récentes, il est conseille d'utiliser pulseaudio en remplacement a ESD.
+
+Sur le client. D'abord installer esd
+<code>
+sudo apt-get update
+sudo apt-get install esound libesd0 libesd-alsa0
+</code>
+Ensuite avant de lancer //X -query ...// lancez (sur une console CTRL-ALT-F1)
+<code>
+sudo esd -tcp -public
+</code>
+puis
+<code>
+X -query 192.168.1.2
+</code>
+Si ça ne fonctionne pas installez peut-être (non testé)
+<code>
+sudo apt-get install alsaplayer-esd
+</code>
+
+
+
+===== Client sous Mac OS X =====
+Ici vous conservez votre beau système Mac OS X, et à la demande, vous vous connecterez sur le serveur. Si vous désirez supprimer Mac OS X et transformer votre mac en linux box, rendez-vous ci-dessus à la section Installation du client.
+  * Installez X11, à partir des CD/DVD de Mac OS X ou du site [[http://www.apple.com/downloads/macosx/apple/x11formacosx.html | Apple (X11)]]
+  * Lancez X11
+  * La première fois, allez dans le menu **X11**, //Préférences//
+  * Cochez la case "Permettre le plein écran"
+  * Fermez
+  * Ouvrer le terminal
+  * Dans le terminal qui s'ouvre, exécutez la commande
+<code>
+/usr/X11R6/bin/X -query 192.168.1.2
+</code>
+
+Si ça ne fonctionne pas essayez la commande suivante :
+<code>
+/usr/X11R6/bin/X :1 -query 192.168.1.2
+</code>
+
+Pour quitter le mode pleine écran tapez la combinaison de touche [alt]-[cmd]-[a].
+
+Pour le son, regardez à la section Son de cette page, pour installer ESD, utilisez Fink.
+
+==== Réglez les problème de clavier ====
+Pour fixer les problèmes de clavier (non-sens du texte brouillé, touche shift ne fonctionne pas)
+
+1. Connectez-vous à votre boîte de Ubuntu (U-Box) en passant par SSH:
+ssh -X <u-box-ip>
+
+2. Générez vos clés carte
+<code>xmodmap -pke > ~/.xmodmaprc </code>
+
+3. Déconnectez-vous de votre session SSH
+
+4. Mac OS X sur votre machine (O-Box) ouvrir le terminal et le tapez
+<code>/usr/X11R6/bin/X -query <u-box-ip> </code>
+
+5. Vous verrez Ubuntu login arriver. Connectez-vous comme d'habitude. Une invite vous demandera si vous voulez charger le fichier. Xmodmaprc. Ajouter le dossier à la case de gauche et cliquez sur OK. Vos clés devrait maintenant fonctionner normalement. L'exception de la touche Shift.
+
+6. Sur la U-Box exécutez la commande
+<code>gedit ~/.xmodmaprc</code>
+
+7. Au début de l'ajouter ce fichier texte
+<code>
+clear shift
+clear lock
+clear control
+clear mod1
+clear mod2
+clear mod3
+clear mod4
+clear mod5
+</code>
+8. À la fin du fichier ajouter ce texte
+<code>
+add shift = Shift_L Shift_R
+add lock = Caps_Lock
+add control = Control_L Control_R
+add mod1 = Alt_L
+add mod2 = Num_Lock
+add mod3 = Mode_switch
+add mod4 = Meta_L
+add mod5 = Scroll_Lock
+</code>
+9. Enregistrez le fichier
+10. Déconnectez-vous d'Ubuntu et de fermer la session X.
+11. Exécutez
+<code> /usr/X11R6/bin/X -query <u-box-ip> </code>
+
+Voilà ça devrait fonctionner :).
+
+===== Client sous Windows =====
+A compléter (en attendant: http://helpful.knobs-dials.com/index.php/Remote_X_windows)
+
+On peut aussi utiliser cygwin pour avoir un serveur X (http://www.cygwin.com/)
+
+XMing est aussi une bonne solution permettant de travailler en mode fenêtre, plus léger que cygwin  http://www.straightrunning.com/XmingNotes/
+
+===== To Do =====
+  *faire des screenshots pour les méthodes graphiques
+  *utiliser update-rc.d -f kdm/gdm remove plutôt qu'un barbare rm /etc/rc2.d/kdm ...
+
+
+
+
+===== Liens =====
+  * [[:xvnc|xvnc]]
+  * [[http://www.peppertop.com/blog/?p=744|Enabling XDMCP on Karmic Koala]]
+
+À compléter…
+
+----
+
+//Contributeurs: Vincent Boucher.//
+
+//Cette page se base sur la discussion [[http://forum.ubuntu-fr.org/viewtopic.php?id=4600|Un vieil ordi rapide comme l'éclair !]] développée dans le forum http://forum.ubuntu-fr.org section **Trucs et Astuces**. N'hésitez pas à passer sur ce fil de discussion en cas de problème.//

@@ -1,0 +1,130 @@
+
+{{tag>Lucid sauvegarde sécurité serveur BROUILLON}}
+
+----
+<note important>Rédaction certainement incomplète. Soyez responsables de ce que vous faites et améliorez la. </note>
+
+====== Se faire un espace de sauvegarde sécurité sur son serveur en ligne ======
+
+Monter un espace de sauvegarde dans les nuages sur son serveur en ligne
+
+  * Utiliser un système de sauvegarde : par exemple [[unison]] pour un mirroir et/ou [[rsnapshot]] pour une vraie sauvegarde
+  * envoyer cela vers un répertoire "coffre"
+  * coder cela avec 'encfs' sur un répertoire ".coffre"
+  * stocker ce ".coffre" sur mon serveur en ligne avec 'sshfs'.
+
+
+===== Pré-requis =====
+  * Disposer d'un serveur en ligne  avec accès root et espace disque suffisant
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Avoir [[:tutoriel:comment_installer_un_paquet|installé les paquets]] **[[apt://ssh|ssh]]**  **[[apt://encfs|encfs]]**.
+
+===== Présentation =====
+
+On fait ici un répertoire  /home/clientuser/coffre que l'on code avec encfs dans un répertoire "/home/clientuser/.coffre" 
+Ce répertoire est physiquement renvoyé sur le serveur au travers de sshfs
+
+===== Scripts à utiliser =====
+À mettre dans un répertoire /home/clientuser/bin et rendre exécutable
+
+<file bash CoffreOuvrir.sh>
+#! /bin/sh
+# Script pour ouvrir le coffre en ligne
+echo "Se connecter au coffre "
+# ouvrir la clef ssh si l'on s'en sert (recommandé)
+# (commande pas obligatoire en fait)
+ssh-add
+
+# monter le répertoire caché .coffre qui stocke les fichiers au format crypté
+# indiquer l'UID et le GID de son utilisateur sur le client
+sshfs -o uid=xxxx -o gid=yyyy  servuser@12.34.56.78:/home/servuser/.coffre /home/clientuser/.coffre
+
+# le répertoire "coffre" ne doit être accessible que lorsqu'il est utilisé par encfs, 
+# sinon risque de le remplir en clair et de provoquer des conflits
+echo "Ouvrir le coffre"
+chmod 700 /home/clientuser/coffre
+encfs  /home/clientuser/.coffre/ /home/clientuser/coffre/
+
+echo "montage ok"
+
+# apperçu si c'est bien monté
+ls /home/clientuser/coffre
+
+# En option :
+# faire utiliser cet espace en ligne pour un mirroir 
+# configurer par ailleurs unison pour envoyer dans le coffre en ligne
+# les zones de répertoires dont on veut disposer en ligne
+# voir les mise à jour souhaitables
+unison-gtk coffre
+
+# éviter l'accumulation des logs
+logrotate -s $HOME/.unison/logstatus $HOME/.unison/logrotate.cfg
+</file>
+
+
+<file bash CoffreFerme.sh>
+#! /bin/sh
+# Fermer coffre en ligne
+# version 1.0
+
+echo -n "On démonte le coffre  ? "
+read ouinon
+if [ "$ouinon" = "y" ] || [ "$ouinon" = "Y" ] || [ "$ouinon" = "o" ] || [ "$ouinon" = "O" ]; then
+{
+# on démonte le "coffre" en affichant les erreurs si encore ouvert
+fusermount -u /home/user/coffre
+
+# on évite de pouvoir inscrire quelque chose dans le répertoire quand il n'est plus monté en coffre
+chmod 000 /home/clientuser/coffre
+
+# on démonte la partie codée en ligne, sans conirmation (ne devrait pas être utilisée directement)
+fusermount -u -z /home/clientuser/.coffre
+
+#On désactive la clef ssh si on l'avait ouverte
+ssh-add -D
+
+echo "démontage ok, trop tard pourles regrets"
+}
+fi
+</file>
+
+A mettre dans /home/clientuser/.kde/shutdown
+ou son équivalent pour gnome (ou autre interface graphique)
+Afin de fermer le coffre vraiment et sans appel à la déconnexion de l'utilisateur
+
+
+<file bash CoffreClaquer.sh>
+#! /bin/sh
+# Fermer coffre en Force
+# pas de confirmation ni commentaires
+# même si ouvert
+# à lancer en fin de session
+
+fusermount -u -z /home/clientuser/coffre
+
+fusermount -u -z /home/clientuser/.coffre
+
+chmod 000 /home/clientuser/coffre
+
+ssh-add -D
+</file>
+
+===== Problèmes connus=====
+
+Documentation incomplète.
+
+Manque au moins lien vers tuto pour utiliser les clefs ssh .
+
+===== Conclusion =====
+
+Pas le temps de faire mieux.
+
+En espérant que se sera utile.
+
+
+----
+
+
+//Contributeurs principaux : [[:utilisateurs:livier|livier]].//
+

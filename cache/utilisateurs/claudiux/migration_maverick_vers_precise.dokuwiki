@@ -1,0 +1,174 @@
+
+====== Migration de Maverick vers Precise ======
+
+Je relate ici mon aventure de migration de Maverick (Ubuntu 10.10) vers Precise (12.04.1). En espérant que cela pourra aider quelqu'un...
+
+===== Téléchargement =====
+
+Sur [[http://www.ubuntu.com/download/desktop/alternative-downloads]] j'ai téléchargé par BitTorrent (c'est plus rapide !) la version 12.04.1 Alternate d'Ubuntu pour mon portable 32bits (i386).
+
+===== Transfert de l'image iso sur clé USB =====
+
+J'utilise une clé USB de 2 Go pour faire mes installations. <note important>Toutes les données de cette clé USB sont effacées par les manipulations suivantes.</note>
+
+Une fois la clé USB branchée, ne pas la démonter. Il faut savoir comment elle est identifiée dans /dev.
+La commande :
+  sudo fdisk -l
+indique :
+<code>[...]
+Disque /dev/sdd : 2062 Mo, 2062548992 octets
+19 têtes, 24 secteurs/piste, 8834 cylindres, total 4028416 secteurs
+Unités = secteurs de 1 * 512 = 512 octets
+Taille de secteur (logique / physique) : 512 octets / 512 octets
+taille d'E/S (minimale / optimale) : 512 octets / 512 octets
+Identifiant de disque : 0x02aa025f
+
+Périphérique Amorce  Début        Fin      Blocs     Id  Système
+/dev/sdd1   *          64     1407575      703756   17  HPFS/NTFS masquée</code>
+
+Donc ici la clé USB est le périphérique **/dev/sdd** ; elle contient une partition /dev/sdd1.
+
+Se placer dans le dossier qui contient l'image iso que l'on vient de télécharger : 
+  cd ~/Téléchargements
+  ls -t | head -1
+Réponse :
+  ubuntu-12.04.1-alternate-i386.iso
+C'est bien ça !
+
+Pour vérifier que l'image iso est correcte, chercher sur [[https://help.ubuntu.com/community/UbuntuHashes]] sa clé md5 (md5sum). Hélas, elle ne s'y trouve pas encore ! Tant pis, on lance : 
+  md5sum ubuntu-12.04.1-alternate-i386.iso
+et on obtient : 
+  b4512076d85a1056f8a35f91702d81f9  ubuntu-12.04.1-alternate-i386.iso
+Un moteur de recherche confirme que cette clé md5 est la bonne.
+
+Lancer alors la commande qui va transformer ma clé USB en clé bootable d'installation d'Ubuntu 12.04.1 Alternate i386 : 
+  sudo dd if=ubuntu-12.04.1-alternate-i386.iso of=/dev/sdd bs=4M && sync
+
+Ne pas interrompre cette commande, ni fermer le terminal dans lequel elle s'exécute ; cela peut durer une dizaine de minutes.
+
+<note tip>Inutile d'essayer de vérifier le md5sum de la clé USB. La taille de la clé USB étant plus importante que celle de l'image iso, elles n'auront forcément pas le même md5sum.</note>
+
+Vérifier que la clé USB n'est pas montée (elle ne l'est normalement pas) et la retirer de son port.
+
+===== Préparation de la mise à niveau =====
+
+==== Sauvegarde des données personnelles ====
+Cela est indispensable, surtout si /home n'est pas monté dans une partition qui lui est propre.
+
+Pour vérifier si /home est monté sur une partition :
+  df -h
+si une ligne contient /home, c'est OK :
+  [...]
+  /dev/sda4                           1,8T  711G 1016G  42% /home
+  [...]
+  
+
+==== Mise à jour de la liste des paquets ====
+Vérifier que synaptic et le gestionnaire de mise à jour sont bien fermés, puis :
+  sudo apt-get update
+
+(Une erreur survient : le dépôt dl.google.com n'existe plus. J'ouvre synaptic, clique sur Origine, sélectionne "testing/non-free (dl.google.com)" et vois que seul picasa, que je n'ai pas installé, est concerné ; je supprime ce dépôt, ferme synaptic, et relance la commande ci-dessus. Tout est OK.)
+
+==== Mise à jour des paquets et nettoyage ====
+  sudo apt-get dist-upgrade
+  sudo apt-get autoremove
+==== Faire la liste des paquets à réinstaller ====
+
+Voici un script python qui fait la liste des paquets à installer. 
+
+<code>#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+import subprocess
+import os, os.path
+import re
+
+### Liste des paquets installés automatiquement (i.e non installés manuellement) ###
+# Sous Maverick (Ubuntu 10.10) apt-mark ne connait pas l'option showmanual.
+proc = subprocess.Popen(["apt-mark","showauto"], stdout=subprocess.PIPE)
+autoInstalls,err = proc.communicate() 
+
+autoInstallsList = []
+for autoInstall in str.split(autoInstalls,'\n'):
+  autoInstallsList.append(autoInstall)
+
+## debug:
+#print "autoInstallsList: %i" %len(autoInstallsList)
+
+### Liste de tous les paquets installés ###
+# S'il n'existe pas, on crée un script bash qui nous donne cette liste.
+# (Pas élégant, mais ça fonctionne et c'est rapide !)
+if not os.path.exists(os.path.abspath('')+'/allpackages.sh'):
+  allpackagescript=open(os.path.abspath('')+'/allpackages.sh', 'w')
+  allpackagescript.write("dpkg --get-selections | grep -v deinstall | awk '{print $1}'")
+  allpackagescript.close()
+# On utilise ce script :
+proc=subprocess.Popen(["/bin/sh",os.path.abspath('')+"/allpackages.sh"], stdout=subprocess.PIPE)
+allInstalls,err = proc.communicate()
+
+allInstallsList = []
+for allInstall in str.split(allInstalls,'\n'):
+  if not (allInstall.startswith('linux-headers-2.6') or allInstall.startswith('linux-image-2.6')):
+    allInstallsList.append(allInstall)
+
+## debug:
+#print "allInstallsList: %i" %len(allInstallsList)
+
+### Liste de tous les paquets installés manuellement ###
+# C'est la différence entre la liste des paquets installés et celle des paquets auto.
+manualInstallList = filter(lambda x:x not in autoInstallsList,allInstallsList)
+
+# Suppression des paquets réinstallés automatiquement
+
+dependsList=[]
+
+depends=re.compile("Depends: ([^\n/]*)")
+section=re.compile("Section: ([^\n/]*)") 
+
+for pkg in manualInstallList:
+  proc=subprocess.Popen(["apt-cache","show",pkg], stdout=subprocess.PIPE)
+  res,err = proc.communicate()
+  """
+  #1ere idée : Suppression des paquets dont dependent les meta-paquets (tels ubuntu-minimal et ubuntu-desktop) :
+  sct=section.search(res)
+  if sct.group(1).startswith("metapackages"):
+    #print "META : %s" %pkg
+    deps=depends.search(res)
+    deps=deps.group(1).replace("," , "")
+    pkgsList=str.split(deps, " ")
+    dependsList=dependsList + filter(lambda x:x not in dependsList,pkgsList)
+  """
+  # 2nde idée : Finalement, supprimer tous les paquets qui seront réinstallés automatiquement du fait des dépendances :
+  deps=depends.search(res)
+  if deps is not None:
+    deps=deps.group(1).replace("," , "")
+    pkgsList=str.split(deps, " ")
+    dependsList=dependsList + filter(lambda x:x not in dependsList,pkgsList)
+
+# On supprime ces paquets de la liste des paquets installés manuellement :
+manualInstallList=filter(lambda x:x not in dependsList,manualInstallList)
+
+# debug:
+#print "manualInstallList: %i" %len(manualInstallList)
+
+for install in manualInstallList:
+  print install
+</code>
+
+Créer un dossier migration, et s'y rendre :
+  mkdir ~/migration
+  cd ~/migration
+
+Enregistrer le script ''listofpackages.py'' ci-dessus :
+  gedit ~/migration/listofpackages.py
+Fermer gedit puis rendre le script exécutable :
+  chmod +x ~/migration/listofpackages.py
+
+L'exécuter en redirigeant sa sortie dans un fichier nommé ''maverick_packages_list.txt'' :
+  ./listofpackages.py > maverick_packages_list.txt
+
+==== Enregistrer les clés GPG de tous les dépôts ====
+  sudo apt-key exportall > maverick_all_repos.asc
+
+
+  

@@ -1,0 +1,259 @@
+
+{{tag>Xenial partage samba tutoriel windows}}
+
+====== Monter des partages Windows au démarrage ======
+
+Bien qu’Ubuntu permette de se connecter à un dossier partagé sur un PC fonctionnant avec Windows de manière très simple, //via// la commande « Se connecter au serveur » du menu Raccourcis, cela ne résout pas tous les problèmes. En effet, certaines applications et non des moindres ([[:LibreOffice]] par exemple) ne savent pas utiliser ces connexions réseaux pour ouvrir les fichiers.
+
+Il est donc nécessaire pour ces applications de « monter », c’est-à-dire d’accrocher, les dossiers partagés par d’autres ordinateurs fonctionnant sous Windows //dans un répertoire de l’arborescence de fichiers d’Ubuntu//, de façon à ce que les fichiers qui s’y trouvent soient directement accessibles pour toutes les applications. Comme s’ils étaient sur la partition du disque dur où Ubuntu est installé.
+
+Pour ce faire, il y a trois méthodes. La, première classique et simple, consiste à utiliser le fichier fstab de montage des partitions. La seconde, plus avancée et utilisant la bibliothèque libpam-mount, est un peu plus complexe, mais offre en contre partie beaucoup plus de possibilités.\\
+
+Enfin la dernière s'appuie sur autosfs avec CIFS :
+[[:autofs|AutoFS - montage automatique de systèmes de fichier]]
+
+__Remarques__ : On pourra se reporter avec intérêt aux pages \\
+[[https://help.ubuntu.com/community/MountSAMBAshareFSTAB]]\\
+[[https://wiki.ubuntu.com/MountWindowsSharesPermanently]] \\
+[[https://help.ubuntu.com/community/MountWindowsSharesPermanently]]\\
+[[:mount_fstab|mount et fstab : Le montage des systèmes de fichiers]] \\
+[[http://g-scripts.sourceforge.net/cat-filesysmgt.php]] et utiliser le script nautilus "Mount Samba Share"
+
+===== 1ère méthode : l’utilisation du fichier fstab =====
+
+==== Installation des paquets nécessaires ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] suivant sur votre système s'il ne le sont pas déjà (il ne fait pas partie des paquets installés par défaut) :
+**[[apt>samba,cifs-utils]]**
+==== Monter les partages distants ====
+
+Dans une console tapez la commande suivante :
+  sudo mkdir /media/partage
+pour créer le répertoire de montage local des fichiers distants. Ce répertoire peut aussi être placé dans le répertoire par défaut /mnt mais il n’y aura pas de raccourci direct dans nautilus.
+
+Avant tout, il est conseillé de commencer par vérifier que vous arrivez bien à monter le partage en ligne de commande, exemple :
+<code>sudo mount -t cifs -o username=utilisateur_ubuntu,rw,iocharset=utf8,file_mode=0777,dir_mode=0777 //adressIP_serveurFichier/repertoireSource /media/partage</code>
+si vous n’avez besoin que d’un accès en lecture, c'est plus simple :
+<code>sudo mount -t cifs -o guest,iocharset=utf8 //adressIP_serveurFichier/repertoireSource /media/partage</code>
+
+On crée ensuite un fichier dans lequel on stocke l’identifiant et le mot de passe pour se connecter sur le PC distant. Le but de cette création est de faire en sorte que l'identifiant et le mot de passe n'apparaissent pas directement dans le fichier fstab, qui, par défaut, est accessible en lecture par tout utilisateur. C'est le minimum à faire pour limiter la visibilité des mots de passe.
+
+Pour créer le fichier et l’ouvrir avec [[:nano|nano]] il suffit de saisir dans un [[:terminal]] la ligne suivante :<code>sudo nano /root/.smbcredentials</code>
+
+Dans ce fichier, ajouter les trois lignes suivantes :
+<file>
+username=MonNom
+password=MonMotDePasse
+domain=DOMAINE
+</file>
+
+Enregistrez ce fichier (Ctrl+0).
+
+
+==== Modifier le fichier fstab de montage des partitions ====
+<note attention>**Note :** avant d'effectuer toute modification du fichier ''/etc/fstab'', pensez à en faire une **copie de sauvegarde** ! Cela peut être fait grâce à la commande suivante, exécutée dans un terminal : <code>sudo cp /etc/fstab /etc/fstab_sauvegarde</code>
+Pour restaurer cette copie de sauvegarde, en cas de besoin, exécutez la commande inverse : <code>sudo cp /etc/fstab_sauvegarde /etc/fstab</code></note>
+Pour l’exemple on va supposer que les paramètres sont les suivants :
+  * Adresse IP du PC distant : 192.168.1.2
+  * Nom du partage auquel on veut accéder : Partage
+  * Dossier local où on va monter ce partage : /media/partage
+
+Toujours dans Gedit, ouvrir le fichier /etc/fstab (faites attention à ce que vous faites. N’oubliez pas que vous êtes en mode Super utilisateur !) et ajoutez-y une ligne de ce type : //(L’option **iocharset=utf8** permet l’utilisation du jeu de caractères UTF-8, ce qui corrige les problèmes de noms de dossiers et fichiers accentués)//.
+<file>//192.168.1.2/Partage	/media/partage cifs credentials=/root/.smbcredentials,iocharset=utf8	0	0</file>
+Ou :
+<file>//192.168.1.2/Partage	/media/partage	cifs	guest,iocharset=utf8	0	0</file>
+si le PC distant est sous windows et ne nécessite pas d’identification.
+
+Le fichier credentials peut ne pas suffire à avoir accès en écriture, il faut alors ajouter l’utilisateur qui se connecte et les droit chmod sur les répertoire et fichiers :
+<file>//192.168.1.2/Partage	/media/partage cifs uid=nom_utilisateur_ubuntu,dir_mode=0777,file_mode=0777,credentials=/root/.smbcredentials,iocharset=utf8	0	0</file>
+
+Dans le cas d’un __**partage dont le nom contient une espace**__, ajouter la ligne comme ceci :
+<file>//192.168.1.2/Partage\040avec\040une\040espace	/media/partage cifs credentials=/root/.smbcredentials,iocharset=utf8	0	0</file>
+Ou encore :
+<file>//192.168.1.2/Partage\040avec\040une\040espace	/media/partage	cifs	guest,iocharset=utf8	0	0</file>
+\040 étant le code octal pour une espace.
+
+Dans le cas d’un __**partage dont le nom contient des parenthèses**__ (cas d’un lecteur partagé), les codes octaux sont respectivement **050** et **051** pour **(** et **)**.
+
+Sauvegardez le fichier : au prochain démarrage, vous aurez accès à vos fichiers dans toutes vos applications.
+
+Cette méthode est efficace, robuste et simple à mettre en œuvre, mais elle souffre de quelques limitations. Elle impose de stocker des mots de passe en clair dans un fichier, et surtout, elle ne permet pas d’utiliser des paramètres différents en fonction de l’utilisateur qui se connecte et donc empêche de profiter des mécanismes de gestion des droits d’accès que les versions récentes de Windows permettent (à partir de Windows 2000). Pour remédier à cela, il existe une autre solution.
+
+
+FIXME
+Les utilisateurs de **Xubuntu** devront utiliser cette méthode pour accéder aux partages réseaux. Voici un petit récapitulatif de la procédure :
+  *Installer **samba** et **smbfs** avec Synaptic
+  *Créer les répertoires où vont être montés les partages :
+    *///media/PC1/images//
+    *///media/PC1/musiques//
+  *Modifier le fichier fstab :
+  gksudo mousepad /etc/fstab
+  *Rajouter à la fin du fichier l’adresse du PC distant, les dossiers à monter, et où les monter :
+<file>
+//192.168.0.2/images	/media/PC1/images	smbfs	guest,iocharset=utf8	0	0
+//192.168.0.2/musiques	/media/PC1/musiques	smbfs	guest,iocharset=utf8	0	0
+</file>
+  *Redémarrer
+
+=== Permissions et appropriation des fichiers et répertoires ===
+[[http://manpages.ubuntu.com/manpages/utopic/en/man8/mount.cifs.8.html|traduit de la page ubuntu.com sur les options cifs]]\\
+Le protocole CIFS ne fournit pas d'informations unix sur le propriétaire et le mode pour les fichiers et répertoires. De ce fait, les fichiers et répertoires sont définis par les valeurs associées aux options //uid=// et //gid=// , et aux persmissions définies par les options //file_mode// et //dir_mode// lors du montage. Tenter de modifier ces valeurs avec chmod/chown fonctionne mais est sans effet.\\
+Quand le client et le serveur négocient les extensions unix, les fichiers et répertoires seront affectés aux valeurs //uid//, //gid// et mode défini par le serveur. Comme le montage CIFS est généralement utilisé par un utilisateur unique avec le même "//credentials//", les nouveaux fichiers et répertoires créés lui sont associés quelque-soit le "//credentials//" utilisé lors du montage.\\
+Si les options //uid// et //gid// utilisées ne correspondent pas entre le client et le serveur, les options //forceuid// et //forcegid// peuvent être utiles. Notez cependant qu'il n'y a pas d'équivalent pour le mode, ce qui entraîne que les permissions affectées à un fichier (ou répertoire) affecté par //uid/gid// ne correspondent pas forcément aux véritables autorisations!\\
+Quand les extensions unix ne sont pas négociées, il est également possible de les émuler localement sur le serveur en utilisant l'option de montage "//dynperm//". Si cette option est active, les nouveaux fichiers et répertoires recevront des permissions appropriées... mais en général, cette option est déconseillée.\\
+Il est aussi possible de remplacer les permissions sur le client via l'option "//noperm//". Les contrôle de permissions réalisées côté serveur ne peuvent pas être remplacées. Elle correspondent toujours au "//credentials//" utilisées lors du montage et non à l'utilisateur qui accède au partage.
+===== 2ème méthode : utilisation de la bibliothèque libpam-mount =====
+
+<note warning>FIXME cette méthode contient des options comme fmask, dmask qu'on ne retrouve plus dans [[http://manpages.ubuntu.com/manpages/precise/en/man8/smbmount.8.html|les pages d'options]] </note>
+==== Installation des paquets nécessaires ====
+
+
+Grâce à [[:Synaptic]], installez les paquets suivants sur votre système s’ils ne le sont pas déjà (ils ne font pas partie des paquets installés par défaut) :
+  *libpam-mount
+  *cifs-utils
+
+
+==== Petite correction sur les droits ====
+
+Afin que tout cela soit faisable, il est nécessaire de modifier légèrement les droits du fichier /usr/bin/smbmount. Pour cela, tapez dans un terminal la commande :
+  sudo chmod +s /usr/bin/smbmount
+
+==== Édition des fichiers de configuration ====
+
+Une fois ces deux paquets installés, on fait comme précédemment : on lance [[:nano|Nano]] en mode superutilisateur pour créer et modifier le fichier /etc/pam.d/common-pammount avec la commande :
+
+<code>sudo nano /etc/pam.d/common-pammount</code>
+Dans ce fichier, ajoutez les deux lignes suivantes et enregistrez-le :
+<file>
+auth       optional   pam_mount.so use_first_pass
+session    optional   pam_mount.so 
+</file>
+
+**Faites attention à saisir correctement ces deux lignes ! Des erreurs ici risquent de vous empêcher d’ouvrir une session ultérieurement.**
+
+Ensuite, ouvrez le fichier **/etc/pam.d/gdm** qui existe déjà et ajoutez à la fin la ligne suivante :
+<file>@include common-pammount</file>
+
+Si vous utilisez la connexion automatique au démarrage, la modification doit se faire aussi dans le fichier **/etc/pam.d/gdm-autologin**.
+
+<note lubuntu> Dans lubuntu 14.04.3 LTS, les fichiers seraient plutôt lightdm et lightdm-autologin.</note>
+
+De la même façon, vous trouverez dans ce répertoire toute une série de fichiers correspondants à diverses commandes de connexion ou d’ouverture de session. Si vous ajoutez cette ligne dans l’un de ces fichiers, le montage des partages sera pris en compte.
+
+Enregistrez ce fichier.
+
+==== Autoriser le démontage des volumes à la fermeture de session ====
+
+Pour cela, il faut modifier le fichier **/etc/login.defs**, y chercher l’option **CLOSE_SESSIONS** (attention à la casse) et la mettre à la valeur //yes//.
+
+<note important>Important :
+Dans la version 9.04, l’option **CLOSE_SESSIONS** est déclarée comme obsolète. Est-elle remplacée par autre chose ?
+</note>
+
+==== Édition du fichier indiquant les partages à monter ====
+
+Toujours dans Gedit, ouvrez le fichier **/etc/security/pam_mount.conf**.
+
+<note important>Important : Dans la version 9.04 le fichier s’appelle **/etc/security/pam_mount.conf.xml**</note>
+
+C’est ici qu’on va trouver toutes les options de configuration permettant d’indiquer quels partages on va monter et de quelles manières.
+
+Toutes les lignes de ce fichier qui commencent par # sont en fait des lignes de commentaires qui n’engagent aucune action concrète. Ne vous inquiètez pas de ce que vous voyez dans ce fichier : 90% des lignes sont des commentaires explicatifs et il n’y a en fait que très peu de lignes réellement significatives.
+
+La lecture de ces commentaires n’est d'ailleurs pas vaine, car ils vous permettront de comprendre un peu mieux l’utilisation générale de ce système qui ne se limite pas à ce que nous en faisons ici.
+
+=== Debug et création des répertoires ===
+
+Les deux premières options disponibles dans ce fichier sont les suivantes :
+  *debug
+  *mkmountpoint
+
+La première active le mode //debug// quand on la met à 1. Cela permet d’avoir des messages de retour de l’utilisation. Ce n’est réellement utile que lorsqu’on l’utilise en mode console, mais on peut la laisser à sa valeur par défaut.
+
+La deuxième est une option qui permet, quand sa valeur est à 1, de créer automatiquement les répertoires où l’on va monter nos dossiers partagés. Là, c’est à vous de voir. Mais faites attention : si vous la mettez à 0, n’oubliez pas d'aller créer les dossiers nécessaires ultérieurement.
+
+=== Montage de partage spécifique à l'utilisateur ===
+
+L’option suivante qui nous intéresse est l’option //luserconf//, disponible quelques lignes plus bas. Si vous décommentez cette ligne, le nom du fichier que vous mettrez à la suite de cette option sera utilisé pour paramétrer des partages spécifiques à l’utilisateur. Ce fichier sera à placer dans le répertoire personnel de l’utilisateur en question et devra contenir des directives volumes comme nous le verrons plus loin.
+
+=== Gestion des options autorisées/interdites/obligatoires ===
+
+Les options suivantes qui nous sont utiles sont :
+  *options_allow
+  *options_deny
+  *options_require
+
+En général, elles seront mises ou laissées en commentaires. Elles permettent d’indiquer quelles options seront interdites, requises et autorisées parmi celles disponibles plus loin dans la directive volume (lisez les commentaires qui les accompagnent si vous voulez vous en servir). Sachez que les options qu’elles concernent sont à rapprocher des options de la commande smbmnt (qui est utilisée de toute façon ici de manière transparente).
+
+=== Directives de montages des partages ===
+
+Voici enfin le point crucial : la création des directives de montage des dossiers distants, par l’indication des directives volumes. La syntaxe d’une telle option pour le montage de volume via [[:samba|smb]] est la suivante :
+<file>volume <utilisateur> smbfs <serveur> <partage> <point de montage> <option1,option2,..optionx> - -</file>
+
+La signification de chaque élément est la suivante :
+|	**<utilisateur>**	|nom d'utilisateur à utiliser pour se connecter. Un mécanisme de joker est disponible pour\\ une utilisation générique (voir plus loin).	|
+|	**<serveur>**	|nom ou adresse IP du poste distant sur lequel se situe le partage auquel on veut accéder.	|
+|	**<partage>**	|nom du partage tel qu'il est défini sur le PC Windows distant.	|
+|	**<point de montage>**	|chemin complet vers le répertoire où l’on veut monter le partage, en fonction de la valeur\\ que l’on a donné à l’option mkmountpoint. Ce dossier sera créé automatiquement ou non.	|
+|	**<optionx>**	|les options disponibles pour le montage de ce répertoire.	|
+
+NB :
+  *les deux tirets à la fin de la ligne sont **absolument indispensables** car ils correspondent à la non-utilisation de paramètres qui sont normalement utilisés dans d’autres cas et inutiles ici (montage de dossiers chiffrés) ;
+  *attention à ne pas confondre les différents paramètres de cette commande. Ils sont à séparer par des espaces. Les différentes options sont séparées les unes des autres par des virgules.
+
+=== Les jokers pour le nom de l’utilisateur ===
+
+On peut remplacer le nom de l'utilisateur par le caractère ''*''. Cela signifie que c’est le nom de l’utilisateur courant qui sera utilisé et dans ce cas, le caractère ''&'' peut être utilisé pour remplacer le nom de l’'utilisateur dans d’autres paramètres de la ligne (nom du dossier partagé, point de montage notamment).
+
+=== Les options de montage ===
+
+Les options de montage disponibles sont en fait celles de la commande smbmnt. Voyez les pages man de cette commande si vous voulez en savoir plus :
+  man smbmnt
+
+Les plus utiles dans notre cas de figure sont les suivantes :
+
+|	**uid**	|nom d’utilisateur du propriétaire des fichiers et répertoire partagé	|
+|	**gid**	|nom du groupe correspondant	|
+|	**dmask**	|masque de droits des répertoires	|
+|	**fmask**	|masque de droits des fichiers	|
+|	**workgroup**	|groupe de travail dans lequel il faut aller chercher le PC distant	|
+
+Vous pouvez tester les options que vous voulez utiliser en faisant d’abord des tests avec la commande smbmnt. Une fois que vous aurez ainsi défini les valeurs correctes des paramètres dont vous avez besoin, il vous sera beaucoup plus facile de paramétrer correctement ce fichier.
+
+=== Quelques exemples de directives volumes ===
+
+Montage d’un répertoire distant accessible à tous les utilisateurs :
+<file>volume * smbfs wrksrv Commun /media/Doc-Commun uid=&,gid=commun,dmask=777,fmask=777,workgroup=workgroup - -</file>
+
+Description des paramètres et options utilisées :
+	Serveur  wrksrv
+	Partage Commun 
+	Point de montage : /media/Doc-Commun (l’intérêt de le monter dans /media est de le faire apparaître dans les raccourcis)
+	option 	uid=utilisateur courant
+		gid= groupe commun regroupant tous les utilisateurs du PC
+		workgroup = c'est ici le nom du groupe de travail par défaut de Windows
+
+Montage d’un partage regroupant des dossiers spécifiques à chaque utilisateur :
+<file>volume * smbfs wrksrv Users /home/&/Doc-Utilisateur uid=&,gid=&,dmask=777,fmask=777,workgroup=workgroup - -</file>
+
+Ceci est un autre exemple dont l’idée est de donner accès à un partage qui regroupe des répertoires spécifiques à chaque utilisateur (on ne peut pas monter directement un sous-répertoire d’un partage. Seuls les partages eux-mêmes sont montables).
+
+Pour cela, on utilise comme //gid// le groupe du même nom que l’utilisateur, créé automatiquement par Ubuntu. Les droits sont ici en libre accès, mais les dossiers distants qui ne sont pas configurés comme accessibles pour l’utilisateur ne lui seront pas accessibles (en fait, il ne verra pas le contenu et ne pourra pas y accéder).
+
+De même, l’utilisation du joker ''&'' permet de monter ce partage directement dans le répertoire personnel de l’utilisateur.
+
+N’oubliez pas que vous pouvez en plus configurer des partages spécifiques à chaque utilisateur, grâce à la directive luserconf vue précédemment.
+
+===== Que faire en cas de problèmes ? =====
+<note tip>S’il y a des erreurs au démarrage, vous pouvez les retrouver dans le fichier **syslog** qui se trouve dans **/var/log** </note>
+Comme on intervient sur les paramètres d’authentification, si vous faites une erreur dans un des fichiers de configuration, il est possible que vous ne puissiez plus vous connecter par la suite : dans ce cas, que faire ?
+
+==== 1ère méthode ====
+
+Le plus simple est de démarrer en mode "rescue". Pour cela, appuyez sur la touche "esc" au démarrage du Linux, lors du chargement de GRUB. Vous pourrez alors choisir le mode "failsafe" qui ouvre une session mono-utilisateur en tant que root. Vous pourrez ainsi modifier les fichiers dans /etc/pam.d sans trop de problèmes.
+
+==== 2ème méthode ====
+
+Si vous êtes bricoleur et que vous avez la patience, vous pouvez utiliser un LiveCD d’une distribution Linux, notamment celui d’Ubuntu. Une fois que vous avez démarré avec le LiveCD, montez votre partition système dans le répertoire de votre choix, puis allez re-modifier les fichiers de configuration. Si vraiment plus rien ne marche, la première chose à faire est de commenter (en mettant un # devant) la ligne @include common-pammount du fichier /etc/pam.d/gdm. Cela vous permettra au moins de pouvoir vous connecter normalement.
+
+Contributeurs: [[utilisateurs:LordPhoenix]], [[utilisateurs:bcag2]]

@@ -1,0 +1,529 @@
+
+{{tag> administration serveur réseau supervision BROUILLON}}
+
+----
+
+====== Zabbix, moniteur de supervision ======
+
+La gestion d'un parc de serveur est un travail de chaque instant. Un bon administrateur système doit savoir à tout moment l'état des différentes machines et des différents services. Un autre aspect clé est que l'administrateur ne peut pas se permettre de passer son temps devant un tableau avec des voyants verts en attendant qu'un voyant passe au rouge pour agir. Son temps est occupé à d'autres 
+tâches et il ne peut donc pas surveiller le tableau de statut en permanence.
+
+L'examen journalier des logs systèmes est un bon début. Cependant, si un problème survient, on s'en rend compte seulement le lendemain. Ce qui peut être très (trop ?) tard.
+
+Pour se simplifier le travail, nous allons utiliser un //moniteur de supervision//. Le but d'un tel programme est de surveiller les services et les machines se trouvant sous notre responsabilité. Si un problème survient, le moniteur de supervision nous prévient (email, SMS, etc.).
+
+Le moniteur de supervision que nous allons envisager est **Zabbix**.
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]] ;
+  * Avoir activé l'accès aux [[:depots#universe_et_multiverse|dépôts Universe]] ;
+  * Avoir un serveur Web installé et gérant le [[:PHP]] et [[MySQL]] (ou [[PostgreSQL]]), voir la page « [[LAMP]] ».
+  * positionner la variable date.timezone dans php.ini (par ex: /etc/php5/apache2/php.ini) : ''date.timezone = Europe/Paris'' (nous y reviendrons)
+
+===== Installation =====
+
+==== Installation du serveur Zabbix 2.0.2 ====
+
+[[:tutoriel:comment_installer_un_paquet|Installer les paquets]] :
+  * **[[apt>zabbix-server-mysql]]** pour utiliser une base MySQL __ou__ **[[apt>zabbix-server-pgsql]]** pour utiliser une base PostGRES ;
+  * **[[apt>zabbix-frontend-php]]** : l'interface PHP ;
+  * **[[apt>zabbix-agent]]** : pour pouvoir monitorer le serveur lui-même.
+
+
+<note tip>Nous utiliseront dans ce tutoriel la version mysql de zabbix </note>
+
+===== Lancement du serveur zabbix : =====
+
+==== Activer le serveur ====
+ 
+Le serveur zabbix n'est pas activé par défaut : la commande
+  sudo service zabbix-server restart
+renvoie :
+  zabbix_server is disabled in /etc/default/zabbix-server.
+
+Pour l'activer, avec les [[:sudo|droits d'administration]] [[:tutoriel:comment_modifier_un_fichier|modifier]] le fichier  "/etc/default/zabbix-server" comme suit :
+<file>START=yes</file>
+
+Redémarrer le serveur :
+<code>sudo service zabbix-server restart</code>
+
+Consulter les logs du serveur :
+<code>tail -100 /var/log/zabbix-server/zabbix_server.log</code>
+
+L'observation des logs montre que le serveur Zabbix ne peut pas se connecter à la base de données MySQL car la base n'est pas remplie, n'est pas paramétrée, et la configuration de Zabbix n'est pas terminée.
+
+
+===== Préparation de la base de données =====
+Zabbix a besoin de stocker les informations de supervision dans une base de données. 
+
+Zabbix est capable de fonctionner avec un moteur de base de données MySQL ou PostgreSQL. Mais c'est à vous de choisir, et d'installer les packages mysql-server ou postgresql-server en conséquence...
+
+Cela signifie que l'installation du package Zabbix-server ne s'accompagne pas automatiquement de la création de la base de données et de l'ajout des données de base. Il faut que vous réalisiez cette opération. 
+
+Afin de vous aider à créer la base de données Zabbix, l'installation du package Zabbix-server vous fournit les scripts de création des structures (schema), des données (data) et des images (images). L'emplacement de ces scripts dépend de la version d'Ubuntu sur laquelle vous travaillez (vois plus loin).
+
+==== MySQL ==== 
+Pour créer et remplir la base Zabbix dans MySQL :
+
+Se connecter avec le compte root MySQL :
+  mysql -uroot -p
+
+Indiquer le mot de passe root de mysql (celui qui a été défini lors de l'installation de MySQL)
+
+Créer la base de données zabbix :
+   mysql > create database zabbix;
+
+Créer un utilisateur MySQL qui se nomme zabbix et qui a pour mot de passe zabbix :
+   mysql > grant all privileges on zabbix.* to zabbix@localhost identified by 'zabbix';
+   mysql > flush privileges;
+
+Quitter la console mysql
+  mysql > exit
+
+<note>S'il faut, après coup ou suite à une erreur, changer le mot de passe de l'utilisateur 'zabbix', voici les commandes à utiliser depuis un terminal de commande (ici le nouveau mot de passe est mysql) :
+
+  user#  mysql -uroot -p
+  mysql > USE mysql ;
+  mysql > SET PASSWORD FOR 'zabbix'@'localhost' = PASSWORD('mysql');
+  mysql > FLUSH PRIVILEGES ;
+</note>
+  
+=== Importer la structure de base de données zabbix  ===
+<note tip>Attention l'ordre des commandes est important. Il faut d'abord créer les tables avant de pouvoir y mettre les données.</note>
+==  ubuntu > =12.04.2 ==
+<code>
+  zcat /usr/share/zabbix-server-mysql/schema.sql.gz | mysql -uzabbix -pmotdepassezabbix zabbix
+  zcat /usr/share/zabbix-server-mysql/images.sql.gz | mysql -uzabbix -pmotdepassezabbix zabbix
+  zcat /usr/share/zabbix-server-mysql/data.sql.gz | mysql -uzabbix -pmotdepassezabbix zabbix 
+</code>
+<note> On remplacera  motdepassezabbix par le mot de passe que nous avons utilisé lors de la création du compte MySQL 'zabbix'.</note>
+
+==== PostgreSQL ====
+Pour créer et remplir la base de donnée Zabbix dans PostgreSQL:
+
+On edite tout d'abord [[:tutoriel:comment_modifier_un_fichier|modifier]] le fichier //pg_hba.conf// (il faut être en [[:sudo|root]] pour cela):
+
+<code>sudo nano /etc/postgresql/"votre_version_de_postgresql"/main/pg_hba.conf</code>
+
+On descend tout en bas du fichier, on commente toutes les lignes qui ne le sont pas (pour éviter les conflits) et on ajoute les deux suivantes:
+<file>
+local    all            zabbix                                     md5
+local   all             postgres                                  trust
+</file>
+Les utilisateurs //zabbix// et //postgres// (l'utilisateur créé par défaut et ne possédant pas de mot de passe) sont ainsi autorisés à se connecter à la Base de Données. Le premier n'étant pas encore créé, il faudra lors de sa création, lui attribuer un mot de passe.
+
+On redémarre le service pour que les modifications soient prises en compte:
+<code>pedro@pedro-pc:~#service postgresql restart</code>
+
+On se connecte à la base de données :
+<code>
+root@pedro-pc:~#su postgres
+postgres@pedro-pc:/root$psql
+postgres=#create role zabbix with password 'votre_mot_de_passe' login createdb;
+</code>
+<note tip>Le paramètre "login" autorise l'utilisateur à se connecter à la base et "createdb" à créer une base de donnée.. ;-)</note>
+On se déconnecte de la base:
+<code>postgres=#\q</code>
+
+Et on se reconnecte avec l'utilisateur //zabbix// en spécifiant la base de donnée //postgres// car c'est la seule qui est actuellement créée. Puis, on crée la base de donnée //zabbix// :
+<code>pedro@pedro-pc:~#psql -Uzabbix postgres
+Password for user zabbix:
+postres=>create database zabbix;</code>
+On se déconnecte de la bdd:
+<code>postgres=>\q</code>
+
+=== Importer la structure de la base dans postgresql ===
+
+C'est exactement la même manipulation qu'avec mysql adaptée à postgresql :
+<note tip>Attention, il faut exécuter les 3 commandes une à une et bien respecter l'ordre d'exécution de celles-ci.</note>
+
+<code>
+zcat /usr/share/zabbix-server-pgsql/schema.sql.gz | psql -Uzabbix zabbix
+zcat /usr/share/zabbix-server-pgsql/images.sql.gz | psql -Uzabbix zabbix
+zcat /usr/share/zabbix-server-pgsql/data.sql.gz | psql -Uzabbix zabbix 
+  </code>
+
+=====  Configuration du serveur =====
+Il faut maintenant indiquer au serveur Zabbix les paramètres qui lui permettront de se connecter à la base de données Zabbix. En particulier, il nous faut indiquer le mot de passe pour le compte MySQL 'Zabbix' (dans notre cas, c'est 'zabbix')
+
+Ajuster les paramètres du serveur en éditant le fichier de configuration comme suit :
+
+  sudo nano /etc/zabbix/zabbix_server.conf
+
+Ajuster au minimum le paramètre DBPassword en ajoutant au fichier la ligne suivante  :
+
+  DBPassword=zabbix
+
+
+Sauvegarder les modification, quitter l'éditeur et relancer le serveur :
+
+   sudo service zabbix-server restart
+
+Pour confirmer que le serveur fonctionne correctement, la commande:
+
+   tail -100 /var/log/zabbix-server/zabbix_server.log
+
+ne doit pas retourner d'erreurs. (En l'absence totale d'erreurs, il est possible que ce fichier n'existe même pas !)
+
+
+
+===== Installation de l’interface web de gestion de Zabbix =====
+
+Il est possible de paramétrer l'accès à zabbix de deux manières distinctes :
+  * Utilisation d'un alias (accès par http://server/zabbix)
+  * Utilisation d'un virtualhost (accès par http://server)
+
+====   Méthode 1 : Alias ====
+
+La première méthode de configuration de l'accès à l'interface web de Zabbix consiste à déclarer un nouvel alias dans Apache2. De cette manière, il sera possible d'accéder à l'interface web de Zabbix en utilisant l'adresse web suivante : http://ip_du_server/zabbix.
+
+Créer un fichier de configuration Apache2 dédié. L'emplacement de ce fichier dépend de la version d'ubuntu utilisée.
+
+Version Ubuntu >= 14.04 : **/etc/apache2/conf-available/zabbix-server.conf **
+
+
+Le contenu du fichier de configuration apache à créer est le suivant :
+<file>
+# Directives pour zabbix serveur
+
+# Définition d'un alias /zabbix
+<IfModule mod_alias.c>
+    Alias /zabbix /usr/share/zabbix
+</IfModule>
+
+# Définition des droits d'accès au dossier contenant les fichiers web de zabbix
+<Directory /usr/share/zabbix>
+        Options Indexes FollowSymLinks MultiViews
+        AllowOverride None
+        Order allow,deny
+        allow from all
+</Directory>
+</file>
+
+Après avoir sauvegardé le fichier, il faut activer la configuration et relancer le serveur Apache2 : 
+<code>
+sudo a2enconf zabbix-server
+sudo service apache2 reload
+</code>
+
+==== Méthode 2 : Virtualhost ====
+
+Une autre méthode de configuration de l'accès à l'interface web de Zabbix consiste à déclarer un virtualhost. Dans ce cas, l'interface web de Zabbix sera accessible en utilisation l'adresse web : http://ip_du_serveur
+
+Créer un fichier de configuration Apache :
+  nano /etc/apache2/sites-available/zabbix
+
+Dans ce fichier, insérez le paramétrage du VirtualHost apache comme suit :
+
+  <VirtualHost *:80> 
+        ServerAdmin webmaster@localhost 
+        DocumentRoot /usr/share/zabbix/ 
+           <Directory /> 
+                Options FollowSymLinks 
+                AllowOverride None 
+        </Directory> 
+        <Directory /usr/share/zabbix/> 
+                Options Indexes FollowSymLinks MultiViews 
+                AllowOverride None 
+                Order allow,deny 
+                allow from all 
+        </Directory> 
+        <Directory /usr/share/zabbix/> 
+                Options Indexes FollowSymLinks MultiViews 
+                AllowOverride None 
+                Order allow,deny 
+                allow from all 
+        </Directory>
+         ScriptAlias /cgi-bin/ /usr/lib/cgi-bin/ 
+        <Directory "/usr/lib/cgi-bin"> 
+                AllowOverride None 
+                Options +ExecCGI -MultiViews +SymLinksIfOwnerMatch 
+                Order allow,deny 
+                Allow from all 
+        </Directory> 
+        ErrorLog ${APACHE_LOG_DIR}/error.log 
+        # Possible values include: debug, info, notice, warn, error, crit, 
+        # alert, emerg. 
+        LogLevel warn
+        CustomLog ${APACHE_LOG_DIR}/access.log combined 
+  </VirtualHost>  
+
+Modifier le fichier de configuration de php (php.ini) pour les pré-requis de l'installation de Zabbix :
+
+   nano /etc/php5/apache2/php.ini :
+   
+ubuntu >=Ubuntu 16.04.1 LTS
+
+   sudo nano /etc/php/7.0/apache2/php.ini
+
+Modifiez les options ci-dessous :
+
+  max_execution_time = 600
+  max_input_time = 600
+  memory_limit = 256M
+  post_max_size = 32M
+  upload_max_filesize = 16M
+  date.timezone = "Europe/Paris"
+
+Enregistrez puis redémarrez Apache2 :
+
+   /etc/init.d/apache2 restart
+
+Créez le fichier de configuration de l'interface zabbix (vide et avec les permissions ajustées), il sera rempli automatiquement par l'installateur zabbix :
+
+   sudo touch /etc/zabbix/zabbix.conf.php
+   sudo chown root:www-data /etc/zabbix/zabbix.conf.php
+   sudo chmod 660 /etc/zabbix/zabbix.conf.php
+
+
+**Il est maintenant possible de se connecter avec son navigateur via http://adress_ip_du_serveur ou http://adress_ip_du_serveur/zabbix suivant votre configuration**
+
+Une fois connecté sur l'interface web (cf. l'image ci-dessous), vous n'avez plus qu'à suivre les instructions, et remplir les champs en fonction de votre configuration.
+
+{{ :capture_du_2012-01-28_13:43:zabbix_202_install.png?800 |Votre serveur est presque opérationnel }}
+
+
+===== Supervision - Agent Zabbix =====
+Zabbix propose un 'agent' qui s'installe sur les ordinateurs à superviser et peut transmettre au serveur principal des informations plus précises que ce que l'on pourrait obtenir par interrogation SNMP. 
+
+L'installation de l'agent Zabbix n'est toutefois pas possible sur des imprimantes ou des équipements d'infrastructure réseau comme des routeurs ou des commutateurs, pour lesquels il faudra se reposer sur les fonctions des agents SNMP proposées par les équipements. 
+
+Un agent Zabbix est un service qui fonctionne en arrière plan sur l'ordinateur sur lequel il est installé. A ce titre, il s'apparente à un programme de type serveur.
+
+==== Agent Linux ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] [[apt://zabbix-agent|zabbix-agent]] et éditer le fichier ''/etc/zabbix/zabbix_agentd.conf'' pour y indiquer l'adresse IP du serveur Zabbix dans la variable "Server" .
+
+==== Agent Windows ====
+
+  * [[http://www.zabbix.com/download.php|Télécharger l'agent]].
+  * Créer le fichier //c:\zabbix_agentd.conf// contenant la ligne //Server=xxx.xxx.xxx.xxx// où xxx.xxx.xxx.xxx est l'adresse IP du serveur Zabbix.
+  * Ouvrir la ligne de commande Windows, se placer dans le répertoire contenant le fichier téléchargé puis lancer la commande suivante : <code>zabbix_agentd.exe --install</code>
+  * Lancer le service en lançant la commande :<code>zabbix_agentd.exe --start</code>
+
+===== Utilisation et configuration =====
+
+Pour accéder à Zabbix, lancez votre navigateur préféré et rendez-vous à l'adresse :
+  * [[http://localhost/zabbix]] si vous êtes sur le serveur ;
+  * [[http://mon_serveur/zabbix]] si vous êtes sur une autre machine.
+
+**Fevrier 2016** / Ubuntu 14.04. : Zabbix-serveur MySQL version 5.5.47 :
+Par défaut le login est  **__Admin__** et le mot de passe est **__zabbix__**
+
+===== En cas de problème =====
+
+  * Si le message //Warning: include_once(/etc/zabbix/dbconfig.php) [function.include-once]: failed to open stream: Permission denied in /usr/share/zabbix/include/db.inc.php on line 24// est affiché en haut de la page,  [[:permissions#modifier_les_permissions|donnez un accès en lecture]] au fichier  /etc/zabbix/dbconfig.php au serveur Web :<code>
+sudo chmod +r /etc/zabbix/dbconfig.php</code>
+  * Si le message //Warning: mysql_pconnect() [function.mysql-pconnect]: Access denied for user 'zabbix'@'localhost' (using password: NO) in /usr/share/zabbix/include/db.inc.php on line 32// s'affiche, [[tutoriel:comment_editer_un_fichier|éditez le fichier]] **/etc/zabbix/dbconfig.php** et complétez le champ DB_PASSWORD avec le mot de passe que vous avez saisi lors de l'installation du paquet zabbix-server-mysql :
+  * Si vous avez utilisé la génération automatique du mot de passe à l'installation de zabbix alors, il faut que vous repreniez le mot de passe inclus dans le fichier /etc/zabbix/zabbix_server.conf et il faut l'inclure dans le fichier /etc/zabbix/dbconfig.php :<code>sudo grep DBPassword /etc/zabbix/zabbix_server.conf</code>Le résultat va être le mot de passe généré par zabbix<code>sudo nano /etc/zabbix/dbconfig.php</code>Là dans le champ "$DB["PASSWORD"]  = ", vous remplacez le mot de passe contenu par celui obtenu lors de la commande précédente.
+  * Pour ces deux erreurs un bug report à été lancé sur [[https://bugs.launchpad.net/ubuntu/ source/zabbix/ bug/112029|launchpad]]
+  * Si le serveur Zabbix ne se relance pas automatiquement après redémarrage de la machine, il faut remplacer le contenu des fichiers :
+    - "///etc/init.d/zabbix-server//" par https://bugs.launchpad.net/ubuntu/+source/zabbix/+bug/172775
+    - "///etc/init.d/zabbix-agent//" par https://bugs.launchpad.net/ubuntu/+source/zabbix/+bug/96644/comments/2 
+  *  Depuis systemd pour le démarrage automatique
+   pour le serveur :     <code>sudo systemctl enable zabbix-server</code>     pour l'agent:     <code>sudo systemctl enable zabbix-agent</code>
+  * Si le mot de passe fourni lors de l'installation ne fonctionne pas pour accéder à l'interface web, essayez login : admin, mdp : zabbix. (notamment sur les paquets du [[https://launchpad.net/~verwilst/+archive/ppa|PPA de Bart Verwilst]])
+===== compilation du serveur =====
+<code>
+sudo apt-get install libsnmp9-dev libmysqlclient15-dev
+
+1 - Make the zabbix user and group:
+
+sudo adduser zabbix
+enter in new password
+confirm
+use the remaining defaults.
+
+Add zabbix to the admin group:
+
+sudo adduser zabbix admin
+
+
+2 - Download and Untar the sources:
+
+su - zabbix
+récupration des sources sur http://www.zabbix.com/download.php
+tar zxvpf zabbix-1.4.tar.gz
+
+
+3 - Create a zabbix database and populate it:
+
+mysql -u root -p
+create database zabbix;
+quit;
+
+mysql -u root -p zabbix < /home/zabbix/zabbix-1.4/create/schema/mysql.sql
+mysql -u root -p zabbix < /home/zabbix/zabbix-1.4/create/data/data.sql
+
+
+4 - Configure, compile and install the server:
+
+cd zabbix-1.4/
+./configure --prefix=/usr --with-mysql --with-net-snmp \
+--enable-server --enable-agent &&
+make
+sudo make install
+
+
+5 - Prepare the rest of the system:
+
+sudo nano /etc/services
+
+Add at the end:
+
+zabbix_agent 10050/tcp # Zabbix ports
+zabbix_trap 10051/tcp
+
+Save and exit.
+
+sudo mkdir /etc/zabbix
+sudo chown -R zabbix.zabbix /etc/zabbix/
+cp misc/conf/zabbix_* /etc/zabbix/
+
+Edit /etc/zabbix/zabbix_agentd.conf:
+
+nano /etc/zabbix/zabbix_agentd.conf
+
+Make sure that the Server parameter points to the server address, for the agent that runs on the server it is like this:
+
+Server=127.0.0.1
+
+Edit /etc/zabbix/zabbix_server.conf:
+
+nano /etc/zabbix/zabbix_server.conf
+
+For small sites this default file will do, however if you are into tweaking your config for your 10+ hosts site, this is the place.
+
+Change this:
+
+# Database password
+# Comment this line if no password used
+
+DBPassword=Secret
+
+Start the server :
+
+zabbix_server
+
+Start the client:
+
+zabbix_agentd &
+
+
+6 - Configure web interface
+
+mkdir /home/zabbix/public_html
+cp -R frontends/php/* /home/zabbix/public_html/
+
+Edit /etc/apache2/sites-enabled/000-default:
+
+sudo nano /etc/apache2/sites-enabled/000-default
+
+Work into file:
+
+Alias /zabbix/ /home/zabbix/public_html/
+<Directory /home/zabbix/public_html>
+AllowOverride FileInfo AuthConfig Limit Indexes
+Options MultiViews Indexes SymLinksIfOwnerMatch IncludesNoExec
+<Limit GET POST OPTIONS PROPFIND>
+Order allow,deny
+Allow from all
+</Limit>
+<LimitExcept GET POST OPTIONS PROPFIND>
+Order deny,allow
+Deny from all
+</LimitExcept>
+</Directory>
+
+Save and exit.
+
+Make php.ini adjustments:
+
+sudo nano /etc/php5/apache2/php.ini
+
+Change the following values:
+
+max_execution_time = 300 ; Maximum execution time of each script, in seconds
+date.timezone = America/Kentucky/Louisville
+(use this url to find your correct timezone format: http://us3.php.net/manual/en/timezones.php )
+
+
+Restart Apache:
+
+sudo /etc/init.d/apache2 restart
+
+
+Now point your browser to:
+
+http://<servername or ip>/zabbix/
+
+1. Introduction
+
+read and click Next
+
+2. License Agreement
+
+Read, check 'I Agree', click Next
+
+3. Check of Pre-Requisites
+
+Fix any problems, click retry. Click Next when all pre-requisites are OK.
+
+4. Configure DB Connection
+
+Enter appropriate settings and click Test Connection.
+Click Next when OK.
+
+5. Pre-Installation Summary
+
+Verify installation settings, click Next.
+
+6. Install
+
+Click Save Configuration file and save to machine.
+Copy zabbix.conf.php to /home/zabbix/public_html/conf/zabbix.conf.php
+
+One way to do this from a desktop machine (requires ssh installed):
+scp zabbix.conf.php zabbix@<serverip>:/home/zabbix/public_html/conf/
+
+Click Retry and click Next when OK.
+
+7. Finish
+
+Click Finish to complete installation.
+
+
+Your New Zabbix install will now be shown.
+
+Log in with username: Admin
+No Password
+
+First go to the tab Configuration and then Hosts.
+
+Now create a host-group, see that you can give it some templates, e.g: Application.MySQL, Host.SNMP, Host.Standalone, Host.Unix.
+
+Then some hosts:
+
+Select your host-group and use Link with Template Host.Unix
+
+Now a lot of triggers are imported and the game begins.
+
+Go to the monitoring tab and watch the latest values roll in.
+
+For specifics on configuration, please refer to the Zabbix user manual.
+
+www.zabbix.com
+</code>
+===== Références =====
+
+  * [[http://www.zabbix.com|Le site officiel]] (en).
+  * [[http://www.zabbix.com/manual/v1.1/|L'aide en ligne de la version 1.1]] (en).
+  * [[http://www.zabbix.com/screenshots.php|Quelques captures d'écran]] (en).
+  * [[http://www.generation-linux.fr/index.php?post/2009/06/03/Zabbix-un-excellent-logiciel-de-supervision-reseau|Présentation de l'interface de supervision et de configuration en images]] (fr).
+  * [[http://wiki.monitoring-fr.org/zabbix/start| Un dossier complet sur le wiki monitoring-fr]] (fr).
+
+----
+
+//Contributeurs : [[utilisateurs:loack]].//
+
+//Descriptif basé sur celui de [[Nagios]].//

@@ -1,0 +1,236 @@
+
+{{tag>bluetooth téléphonie tutoriel}}
+
+----
+
+====== Comment connecter à Internet un téléphone portable Sony Ericsson par Bluetooth ? ======
+
+===== But de ce tutoriel =====
+
+==== Objectif ====
+
+Surfer sur internet sur votre mobile, mais sans payer à votre opérateur mobile cette connexion. Utiliser à la place la connexion Internet de votre ordinateur.
+
+
+==== Un schéma de principe ====
+
+{{ tutoriel:liaison_bluetooth.jpg }}
+
+Le téléphone va se connecter à l'ordinateur et passer par la connexion Internet de celui-ci. Au final, le PC va devoir partager sa connexion avec le téléphone. Nous allons voir comment y arriver.
+
+
+==== Utilité ====
+
+  * La synchronisation de l'agenda de votre portable avec par exemple un serveur [[wpfr>SyncML]] de chez [[http://www.scheduleworld.com|ScheduleWorld]].
+  * Le téléchargement d'applications que vous voudriez tester.
+  * La classe pour épater vos amis.
+
+
+
+
+
+
+
+
+
+
+
+
+==== Modèles supportés ====
+
+<note>Ajoutez le modèle de votre téléphone si le test a été concluant.</note>
+
+  * k550i
+  * K610
+  * K750i
+  * Z520i
+  * W850i
+  * W300i
+  * v630i
+  * s500i 
+  * w910i
+  * P1i
+  *W380i
+
+==== Modèles non-supportés ====
+
+  * w810i (même après mise a jour du firmware impossible de voir Bluetooth dans les options de connexion. n'hésitez pas à le mettre à jour si vous avez réussi) 
+  * K320i (je n'ai toutefois pas essayer de mettre à jour le firmware)
+  * W910i: après flash vers le firmware, aucun des menus decris existent
+
+===== Prérequis =====
+
+
+
+==== Prérequis logiciels ====
+
+  * Les paquets
+**[[apt://bluez-utils|bluez-utils]][[apt://dnsmasq|dnsmasq]]** [[:tutoriel:comment_installer_un_paquet|doivent être installés]].
+  * Et vous pouvez ajouter (en option) :
+    * **[[apt://bluetooth|bluetooth]]** quel que soit votre gestionnaire de fenêtres ;
+    * **[[apt://gnome-bluetooth|gnome-bluetooth]]** si vous êtes sous Ubuntu ;
+    * **[[apt://kdebluetooth|kdebluetooth]]** si vous êtes sous Kubuntu.
+
+v2.0613.1.12.1 06-04-2006 rm-67 nokia===== Sur le téléphone =====
+
+==== Activez le Bluetooth ====
+
+//Menu → Réglages →// onglet //Connectivité → Bluetooth → Activer//.
+
+==== Détectez l'ordinateur et tentez la connexion ====
+
+Si votre ordinateur n'est pas déjà un périphérique enregistré :
+//Mes périphériques → Nouveau périph.// → Choisissez votre ordinateur. Tapez le mot de passe((C'est celui que vous avez mis lorsque vous avez configuré **/etc/bluetooth/hcid.conf**. Relisez la page « [[:Bluetooth]] » si nécessaire.)).
+
+Ensuite, placez-vous sur ce périphérique et essayez de faire //Connect.//. Vous devriez obtenir « Échec de connexion ».
+
+==== L'étape critique ====
+
+Comme sur la photo, le périphérique Bluetooth de la machine devrait apparaitre dans //Communicat. Data → Comptes Data// (toujours dans l'onglet //Connectivité//).
+{{ tutoriel:tuto-portable.jpg }}
+<note>Si ça n'est pas le cas, c'est que le [[wpfr>Micrologiciel|firmware]] de votre téléphone n'autorise pas cette manipulation. Essayez de [[#comment_modifier_le_firmware_de_votre_telephone|changer le firmware de votre mobile]] pour l'officiel de Sony Ericsson (à vos risques et périls) ou bien laissez tomber ce tutoriel. :-\</note>
+
+
+==== Création de la connexion ====
+
+//Réglages Internet → Profils Internet → Nouveau profil//
+
+  * //Nom :// Bluetooth
+  * //Connexion via :// <le nom de votre périphérique>
+
+<note>
+Évidemment, si l'étape précédente a échoué, celle-ci devrait logiquement rater aussi : vous ne trouverez pas le fameux périphérique dans la liste.
+</note>
+
+===== Sur l'ordinateur =====
+
+
+==== Personnal Area Network ====
+
+PAN est le protocole d'accès réseau par le Bluetooth. Pour activer celui-ci, vous devez créer une interface **bnep0**.
+
+Voir aussi http://bluez.sourceforge.net/contrib/HOWTO-PAN
+
+=== Démarrage du service « pand » ===
+
+[[:tutoriel:comment_editer_un_fichier|Modifiez le fichier]] **/etc/default/bluetooth** pour avoir les lignes :
+<file>
+PAND_ENABLED=1
+PAND_OPTIONS="--listen --role NAP --devup /etc/bluetooth/pan/dev-up"
+</file>
+
+Puis démarrez le service « pand » par :
+
+  sudo /etc/init.d/bluetooth restart
+
+=== Attribution d'IP pour l'interface bnep0 ===
+
+//bnep0// est l'interface qui va servir de passerelle pour le réseau bluetooth.
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]]  **/etc/network/interfaces** et ajoutez-y les éléments suivants :
+<file>
+iface bnep0 inet static
+    address 10.0.253.1
+    netmask 255.255.255.240
+</file>
+
+=== Script d'activation ===
+
+Nous allons créer un script qui activera l'//ip-forward// en cas de demande de connexion par le téléphone. Créez le dossier **/etc/bluetooth/pan** par :
+
+  sudo mkdir /etc/bluetooth/pan
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/bluetooth/pan/dev-up** :
+
+<file>
+#!/bin/sh
+echo 1 > /proc/sys/net/ipv4/ip_forward
+ifup --force $1
+</file>
+
+Rendez ce script exécutable :
+
+  sudo chmod +x /etc/bluetooth/pan/dev-up
+
+==== Configuration de « dnsmasq » ====
+
+Pour naviguer, le mobile a besoin qu'on lui attribue une [[wpfr>adresse IP]]. On pourrait installer un serveur DHCP sur la machine afin de réaliser cette attribution, mais ça serait utiliser un marteau-pilon pour casser une noix. On va donc utiliser //dnsmasq//, qu'on a installé au début du tuto, pour faire ce travail.
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/dnsmasq.conf** :
+
+<file>
+# Auteur de ce fichier : Yves Agostini, Ingénieur de recherche à l'université de Metz
+# ne pas transmettre les domaines incomplets
+domain-needed
+# interface et ip d'ecoute
+interface=bnep0
+listen-address=10.0.253.1
+# ajoute le domaine aux domaines incomplets
+expand-hosts
+domain=exemple.com
+# ne distribue que cette plage d'adresses
+dhcp-range=10.0.253.10,10.0.253.20,255.255.255.0,12h
+# pour la mac de mon mobile donne toujours la même ip
+dhcp-host=00:19:63:f5:xx:yy,10.0.253.10,infinite
+# l'option 3 distribue l'adresse de la passerelle : ma machine
+dhcp-option=3,10.0.253.1
+# l'option 42 permet de définir un serveur ntp
+# taille du cache dns
+cache-size=150
+# affiche les log pour débugguer
+log-queries
+</file>
+
+
+==== Masquerading ====
+
+Faisons un peu de [[wpfr>Network_address_translation|masquerading]] (ou NAT). Il reste encore à autoriser les connexions de « bnep0 » vers Internet :
+
+[[:tutoriel:comment_editer_un_fichier|Éditez à nouveau le fichier]] **/etc/network/interfaces**, et ajoutez-y les règles //[[:iptables]]// suivantes juste après la définition de l'interface « bnep0 », avec « eth0 » comme interface publique :
+
+<file>
+post-up iptables -t nat -A POSTROUTING -s 10.0.253.0/24 -j MASQUERADE
+post-up iptables -A FORWARD -i bnep0 -o eth0 -j ACCEPT
+post-up iptables -A FORWARD -o bnep0 -i eth0 -j ACCEPT
+</file>
+
+Si vous ne vous serviez pas de « dnsmasq » autrement, vous pouvez ajouter les deux lignes suivantes pour lancer le lancer uniquement au chargement de l'interface « bnep0 ». (Sinon je ne doute pas que vous aurez pensé vous même à ne pas les mettre. 8-))
+
+<file>
+    pre-down /etc/init.d/dnsmasq  stop
+    post-up /etc/init.d/dnsmasq start
+</file>
+
+
+===== Firmware du téléphone portable =====
+
+Si vous avez de la chance, votre téléphone tourne avec le //firmware// officiel de Sony Ericsson. C'est le cas si vous avez acheté votre téléphone indépendamment sans passer par votre opérateur. Dans le cas contraire, il y a toutes les chances que votre téléphone soit sous un //firmware// modifié par votre opérateur. Il y a alors un gros risque pour que le tutoriel proposé ne fonctionne pas pour vous.
+
+==== Que faire si vous ne savez pas sous quel firmware tourne votre téléphone ? ====
+
+Commencez par essayer d'appliquer ce tutoriel. Si jamais vous n'y arrivez pas à l'[[#l_etape_critique|étape critique de configuration du téléphone]], considérez que vous n'avez pas le bon //firmware//. Lisez la suite pour savoir comment changer de //firmware//.
+
+
+==== Comment modifier le firmware de votre téléphone ? ====
+
+<note warning>
+Modifier le //firmware// de votre téléphone portable est **une opération risquée** qui peut le mettre définitivement hors service. Sachez d'autre part que **cela fait systématiquement sauter la garantie** de l'appareil.
+</note>
+
+La modification de //firmware//, ou //flashage// de mobile, est une opération délicate qui se fait sous Windows. Vous comprendrez qu'il n'y ait pas plus d'explications dans ce tutoriel.
+
+  * Vous trouverez de bonnes informations pour le faire gratuitement sur [[http://www.forummobiles.com/index.php?showforum=107|la section Sony Ericsson de forummobiles.com]].
+  * Il y a une méthode payante qui est proposée par [[http://www.wotanserver.com|l'entreprise wotanserver]]((Cette solution payante est abordable et assez sûre.)).
+
+<note tip>
+Flasher votre mobile avec la dernière version du //firmware// officiel de Sony Ericsson peut lui enlever quelques bugs.
+</note>
+
+
+===== Sources =====
+
+  * Merci à [[http://www.crium.univ-metz.fr/presentation/equipe/yagostini.html|Yves Agostini]] , auteur de [[http://www.crium.univ-metz.fr/docs/system/wep.html]] (dont cette page s'inspire) pour m'avoir conseillé de flasher mon mobile.
+  * http://www.howtoforge.com/bluetooth_pand_debian_etch
+
+----
+
+//Contributeur : Christophe-Marie Duquesne.//

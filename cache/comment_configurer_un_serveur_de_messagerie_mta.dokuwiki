@@ -1,0 +1,88 @@
+
+{{tag>messagerie courriel MTA SMTP serveur}}
+
+====== Configurer un serveur de messagerie MTA sous Ubuntu ======
+Paramétrer un serveur de messagerie est un processus complexe mettant en œuvre de nombreux programmes (MTA, MDA, MUA et des filtrages), qui ont chacun besoin d'être correctement configurés. Voir l'explication pédagogique [[:comment_fonctionne_le_courriel_sous_linux|Comment fonctionne le courriel sous Linux ?]] pour vous aider sur la compréhension de ce qu'est la messagerie.
+
+La meilleure approche est d'installer et configurer chaque composant individuellement, et s'assurer que chacun fonctionne. Ceci va permettre de construire son serveur de messagerie progressivement.
+===== Les éléments de configuration =====
+
+==== Préciser l'utilisateur gestionnaire du serveur de messagerie =====
+Lorsque vous installez un serveur vous avez besoin d'avoir un administrateur. 
+
+Comme les volumes de traitements des courriels sont souvent importants, vous devrez définir pour votre serveur de messagerie un utilisateur pour gérer les conflits de distribution des courriels.
+
+==== Définir la location des boites aux lettres des courriels des utilisateurs =====
+Vos courriers sont :
+  * soit dans des boîtes postales pour vos utilisateurs. C'est à dire concentrées dans un endroit commun (/var/mail) pour tous vos utilisateurs (exemple /var/mail/utilisateur).
+  * soit dans le répertoire de l'utilisateur du serveur (/home/utilisateur) avec un dossier ou fichier dédié à la messagerie (exemple /home/utilisateur/.local/share/courriels)
+
+Donc il vous faudra définir l'architecture des boîtes aux lettres utilisateurs que vous avez choisi pour votre messagerie.
+==== Définir le nom de centre de distribution pour nos courriels utilisateurs sortant =====
+Lorsque vous envoyez un message courriel, vous le faite avec une adresse d'expéditeur. C'est le fameux **@mon_centre_de_distribution.fr** de votre adresse courriel locale. C'est ce nom qui définit le serveur de messagerie en tant qu'expéditeur des courriels.
+
+Donc il vous faudra paramétrer ce nom et éventuellement son alias messagerie MX DNS sur internet suivant votre choix d'architecture de messagerie.
+==== Quelle architecture de serveur de courriels ? =====
+Ici on va définir le réseau de distribution des courriels et sa structure :
+  * Si on expédie directement sur internet, si on passe par un intermédiaire ou si on ne distribue que localement le courriel. 
+  * Si on passe par la route locale au serveur, par la route du LAN, par la route internet WAN.
+  * Si on redistribue ou pas les courriers qui ne nous sont pas destinés.
+  * Où distribuer les courriers qui n'ont pas aboutis localement.
+==== Comment sécuriser le SMTP ====
+Pour lutter contre le SPAM engendré par les machines zombies (machines infectées par des virus servant de relais aux spammeurs), la plupart des FAI ont décidé de bloquer le port 25 en sortie (dans le sens "Abonné -> Internet"), utilisé par défaut par le protocole SMTP. Dans ce cas, le port 25 n'est ouvert que pour le serveur SMTP de votre FAI ( du type smtp.monprovider.com).
+Ceci empêche la mise en place d'un serveur SMTP chez soi (en tous cas pour l'envoi vers Internet sans passer par le relais SMTP du provider).
+Ceci empêche également l'envoi depuis votre ligne ADSL vers votre serveur hébergé sur Internet (de type Dedibox, OVH, etc.)
+
+Si vous êtes abonné Free avec une Freebox, vous pouvez débloquer l'envoi par le port 25 dans l'interface de gestion :
+//Fonctionnalités optionnelles de la Freebox → Autres fonctions → Blocage SMTP sortant//.
+
+Chez Neuf, ce filtrage est aussi actif. Pour changer les paramètres, allez dans l'interface de gestion de votre Neuf Box, Puis dans //Réseau → Filtrage//, décochez la case //Autoriser l'envoi de courriels uniquement par l'intermédiaire des serveurs mail du groupe SFR//.
+
+D'une manière générale, regardez les options de votre Box pour désactiver ce filtrage. Chez certains fournisseurs d'accès à internet, la fonctionnalité n'est pas « débridable ». Une solution autre que de passer par le smtp de votre fournisseur d'accès, est de ne pas passer par le port 25 pour contourner le filtrage mais ceci vous oblige donc a passer par un relais sous votre contrôle…
+
+<note warning>
+Il est important de ne pas négliger la sécurité du serveur SMTP, sous peine d'être rapidement mis sur la liste noire.
+
+En effet, des sites spécialisés listent les serveurs par lesquels transitent les pourriels. 
+À partir du moment ou votre adresse IP est mise sur la liste noire, certains de vos courriels risquent d'être détruits avant d'arriver à destination.
+
+Il ne faut donc pas permettre à votre serveur de relayer n'importe quel courriel provenant de n'importe où.
+</note>
+
+Le port par défaut du protocole SMTP est le port 25. Il est ouvert donc :
+  * Il n'est pas sécurisé pour le transport des messages, ce qui permet à un logiciel de [[https://fr.wikipedia.org/wiki/Analyseur_de_paquets|sniffing]] de lire le contenu de vos courriels. 
+  * Il n’identifie pas les utilisateurs, ce qui permet d'expédier avec un autre nom d'utilisateur. 
+  * Il n'authentifie pas les utilisateurs. C'est cette non authentification qui permet les SPAMs.
+
+Donc avec votre serveur de messagerie il faudra :
+  * Bloquer le port 25 pour éviter les relais de SPAMs.
+  * Transporter vos courriels sur un port sécurisé le 587 (ou déconseillés le 465 ou plus anecdotique le 2525)
+  * Crypter le transport pour avoir de la confidentialité pour vos courriels avec [[https://fr.wikipedia.org/wiki/Transport_Layer_Security|StartTLS]].
+  * Mettre en place un système d'authentification pour éviter les usurpations d'identités et les détournements de la messagerie.
+
+==== Marquer/filtrer les messages indésirables et les virus ====
+Pour renforcer encore la sécurité du serveur MTA, il n'est pas suffisant de sécuriser le transport et l'authentification. Il faut aussi jeter un œil sur le contenu des courriels distribués. En effet ces messages peuvent avoir des contenues non sollicités ou même des logiciels mail vaillants.
+
+Pour sécuriser tout cela, **il faudra installer des systèmes de filtrages, un anti-SPAMs et un anti-Virus**.
+
+Exemple de systèmes de filtrages pour nos serveurs MTA sous Linux :
+  * **Amavis-new** est un programme enveloppe qui peut appeler différents programmes de filtrage de contenu pour la détection de courrier indésirable (spam), anti-virus, etc.
+  * opendkim implémente un filtre de courriel MTA (Milter) pour la norme DomainKeys Identified Mail (DKIM).
+  * python-policyd-spf active la vérification Sender Policy Framework (SPF) avec le MTA.
+
+Exemple de systèmes anti-SPAM pour nos serveurs MTA sous Linux :
+  * **SpamAssassin** utilise divers mécanismes pour filtrer les courriers en se basant sur leur contenu.
+  * Pyzor
+  * Razor
+  * DCC
+
+Exemple de systèmes anti-virus pour nos serveurs MTA sous Linux :
+  * **[[:clamav|ClamAv]]** est anti-virus libre.
+===== Configurer un serveur MTA pour Ubuntu =====
+  * Pour Postfix, le serveur par défaut, allez dans [[:Comment configurer sa distribution de courriels systèmes MTA|Comment configurer sa distribution de courriels systèmes MTA avec Postfix ?]]
+  * Pour exim4 allez dans [[:exim4-satellite|Comment configurer sa distribution de courriels systèmes avec exim4 ?]]
+  * Pour zimbra allez dans [[:zimbra|Configuration du serveur de courriels zimbra]]​​
+  * Pour msmtp allez dans [[:msmtp|Comment configurer sa distribution de courriels systèmes avec msmtp ?]]
+  * Pour ssmtp allez dans [[:ssmtp|Comment configurer sa distribution de courriels systèmes avec ssmtp ?]]
+
+//Autres MTA : Qmail, Sendmail, OpenSMTPD, etc.//

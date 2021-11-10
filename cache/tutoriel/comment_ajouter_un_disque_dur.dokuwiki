@@ -1,0 +1,416 @@
+
+{{tag>tutoriel matériel installation À_RECYCLER}}
+----
+
+====== Tutoriel : Ajouter un disque dur ======
+
+<note warning>Largement obsolète</note>
+<note important>Le mieux serait d'apporter ses connaissances au lieu de laisser les autres dans l'ignorance surtout avec des commentaires inutiles et dans une doc de partage, "Largement obsolète" ne veut rien dire sans arguments, merci. </note>
+
+===== Notions de base =====
+
+Avec GNU/Linux, tout comme avec Unix, tout est fichier. Le système interprète donc vos périphériques en tant que fichiers. Les disques durs n'échappent pas à cette règle et se retrouvent donc dans le dossier /dev. Traditionnellement les périphériques IDE répondent à une appellation commençant par hd (pour Hard Disk) suivi d'une lettre correspondant à la position logique du disque (maître, esclave etc.) suivi d'un chiffre identifiant la partition.
+
+Par exemple, la première partition du premier disque dur (disque maître du bus IDE primaire) s'appelle donc hda1 et c'est généralement sur celle-ci qu'est installé votre système d'exploitation.
+
+Malheureusement cette nomenclature devient plus complexe dès lors que l'on utilise des contrôleurs Serial ATA ou RAID et que l'on se retrouve avec beaucoup de disques dans le même ordinateur. Je vais, dans cet article, essayer de vous faciliter la vie mais si vous désirez vraiment savoir comment ça fonctionne je vous invite à consulter cette page : [[http://www.linux-wizard.net/faq.php?section=0&key=hd_naming]] ...
+
+
+<note help>Depuis quelques années la notation des disques a été simplifiée. Ils se nomment tous sdx (où x est une lettre) par exemple hda devient sda, hdb devient sdb. </note>
+
+
+
+==== Identifier le disque dur ====
+=== En ligne  de commandes ===
+
+
+Plusieurs commandes existent aux résultats plus ou moins compréhensibles et adaptés aux besoins de l'utilisateur.
+
+  * lshw
+
+   sudo lshw -class disk
+
+
+Exemple de résultat
+<code>
+  *-disk:0                
+       description: ATA Disk
+       product: WDC WD200EB-00CP
+       vendor: Western Digital
+       physical id: 0.0.0
+       bus info: scsi@0:0.0.0
+       logical name: /dev/sda
+       version: 06.0
+       serial: WD-WMAAXXXXXXX
+       size: 18GiB (20GB)
+       capabilities: partitioned partitioned:dos
+       configuration: ansiversion=5 signature=7945XXXXXX
+  *-disk:1
+       description: ATA Disk
+       product: ST320414A
+       vendor: Seagate
+       physical id: 0
+       bus info: scsi@0:0.1.0
+       logical name: /dev/sdb
+       version: 3.05
+       serial: 7EC0XXXXX
+       size: 18GiB (20GB)
+       capabilities: partitioned partitioned:dos
+       configuration: ansiversion=5 signature=fxxxxxx
+</code>
+
+
+
+  * Analyse des fichiers log 
+
+Les disques durs connectés à l'ordinateur sont identifiés au démarrage de l'ordinateur, par conséquent il faut analyser le journal de démarrage pour récupérer leur appellation logique.
+
+Lancez la commande: ''dmesg | grep [sh]d[a-z]'' pour obtenir quelque chose de ce genre ou encore dmesg > /chemin/votre_fichier (cela permet d'envoyer le contenu de la commande dans un fichier) :
+
+  Kernel command line: root=/dev/hda1 ro quiet splash
+  ide0: BM-DMA at 0xe000-0xe007, BIOS settings: hda:DMA, hdb:DMA
+  ide1: BM-DMA at 0xe008-0xe00f, BIOS settings: hdc:DMA, hdd:DMA
+  hda: WDC WD200BB-00AUA1, ATA DISK drive
+  hdb: Maxtor 51024U2, ATA DISK drive
+  hda: max request size: 128KiB
+  hda: 39102336 sectors (20020 MB) w/2048KiB Cache, CHS=38792/16/63, UDMA(100)
+  hda: cache flushes not supported
+  hdb: max request size: 128KiB
+  hdb: 20010816 sectors (10245 MB) w/2048KiB Cache, CHS=19852/16/63, UDMA(66)
+  hdb: cache flushes not supported
+  hdc: HITACHI DVD-ROM GD-5000, ATAPI CD/DVD-ROM drive
+  hdd: HL-DT-ST GCE-8526B, ATAPI CD/DVD-ROM drive
+  Adding 746980k swap on /dev/hda5.  Priority:-1 extents:1
+  EXT3 FS on hda1, internal journal
+  hdc: ATAPI 40X DVD-ROM drive, 512kB Cache
+  hdd: ATAPI 52X CD-ROM CD-R/RW drive, 2048kB Cache
+  EXT3 FS on hdb1, internal journal
+
+Dans cet exemple on remarque facilement ces périphériques :
+  -           hda Disque dur primaire Western Digital de 20Go
+  -           hdb Disque dur secondaire Maxtor de 10Go
+  -           hdc Lecteur DVD-ROM Hitachi
+  -           hdd Graveur CD-RW
+
+
+
+
+
+  * Lister ceux qui ont été reconnus au moment du boot. 
+<code>ls -l /dev/disk/by-id | grep -v part </code>
+Exemple de retour
+<code>lrwxrwxrwx 1 root root  9 févr. 17 16:25 ata-MATSHITABD-CMB_UJ172_WQ90_002075 -> ../../sr0
+lrwxrwxrwx 1 root root  9 févr. 17 16:25 ata-TOSHIBA_MQ01ABD100_339KP439T -> ../../sda
+lrwxrwxrwx 1 root root  9 févr. 17 16:25 wwn-0x50000394a2b021d3 -> ../../sda </code>
+Il y aura d'autres périphériques. Il seront listées deux fois  à cause de leur double définition. La première permet souvent de retrouver par internet leurs caractéristiques. Dans cet exemple "TOSHIBA_MQ01ABD100"
+=== Avec des logiciels graphiques. ===
+En priorité, privilégier ceux qui vont pouvoir les formater.
+
+[[https://doc.ubuntu-fr.org/gnome-disk-utility|disques]]
+
+[[https://doc.ubuntu-fr.org/gparted|gparted]]
+
+
+  
+
+
+
+
+
+==== Identifier les partitions ====
+
+Une fois le nom du disque récupéré, il nous reste à repérer la partition qui nous intéresse. Nous allons utiliser la commande ''fdisk''. Ainsi, nous allons afficher les partitions du disque principal,
+
+  sudo fdisk -l 
+qui renvoie :
+  Disque /dev/hda: 20.0 Go, 20020396032 octets
+  255 têtes, 63 secteurs/piste, 2434 cylindres
+  Unités = cylindres de 16065 * 512 = 8225280 octets
+  Périphérique Amorce    Début         Fin      Blocs    Id  Système
+  /dev/hda1   *           1        2341    18804051   83  Linux
+  /dev/hda2            2342        2434      747022+   5  Extended
+  /dev/hda5            2342        2434      746991   82  Linux swap / Solaris
+  
+
+Afin d'éviter d'être pollué par des disques fictifs de plus en plus présents, il est maintenant préférable de mettre le nom du disque dont on désire connaître les caractéristiques.
+
+  sudo fdisk -l /dev/sda
+
+qui renvoie
+<code>Disque /dev/sda : 931,5 GiB, 1000204886016 octets, 1953525168 secteurs
+Unités : secteur de 1 × 512 = 512 octets
+Taille de secteur (logique / physique) : 512 octets / 4096 octets
+taille d'E/S (minimale / optimale) : 4096 octets / 4096 octets
+Type d'étiquette de disque : gpt
+Identifiant de disque : 1072749E-6A53-E642-9E87-DFBC4088A4FC
+
+Périphérique      Début        Fin  Secteurs Taille Type
+/dev/sda1          2048      34815     32768    16M Réservé Microsoft
+/dev/sda2         34816    1071103   1036288   506M Système EFI
+/dev/sda3       1071104    2107391   1036288   506M Données de base Microsoft
+/dev/sda4       2107392  104354835 102247444  48,8G Données de base Microsoft
+/dev/sda5     104355840  106010623   1654784   808M Environnement de récupération Windows
+/dev/sda6     106010624  197640191  91629568  43,7G Système de fichiers Linux
+/dev/sda7     259080192  261179391   2099200     1G Système de fichiers Linux
+/dev/sda8     261179392  345085951  83906560    40G Données de base Microsoft
+/dev/sda9     345085952  448989183 103903232  49,6G Données de base Microsoft
+/dev/sda10    448989184  459474943  10485760     5G Données de base Microsoft
+/dev/sda11    459474944  563922943 104448000  49,8G Données de base Microsoft
+/dev/sda12    563922944  616351743  52428800    25G Système de fichiers Linux
+/dev/sda13    616351744  628807679  12455936     6G Données de base Microsoft
+/dev/sda14    628807680  733665279 104857600    50G Données de base Microsoft
+/dev/sda15    733665280  941836287 208171008  99,3G Système de fichiers Linux
+/dev/sda16    941836288  975390719  33554432    16G Système de fichiers Linux
+/dev/sda17    975390720  985876479  10485760     5G Données de base Microsoft
+/dev/sda18    985876480 1027819519  41943040    20G Système de fichiers Linux
+/dev/sda19   1027819520 1132677119 104857600    50G Données de base Microsoft
+/dev/sda20   1132677120 1195591679  62914560    30G Système de fichiers Linux
+/dev/sda21   1195591680 1217533951  21942272  10,5G inconnu
+/dev/sda22   1217533952 1237534719  20000768   9,6G Système de fichiers Linux
+/dev/sda23   1237534720 1321420799  83886080    40G Données de base Microsoft
+/dev/sda24   1321420800 1342392319  20971520    10G Données de base Microsoft
+/dev/sda25   1342392320 1355499519  13107200   6,3G Données de base Microsoft
+/dev/sda26   1355499520 1359693823   4194304     2G Système EFI
+/dev/sda27   1368082432 1380665343  12582912     6G Partition d'échange Linux
+/dev/sda28   1380665344 1848664063 467998720 223,2G Données de base Microsoft
+/dev/sda29   1848664064 1901092863  52428800    25G Système de fichiers Linux
+/dev/sda30   1901092864 1953523711  52430848    25G Système de fichiers Linux
+/dev/sda31    197640192  259080191  61440000  29,3G Système de fichiers Linux
+/dev/sda32   1359693824 1368082431   8388608     4G Système de fichiers Linux
+
+Les entrées de la table de partitions ne sont pas dans l'ordre du disque.</code>
+
+
+
+Et voilà, nous obtenons le nom de chacune des partitions et un certain nombre d'informations intéressantes comme la position sur le disque, les partitions bootables ou non et le type de système de fichiers.
+
+Note 1: On peut aussi aller, dans la barre du haut, sur Système/Administration/Disques pour avoir le nom des disques (le nombre d'information est tout de même moins détaillé)
+Note 2: On peut aussi utiliser les deux applications graphiques citées au chapitre précédant. Dans l'état actuel de la présentation graphique, il faut éviter l'application **disques** lorsque le nombre de partitions est important (limite à 32).
+
+===== Cas d'un disque vierge/neuf =====
+
+Si vous installez un nouveau disque dans votre ordinateur, il faut créer une table de partition. Une possible exception est lorsque le disque **entier** est utilisé en environnement [[:raid_logiciel|RAID]]
+ <del>il faut obligatoirement le partitionner et le formater</del>, Lorsque la table de partition est créée, il est possible de créer au moins une partition en la formatant. Ce qui implique des manipulations supplémentaires. Pour trouver l'identifiant de votre disque, je vous invite à suivre la démarche du point [[#identifier_le_disque_dur|1.2]]
+
+On peut utiliser l'outil de partitionnement de disque d'Ubuntu. (sous KDE menu | Applications | Systeme)
+On peut aussi utiliser les deux outils graphiques du premier  chapitre.
+
+Attention : voir la documentation sur les **[[:partitions]]**.
+(pour faire simple, créer une seule partition de type EXT4)
+
+Depuis Ubuntu 14.04 LTS, le nom de lecteur se trouve dans /media/nom utilisateur.
+Le disque est reconnu sans autre manipulation.
+Il ne reste plus qu'a définir les **[[:permissions]]** pour l'utilisateur en ouvrant un **[[:terminal]]**.
+
+exemple : 
+
+sudo chmod 770 -R NomDeLecteur
+
+puis
+
+sudo chgrp "nom utilisateur" -R NomDeLecteur
+
+On peut maintenant utiliser le nouveau disque.
+
+
+===== Méthode ancienne de partitionnement =====
+
+==== Partitionner le disque ====
+
+L'utilitaire cfdisk vous permet d'afficher les partitions d'un disque et de les modifier. Attention, si vous supprimez une partition, vous détruisez son contenu.
+
+Il se lance avec la commande ''sudo cfdisk'' éventuellement suivie de l'adresse du disque concerné comme dans l'exemple suivant (''sudo cfdisk /dev/hda'').
+
+  cfdisk 2.12p
+  
+                           Unité de disque: /dev/hda
+                      Taille: 20020396032 octets,  20.0 Go
+             Têtes: 255   Secteurs par piste: 63  Cylindres: 2434
+  
+    Nom         Fanions    Part Type  Type SF          [Étiq.]        Taille (Mo)
+   ------------------------------------------------------------------------------
+    hda1        Amorce      Primaire  Linux ext3       [/]             19255,39
+    hda5                    Logique   Linux swap / Solaris               764,96
+    
+     [Amorçable] [Détruire]  [  Aide  ]  [Maximiser] [Afficher]
+     [Quitter ]  [  Type  ]  [Unités ]   [Écrire ]
+  
+             Basculer le fanion d'amorce pour la partition courante
+
+Vous pouvez choisir votre partition avec les flèches haut et bas et utiliser les menus avec la touche tabulation, voici l'explication concise de ses principaux menus
+
+  *  [Amorçable] rend amorçable la partition sélectionnée, ceci est indispensable pour la partition contenant votre système d'exploitation.
+  *  [Nouveau] permet de créer une partition dans un espace vide
+  *  [Détruire] efface la partition sélectionnée
+  *  [Aide] affiche l'aide
+  *  [Quitter] quitte sans enregistrer les modifications
+  *  [Type] permet de choisir le type de partition (Fat, Ext, etc.) cette commande affiche une liste exhaustive.
+  *  [Unité] permet de choisir si on affiche la taille des partitions en Cylindres, en Secteurs ou en Octets
+  *  [Écrire] enregistre les modifications de manière définitive (à faire avant de quitter)
+
+
+
+==== Formater les disques ====
+
+Une fois vos partitions clairement identifiées et préparées, il vous reste à les formater correctement. Avant de procéder au formatage en tant que tel, pensez à choisir le type de système de fichier du genre...
+  *  ext2 système de fichier historique de Linux
+  *  ext3 évolution de l'ext2 avec journalisation
+  *  reiserfs concurrent de l'ext3
+  *  vfat système de fichier de windows 9x
+
+La commande mkfs vous permet de formater votre partition, elle s'utilise en passant en paramètre le type de fichier voulu et le nom de la partition, par exemple, pour formater hdb1 en ext3 : 
+
+<code>sudo mkfs.ext3 /dev/hdb1</code>
+
+==== Formatage NTFS ====
+
+ntfs : système de fichier de windows NT XP (disques durs de grande capacité).
+Dans le cas particulier où l'on souhaite formater un disque dur USB externe au format NTFS
+  * Il faut installer **ntfsprogs** avec le gestionnaire de paquets Synaptic
+  * Partitionner le disque si une ou des partition(s) n'existe(nt) pas (cas d'un disque neuf) :
+
+   sudo cfdisk /dev/sdc
+
+Puis formater la partition créée, par exemple une partition couvrant le disque complet :
+
+   sudo mkntfs /dev/sdc1
+   
+Dès lors, vous pouvez aussi utiliser "**mkfs.Type_de_fichier**" :
+
+   sudo mkfs.ntfs /dev/sdc1
+
+
+
+
+
+
+===== Méthode de partitionnement en mode graphique =====
+La création de partition et leur formatage en mode graphique fonctionne parfaitement.
+Les deux utilitaires 
+
+ [[:gnome-disk-utility|Disques : l'utilitaire de disques]]
+
+[[:gparted|GParted : éditeur de partitions]]
+
+Sont bien adaptés et évitent les erreurs de frappes toujours possibles lors d'un formatage en ligne de commande.
+
+Les types de formatages  à préférer sont les suivants:
+  * FAT32 pour les partition de boot des ordinateurs EFI
+  * EXT4 pour les partitions  utilisées par ubuntu.   Les types EXT2 et EXT3 ne sont plus  proposés en formatage par l'application disques.
+  * NTFS pour les partitions utilisées par windows.
+  * [[:exfat|EXFAT]] pour les partitions utilisées  sur des support externes du style mémoire flash .
+  * [[:btrfs|BTRFS]] pour les partitions de type haute sécurité.
+  * HFS+ pour les partitions apple
+   
+
+
+===== Connecter logiquement le disque dur =====
+
+Avec Linux, pour avoir accès à un périphérique, il faut le "monter" c'est-à-dire que l'on doit faire correspondre un dossier existant de l'arborescence avec le fichier de matériel en question. Cela peut se faire de deux manières : soit à la demande, comme on le fait généralement avec le lecteur CD par exemple, soit de manière permanente au démarrage de l'ordinateur comme c'est utilisé pour le disque système.
+
+Dans les exemples suivants, on prévoit que votre point de montage est prêt et qu'il s'agit de /media/backup, pour ce faire il suffit juste de créer le dossier en question avec mkdir.
+==== À la demande ====
+
+Pour monter un périphérique de stockage, on utilise la commande ''mount'' qui doit s'accompagner de la désignation de votre lecteur et, éventuellement, des paramètres à lui appliquer.
+
+Pour monter notre disque /dev/hdb1 dans /media/backup :
+   sudo mount /dev/hdb1 /media/backup
+
+Cette commande monte votre disque en détectant automatiquement le type du système de fichier, dans certains cas, Linux sera incapable de le choisir automatiquement, il faudra donc indiquer à la commande ''mount'' le type de fichier :
+   sudo mount -t ext3 /dev/hdb1 /media/backup
+
+Vous pouvez aussi ajouter des options comme, par exemple, des droits d'accès :
+   sudo mount -t ext3 -o mode=0755 /dev/hdb1 /media/backup
+
+Pour aller plus loin dans les arcanes de la commande ''mount'' je vous invite grandement à consulter le manuel qui lui est associé (''man mount'').
+
+**Dans le cas particulier où l'on souhaite monter un disque USB externe NTFS :**
+   sudo mount -t ntfs-3g /dev/sdd1 /media/backup
+démontage avant arrêt du disque dur :
+   sudo umount -f /media/backup
+
+Le disque NTFS peut refuser de se monter, cela peut arriver lorsque le disque à été mal démonté par windows, pour forcer le montage :
+   sudo mount -t ntfs-3g /dev/sdd1 /media/backup -o force
+
+==== De manière permanente ====
+
+===En modifiant le fichier fstab===
+Pour que le disque dur soit détecté automatiquement au démarrage, on doit [[:tutoriel:comment_editer_un_fichier|éditer le fichier]] **/etc/fstab** et ajouter la ligne suivante : 
+
+<code>
+/dev/hdb1 /media/backup auto defaults umask=0 0 0
+</code>
+
+Pour aller plus loin : [[:mount_fstab|mount et fstab : Le montage des systèmes de fichiers]].
+
+===De manière graphique===
+ Disk-manager permet d'effectuer pour vous cette opération. Un paquet DEB est disponible depuis la  [[http://forum.ubuntu-fr.org/viewtopic.php?id=403792&p=1|page du forum consacrée à cet outil]].
+
+===== Informations complémentaires =====
+
+
+
+
+
+
+
+
+
+
+
+
+==== Le NTFS ====
+<note tip>Ntfs-3g permet d'écrire sur les partitions NTFS de manière sûre et simple : [[:tutoriel:ntfs|ntfs-3g]]</note>
+
+<note tip>Ntfs-3g est maintenant inclus en version stable sous Hardy Heron</note>
+Dans certains cas il est intéressant de pouvoir monter des partitions de type NTFS, notamment utilisées par les disques durs de grande capacité fonctionnant sous windows NT ou windows XP. Pour mettre cela en place, il est indispensable de disposer de la bibliothèque correspondante nommée libntfs9. Vous pouvez l'installer, il vous suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **libntfs10**
+
+Ainsi, si votre partition est en NTFS vous pourrez la monter à la volée de la façon suivante :
+  sudo mount -t ntfs-3g -o mode=0111 /dev/hdb1 /media/backup
+Ou l'ajouter au fstab :
+  /dev/hdb1   /media/backup   ntfs-3g   rw,auto   0    0
+en préférant une codification plus récente en prenant le soin de créer le répertoire /Data
+  UUID=xxxxxxxxxxxx     /Data     ntfs-3g  permissions,windows_names  0 0
+
+L'outil ''ntfsprogs'' propose des logiciels permettant de supporter le NTFS au niveau du formatage et du partitionnement, entre autres.
+
+
+==== L'HFS (sur mac) ====
+
+Le système de fichier utilisé par défaut dans MacOSX est l'HFS, vous pouvez monter vos disques durs en faisant :
+  sudo mount -t hfs /dev/hda1 /media/Macintosh_HD
+Ou encore l'ajouter au fstab (ainsi il sera monté automatiquement) :
+  /dev/hda1 /media/Macintosh_HD hfs rw,auto 0  0
+
+
+
+==== Les disques SCSI et SATA ====
+
+Les disques durs SCSI et Serial ATA répondent globalement 
+
+==== Droit d’utilisation : disque dur ou partition partagé entre utilisateurs. ====
+Par défaut , le disque dur formaté sera la propriété de l'utilisateur ROOT. Cela a pour effet que les utilisateurs habituels de l'ordinateur ne peuvent pas créer ou modifier les fichiers ou dossiers qui y seront crées. Cela est pertinent au niveau sécurité (on limite l’accès aux droit de lecture et d'écriture pour n'autoriser l'accès que de façon sélective dans un second temps), mais c'est  effectivement frustrant de ne pas pouvoir partager des données entre utilisateurs.
+
+<note warning>Si plusieurs utilisateurs sont créés, c'est certainement pour qu'ils ne partagent pas toutes leurs données mais, bien contraire, qu'ils ne puissent pas  accéder aux données des autres.</note>
+=== Pour une partition EXT4. ===
+Une fois formaté, pour permettre que la partition soit accessible à tous les utilisateurs (utilisateur users), il faut changer les droits de la partition. Soit dans le fstab (qui spécifie les conditions de montage de la partition), soit plus simplement de la façon suivante. 
+
+De façon graphique :
+
+  - Ouvrir un terminal puis entrer <code>gksudo nautilus</code>
+  - Entrer le mot de passe administrateur \\ 
+
+  - Le navigateur de fichier s'ouvre avec les droits de ROOT. Attention tout ce que vous ferez avec cette fenêtre sera avec les droits du super utilisateur (création de fichier, de dossier). Il faudra donc limiter l'utilisation de ce que vous ferez avec, car cela peut endommager votre système.
+  - Aller dans le disque dont on veut changer les droits d’utilisation
+  - Clic droit --> propriété --> onglet Permissions
+  - Dans la rubrique groupe, sélectionner "users", juste en dessous, dans l' accès au dossier, sélectionner  "création et suppression des fichiers", dans la rubrique autre, vous pouvez faire de même.
+  - Fermez ce menu et le navigateur de fichier ouvert avec les droits ROOT. 
+
+Ceci peut être également réalisé en ligne de commande, via la commande chmod.
+
+=== Pour une partition NTFS. ===
+Cela se règle assez facilement dès l'instant où on sait que c'est le fichier **UserMappings**  stocké sous le répertoire de premier niveau **.NTFS-3G** qui  fait la table de correspondance entre les utilisateurs définis dans ubuntu et ceux définis dans windows.
+
+
+
+

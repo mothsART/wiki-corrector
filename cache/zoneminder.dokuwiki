@@ -1,0 +1,348 @@
+
+{{tag>webcam sécurité videosurveillance}}
+<note warning>Cette page contient des manipulation dangereuses pour la sécurité du système en attribuant des droits excessifs à plusieurs emplacements (chmod -R 777 entre autres)</note>
+----
+
+======ZoneMinder: vidéo-surveillance======
+
+===== Présentation=====
+
+Zoneminder est une solution open source efficace de vidéosurveillance, acceptant des sources vidéo analogiques (connectées via une carte d'acquisition), des webcams ou encore des caméras réseau. Il est capable d'envoyer les images capturées sur un serveur déporté via FTP ou SMTP (mail) mais dispose également d'un serveur web dédié permettant de consulter les images et vidéos capturées ainsi que de contrôler le système de vidéo-surveillance...
+
+===== Prérequis =====
+
+Pour fonctionner, Zoneminder nécessite un ordinateur (idéalement de faible consommation étant donné qu'il ne sera jamais éteint) sous système GNU/Linux et disposant d'au moins 1 Go de mémoire vive. Zoneminder est également optimisé pour les systèmes multi-coeurs en affectant la gestion d'une caméra par thread. Concernant l'espace disque nécessaire, cela dépend de vos besoins, conservez en mémoire que l'espace disque employé sera forcément important.
+
+Vous aurez besoin au minimum des paquets Apache, PHP et MySQL.
+
+===== Installation =====
+
+Ajouter le dépôt iconnor/zoneminder-1.32
+
+<code>sudo add-apt-repository ppa:iconnor/zoneminder-1.32 && sudo apt-get update</code>
+
+Installez simplement le paquet [[apt://zoneminder]].
+
+L'installeur vous demande "mail name" et "smart hosts", vous pouvez les laisser par défaut. 
+
+Ces réglages sont utiles si vous voulez que ZoneMinder envoie des notifications par email ; vous pourrez modifier ces valeurs plus tard facilement. 
+
+==== Paramétrage du serveur web ====
+pour Ubuntu 16.04
+<code>sudo ln -s /etc/zm/zm.conf /etc/apache2/conf.d/zoneminder.conf</code>
+pour les versions antérieures
+<code>sudo ln -s /etc/zm/apache.conf /etc/apache2/conf.d/zoneminder.conf</code>
+
+ou 
+<code>sudo ln -s /usr/share/zoneminder/ /var/www/zm</code>
+ou pour Ubuntu 14.04
+<code>sudo ln -s /usr/share/zoneminder/ /var/www/html/zm</code>
+puis relancer le serveur apache :
+<code>sudo /etc/init.d/apache2 force-reload</code>
+
+- **Si vous avez une erreur du type** //apache2: Could not reliably determine the server's fully qualified domain name, using 127.0.0.1 for ServerName//, 
+  - il faut ajouter la ligne suivante dans /etc/apache2/httpd.conf <code>ServerName www.mondomaine.com</code> (on peut remplacer www.mondomaine.com par un **dyndns** si on en a un)
+  - et dans /etc/hosts vérifer qu'on ait bien une ligne du type <code>127.0.0.1	localhost	nom_de_machine	   www.mondomaine.com</code>
+  - et dans /etc/hostname vérifer qu'on ait bien une ligne du type <code>nom_de_machine</code>
+  - Enfin, relancer le serveur apache <code>sudo /etc/init.d/apache2 force-reload</code>
+
+==== Attention sous Ubuntu 10.04 et 10.10 ====
+
+1- le paquet //zoneminder 1.24.2// se charge de créer la configuration MySQL ci-dessous lui-même, **donc on doit sauter la partie "Configuration MySQL"**.
+
+2- Vérifiez que vous avez bien lancé ces deux commandes  <code>sudo ln -s /usr/share/zoneminder/ /var/www/zm
+sudo adduser www-data video</code>
+  
+3- Vous pouvez lancer directement zoneminder <code>sudo /etc/init.d/zoneminder restart</code>
+
+4- C'est terminé pour l'installation, rendez-vous au chapitre **"Configuration" > "Nécessaire sous Ubuntu 10.xx"**.
+
+
+
+==== Configuration MySQL ====
+
+Créez la base MySQL "zm" (elle ne semble pas créée automatiquement) :
+<code>$ mysql -u root -p < /usr/share/zoneminder/db/zm_create.sql
+Enter password:</code>
+
+(hop ! un petit coup de MySQL pour s'assurer que la base est bien créée :
+<code>$ mysql -u root -p
+Enter password:
+mysql> show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| mysql              |
+| zm                 |
++--------------------+
+3 rows in set (0.00 sec)</code>
+C'est bon)
+
+Créez l'utilisateur de la base :
+<code>mysql>use mysql;
+mysql>CREATE USER 'zmuser' IDENTIFIED BY 'zmpass';
+mysql>GRANT ALL ON zm.* TO 'zmuser'@'localhost';</code>
+
+NB: si vous décidez de changer le mot de passe par défaut "zmpass" (ce qui est une **bonne** idée), n'oubliez pas de reporter cette modification dans /etc/zm/zm.conf.
+
+
+Lancez ZoneMinder :
+<code>$ sudo /etc/init.d/zoneminder start
+Starting ZoneMinder: Warning, overriding installed ./zm.conf file with local copy
+success</code>
+
+Pour accéder à ZoneMinder:  http://AdresseServeur/zm/
+
+En cas d'erreur lors du démarrage de zoneminder, vous pouvez changer les droits sur le fichier de conf avec la commande suivante:
+<code>$ sudo chown root:www-data /etc/zm/zm.conf. </code>
+Cela devrait régler le problème.
+
+--------------------------------------------
+
+Pour voir les log de démarrage de zoneminder,
+ça se trouve dans **/var/log/syslog** et **/tmp/zmpkg.log**.
+
+===== Configuration =====
+
+L'adresse http://127.0.0.1/zm/ ou http://www.mondomaine.com/zm/ permet d'administrer Zoneminder lorsqu'il est démarré.
+user : admin
+password : admin
+==== Nécessaire pour Ubuntu 10.xx ====
+**Cette partie est apparemment nécessaire sous Ubuntu 10.04 pour que zoneminder fonctionne normalement**
+
+- Pour permettre l'**accès aux périphériques /dev/videoX** : 
+  - Donner les droits //setuid// à zmfix <code>sudo chmod 4755 /usr/bin/zmfix</code>
+  - Ajouter l'utilisateur //www-data// au groupe //video// <code>sudo adduser www-data video</code> (à priori déjà fait auparavant)
+
+- Pour afficher des vidéos en **streaming à partir de jpeg** (inutile pour firefox) :
+  - Télécharger Cambozola depuis http://www.charliemouse.com/code/cambozola/
+  - Décompressez le fichier
+  - vérifiez que vous avez bien créé le lien symbolique /var/www/zm, sinon créez le <code>sudo ln -s /usr/share/zoneminder/ /var/www/zm</code>
+  - Copiez le fichier cambozola.jar vers le répertoire de zoneminder <code>sudo cp cambozola-0.80/dist/cambozola.jar /var/www/zm/</code>
+  - Ouvrir http://127.0.0.1/zm/index.php?view=options&tab=images  <code>STREAM_METHOD : Jpeg
+OPT_CAMBOZOLA : cocher la case</code>
+    
+- Pour réduire la taille des images générées :
+  - Ouvrir http://127.0.0.1/zm/index.php?view=options&tab=images  <code>OPT_NETPBM : cocher la case
+PATH_NETPBM : /usr/share</code>
+    
+- Pour fournir un **accès aux images** stockées :
+  - Supprimer les liens actuels    <code>sudo rm /var/www/zm/images
+sudo rm /var/www/zm/events</code>
+  - Créer de nouveaux liens    <code>cd /var/www/zm
+ln -s /chemin_choisi_par_vous/images images
+ln -s /chemin_choisi_par_vous/events events</code>
+  - Donner des autorisations    <code>chmod -R 777 /chemin_choisi_par_vous</code>
+
+- Si l'image de la webcam n'apparait pas sur la page web :
+Il peut s'agir d'un problème de mémoire. Ajouter (ou modifier) le fichier sysctl.conf :
+  sudo vi /etc/sysctl.conf
+Ajouter/modifier :
+  kernel.shmall = 134217728
+  kernel.shmmax = 134217728
+
+- Si l'image de la webcam n'apparait pas sur la page web avec Internet Explorer :
+Utiliser Firefox et installer Cambozola.
+
+- Si malgré tout cela vous n'avez toujours pas d'images dans le navigateur, il faut activer le CGI dans apache2 avec les commande suivantes:
+<code>
+sudo /etc/init.d/zoneminder stop
+sudo /etc/init.d/apache2 stop
+sudo rm -vf /tmp/zm/*.*
+sudo a2enmod cgi
+sudo /etc/init.d/apache2 start
+sudo /etc/init.d/zoneminder start</code>
+
+Source: [[https://bugs.launchpad.net/ubuntu/+source/zoneminder/+bug/1159361]]
+
+- Certaines webcams utilisant v4l1 (Video For Linux version 1), nécessitent une petite correction :
+Modifier zmdc.pl
+  sudo vi /usr/bin/zmdc.pl
+
+  ...
+  $ENV{PATH}  = '/bin:/usr/bin';
+  $ENV{SHELL} = '/bin/sh' if exists $ENV{SHELL};
+  $ENV{LD_PRELOAD} = '/usr/lib/libv4l/v4l1compat.so';     <== ajouter cette ligne
+  delete @ENV{qw(IFS CDPATH ENV BASH_ENV)};
+  ...
+
+- Une fois terminées une ou plusieurs de ces opérations, vous devez redémarrer Zoneminder <code>sudo /etc/init.d/zoneminder restart</code>
+
+
+==== Modifier la langue ====
+Une fois connecté, modifiez la langue par défaut :
+  * Sélectionnez le lien "Options" en haut à droite de la page, (http://127.0.0.1/zm/index.php?view=options)
+  * Modifez LANG_DEFAULT à la valeur fr_fr,
+
+<note important>Le changement de langue peut engendrer des problèmes, le plus simple est de laisser en anglais.</note>
+
+==== Changer le port de l'interface web ====
+
+Si vous voulez accéder à ZoneMinder à partir d'internet et que votre ISP bloque le port 80, vous allez devoir changer le port d'écoute de ZoneMinder pour le port 8080 ou autre.
+
+Modifiez le fichier /etc/apache2/ports.conf et modifiez les deux lignes
+
+<code>
+NameVirtualHost *:80
+....
+Listen 80
+</code>
+pour refléter le numéro du port voulu.
+
+Ensuite, modifiez le fichier /etc/apache2/sites-enabled/000-default et modifiez la ligne
+
+<code>
+<VirtualHost *:80>
+</code>
+pour refléter le numéro du port voulu.
+
+Finalement, redémarrez le service apache:
+<code>
+service apache2 restart
+</code>
+
+Vous devriez maintenant pouvoir accéder à l'interface web à partir du port que vous avez spécifié comme ceci:  http://AdresseServeur:port/zm
+
+
+
+==== Vérifier la communication avec la camera ====
+<note tip>Tester d'abord la caméra dans un autre logiciel comme cheese ou xawtv</note>
+FIXME Pas pour une caméra IP, uniquement pour une caméra USB (?)
+
+Taper cette commande dans un terminal : 
+<code>zmu -d /dev/video0 -q -v</code>
+Si vous avez un message d'erreur, essayez ceci :
+<code>zmu -d /dev/video0 -V 1 -q -v</code>
+Vous devez voir apparaitre la liste des options supportées par votre camera.
+
+==== Configurer une Webcam USB ====
+
+- Pour une webcam usb classique (bon marché) il est recommandé de régler votre webcam dans zoneminder de cette manière dans un premier temps :
+  - Ouvrir l'interface web de Zoneminder http://127.0.0.1/zm/
+  - Cliquer "Ajouter un nouvel écran" puis renseigner les champs indiqués <code>Source Type : Local
+  FPS Max (i/s maximum) : 25
+  Device Path : /dev/video0
+  Canal Camera : 0
+  Format Camera : PAL
+  Palette capture : YUYV (ou GREY)
+  Largeur de capture : 320
+  Hauteur de capture : 240</code>
+
+Les cameras basée sur UVC (beaucoup de webcams en usb le sont) possèdent un outil spécifique, vous pouvez installer le paquet //Luvc// et/ou //Guvcview// (facultatif) pour connaitre les modes d'utilisation disponibles, puis lancer :
+<code>luvcview -d /dev/video0 -L</code> 
+Vous verrez apparaitre la liste des modes vidéos supportés.
+<code>luvcview -d /dev/video0 -l</code> 
+Vous verrez la liste des réglages disponible pour votre source vidéo.
+<note tip>Avec un serveur et une connexion ssh. Faites: <code>export SDL_NOMOUSE=1
+export SDL_VIDEODRIVER=dummy
+</code>
+avant les commandes luvcview.</note>
+ou lancez en interface graphique <code>guvcview</code>
+  
+Certaines webcams ne fonctionnent pas directement avec Zoneminder.
+Vous avez donc la possibilité de passer par un logiciel tiers ( [[motion]] , [[mjpg-streamer]] ...). Ceux-ci vont mettre en place un serveur http, que vous récupérerez sous Zoneminder en ajoutant une source de type "remote".
+Attention à bien respecter résolution et format, sinon la camera ne sera pas prise en compte.
+==== Signification codes couleurs ====
+Pour les colonnes //Fonction// et //Source// de l'interface web :
+
+**VERT** - Communication fonctionne normalement (uniquement si la fonction choisie diffère de "MONITOR" et de "NONE")
+
+**ORANGE** - Fonctionne à moitié. Cela peut être la taille de l'image qui n'est pas bonne, la couleur, ou que les images ne peuvent être sauvées (plus assez d'espace disque, problème de permissions), ou la base MySQL qui est corrompue ou erronée. 
+(si la fonction choisie est "MONITOR" alors tout est normal quand ORANGE)
+
+**ROUGE** - Ne peut pas joindre le périphérique (device) ou autre erreur fatale.
+(si la fonction choisie est "NONE" alors c'est normal quand ROUGE)
+
+==== Astuces ====
+== 1. Changer le dossier de stockage des données vidéo et audio ==
+  sudo mv -f /var/cache/zoneminder <chemin de mon autre dossier>
+  sudo ln -s  <chemin de mon autre dossier> /var/cache/zoneminder
+  sudo chown -h www-data:www-data /var/cache/zoneminder
+  sudo chown -R www-data:www-data  <chemin de mon autre dossier>
+
+== 2. Ajouter des pièces jointes aux mails ==
+Ajouter dans MESSAGE_BODY le texte du mails (Options->Email)
+    %EI1% : attache la première image de l'évènement.
+    %EIM% : attache la première image de l'évènement ayant le plus grand score.
+    %EV%  : attache la vidéo de l'évènement.
+
+== 3. Ajouter un login à la connexion ==
+Cocher la case OPT_USE_AUTH (Options->Système).
+
+Un login sera directement demandé (après avoir sauvé).
+
+Ne pas le répéter, c'est : 
+
+utilisateur: **admin**
+
+mdp: **admin**
+
+Après cela, un nouvel onglet "Utilisateurs" apparait dans les options.
+Cet onglet permet de gérer différents utilisateurs et leurs droits.
+
+== 4. Images corrompues ou dégradées ==
+
+Cela peut venir d'une mauvaise transformation de l'image, essayer en remettant ORIENTATION de votre source sur la valeur "Normal" (pas de rotation ou de miroir).
+
+== 5. Démarrage automatique ==
+Sur ubuntu 12.04 LTS à 13.10, les priorités de démarrage sont incorrects. Pour le corriger:
+<code>
+$ sudo update-rc.d -f zoneminder remove
+$ sudo update-rc.d zoneminder start 99 2 3 4 5 . stop 5 0 1 6 .
+</code>
+
+== 6. Fix pour les installations 32 bits == 
+Si vous avez l'erreur suivante:
+<code>Shared data size conflict in shared_data for monitor Monitor-1, expected 328, got 316</code>
+Modifier le fichier: **/usr/share/perl5/ZoneMinder/Memory.pm** vers la ligne 130:
+<code>
+# Native architecture
+our $arch = int(3.2*length(~0));
+</code>
+En forçant le passage en 32 bits:
+<code>
+# Native architecture
+our $arch = 32;
+</code>
+Puis redémarrer zoneminder.
+
+== 7. Supprimer les exportations automatiquement == 
+Pour supprimer les http://localhost/zm/temp/zmExport.zip automatiquement. Ajouter à [[cron]] la commande suivante
+<code>/usr/bin/find /var/cache/zoneminder/temp/ -type f -mtime +1 -exec rm {} \; </code>
+le "+1" correspondant aux fichiers d'un jour ou plus.
+===== ZMviewer : Interface graphique (Qt) pour zoneminder =====
+
+  * [[http://sourceforge.net/projects/zmviewer/files/]]
+**zmviewer** nécessite les paquets : cmake, qt4-qmake, libqt4-dev
+
+- Configuration de zmviewer :
+pour que zmviewer trouve l'interface web de zoneminder <code>sudo ln -s /var/www/zm/index.php /var/www/zm/zm.php</code>
+
+- Lancement avec la commande : <code>./zmviewer-0.2/build/src/shell/zmviewer</code> 
+
+- Accès aux commandes par clic droit sur une des zones rectangulaires
+
+- Accès à l'interface web zoneviewer par menu "Cameras">"Admin Panel">"Your server"
+
+===== Liens =====
+
+Lien vers des explications (FR):
+
+  * [[http://fr.wikipedia.org/wiki/ZoneMinder]]
+
+Guide d'installation complet à partir des sources (EN):
+
+  * [[http://www.zoneminder.com/wiki/index.php/Ubuntu_9.10_Server_32-bit]]
+
+Guide complet d'utilisation sous Ubuntu (EN):
+
+  * [[http://www.howtoforge.com/video_surveillance_zoneminder_ubuntu]]
+
+Forum officiel zoneminder (EN):
+
+  * [[http://www.zoneminder.com/forums/]]
+
+----
+
+//Contributeurs : Maintenu par [[utilisateurs:apokalypse]] et [[utilisateurs:gezus]].

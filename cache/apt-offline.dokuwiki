@@ -1,0 +1,144 @@
+
+{{tag>Xenial paquet tutoriel installation_logiciel dépôts apt}}
+
+----
+
+====== Comment ajouter des paquets ou mettre à jour Ubuntu avec apt-offline ? ======
+
+Ce tutoriel est destiné à tous ceux qui ont installé Ubuntu sur un ordinateur qui n'a pas de connexion à Internet, mais qui aimeraient bien néanmoins tenir leur système à jour et installer les applications qui leur manquent.\\
+[[http://manpages.ubuntu.com/manpages/lucid/en/man8/apt-offline.8.html|apt-offline]] permet de faire aisément ceci à partir d'un autre ordinateur relié à Internet.
+
+L'ensemble des méthodes listées ci-dessous suppose que vous pouvez avoir accès à un ordinateur disposant d'une connexion Internet haut débit sur lequel vous n'avez pas nécessairement les droits d'[[:sudo|administration]], et que vous possédez une clé USB (1 Gio serait confortable). Ce tuto s'adressant plutôt aux [[:debutant|débutants sous Ubuntu]].
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]] sur l'ordinateur hors-connexion.
+  * Avoir accès à un ordinateur sous Ubuntu ou Windows (d'un ami ou café Internet, par exemple) disposant d'une connexion Internet.
+  * Disposer d'une clé USB (de préférence d'au moins 1 Gio) ou tout autre support amovible.
+  * Avoir un fichier sources.list fonctionnel. Si ce n'est pas le cas, des générateurs sont disponibles sur la page [[:sources.list|sources.list]].
+
+===== Installation =====
+
+Il est nécessaire d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>apt-offline]]** sur les deux ordinateurs soit en trouvant le moyen de connecter momentanément l'ordinateur cible à Internet, soit en utilisant une des méthodes décrites sur le [[:installation_paquet_hors_ligne|portail dédié à l'installation de paquets hors-ligne]]. Ou bien en téléchargeant directement le paquet [[http://packages.ubuntu.com/trusty/apt-offline|ici]] pour [[trusty|Ubuntu 14.04]] et [[http://www.ubuntuupdates.org/package/core/xenial/universe/base/apt-offline|là]] pour la version 16.04.
+
+===== Utilisation de l'outil apt-offline =====
+
+Il est également possible d'effectuer toutes les tâches qui suivent grâce à une interface graphique pour apt-offine. Pour cela [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>apt-offline-gui]]**. Lancez-le avec la commande :
+<code>gksudo apt-offline-gui</code>
+
+==== Mise à jour du système ==== 
+Dans ce qui suit veillez bien à remplacer **$USER** par votre **identifiant de session**.
+
+=== Sur l'ordinateur hors-ligne ===
+Générer un fichier de signatures dans un support usb déjà monté :
+<code>sudo apt-offline set /media/$USER/USB/apt-offline.sig</code>
+La commande ci-dessus va générer toutes les informations requises par [[:apt]] pour mettre à jour sa base de données.
+
+Par défaut, sans arguments supplémentaires, apt-offline va extraire les informations de mise à jour de la base de données APT (option --update implicite), ainsi que la liste des paquets à mettre à niveau (option --upgrade implicite).
+
+Ces options peuvent également être utilisées individuellement si vous le souhaitez.
+
+=== Sur l'ordinateur en ligne ===
+Connecter la clé USB et télécharger dans un répertoire les données correspondant au fichier de signature généré précédemment :
+<code>sudo mkdir /media/$USER/USB/apt
+sudo apt-offline get /media/$USER/USB/apt-offline.sig -d /media/$USER/USB/apt --threads 5</code>
+L'option threads permet d'accélérer l'opération en téléchargeant jusqu'à cinq fichiers en parallèle.
+
+=== Sur l'ordinateur hors-ligne ===
+Reconnecter la clé USB et réinjecter les données téléchargées :
+<code>sudo apt-offline install /media/$USER/USB/apt</code>
+Ceci mettra à jour votre base de données APT de manière transparente.
+<code>sudo apt list --upgradable</code>
+Ceci listera les paquets qui peuvent être mis à jour automatiquement.
+<code>sudo apt upgrade</code>
+Ceci mettra à jour vos paquets de manière transparente.
+
+==== Installation d'un paquet et de ses dépendances ====
+
+apt-offline est très puissant, puisqu'il vous permet de télécharger également les sources si vous le désirez.
+
+=== Sur l'ordinateur hors ligne ===
+<code>sudo apt-offline set NOM_PAQUET-offline.sig --install-packages NOM_PAQUET --src-build-dep --install-src-packages NOM_PAQUET </code>
+
+=== Sur l'ordinateur relié à Internet ===
+Placez-y le fichier NOM_PAQUET-offline.sig que vous avez généré précédemment, puis :
+<code>sudo apt-offline get NOM_PAQUET-offline.sig --no-checksum --bundle NOM_PAQUET-offline.zip</code>
+
+=== Extraction des paquets téléchargés sur l'ordinateur cible ===
+Extrayez l'archive obtenue dans le cache de apt :
+<code>sudo apt-offline install NOM_PAQUET-offline.zip</code>
+Puis installez les paquets de manière classique :
+<code>sudo apt upgrade</code>
+
+Alternativement, extrayez l'archive obtenue dans un répertoire temporaire :
+<code>unzip -l NOM_PAQUET-offline.zip</code>
+Puis installez les paquets de manière classique :
+<code>sudo apt-get -o dir::cache::archives=CHEMIN/VERS/LE/DOSSIER install NOM_PAQUET</code>
+<note help>Pour installer les paquets, il est également possible d'utiliser la commande suivante, moins recommandée en pratique. <code>sudo dpkg -i *.deb </code></note>
+
+===== apt-get update offline avec un miroir de paquets local =====
+Reportez-vous au tutoriel [[tutoriel:creer_un_miroir_de_depot|Comment créer un miroir de dépôt local ?]]
+
+===== Mise à jour manuelle de vos listes de paquets =====
+
+La procédure décrite ci-dessous permet la mise à jour de votre liste de paquets. À noter pour les utilisateurs avertis qu'il existe [[tutoriel:scripts_de_mise_a_jour_sans_internet|des alternatives sous forme de scripts]].
+
+À tester si rien d'autre ne marche. Cependant il est bon de l'exposer car ça permet de voir ce qui se passe vraiment.
+
+Ouvrez un terminal et tapez :
+<code>sudo apt-get update -qq --print-uris >> toto.txt && gedit toto.txt</code>
+Dans le fichier qui s'ouvre, vous trouverez notamment une url par ligne. Enregistrez le fichier sur votre clé, allez sur l'ordinateur (Linux) où vous avez Internet, et pour chaque url, tapez :
+<code>wget <url></code>
+Puis ramenez les fichiers téléchargés sur votre ordinateur hors-ligne. Placez-vous dans le dossier où vous avez téléchargé (on suppose dans les prochaines commandes que ce sont les seuls fichiers .gz du répertoire). Comme précédemment afin d'alléger la présentation de la page, voici les commandes successives en un seul bloc :
+<code>
+# On copie les paquets dans le bon répertoire
+sudo cp *.gz /var/lib/apt/lists/
+# On se place dans ce répertoire
+cd /var/lib/apt/lists/
+# On dézippe les listes de paquets 
+sudo gunzip *.gz
+</code>
+
+À ce stade cela pourrait marcher, mais vous allez avoir des problèmes en lançant l'utilitaire de mise à jour qui va vous dire qu'il n'a pas réussi à déverrouiller les fichiers. C'est pourquoi il faut ajouter :
+<code>sudo chmod 755 *_Packages</code>
+Vos listes sont désormais à jour.
+
+===== Par le terminal avec apt (méthode déconseillée) =====
+
+<note warning>Méthode à n'utiliser que si l'ordinateur relié à Internet et l'ordinateur cible possèdent des architectures matérielles et logicielles proches</note>
+
+Cette méthode s'utilise avec le [[:terminal]] mais elle est assez simple et efficace ! Les listes de paquets utilisées étant celles de l'ordinateur relié à Internet, il n'est pas nécessaire de passer par les étapes précédentes (c.-à-d. la mise à jour de la liste source, et la mise à jour des listes des paquets) à condition que les listes de l'ordinateur relié à Internet soient suffisamment à jour (mais si vous pouvez le faire c'est quand même mieux).
+
+  - Sur l'ordinateur connecté, créez un nouveau dossier (par ex., tempo).
+  - Créez dans ce dossier (tempo) un autre dossier nommé partial (Ce dossier sera vide à la fin du téléchargement mais il est indispensable).
+  - Ouvrez un terminal et placez-vous dans votre dossier en tapant la commande <code>cd /chemin/vers/votre/dossier/tempo</code> Par exemple :<code>cd /home/raouf/Bureau/tempo</code> suivi de la touche ENTRÉE du clavier.
+  - Ensuite, pour télécharger le paquet et ses dépendances, tapez la commande ci-dessous en remplaçant « monpaquet » par le nom du paquet en question :<code>apt-get --install-recommends -o "Dir::Cache::archives=`pwd`" -o "Debug::NoLocking=true" -o "Dir::State::status=/dev/null" -d install monpaquet </code>Reste alors à patienter selon le débit de votre connexion ;-). Vous pouvez répéter cette commande une autre fois pour vous assurer que toutes les dépendances ont bien été téléchargées. (FIXME: bizarre)
+  - Copiez le dossier sur une clé usb et rapportez-le sur l'ordinateur sans Internet.
+  - Ouvrez un terminal et placez-vous dans le dossier que vous avez copié (de la même manière que la précédente ''cd /chemin.../tempo'' + ENTRÉE).
+  - Et enfin installez le paquet et ses dépendances en tapant la commande <code>sudo dpkg -i *.deb</code>
+<note important>Comme vous utilisez les listes de paquets de **l'ordinateur relié à Internet** pour procéder à la mise à jour de **l'ordinateur non connecté**, ce dernier **doit** tourner sous la **même version d'Ubuntu** ou d'une autre de ses variantes, que l'ordinateur relié à Internet ! (Par exemple, si sur le non connecté c'est « Trusty », vous devez télécharger les paquets sur un ordinateur qui tourne sous « Trusty » et non pas « Precise »).
+Notez encore que cette méthode n'est pas fiable à 100 %. Elle nécessite que les deux ordinateurs aient des configurations proches, autrement des problèmes de dépendances mal téléchargées ou d'incompatibilité peuvent se produire.</note>
+
+===== Utilisation de Windows© pour récupérer vos paquets =====
+Cette méthode est particulièrement intéressante dans un dualboot avec un réseau Windows opérationnel et un réseau Ubuntu ne fonctionnant absolument pas (wifi comme ethernet).
+
+  * Vous disposez déjà de [[:wsl|l'application bash que vous commencez péniblement à faire fonctionner sous Windows]]. 
+  * Téléchargez la version d'apt-offline qui convient avec Windows [[http://fr.archive.ubuntu.com/ubuntu/pool/universe/a/apt-offline/apt-offline_1.3.1_all.deb|ici]], ou la version pour Ubuntu 16.04 si l'autre ordinateur est sous Ubuntu 16.04 [[http://security.ubuntu.com/ubuntu/pool/universe/a/apt-offline/apt-offline_1.7_all.deb|là]].
+  * Maintenant vous lancez [[:wsl|bash]], et exécutez les diverses commandes : <code>mkdir /home/$USER/offline
+cd /mnt/c/Users/Nomd'utilisateurWindows/Downloads
+cp apt-offline_1.3.1_all.deb /home/$USER/offline
+sudo dpkg -i /home/$USER/offline/*.deb</code>
+  * Il ne vous reste plus qu'à jouer la commande <code>sudo apt-offline --verbose set /home/$USER/offline/liste.sig</code> Mais c'est uniquement pour vérifier que la méthode marche car cette action doit se faire sur l'ordinateur qui n'a pas d'Internet.
+  * Puis : <code>cp /home/$USER/offline/liste.sig /mnt/c/Users/Nomd'utilisateurWindows/Downloads</code>
+  * Il reste maintenant à recevoir la vraie liste et voir comment va se comporter la commande d'injection et de récupération.
+  * Voila, on l'a reçue (fichier liste.sig) et bien installée dans le répertoire de téléchargement. On fait donc les commandes :<code>cd /mnt/c/Users/Nomd'utilisateurWindows/Downloads
+mkdir apt
+sudo apt-offline get liste.sig -d apt --threads 1</code>
+  * Cela se passe très mal : réception d'environ 100 paquets au lieu des 200 attendus. (FIXME: suite demain...)
+  * Une fois les paquets récupérés, la méthode est la même que plus haut sur l'ordinateur non connecté.
+
+===== Pages en rapport avec les dépôts APT =====
+{{topic>dépôts}}
+
+----
+//Contributeurs: [[:utilisateurs:Aldian]], [[:utilisateurs:mavosaure]], [[:utilisateurs:febcrash]], [[:utilisateurs:Urhixidur]].//

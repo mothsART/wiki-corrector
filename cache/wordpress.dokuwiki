@@ -1,0 +1,218 @@
+
+{{tag>serveur internet cms}}
+
+{{  https://s.w.org/style/images/about/WordPress-logotype-standard.png?260}}
+
+====== WordPress ======
+
+[[wpfr>WordPress]] est le [[:CMS]] le plus utilisé du monde. En 2018 il représente presque un tiers des sites Internet !
+
+C'est un projet né en 2003, ce qui est ancien pour une technologie du [[:Web]].
+
+Cause et conséquence de cette gigantesque communauté : il propose une quantité sidérante d'extensions qui étendent ses fonctionnalités au delà du raisonnable (plus de 54000 plugins sur le dépôt officiel en 2018).
+
+{{:internet:twentyelevendefault1.png?direct&0x200}}
+{{:internet:dashboard-welcome.png?direct&0x200}}
+{{:internet:pages-edit-page.png?direct&0x200}}
+{{:internet:managefiles.png?direct&0x200}}
+{{:internet:appearance-install-theme-step1.png?direct&0x200}}
+
+<note important>Il ne faut pas confondre //[[https://fr.wordpress.com/|WordPress.com]]// qui est une plateforme de blog commerciale gérée par [[wpfr>Automattic]], et //WordPress//, le CMS dont il est question ici et dont le site officiel est [[https://fr.wordpress.org/|fr.wordpress.org]].</note>
+
+===== Installation =====
+
+<note>Le site officiel propose 2 documentations concernant l'installation de WordPress : [[https://fr.wordpress.org/txt-install/|une succincte]], l'autre [[https://codex.wordpress.org/fr:Installer_WordPress|plus complète]].</note>
+
+<note tip>La plupart des hébergeurs web proposent une installation de WordPress simplifiée ("//en 1 clic//").</note>
+
+<note>WordPress étant une solution destinée à être déployée sur un serveur, toutes les manipulations dont nous traiterons ici se feront en ligne de commande.</note>
+
+==== Prérequis ====
+
+Pour installer WordPress vous aurez besoin d'un [[:web#serveurs|serveur HTTP]], de [[:PHP]], et d'un serveur de base de données MySQL ([[:MySQL]] ou [[:MariaDB]]).
+
+<note>Sur un hébergement web géré par l'hébergeur, ces prérequis devraient déjà être en place, donc toutes ces étapes devraient être inutiles.
+
+N'hésitez pas à contacter le support de l'hébergeur si ce n'est pas le cas.</note>
+
+[[:apache2|Apache]] est le serveur HTTP le plus couramment utilisé, et cette configuration (en conjonction avec MySQL et PHP) s'appelle une pile [[:LAMP|LAMP]].
+
+Donc pour installer [[:apache2|Apache]], [[:PHP]] et [[:MySQL]] ou [[:MariaDB]], suivez [[:LAMP#installation|cette documentation]].
+
+Une fois la pile [[:LAMP]] installée (avec les modules PHP les plus courants), on active le module [[:apache2#mod_rewrite]], dont a aussi besoin WordPress :
+<code>sudo a2enmod rewrite</code>
+
+Nous allons ensuite créer un [[:apache2#hotes_virtuels|hôte virtuel]] pour WordPress, dont la racine sera ''/var/www/wordpress'' :
+<code>sudo nano /etc/apache2/sites-available/wordpress.conf</code>
+Ce qui ouvre avec [[:nano|l'éditeur nano]] un fichier dans lequel nous allons coller :
+<file - wordpress.conf><VirtualHost *:80>
+        ServerName wordpress.localhost
+        DocumentRoot /var/www/wordpress
+        <Directory /var/www/wordpress>
+                AllowOverride all
+                Require all granted
+        </Directory>
+        ErrorLog /var/log/apache2/error.wordpress.log
+        CustomLog /var/log/apache2/access.wordpress.log combined
+</VirtualHost></file>
+Si un nom de domaine pointe sur le serveur, on l'indique à la place de ''wordpress.localhost'' pour la directive ''ServerName''.\\
+(''Ctrl+X'' puis ''O'' pour quitter en sauvegardant)
+
+Finalement, on active l'hôte virtuel et on recharge la configuration d'Apache :
+<code>sudo a2ensite wordpress
+sudo systemctl reload apache2</code>
+
+<note important>Si votre serveur est sur le [[:Web]], pensez à [[:apache2#securite|sécuriser]] l'accès au site en particulier en forçant [[:apache2#HTTPS]].</note>
+
+==== Installation de WordPress ====
+
+=== Copie des fichiers ===
+
+Tout d'​abord téléchargeons la dernière version de WordPress :
+<code>wget https://fr.wordpress.org/wordpress-latest-fr_FR.zip</code>
+
+Ensuite nous allons extraire le contenu du zip à la racine de notre hôte virtuel (''/var/www/wordpress'' dans cet exemple) :
+<code>sudo unzip wordpress-latest-fr_FR.zip -d /var/www</code>
+
+On va renforcer légèrement la sécurité en attribuant des [[[[:apache2#permissions|droits]] un peu restrictifs aux fichiers :
+<code>sudo chown www-data:www-data /var/www/wordpress -R
+sudo chmod -R -wx,u+rwX,g+rX,o+rX /var/www/wordpress</code>
+(WordPress [[https://codex.wordpress.org/Updating_WordPress#File_Ownership|exige]] que les fichiers soient modifiables par le serveur __et__ appartiennent à ''www-data'' pour faire fonctionner les mises à jour automatiques)
+
+=== Création de la base de données ===
+
+Pour créer la base de données qu'utilisera WordPress, le plus simple est de se connecter avec le client [[:MySQL]] :
+<code>sudo mysql</code>
+
+On arrive alors sur la console SQL sur laquelle nous allons entrer ces commandes (en remplaçant ''mot_de_passe'') :
+<code mysql>CREATE DATABASE wordpress;
+CREATE USER 'wpuser'@'localhost' IDENTIFIED BY 'mot_de_passe';
+GRANT ALL ON wordpress.* TO 'wpuser'@'localhost';
+FLUSH PRIVILEGES;
+QUIT;</code>
+Il faut remplacer ''mot_de_passe'' par un vrai mot de passe complexe qu'on note pour la prochaine étape.
+
+On vient de créer la base de donnée ''wordpress'' à laquelle l'utilisateur ''wpuser'' aura accès.
+
+=== Installation via l'interface web ===
+
+WordPress devrait alors être accessible à l'​adresse [[http://wordpress.localhost/]], et cette adresse nous redirige sur une interface qui nous permet de finaliser l'installation.
+
+Cliquez sur //C'est parti !// et renseignez les différents champs :
+  * **Nom de la base de données** : ''wordpress''
+  * **Identifiant** : ''wpuser''
+  * **Mot de passe** : le mot de passe qu'on a noté à l'étape précédente (lors de la création de la base de donnée et de l'utilisateur ''wpuser'')
+  * **Adresse de la base de données** : ''localhost''
+  * **Préfixe des tables** : ''wp_''
+Après avoir cliqué sur //Lancer l'installation//, on tombe sur un second formulaire.
+
+Il s'agit cette fois de définir un administrateur pour WordPress. Les champs sont assez clairs.\\
+Le **titre du site** sera visible par les internautes.\\
+Concernant le **mot de passe** il est conseillé de conserver celui proposé par défaut qui est très fort. Vous pouvez par exemple le sauvegarder dans un gestionnaire de mots de passe tel que [[:keepassx|KeePass]].\\
+Il est conseillé également de renseigner une **adresse de messagerie** existante, ce qui vous permettra de récupérer votre mot de passe en cas de perte, ou de faire fonctionner les notifications par courriel.
+
+===== Utilisation =====
+
+==== Contenu éditorial ====
+
+La contenu éditorial de WordPress est principalement de deux types :
+  * les //pages//, qui sont les éléments constituants des "sites classiques", et sont en général structurées par arborescence (menu, sous-menu)
+  * les //articles//, qui sont les éléments constituants des blogs, et sont liés à une notion d'actualité (tri par date)
+
+==== Extensions ====
+
+Pour installer des extensions, depuis l'administration allez sur //Extension// -> //Ajouter// : vous aurez accès à toutes les extensions de la [[https://wordpress.org/plugins/browse/popular/|base de données officielle de WordPress]].
+
+Nous n'allons évidemment pas dresser la liste exhaustive des plus de 50000 extensions disponibles, mais certaines d'entre elles sont incontournables :
+
+  * //**[[https://fr.wordpress.org/plugins/wp-super-cache/|WP Super Cache]]**// : confère à WordPress une fonctionnalité d'optimisation indispensable pour accélérer l'affichage du site, et alléger la charge de travail côté serveur.
+  * //**[[https://fr.wordpress.org/plugins/wp-force-ssl/|WP Force SSL]]**// : force l'utilisation de [[:apache2#HTTPS]], ce qui évite que le contenu web et les variables d'identifications des utilisateurs transitent en clair sur Internet.
+  * //**[[https://fr.wordpress.org/plugins/polylang/|Polylang]]**// : incontournable pour les sites multilingues.
+
+<note important>La qualité des extensions de WordPress est très variable. De plus, chacune est potentiellement source de lenteurs et de failles de sécurités.
+
+N'installez que des extensions qui vous sont indispensables et en lesquelles vous avez confiance.</note>
+
+==== Thèmes ====
+
+Pour installer un thème, depuis l'administration allez sur //Apparence// -> //Thèmes// -> //Ajouter// : vous aurez accès à tous les thèmes de la [[https://wordpress.org/themes/|base de données officielle de WordPress]].
+
+<note important>De la même manière que les autres extensions, les thèmes peuvent être source de failles de sécurité. N'utilisez que des thèmes fiables et maintenus, et maintenez-les à jour autant que possible.</note>
+
+===== Problèmes courants =====
+
+==== Changement de domaine ====
+
+WordPress a la mauvaise idée de stocker en dur (en base de données, par défaut, et / ou en fichier de configuration) le nom de domaine utilisé lors de son installation, et s'obstine à rediriger dessus même lorsqu'il est appelé depuis une autre adresse.
+
+Ce comportement pose problème lors d'un changement de nom de domaine, pour une mise en production par exemple.
+
+Par défaut on peut modifier ce nom de domaine depuis l'interface d'administration -> //Réglages// -> //Général// -> //Adresse web de WordPress (URL)// et //Adresse web du site (URL)//.
+
+Si ces champs sont grisés et non modifiables, cela signifie que ces infos sont spécifiées en dur dans le fichier de configuration de WordPress. Il vous faut dans ce cas [[:tutoriel:comment_modifier_un_fichier|éditer manuellement]] le fichier ''wp-config.php'' (à la racine de WordPress) et ajuster les lignes suivantes :
+<file - wp-config.php>
+define( 'WP_HOME', 'http://example.com' );
+define( 'WP_SITEURL', 'http://example.com' );
+</file>
+
+Par ailleurs il est fort probable que votre ancien nom de domaine apparaisse également dans le contenu éditorial de votre site (chemin vers une image ou autre lien hypertexte). Dans ce cas la méthode la plus simple est de lancer un remplacement automatisé de votre ancien nom de domaine vers votre nouveau dans le fichier SQL, entre son export depuis son ancien emplacement, et son import sur le nouveau serveur. Vous pouvez effectuer cela par exemple avec un éditeur de texte ou avec la commande [[:sed]] :
+<code>sed -i "s/http\:\/\/ancien\.example\.com/https\:\/\/nouveau\.example\.com/g" wordpress.sql</code>
+
+==== Mot de passe administrateur perdu ====
+
+Vous pouvez modifier le mot de passe de l'administrateur WordPress en vous connectant à la console MySQL
+<code>sudo mysql</code>
+Puis en entrant les commandes suivantes :
+<code mysql>USE wordpress;
+UPDATE wp_users SET user_pass=MD5('mot_de_passe') WHERE user_login = 'admin';
+EXIT</code>
+où ''wordpress'' est le nom de votre base de données, ''admin'' le nom d'utilisateur de l'administrateur, et ''mot_de_passe'' est votre nouveau mot de passe.
+
+===== Aller plus loin =====
+
+==== Multisite ====
+
+WordPress permet de gérer plusieurs sites depuis une instance unique. Cette fonctionnalité consiste à afficher différents contenus et différents thèmes en fonction du nom de domaine appelé. On peut ainsi gérer plusieurs sites distincts pour les internautes depuis une interface unique et un même compte administrateur. De plus on a un seul [[:CMS]] à maintenir à jour.
+
+Pour que cela fonctionne il faut avant tout que les différents [[wpfr>https://fr.wikipedia.org/wiki/Nom_de_domaine|noms de domaine]] pointent tous sur votre serveur web.\\
+Il faut également que notre serveur web affiche WordPress pour chacun de ces noms de domaine. Si on utilise [[:apache2|Apache]] il faut par ex. ajouter chacun de ces noms de domaine à la directive [[https://httpd.apache.org/docs/2.4/fr/mod/core.html#serveralias|ServerAlias]] de notre [[:apache2#hotes_virtuels|VirtualHost]].
+
+Voici un exemple grâce auquel WordPress pourra prendre en charge les domaines ''example.com'', ''example.org'', ainsi que n'importe quel sous-domaine de ''example.com'' :
+
+<file - wordpress.conf><VirtualHost *:80>
+        ServerName example.com
+        ServerAlias example.org *.example.com
+        DocumentRoot /var/www/wordpress
+        <Directory /var/www/wordpress>
+                AllowOverride all
+                Require all granted
+        </Directory>
+        ErrorLog /var/log/apache2/error.wordpress.log
+        CustomLog /var/log/apache2/access.wordpress.log combined
+</VirtualHost></file>
+
+Une fois ce fichier modifié on recharge la configuration d'[[:apache2|Apache]] :
+<code>sudo systemctl reload apache2</code>
+
+==== WP-CLI ===
+
+Comme indiqué sur la page d'accueil du projet : "[[https://wp-cli.org/fr/|WP-CLI]] est un ensemble d’outils en ligne de commande pour gérer vos installations WordPress. Vous pouvez mettre à jour les extensions, configurer des installations multisite et beaucoup plus sans avoir recours à un navigateur web."
+
+Comme WP-CLI est exécuté par l'utilisateur Linux courant, cela permet par ex. d'améliorer la sécurité de WordPress en effectuant ses mises à jour malgré des permissions plus strictes pour le serveur. Ou encore d'écrire des scripts [[:tutoriel:script_shell|bash]] ou [[:Make]] pour déployer WordPress de manière automatisée (WP-CLI permet par ex. d'exporter / importer la base de données en remplaçant au passage toutes les occurrences de l'URL locale par celle du nom de domaine de production, et d'activer ou de désactiver des plugins).
+
+==== Composer ====
+
+Il existe deux projets permettant de déployer WordPress au moyen de [[:Composer]]. Il s'agit de [[https://roots.io/bedrock/|Bedrock]] et [[https://wordplate.github.io/|WordPlate]]. Ce sont des options très pratiques en particulier pour les développeurs web. En plus de simplifier l'installation ils intègrent de nombreux outils et le dépôt [[https://wpackagist.org/|WordPress Packagist]] qui permet d'installer les extensions et les thèmes de WordPress comme de simples librairies PHP.
+
+Les deux projets sont légèrement différents, vous trouverez de très bons tutoriels en français [[https://www.grafikart.fr/tutoriels/wordpress-bedrock-1305|ici pour Bedrock]] et [[https://www.grafikart.fr/tutoriels/wordplate-973|là pour Wordplate]].
+
+===== Voir aussi =====
+
+  * [[https://fr.wordpress.org/|fr.wordpress.org]] : site officiel
+  * [[https://wpfr.net/|wpfr.net]] : communauté francophone
+  * [[https://www.geekeries.fr/|www.geekeries.fr]] : présentations de ressources WordPress
+  * [[https://www.grafikart.fr/tutoriels/wordpress|www.grafikart.fr]] : tutoriels pour les développeurs
+
+---- 
+
+//Contributeurs : [[:utilisateurs:krodelabestiole]], [[:utilisateurs:psychederic|Psychederic]]//

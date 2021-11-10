@@ -1,0 +1,483 @@
+
+{{tag>personnalisation}}
+----
+
+====== Comment personnaliser son live CD Ubuntu ======
+
+Dans ce tutoriel, nous vous expliquerons comment créer votre propre liveCD (ou liveDVD),
+ en modifiant un liveCD ubuntu déjà existant afin qu'il corresponde à vos besoins.
+ Vous pourrez par exemple installer les paquets que vous souhaitez, 
+mettre dans le /home du liveCD les fichiers dont vous avez besoin, etc.
+
+
+===== Méthodes assistées =====
+
+Il existe plusieurs applications permettant de personnaliser votre liveCD :
+  * [[:UCK]]
+  * [[:Remastersys]]
+  *  [[:Respin]]
+  *[[ http://forum.ubuntu-fr.org/viewtopic.php?id=424373|ModCustom]]
+  * [[http://www.le-libriste.fr/2012/03/creer-votre-propre-distribution-avec-ubuntu-builder/|Ubuntu-Builder]] ([[https://launchpad.net/ubuntu-builder/+announcement/12508|Projet abandonné]] 
+  * puis [[https://launchpad.net/~kamilion/+archive/ubuntu/ubuntu-builder|copié récemment par Kamilion]] ) 
+  * [[https://launchpad.net/~nemh/+archive/ubuntu/systemback|SystemBack]]
+  * [[http://linuxiumcomau.blogspot.com/2017/06/customizing-ubuntu-isos-documentation.html |
+  *  Le script "isorespin.sh" (conçu par l'individu "Linuxium")]] permet (aux utilisateurs avancés) de modifier des [[wp>fr:Image disque|images disque]] ISO de Ubuntu afin de les rendre compatibles (démarrables et modification de drivers) avec les CPU Intel Atom (2017)
+  * [[https://ubuntuplace.info/questions/16155/comment-utiliser-cubic-pour-creer-une-image-cd-ubuntu-person|cubic]] (En anglais)
+
+
+<note tip>Il est recommandé d'utiliser la méthode manuelle ci-dessous pour des questions de fiabilité.</note>
+
+===== Méthode manuelle =====
+
+==== Prérequis ====
+
+  * Posséder une image CD (iso) d'Ubuntu Desktop. (l'[[:cd_ubuntu-fr|Edition Francophone]] par exemple)
+  * Disposer d'environ 3Go d'espace libre sur votre Disque Dur.
+  * Installer les outils relatifs au squashfs (format de compression en lecture seule utilisé dans les ISOs Ubuntu) : <code bash>sudo apt-get install squashfs-tools schroot genisoimage</code>
+
+==== Introduction : Généralités sur le liveCD ====
+
+Comme vous le savez, un liveCD est un CD bootable, qui va charger un système
+ Linux en mémoire vive. Cela permet de tester une distribution sans risquer de faire
+ des dégâts sur les disques dur, par exemple.\\
+Un liveCD Linux n'est donc rien d'autre qu'un système Linux classique, 
+son but étant d'être en lecture seule et de ne pas tenir de place, il est compressé.
+ Pour la compression, on utilise squashfs : un système de fichier (tel que ext3 ou reiserfs),
+ qui ne permet que la lecture mais permet un gain de place très important.\\
+Malheureusement, ce système seul ne permet pas de faire fonctionner un système Linux. 
+On l'associe donc à un autre système de fichier, qui est entièrement placé en mémoire : ramfs.\\
+Un dernier système de fichier permet d'associer les deux précédents : unionfs.
+Unionfs est utilisable grâce à l'initrd, qui permet de charger un mini-système
+ en mémoire au boot, et d'agir sur le « vrai » système.\\
+Le soft casper permet la mise en place du boot du liveCD a partir de l'initrd.
+
+
+==== Extraction du système ====
+
+On commence par extraire le squashfs de l'image ISO pour pouvoir lui apporter
+ les modifications souhaitées.\\
+Au cours du tutoriel, nous allons utiliser plusieurs dossiers.
+ Créez-les avec les commandes suivantes (à passer dans votre terminal favori) :
+
+<code bash>mkdir ~/livecd
+cd ~/livecd
+mkdir iso squashfs</code>
+
+L'image ISO sera stockée dans le dossier iso, dans squashfs sera stocké le « vrai » système live.
+
+Il nous faut commencer par copier le contenu de l'image ISO sur le disque dur. 
+
+  * On va donc la monter : // Remplacez ubuntu-desktop-xxx.iso par le chemin de votre fichier ISO.//<code bash>sudo mount -o loop ubuntu-desktop-xxx.iso /mnt</code>
+
+  * On copie son contenu dans le dossier iso : //l'option -a permet de conserver les droits des fichiers copiés// <code bash>sudo cp -av /mnt/. iso</code>
+
+  * Une fois cela fait, on peut la démonter :<code bash>sudo umount /mnt</code>
+\\
+
+=== Copie du squashfs ===
+
+Nous allons maintenant copier le squashfs (le système de fichier de notre liveCD) 
+sur le disque dur afin de pouvoir le modifier.
+
+  * On le monte de la même manière que n'importe quel système de fichier :<code bash>
+sudo mount -t squashfs -o loop iso/casper/filesystem.squashfs /mnt</code>
+<note>On pourra reconnaître dans /mnt l'arborescence classique de Linux : /etc, /boot,…, 
+qui est présente dans le squashfs.</note>
+  * Comme nous l'avons dit, le squashfs est en lecture seule : il est impossible de modifier directement le squashfs. \\ Il faut copier le système qu'il contient dans le dossier //squashfs// créé dans ce but. :<code bash>sudo cp -av /mnt/. squashfs</code>//Attention, cette opération prend un peu de temps.//
+
+  * Pour finir, on le démonte :<code bash>sudo umount /mnt</code>
+
+==== Modification du système ====
+Maintenant que nous avons notre système dans le dossier ''~/livecd/squashfs'', 
+nous allons pouvoir le modifier à notre guise. Mais comment utiliser les logiciels
+ qui y sont présents, pour travailler proprement dessus ? C'est là que le chroot intervient.
+<note tip>Le chroot permet de "se connecter" en super-utilisateur dans un système
+ hébergé (dans ''~/livecd/squashfs''), en utilisant le noyau du système 
+hôte (votre jolie Ubuntu à vous ;-) ). C'est une Inception, si vous voulez !</note>
+<note warning> Il faut que le système hôte ait une architecture au moins du 
+niveau du système hébergé : votre Ubuntu doit être en 64b pour chrooter 
+dans un système 64b.\\ Si vous essayez de modifier un système 64b dans
+ une installation 32b, vous aurez une erreur qui ressemble 
+à <code bash>chroot: failed to run command ’/bin/bash’: Exec format error</code>FIXME</note>
+Vous pourrez modifier votre système hébergé (presque) comme s'il était installé en dur !
+
+=== Chroot ===
+
+  * Quelques réglages préalables pour que le chroot fonctionne correctement :<code bash>
+sudo mount --bind /proc squashfs/proc 
+sudo mount --bind /sys squashfs/sys
+sudo mount -t devpts none squashfs/dev/pts</code> //Ces lignes permettent 
+d'utiliser les informations du système hôte//
+<note tip>En cas d'erreur avec ''apt-get'', il peut être utile de mettre :
+<code bash>
+sudo mount --bind /dev squashfs/dev
+sudo mount --bind /dev/pts squashfs/dev/pts
+</code>
+</note>
+
+<note tip>
+En cas d'erreur
+<code bash>
+Failed to open connection to "system" message bus: Failed to connect 
+to socket /var/run/dbus/system_bus_socket: No such file or directory
+</code>
+il peut être utile de mettre :
+<code bash>
+sudo mount --bind /var/run/dbus/ squashfs/var/run/dbus/
+</code>
+</note>
+==Quelques réglages pas nécessaires, mais éventuellement utiles :==
+  * Pour utiliser la connexion du système hôte (mettre à jour, installer des logiciels) :<code bash>sudo cp /etc/resolv.conf squashfs/etc/resolv.conf</code>
+  * Pour pouvoir lancer un serveur PostgreSQL ou un LAMP dans le chroot (il faudra préalablement éteindre les serveurs sur la machine hôte pour éviter les conflits de port)<code bash>sudo cp /etc/hosts squashfs/etc/hosts</code>
+  * Pour avoir la même liste de dépôts :<code bash>sudo cp /etc/apt/sources.list squashfs/etc/apt/sources.list</code>
+<note important>N'utilisez cette commande que si le liveCD 
+que vous modifiez et le système à partir duquel vous
+ le modifiez sont de la même version d'Ubuntu.
+Dans le cas contraire, vous n'installeriez pas sur le liveCD
+ les bonnes versions des paquets.</note>
+  * Vous pouvez alors éditer manuellement les fichiers ''~/iso/squashfs/etc/apt/sources.list'' et ''~/iso/squashfs/etc/apt/sources.list.d/'' pour rajouter des dépôts :<code bash> gksudo gedit squashfs/etc/apt/sources.list</code>
+ 
+  * Si vous souhaitez lancer des applications graphiques, vous devez permettre au chroot d'accéder à X :<code bash>xhost +</code> Sans oublier une fois fini d'enlever cette autorisation avec : <code bash>xhost -</code>
+
+ Pour finir, on peut entrer dans le chroot : <code bash>sudo chroot squashfs</code>
+
+=== Exemples de modifications ===
+
+<note important>
+Vous ne saurez qu'à la reconstruction du squashfs si votre iso
+ tiendra sur un CD (700Mo), donc soit vous devez bien gérer la taille,
+ soit vous pourrez graver un DVD, ou utiliser un LiveUSB.</note>
+<note tip>Pas besoin de ''sudo'', vous êtes connectés
+ en Root (super-utilisateur).</note>
+Vous pouvez, si vous avez lancé ''xhost +'',
+ lancer les applications graphiques présentes dans le LiveCD.
+
+== Mise à jour du système ==
+
+<code bash>
+apt-get update
+apt-get dist-upgrade
+apt-get install console-data # Sélectionner le clavier français
+</code>
+<note warning>La commande ''apt-get dist-upgrade'' peut amener
+ une mise à jour du kernel, ce qui vous obligera à une manipulation 
+supplémentaire à la fin.</note>
+
+== Installation / Désinstallation de paquets ==
+
+  * Installez les paquets que vous souhaitez à l'aide de la commande ''apt-get install //nom_du_paquet//''
+
+  * Vous pouvez lister les paquets par taille pour voir ceux qui prennent de la place.<code bash>
+dpkg-query -W --showformat='${Installed-Size} ${Package}\n' | sort -nr | less
+</code>
+  * Supprimez ceux qui ne vous servent à rien :<code bash>apt-get purge //nom_du_paquet//</code>
+
+<note tip>Supprimer des paquets peut, par inadvertance,
+ désinstaller le paquet **ubuntu-desktop** qui est nécessaire au moment 
+d'une mise à niveau de la distribution. Ce paquet devrait donc figurer
+ sur tout liveCD destiné à être distribué à un certain nombre
+ d'utilisateurs de différents niveaux de compétence. 
+Il est donc bon, après avoir fini de faire les modifications, 
+d'utiliser la commande **apt-get install ubuntu-desktop** 
+pour s'assurer que le paquet est toujours installé.</note>
+
+== Modifier les raccourcis de la barre de lanceurs Unity ==
+
+<code bash>gsettings get com.canonical.Unity.Launcher favorites #Pour connaître la liste actuelle
+echo "[com.canonical.Unity.Launcher]
+favorites=['nautilus-home.desktop', 'firefox.desktop','ubuntu-software-center.desktop', 'otherapp1.desktop' 'otherapp2.desktop']" > /usr/share/glib-2.0/schemas/10_local-unity-launcher.gschema.override
+glib-compile-schemas /usr/share/glib-2.0/schemas/</code>
+
+== Autres modifications ==
+  * On peut utiliser l'utilitaire bleachbit afin de nettoyer les fichiers langues superflus.<code bash>apt-get install bleachbit</code>
+  * Synaptic permet de gérer les logiciels installés. <code bash>apt-get install synaptic</code>
+
+  * Il est logique de supprimer les fichiers de cache pour ne pas surcharger le cd :<code bash>apt-get clean</code>
+  * Et les logs de crash :<code bash>rm -r /var/crash/*</code>
+  * FIXME On peut supprimer le cache : (http://askubuntu.com/questions/87142/safe-to-remove)<code bash>rm -r /var/cache/*</code>
+
+== Sortie du chroot ==
+
+D'autres modifications peuvent se faire à l'extérieur du chroot.
+
+  * On sort du chroot :<code bash>umount -lf /sys
+umount -lf /proc
+umount -lf /dev/pts
+umount -lf /dev #dans le cas où on a exécuté sudo mount --bind /dev squashfs/dev pour le problème avec apt
+rm /etc/resolv.conf
+rm /etc/hosts
+exit</code>
+
+== Insérer des fichiers ==
+**__Dans le répertoire utilisateur__**
+
+L'utilisateur par défaut du système chargé lorsque l'on utilise le liveCD
+ n'existe pas dans le système compressé. Il est créé par casper pendant le boot.
+ casper copie les fichiers se trouvant dans ''/etc/skel'' dans le dossier utilisateur qu'il crée au boot.\\
+Placez donc tous les fichiers que vous voulez dans ce dossier,
+ ils apparaîtront dans le répertoire personnel après le boot.
+<code bash>
+sudo cp *votre fichier* squashfs/etc/skel
+</code>
+
+Nous allons pouvoir utiliser cette technique un peu plus tard pour
+ modifier l'apparence du bureau et utiliser des thèmes personnalisés.
+
+**__Dans le système__**, vous pouvez recopier des fichiers au même
+ emplacement que sur votre propre système, par exemple :
+  * Des thèmes<code bash>sudo cp -r /usr/share/themes/* squashfs/usr/share/themes</code>
+  * Des fonds d'écran<code bash>sudo cp -r /usr/share/backgrounds/* squashfs/usr/share/backgrounds/</code>
+
+== Rendre le boot explicite ==
+
+Il est possible de supprimer l'option "quiet" du boot,
+ afin que toutes les étapes soient détaillées.\\
+Éditez le fichier isolinux.cfg qui se trouve dans le dossier iso :
+<code bash>gksudo gedit iso/isolinux/isolinux.cfg</code>
+Supprimez toutes les occurrences du mot ''quiet''.\\
+Vous pouvez également supprimer le mot ''splash'', 
+vous supprimerez ainsi le logo Ubuntu ainsi que la barre de chargement.\\
+Enregistrez et quittez.
+
+== Utiliser le français par défaut ==
+<code bash>echo "fr" | sudo tee iso/isolinux/lang</code>
+
+== Modifier l'utilisateur par défaut ==
+ L'utilisateur par défaut (ubuntu) est créé lors du boot
+ par le programme casper. Pour modifier celui-ci, Il faut :
+  - modifier les fichiers de configuration de casper
+  - régénérer le fichier initrd dans le squashfs (en chroot)
+
+  * Modifier le nom de l'utilisateur<code bash>gksudo gedit squashfs/etc/casper.conf</code>
+
+Ce fichier est court et explicite : 
+> # This file should go in /etc/casper.conf
+> # Supported variables are:
+> # USERNAME, USERFULLNAME, HOST, BUILD_SYSTEM, FLAVOUR
+> 
+> export USERNAME="ubuntu"
+> export USERFULLNAME="Live session user"
+> export HOST="ubuntu"
+> export BUILD_SYSTEM="Ubuntu"
+>
+> # USERNAME and HOSTNAME as specified above won't be honoured and will be set to
+> # flavour string acquired at boot time, unless you set FLAVOUR to any
+> # non-empty string.
+> 
+> # export FLAVOUR="Ubuntu"
+
+
+Modifiez les valeurs à votre convenance. 
+<note important>
+Par défaut, cet utilisateur possède les droits d'administration 
+sans qu'aucun mot de passe ne soit requis. 
+</note>
+Si vous voulez conserver cette propriété, ne modifiez que la première
+ partie ainsi que la valeur de la variable FLAVOUR
+> export USERNAME="mon_utilisateur"
+> export USERFULLNAME="mon_utilisateur Live CD"
+> export HOST="ubuntu"
+> export BUILD_SYSTEM="Ubuntu"
+>
+> # USERNAME and HOSTNAME as specified above won't be honoured and will be set to
+> # flavour string acquired at boot time, unless you set FLAVOUR to any
+> # non-empty string.
+> 
+> export FLAVOUR="mon_ubuntu_personnalise"
+
+Et passez directement à la section suivante : régénération du fichier initrd
+
+Si vous voulez modifier ce comportement, éditez toutes les occurrences 
+ubuntu et remplacez-les par mon_utilisateur, modifiez la valeur de FLAVOUR
+> export USERNAME="mon_utilisateur"
+> export USERFULLNAME="mon_utilisateur Live CD"
+> export HOST="mon_utilisateur"
+> export BUILD_SYSTEM="mon_utilisateur"
+>
+> # USERNAME and HOSTNAME as specified above won't be honoured and will be set to
+> # flavour string acquired at boot time, unless you set FLAVOUR to any
+> # non-empty string.
+> 
+> export FLAVOUR="mon_ubuntu personnalise"
+
+Et modifiez le mot de passe.
+
+  * Modifier le mot de passe
+Commencez par créer un mot de passe crypté :
+
+//le mot de passe étant conservé dans un fichier accessible en lecture,
+ il est nécessaire de le crypter pour préserver sa confidentialité//
+<code>
+mkpasswd -s monmotdepasse
+U5dDh03hz1L6.
+</code>
+Votre mot de passe est ici "monmotdepasse", il sera conservé sous
+ la forme "U5dDh03hz1L6." dans le fichier de configuration.
+
+Et insérez-le dans le script de création de l'utilisateur
+<code>
+~/livecd$ gksudo gedit squashfs/usr/share/initramfs-tools/scripts/casper-bottom/10adduser
+</code>
+
+<note important>
+Avec ubuntu 14.04, il semblerait que le fichier 10adduser soit 
+devenu 25adduser, si vous obtenez un fichier vide avec la ligne 
+ci-dessus essayez en remplaçant 10adduser par 25adduser
+</note>
+
+Repérez la section suivante :
+> set passwd/root-password-crypted *
+> set passwd/user-password-crypted U6aMy0wojraho
+
+Insérez votre nouveau mot de passe :
+> set passwd/root-password-crypted U5dDh03hz1L6.
+> set passwd/user-password-crypted U5dDh03hz1L6.
+
+<note important>
+Lors du démarrage, l'utilisateur automatiquement créé à UID de 999.
+ Pour que cette création se passe bien il faut qu'il n'y ait 
+ aucun utilisateur existant ayant un UID == 999.
+Pour détecter le problème, exécutez la commande:
+<code>
+ awk -F: '$3 == 999' /etc/passwd
+</code>
+Et modifiez les UID des utilisateurs trouvés:
+<code>
+usermod -u 500 <utilisateur_problematique_1>
+usermod -u 501 <utilisateur_problematique_2>
+</code>
+
+Par exemple, l'installation des [[virtualbox#ameliorer_l_emulationles_additions_invite
+|additions invités de virtualbox]] créé un utilisateur vboxadd pouvant avoir l'uid 999.
+</note>
+
+
+  * Régénération du fichier initrd
+Pour que ces modifications soient prises en compte, il est impératif de 
+recréer le fichier initrd qui est chargé au boot. Cette étape est
+ réalisée en chroot (à l'intérieur du système du liveCD).
+<code>
+~/livecd$ sudo chroot squashfs
+update-initramfs -k all -u
+exit
+</code>
+
+Ceci n'est qu'un aperçu des modifications que vous pouvez faire, 
+il serait impossible de les lister toutes.
+
+
+==== Création du nouveau LiveCD ====
+
+Maintenant que le système correspond à vos besoins,
+ nous allons recréer un liveCD à partir de votre système personnalisé.
+
+=== Reconstruction du squashfs ===
+
+  * Tout d'abord, il faut régénérer le fichier manifest pour qu'il prenne en compte les modifications dans les paquets. <code bash>
+sudo chmod a+w iso/casper/filesystem.manifest
+sudo chroot squashfs dpkg-query -W --showformat='${Package}  ${Version}\n' > iso/casper/filesystem.manifest
+sudo chmod go-w iso/casper/filesystem.manifest
+</code>
+Pour n'avoir certains logiciels qu'en session live,
+ et qu'ils ne s'installent pas sur l'ordinateur, 
+il suffit de les ajouter au fichier 
+<code>iso/casper/filesystem.manifest-remove</code>
+
+  * On efface l'ancien squashfs :<code bash>sudo rm iso/casper/filesystem.squashfs</code>
+  * On recrée le nouveau : <code bash>
+cd squashfs
+sudo mksquashfs . ../iso/casper/filesystem.squashfs -info
+cd ..</code>
+
+Comme toute compression, cela prend beaucoup de ressources et peut prendre du temps.\\
+
+On rajoute -info à la fin qui équivaut à un verbose... pratique
+ pour voir l'avancement de la compression (la barre de progression reste visible)
+ et aussi pour voir ce qui pourrait éventuellement bloquer. \\
+Une fois la procédure terminée, la taille de votre fichier s'affiche
+ dans le terminal, vous savez donc si vous avez dépassé la taille maximale ou pas.
+Si c'est le cas, supprimez des applications/fichiers dans le système, et recommencez.
+
+
+=== Reconstruction de l'iso ===
+<note important>Si le noyau a été mis à jour, que vous avez changé 
+l'usplash ou que vous avez modifié le compte utilisateur, 
+il va falloir remplacer deux fichiers essentiels sur l'image disque,
+ que l'on trouve dans ''iso/casper'' : ''vmlinuz'' et ''initrd.lz''.\\
+On les remplace par les fichiers vmlinuz-* et initrd-img* que 
+l'on trouve dans le dossier squashfs/boot :
+<code bash>sudo rm -f iso/casper/vmlinuz iso/casper/initrd.lz
+sudo cp squashfs/boot/vmlinuz-3.2.0-54* iso/casper/vmlinuz 
+sudo cp squashfs/boot/initrd.img-3.2.0-54* iso/casper/initrd.lz</code>
+FIXME : Je crois que le nom des fichiers n'est plus à jour. (mis à jour ubuntu 12.04.3)</note>
+
+
+  * On régénère une nouvelle somme de contrôle MD5 afin qu'elle reflète le nouveau contenu du CD :<code bash>
+cd iso
+sudo bash -c "find . -path ./isolinux -prune -o -type f -not -name md5sum.txt -print0 | xargs -0 md5sum | tee md5sum.txt"
+</code>
+
+  * Il ne reste plus qu'à reconstruire l'image ISO :\\ __cas 1__: si le système sur lequel on veut démarrer avec l'iso personnalisée est un système EFI: <code bash>sudo mkisofs -U -A "Custom" -V "Custom" -volset "Custom" -J -joliet-long -r -v -T -o ../Custom.iso -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -eltorito-alt-boot -e boot/grub/efi.img -no-emul-boot .</code> On obtient alors l'iso personnalisée mais elle ne peut être mise que sur un dvd. Pour pouvoir la mettre sur une clé usb, <code bash>sudo isohybrid -u Custom.iso</code>\\ __cas 2__: si le système sur lequel on veut démarrer avec l'iso personnalisée n'est pas un système EFI: <code bash>
+sudo mkisofs -r -V "Nom_personnalisé" -cache-inodes -J -l -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -o custom-livecd.iso iso </code> Cette commande crée une image iso **custom-livecd.iso**. Et voilà !
+
+<note important> Attention mkisofs devient obsolète selon les depots utilisés.
+ La commande équivalente avec genisoimage :</note>
+<code bash>
+sudo genisoimage -o "Nom personnalisé.iso" -r -J -no-emul-boot -V "USB_LINUX" -boot-load-size 4 -boot-info-table -b isolinux/isolinux.bin -c isolinux/boot.cat ./ </code>
+Renommer le fichier "nom personnalisé" en "nom personnalisé".iso
+
+* Cette image ne peut être copiée que sur DVD. Si vous souhaitez 
+pouvoir copier cette image sur une clé USB, exécutez la commande suivante sur votre ISO :<code bash>
+sudo isohybrid "nom personnalisé.iso"</code>
+De cette façon tous les supports bootables seront supportés par votre ISO.
+==== Modifications de la configuration du compte utilisateur ====
+
+Votre liveCD est prêt à l'emploi. Comme indiqué brièvement dans
+ la section Modifications, il est possible de rajouter des fichiers
+ dans le répertoire utilisateur. \\ Voici une méthode pour configurer votre session live.
+  * Démarrez sur le liveCD, physiquement ou en utilisant un logiciel de virtualisation : ([[virtualbox]] ou [[qemu]])
+  * Configurez vos logiciels (Thunderbird, Firefox, mots de passe WiFi, thèmes,…)
+  * Après avoir fini, **ne redémarrez pas, ça effacerait toute votre personnalisation**, enregistrez votre /home/ sur un support externe ou dans une archive envoyée par mail. (si elle n'est pas trop grosse)
+  * Retournez sur votre Ubuntu, où se trouve le dossier ''livecd''.
+  * Recopiez alors le contenu de la sauvegarde/archive dans **livecd/squashfs/etc/skel/** : <code bash>cd livecd
+sudo cp -r DOSSIER_DE_SAUVEGARDE/. squashfs/etc/skel/
+sudo chown -R root:root squashfs/etc/skel </code>
+
+  * Vérifiez que les fichiers sont au bon emplacement avec ls. 
+  * Vous devez voir les fichiers de configuration sous cette forme :<code bash>
+ls -la squashfs/etc/skel
+
+drwxr-xr-x   2 root root  304 2008-03-21 08:25 .fontconfig
+drwx------   4 root root   96 2008-03-21 08:25 .gconf
+drwx------   2 root root   80 2008-03-21 08:25 .gconfd
+drwxr-xr-x   4 root root  112 2008-03-21 08:25 .gnome
+drwx------   9 root root  272 2008-03-21 08:25 .gnome2
+drwx------   2 root root   48 2008-03-21 09:15 .gnome2_private
+drwxr-xr-x   2 root root   88 2008-03-21 08:25 .gstreamer-0.10
+...
+</code>
+
+Si tout est OK, il ne reste qu'à recréer une image avec ce nouveau contenu.
+
+Recommencez à partir de [[#Reconstruction du liveCD]].
+ Au prochain démarrage de l'image, les fichiers de configuration 
+seront installés et pris en compte.
+===== Liens =====
+
+  * [[https://help.ubuntu.com/community/LiveCDCustomization]]
+  * [[http://liveusb.info/dotclear/|Le script de frafa pour 
+  * créer/customiser des liveCD/USB]] discuté sur ce 
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=276821|forum]]
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=424373 
+  * |Une solution pour personnaliser facilement viso iso de
+  *  liveCD (Ubuntu/Kubuntu/Xubuntu/lubuntu/Edubuntu/...)]]
+  * [[:projets:traduction_live_cd#iso_a_creer|Méthodes utilisées
+  *  pour la création des Editions Francophones d'Ubuntu]]
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=412528&p=1|
+  *  script de smo pour créer/customiser/cloner des distribs
+  *  avec chroot graphique et export sur usb/iso]]
+
+----
+//Contributeurs : Elessor, [[utilisateurs:traaf|traaf]], Furious-therapy,
+ Eric Buist, Gpocentek ([[projets:ecole|classroom Ubuntu-fr]] le 5/07/2007),
+ [[utilisateurs:FelixP]] (Juin 2013)//

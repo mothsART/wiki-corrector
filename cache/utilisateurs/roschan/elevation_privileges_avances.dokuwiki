@@ -1,0 +1,323 @@
+
+{{tag>administration sécurité droits sudo}}
+------
+
+====== Tutoriels : l'élévation des privilèges (avancé) ======
+
+Les actions qu'on peut effectuer sur son système sont de deux types :
+  * l'utilisation courante (lire ses mails, naviguer sur Internet, etc.) ;
+  * l'administration du système (principalement, l'installation de logiciels, et des manipulations de configuration avancées).
+L'utilisation courante ne demande pas de privilèges particuliers. Par contre pour les tâches d'administration, qui pourraient endommager le système en cas d'erreur, des droits spécifiques sont requis : les droits de **super-utilisateur**.
+
+De nombreux moyens permettent d'accéder à ces droits spécifiques, ils sont détaillés dans cet article.
+
+<note important>Cette page est très complète, car elle s'adresse à des utilisateurs avancés, si ce n'est pas votre cas, référez-vous à l'article « [[:elevation_privileges|Élévation des privilèges]] ».</note>
+
+===== Pré-requis : comprendre l'action que vous allez effectuer =====
+
+**Toute tâche d'administration est sensible**, et il n'est pas forcément facile de revenir en arrière.
+
+Il est vivement conseillé de chercher à comprendre les [[:terminal|lignes de commande]] que vous exécuterez, par exemple en utilisant //[[:man]]//, car en cas d'erreur, la réinstallation complète du système est parfois l'unique option.
+
+==== Quel mécanisme choisir ? ====
+
+Quand doit-on utiliser pkexec/sudo/su/gksudo/kdesudo ?
+
+  * Lorsque le programme concerné le prévoit, utilisez [[#fonctionnement de base|le mécanisme polkit qui y est natif]].
+  * Sinon, lorsqu'il s'agit d'un programme **en mode console**, utilisez ''[[#la commande sudo|sudo]]''.
+  * Sinon, si aucune alternative entrant dans les cas ci-dessus n'existe, utilisez ''[[#gksudo]]'' ou ''[[#kdesudo]]'' ;
+
+<note tip>**Prenez de bonnes habitudes !**
+
+On trouve plusieurs fois dans cette documentation, sur le forum ou sur des blogs, l'instruction ''sudo <commande>'' pour exécuter de nombreux programmes en mode **graphique** avec des privilèges d'administration ! \\ Bien que ceci fonctionne quand même pour de certains programmes, vous devriez prendre l'habitude de lui préférer [[:polkit]], ''gksudo'' ou ''kdesudo''.
+
+Utiliser ''sudo'' pour exécuter des applications en mode graphique peut causer des problèmes dans votre session utilisateur courante, vous empêchant de poursuivre votre travail.</note>
+
+=== Un problème de variables d'environnement ===
+
+Par exemple ''gksudo'' estimera que le dossier personnel (c'est-à-dire la variable d'environnement ''$HOME'') pour l'application exécutée en mode privilégiée est à ''/root'' plutôt qu'à ''/home/<identifiant>'', et copie le fichier ''.Xauthority'' dans un dossier temporaire.
+
+Ceci empêche que des fichiers du dossier personnel de l'utilisateur changent de propriétaire (et donc corrompent la session graphique en cours). En exécutant des applications graphiques avec ''sudo'' directement, cette précaution ne sera pas prise.
+
+Même en restant cantonné à des applications en console, des problèmes de variables d'environnement peuvent ou non survenir en fonction des options utilisées par ''sudo''.
+
+=== Différences entre "sudo -i" et "sudo -s" et pourquoi il est préférable de ne jamais lancer "sudo su" ===
+
+Voici une commande mettant en évidence ces différences (il est nécessaire que le paquet **[[apt>meld]]** soit installé pour que cette commande fonctionne) : <code bash>sudo -s env > /tmp/testenv_sudo_-s ; sudo -i env > /tmp/testenv_sudo_-i ; sudo su -c env > /tmp/testenv_sudo_su ; meld /tmp/testenv_sudo_* && rm /tmp/testenv_sudo_* </code>
+
+Les principales différences observées, dans le cas où ces commandes sont lancées par l'utilisateur nommé foo :
+
+|            ^ sudo -s       ^ sudo -i      ^ sudo su    ^
+^ HOME=      | /home/foo     | /root        | /root      |
+^ PWD=       | /home/foo     | /root        | /home/foo  |
+^ PATH=      | /usr/local/sbin:/usr/local/bin: \\ /usr/sbin:/usr/bin:/sbin:/bin:/usr/X11R6/bin | /usr/local/sbin:/usr/local/bin: \\ /usr/sbin:/usr/bin:/sbin:/bin:/usr/games | /usr/local/sbin:/usr/local/bin: \\ /usr/sbin:/usr/bin:/sbin:/bin:/usr/games |
+^ fichier(s) exécuté(s) | /home/foo/.bashrc | /etc/environment, /root/.login, /root/.profile, /root/.bashrc | /etc/environment, /root/.bashrc |
+
+On voit donc que ces commandes ont une influence différente sur les variables d'environnement, et cela peut avoir des conséquences inattendues (compilations, exécution de scripts, etc.).
+
+=== Les avantages de sudo ===
+
+Les avantages de l'emploi de ''sudo'', par opposition à l'emploi direct d'un unique compte super-utilisateur (''root''), sont nombreux pour une utilisation dans un environnement domestique ou de PME/PMI :
+  * L'installateur d'Ubuntu doit poser moins de questions. Ceci est particulièrement important pour le nouvel arrivant, qui peut ne pas être au courant de l'utilité du compte super-utilisateur et de son potentiel dangereux ;
+  * Les administrateurs n'ont pas à se souvenir d'un mot de passe supplémentaire, qu'ils peuvent facilement oublier, ou compromettre la sécurité du compte ''root'' par des mauvaises habitudes ;
+  * Cela évite le comportement du « Je peux faire n'importe quoi sur ma machine » : \\ avant d'effectuer une action d'administration, Ubuntu vous demande votre mot de passe, ce qui devrait faire réfléchir les administrateurs aux conséquences de leur action ;
+  * ''sudo'' conserve une trace de toutes les commandes exécutées. Si un problème apparaît, vous pourrez toujours consulter ce journal afin de retrouver la commande ayant causé le problème ;
+  * Tous les pirates tentant de pénétrer par la force brute votre système savent qu'il existe un compte appelé ''root'' et essaieront de pirater celui-ci d'abord. Ils ne connaissent pas les identifiants des autres utilisateurs de votre ordinateur ;
+  * Ceci permet un transfert rapide des droits d'administration, autant pour du long que pour du court terme, par le simple ajout ou retrait d'un utilisateur dans le groupe d'administration. Le tout, sans compromettre la sécurité de votre environnement informatique par le partage d'un mot de passe unique pour le compte ''root'' ;
+  * ''sudo'' peut être configuré avec une politique bien plus affinée.
+
+==== Remarques sur la sécurité ====
+
+Le « super-utilisateur » ayant TOUS les droits sur le système, l'utilisation de ses privilèges peut être TRÈS dangereuse, pour plusieurs raisons :
+
+  * Une **manipulation dangereuse** de votre part. Il est possible que vos manipulations ça aboutisse au dérèglement d'une partie du système. Soyez toujours certain du résultat attendu de vos commandes avant de les lancer.
+
+  * Une **erreur de votre part**. Même pour une manipulation supposée sans risque, la moindre faute de frappe dans les commandes peut aboutir à de graves problèmes.
+
+  * Du **code malveillant**. Si vous exécutez un programme ou un [[:bash|script]] malveillant avec les droits de super-utilisateur, celui-ci n'aura aucun mal à prendre le contrôle du système en totalité et à s'implanter en profondeur dans le système.
+
+  * Sur les systèmes utilisant [[:Xorg]], faire cohabiter les fenêtres de l'utilisateur avec ceux du super-utilisateur au sein de la même session représente une **faille de sécurité potentielle**, qui a en partie motivée la création de [[:Wayland]]. C'est entre autres pourquoi il est déconseillé de lancer des programmes graphiques avec ''sudo''.
+
+=== « sudo » n'est-il pas moins sécurisé que « su root » ? ===
+
+Non : le modèle de sécurité à la base est le même, et les deux modèles partagent une même faiblesse. Tout utilisateur utilisant ''su root'' ou ''sudo'' pour effectuer des tâches administratives doit être considéré comme un utilisateur privilégié : si le compte de l'utilisateur est compromis par un attaquant, alors l'attaquant peut aussi obtenir une élévation de privilèges et compromettre le système d'exploitation.
+
+Les utilisateurs ayant les droits d'administration doivent être protégés avec les mêmes soins que le compte super-utilisateur.
+
+<note tip>''sudo'' encourage la modification des habitudes de travail, qui peuvent provoquer un impact positif sur la sécurité du système d'exploitation. \\ ''sudo'' est habituellement utilisé pour exécuter une commande unique, alors que ''su root'' est souvent utilisé pour exécuter un terminal ''root'' et exécuter des multiples commandes.
+
+L'approche de ''sudo'' réduit la possibilité qu'un terminal ''root'' soit laissé ouvert indéfiniment sur le poste de travail et encourage l'utilisateur à minimiser son utilisation des privilèges d'administration.</note>
+
+===== La commande sudo =====
+
+<note tip>Valable pour toutes les versions et toutes les variantes, à condition qu'il s'agisse d'exécuter quelque chose dans une console, en ligne de commande.</note>
+
+Dans l'immense majorité des cas où il vous sera demandé d'effectuer une action __en ligne de commande__ (dans un [[:terminal]]) avec les droits d'administration, il vous de faire précéder votre commande par le mot ''**[[:sudo]]**''.
+
+{{ :sudo-sudo1.png?300|Ouvrez une fenêtre de terminal dans Ubuntu}}
+Ouvrez donc [[:terminal|une fenêtre de terminal]] comme indiqué **[[tutoriel:comment_lancer_application|ici]]**.
+
+Exemple, pour [[tutoriel:comment_modifier_un_fichier|modifier un fichier]] avec l'éditeur de texte //[[:nano|nano]]//, la commande serait :
+<code>sudo nano /chemin/vers/mon_fichier</code>
+
+~CB~
+
+<note warning>N'utilisez pas ''sudo'' pour lancer des logiciels graphiques, soit [[:wayland|ça ne marchera pas]], soit [[:sudo#remarques_sur_la_securite|ça risquera de causer des bugs importants et des failles de sécurité]].</note>
+
+{{ :sudo-sudo2.png?300|Saisissez l'instruction sous la forme « sudo <commande> » (ex : « sudo apt-get update »). }}
+Après la saisie d'une ligne de commande commençant par **''sudo''**, il vous sera demandé de taper votre mot de passe, mais les caractères ne s'afficheront pas à l'écran et il n'y aura pas non plus de petites étoiles ''*'', **ce qui est normal**. Tapez tout de même votre mot de passe et validez avec la touche ''Entrée''.
+
+La commande demandée s'exécutera alors avec les privilèges du super-utilisateur.
+
+Si vous n'avez pas entré un mot de passe erroné, votre programme se lancera en mode privilégié. En cas d'erreur dans votre mot de passe, recommencez les opérations ci-dessus.
+
+Lors du succès de l'authentification, les tâches administratives sont débloquées pour une durée de quelques minutes : votre mot de passe ne vous sera pas redemandé dans les minutes qui suivent pour effectuer d'autres tâches administratives.
+
+==== Rediriger un flux avec « sudo » ====
+
+''sudo'' pose //a priori// des problèmes pour la redirection de flux dans une console. Par exemple, la redirection suivante ne fonctionnera pas : <code bash>utilisateur@ordinateur:~$ sudo echo 2 > /proc/acpi/thermal_zone/ATF0/polling_frequency</code>La raison de cet échec est que ''sudo'' n'exécute que la première tâche (''echo 2'') avec l'identité empruntée ; la redirection, elle, est effectuée en mode utilisateur uniquement.
+
+La solution, pour contourner cette limitation, est d'appeler un nouvel interpréteur de commandes et de lui faire exécuter votre redirection de flux. Par exemple : <code bash>utilisateur@ordinateur:~$ sudo sh -c 'echo 2 > /proc/acpi/thermal_zone/ATF0/polling_frequency'</code>De cette manière, c'est tout l'interpréteur ''sh'' et la commande passée en argument qui est exécutée avec l'identité empruntée.
+
+==== Observer le journal des tâches exécutées précédemment par « sudo » ====
+
+L'ensemble des actions exécutées à travers l'utilitaire ''sudo'' -- qu'elles s'accomplissent avec succès ou échec --  sont journalisées. Elles sont inscrites dans le fichier de journal ///var/log/**auth.log**//.
+
+==== Utiliser un terminal en tant que root ====
+
+Utiliser ''sudo'' pour exécuter une seule commande ne cause pas un réel désagrément, mais il peut être désagréable de l'utiliser pour exécuter une longue procédure nécessitant plusieurs interventions en mode super-utilisateur (''root''). \\ L'ouverture d'un terminal en mode ''root'' permet d'éviter d'avoir à appeler ''sudo'' à chacune des étapes de cette procédure, sans avoir à activer l'accès au compte d'utilisateur ''root''.
+
+<note important>L'inconvénient de cette méthode est qu'aucune trace des actions posées n'est inscrite dans le journal de ''sudo'' (sinon l'ouverture du terminal ''root'' lui-même). Il est **déconseillé** d'ouvrir un terminal ''root''.</note>
+
+Pour vous servir d'un terminal ''root'' :
+  - Ouvrez [[:terminal|une fenêtre de terminal]] ;
+  - Saisissez la commande suivante : <code bash>utilisateur@ordinateur:~$ sudo -i</code>
+  - Saisissez votre mot de passe à l'invite de saisie de mot de passe ;
+  - Exécutez votre série de commandes d'administration ;
+  - Fermez la session ''root'' : <code bash>root@ordinateur:~# exit</code> ou "''Ctrl d''"
+
+==== Options utiles ====
+
+  * **sudo -k** termine une session sudo éventuellement ouverte, cela assure que la prochaine instruction sudo demandera bien un mot de passe.
+  * **sudo -s** ouvre le shell spécifié dans ''/etc/passwd'' pour l'utilisateur cible (root par défaut).
+  * **sudo -i** simule un login initial et ouvre le [[:bash|shell]] spécifié dans ''/etc/passwd'' pour l'utilisateur cible (root par défaut). Cela signifie que des fichiers spécifiques tels que .login ou .profile seront lus par le shell ainsi lancé. 
+  * **sudo -E** préserve l'environnement du [[:bash|shell]] depuis lequel la commande est lancée
+  * **sudo -u foo** lance la commande en tant que l'utilisateur foo
+  * **sudo -g bar** lance la commande avec le groupe bar spécifié (le groupe spécifié est le groupe primaire de l'utilisateur cible indiqué dans /etc/passwd)
+  * ** sudo -i -u toto ** permet de se connecter en tant que l'utilisateur toto (ne pas utiliser ces options pour root)
+
+===== Configuration de sudo =====
+
+==== Assigner le rôle d'administrateur à un compte d'utilisateur ====
+
+{{  :sudo-promoadmin.png?250|Promouvoir un compte d'utilisateur au rang d'administrateur dans Ubuntu 10.04 LTS}}
+
+Seuls les administrateurs sont habilités à effectuer des tâches administratives à travers l'utilitaire ''sudo''. Pour augmenter les privilèges accessibles à un utilisateur, vous devez vous-même avoir d'abord accès à un compte administrateur.
+
+Pour assigner le rôle d'administrateur à un autre compte d'utilisateur :
+  * **Via les paramètres du système :** la procédure peut légèrement varier en fonction des [[:environnements]], mais il s'agit toujours d'ouvrir les paramètres du système, puis de cliquer sur "Utilisateurs" (ou "Utilisateurs et groupes"), sélectionner un utilisateur, et modifier son niveau de privilèges.
+  * **Via  [[:users-admin#changer_le_type_de_compte_d_utilisateur|l'utilitaire "Utilisateurs et groupes"]]** si celui-ci est présent sur votre système ;
+  * **Via un terminal :** Ouvrez un terminal et exécutez la commande suivante : <code>sudo adduser <identifiant> sudo</code>où ''<identifiant>'' doit être remplacé par l'identifiant du compte d'utilisateur (sans les <chevrons>) auquel des privilèges supplémentaires doivent être accordés.
+
+<note help>Les changements de privilèges ne sont pas appliqués dès leur enregistrement. Ils ne sont appliqués que lorsque toutes les sessions en cours sont closes pour le compte concerné. À l'ouverture de session suivante pour ce compte, les nouveaux privilèges sont pris en compte.</note>
+
+==== Configuration avancée ====
+
+On peut configurer plus finement les privilèges accordés par l'utilitaire ''sudo'' afin d'autoriser ou refuser l'exécution de tâches privilégiées. Plus que simplement autoriser l'exécution de **toutes** les tâches administratives à un groupe d'utilisateurs par l'authentification par mot de passe, ''sudo'' peut être paramétré pour permettre à un utilisateur particulier ou un groupe d'utilisateurs particulier d'exécuter une ou des tâches bien précises, avec ou sans saisie du mot de passe.
+
+D'autres paramètres, tels le délai d'attente avant qu'une ré-authentification soit nécessaire, l'endroit où est enregistré le journal d’événements et le niveau de courtoisie de ''sudo'', sont aussi paramétrables.
+
+Reportez-vous à **[[:sudoers|cette page]]** pour découvrir la configuration avancée avec ''/etc/sudoers/''
+
+
+
+
+
+
+===== Avec Polkit =====
+
+==== Fonctionnement de base ====
+
+Certains logiciels, comme [[:flatpak|la commande flatpak]], la [[:gnome-software|logithèque GNOME]], divers gestionnaires de paquets, des éditeurs de partitions, ou les [[:gnome-control-center|paramètres système]] vous demanderont parfois automatiquement votre mot de passe pour certaines actions. Il s'agit de logiciels ayant été prévus pour supporter une élévation de privilèges par [[:polkit]].
+
+[[:polkit]] est un logiciel moderne actuellement privilégié par les développeurs d'environnements graphiques grâce à la sécurité qu'il fournit, en effet il fonctionne selon le principe suivant : un programme (démon) s'exécute en arrière-plan (sans fenêtre), et dispose des droits root. Les applications sont invitées à lui demander les droits nécessaires pour effectuer des opérations spécifiques. Cela évite de lancer des programmes graphiques en tant que super-utilisateur, ça évite également d'utiliser ''sudo'' pour des commandes n'en ayant pas besoin, la sécurité est donc accrue, et moins d'actions sont requises de la part de l'utilisateur (ce sont les applications qui demandent les droits, pas l'utilisateur).
+
+==== Exemples ====
+
+Parmi les programmes capables d'utiliser PolKit, on peut citer :
+  * [[:gnome-packagekit|GNOME Paquets]]
+  * [[:flatpak]]
+  * [[:gnome-software|GNOME Logiciels]]
+  * [[:plasma-discover|Plasma Discover]]
+  * [[:Nautilus]]
+  * [[:Kate]]
+  * Les paramètres système (concernant l'ajout d'utilisateur par exemple)
+  * etc.
+
+Si votre compte est paramétré correctement comme étant administrateur, l'action demandée pourra alors s'effectuer sans problème (sinon, référez-vous à [[:sudo#ajouter_les_privileges_a_des_utilisateurs|ceci]]).
+
+=== L'exemple de Nautilus ===
+
+À partir d'Ubuntu [[:17.10]], dans l'explorateur de fichiers [[:Nautilus]], on peut faire précéder l'adresse (accessible en faisant "''Ctrl L''") par le préfixe ''admin:/''''/''''/'' (exemple : ''admin:/''''/''''/''''/usr/share/applications/''), le mot de passe sera alors demandé, et l'emplacement en question sera ouvert avec les droits d'administration. Vous pourrez notamment y modifier des fichiers avec [[:gedit]].
+
+Pourtant, remarquez que Nautilus conserve la configuration de l'utilisateur courant (signets, thèmes, ...) : [[:polkit]] agit comme un filtre très précis, qui ne prend à //root// que ses privilèges de lecture et d'écriture dans les dossiers, sans prendre sa configuration.
+
+==== Utiliser polkit dans un terminal ====
+
+<note important>Ceci fonctionne dans un terminal ouvert au sein d'un environnement graphique. Ça ne fonctionne pas en mode console !</note>
+
+En faisant précéder une commande par ''pkexec'', on peut la lancer avec des privilèges élevés. Exemples :
+<code>pkexec synaptic</code>
+<code>pkexec apt update</code>
+
+<note>Pour qu'un programme "sache" nativement s'exécuter via polkit (par exemple ci-dessus, [[:Synaptic]], qui fonctionnera si votre système utilise [[:Xorg]]), il est préférable qu'il ait été "conçu pour ça" par les développeurs.
+
+Tous les programmes ne fonctionneront pas aussi facilement, et notamment les programmes graphiques, qui nécessitent quelques précautions pour se lancer proprement (paragraphe ci-dessous).
+</note>
+
+=== Logiciels graphiques ===
+
+Pour se lancer via pkexec, les logiciels graphiques ont besoin de quelques variables d'environnement, qu'il faut préciser dans la commande.
+
+Pour un hypothétique programme nommé "bidule", saisissez la commande suivante dans un [[:terminal]] : <code>pkexec env DISPLAY=$DISPLAY XAUTHORITY=$XAUTHORITY bidule</code>
+
+Le programme devrait se lancer en tant qu'administrateur.
+
+===== Les façades graphiques pour sudo =====
+
+<note important>Si vous utilisez le protocole d'affichage [[:Wayland]], les manipulations qui suivent ne fonctionneront pas : reportez-vous à [[:wayland#impossible_de_lancer_une_application_comme_admin|ce paragraphe de la page dédiée]].
+
+Ces façades graphiques ne sont plus utilisées couramment depuis Ubuntu [[:13.10]], et peuvent donc rencontrer des problèmes avec certaines applications.</note>
+
+Lancer des applications graphiques (c'est-à-dire ayant une fenêtre) en tant que super-utilisateur n'est pas une bonne pratique : il est toujours préférable de rechercher comment atteindre le même but via un utilitaire en ligne de commande. Si toutefois vous n'avez pas d'alternative, notez que l'usage du **''sudo''** utilisé pour les lignes de commande __n'est pas approprié__ dans ce cas : il y a entre autres un risque d'écrasement de vos configurations.
+
+Il est donc préférable d'utiliser un utilitaire approprié à votre environnement. Ces utilitaires ne sont pas installés par défaut, il faut les ajouter. Les plus répandus sont **''gksudo''** pour [[:Ubuntu]], [[:Xubuntu]], [[:mate|Ubuntu MATE]], [[:budgie|Ubuntu Budgie]] ou [[:Lubuntu]] ; ou bien **''kdesudo''** pour [[:Kubuntu]] ou l'environnement [[:LXQt]].
+
+==== gksudo ====
+
+=== Installation ===
+
+L'utilitaire **gksudo** (ou **gksu**) n'est pas installé par défaut dans Ubuntu.
+
+[[:tutoriel/comment_installer_un_paquet|Installez donc le paquet]] **[[apt>gksu]]** pour l'obtenir.
+
+=== Utilisation ===
+
+Depuis une invite d'exécution de programme (Alt+F2) ou depuis un terminal, saisissez le nom du programme à exécuter, en le faisant précéder de "gksudo". Exemple : <code>gksudo mousepad</code>
+| {{ :sudo-gksudo1.png?300 |Saisissez l'instruction sous la forme « gksudo "nom du programme" » (ex : « gksudo "update-manager" »). }} | {{ :sudo-gksudo1-1.png?300 |Saisissez l'instruction sous la forme « gksudo nom du programme » (ex : « gksudo xdg-open /etc/default/grub »). }} |
+
+Validez la commande ; une boîte de dialogue pour la saisie de votre mot de passe s'affiche. Saisissez le mot de passe de votre compte d'utilisateur.
+
+{{ :sudo-gksudo2.png?300 |Saisissez votre mot de passe.}}
+
+Si vous n'avez pas entré un mot de passe erroné, votre programme se lancera en mode privilégié. En cas d'erreur dans votre mot de passe, recommencez les opérations ci-dessus.
+
+Lors du succès de l'authentification, les tâches administratives sont débloquées pour une durée de quelques minutes : votre mot de passe ne vous sera pas redemandé dans les minutes qui suivent pour effectuer d'autres tâches administratives.
+
+==== kdesudo ====
+
+=== Installation ===
+
+L'utilitaire **kdesudo** n'est pas installé par défaut dans Kubuntu.
+
+[[:tutoriel/comment_installer_un_paquet|Installez donc le paquet]] **[[apt>kdesudo]]** pour l'obtenir.
+
+=== Utilisation ===
+
+Depuis une invite d'exécution de programme (Alt+F2) ou depuis un terminal, saisissez le nom du programme à exécuter, en le faisant précéder de "kdesudo". Exemple : <code>kdesudo "kate"</code>
+
+Utilisez les guillemets anglais pour entourer le nom de votre programme, particulièrement si celui-ci utilise plusieurs arguments.
+
+{{ :sudo-kdesudo1.png?300 |Saisissez l'instruction sous la forme « gksudo "nom du programme" » (ex : « kdesudo "kpackagekit" »). }}
+
+Validez la commande ; une boîte de dialogue pour la saisie de votre mot de passe s'affiche. Saisissez le mot de passe de votre compte d'utilisateur.
+
+{{ :sudo-kdesudo2.png?300 |Saisissez *votre* mot de passe.}}
+
+Si vous n'avez pas entré un mot de passe erroné, votre programme se lancera en mode privilégié. En cas d'erreur dans votre mot de passe, recommencez les opérations ci-dessus.
+
+Lors du succès de l'authentification, les tâches administratives sont débloquées pour une durée de quelques minutes : votre mot de passe ne vous sera pas redemandé dans les minutes qui suivent pour effectuer d'autres tâches administratives.
+
+===== Activer et désactiver le compte root =====
+
+<note important>Activer le compte root n'est **pas** nécessaire et est déconseillé. Toutes les tâches d'administration auxquelles on est confronté sous Ubuntu peuvent être réalisées avec polkit ou sudo.</note>
+Si le besoin d'un login en tant que ''root'' se fait ressentir, la meilleure alternative est de le simuler avec la commande suivante : <code bash>sudo -i</code> Il est possible de sortir de ce shell avec le raccourci "''Ctrl d''" ou avec la commande suivante : <code bash>exit</code>
+
+À vos risques et périls, donc : pour activer le compte root (c'est-à-dire lui donner un mot de passe), on peut utiliser la commande suivante: <code bash>sudo passwd root</code>
+
+<note warning>Se connecter graphiquement à votre environnement de bureau en tant que root peut **poser de très gros problèmes**.
+
+Si vous pensez avoir besoin d'un compte root activé pour réaliser une certaine action, consultez un canal de support officiel ([[:salons_irc|irc]], [[:wiki:liste_discussion#utilisateurs_francophones_d_ubuntu|liste de diffusion]],  [[:tutoriel:howto_forum|forum]], ...) **avant** de l'activer, afin de vous assurez qu'il n'y a pas une meilleure méthode pour réaliser cette action.</note>
+
+Pour désactiver un compte root précédemment activé: <code bash>sudo usermod -p '!' root</code>
+
+===== Autres =====
+
+==== Les comptes super-utilisateurs d'applications particulières ====
+
+Certains programmes ou services affirmeront avoir besoin de comptes « super-utilisateurs », par exemple c'est généralement le cas avec des systèmes de bases de données (comme MySQL ou MariaDB).
+
+Ce compte super-utilisateur est indépendant et distinct de celui du système d'exploitation : il est spécifique au programme ou service en particulier, vous devez paramétrer ce compte avec les outils que le programme fournit. Consultez pour cela les documents d'aide relatifs à l'application concernée.
+
+==== Pages sur le sujet ====
+
+{{topic>:  sudo}}
+
+  * [[:polkit]]
+  * https://doc.ubuntu-fr.org/tutoriel/comment_eviter_root_quand_c_est_possible (FIXME à recycler ?)
+
+----
+
+//Contributeurs : [[:utilisateurs:AlexandreP]], [[:utilisateurs:Chatalors]], [[:utilisateurs:Damocles]], [[:utilisateurs:Ju]], [[:utilisateurs:eagle08]], [[:utilisateurs:roschan]]
+, ...//
+
+
+
+
+
+
+
+
+
+
+

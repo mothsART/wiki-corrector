@@ -1,0 +1,187 @@
+
+{{tag>bionic serveur xmpp}}
+
+----
+
+====== Prosody ======
+
+Prosody est un serveur [[:XMPP]] libre entièrement écrit en Lua, ce qui le rend très léger, simpliste et facile à configurer.
+
+Il est bien sûr gratuit, et très jeune, ce qui peut être (pour certaines personnes), un désavantage par rapport à ses concurrents.
+
+===== Installation =====
+
+==== Depuis les dépôts officiels ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>prosody|prosody]]**
+
+==== Depuis le dépôt de Prosody IM ====
+
+Si vous voulez profiter de la dernière version du serveur XMPP Prosody, elle est disponible sur le dépôt proposé par le site internet officiel du projet.
+
+<note important>Ce logiciel ne provient pas des dépôts officiels Ubuntu, ce qui fait que vous devez faire confiance à la source depuis laquelle vous le récupérez ([[http://prosody.im/]])</note>
+
+[[:tutoriel:comment_modifier_sources_maj|Modifiez vos sources de mises à jour]] pour y ajouter le dépôt suivant :
+<file>deb http://packages.prosody.im/debian VERSION main</file>
+
+Remplacez **VERSION** par la version d'Ubuntu que vous utilisez, si vous ne savez pas copier dans un terminal :
+
+<code>lsb_release -sc</code>
+
+Suite à la modification des sources, un message d'erreur apparaîtra indiquant que la clé publique n'est pas disponible, pour y remédier copiez dans un terminal :
+
+<code>wget https://prosody.im/files/prosody-debian-packages.key -O- | sudo apt-key add -</code>
+
+puis [[:tutoriel:comment_modifier_sources_maj#recharger_la_liste_des_paquets|rechargez la liste des paquets]].
+
+Pour terminer, [[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>prosody|prosody]]**
+
+
+<note>Si il s'agit d'une mise à jour, n'oubliez pas de redémarrer Prosody
+<code bash>sudo /etc/init.d/prosody restart</code></note>
+
+===== Configuration =====
+
+La grande puissance de Prosody est aussi sa grande faiblesse : ce serveur a beau être très simpliste (il ne proposera pas autant de fonctionnalités que [[wpfr>ejabberd]]), il est plus que simple à configurer !
+
+Voyons donc les étapes de sa configuration ! C'est parti !
+
+==== Ouvrir les ports ====
+
+Si vous êtes derrière un pare-feu et/ou une box/routeur (de type Freebox, Livebox, etc...), il se peut que les ports nécessaires au bon fonctionnement du protocole XMPP (côté serveur) soient fermés. Ce serait bête d'installer un serveur XMPP si celui-ci ne peut être utilisé !
+
+Voici donc les ports principaux à ouvrir :
+
+  * 5222 (TCP) -> communications client/serveur
+  * 5269 (TCP) -> communications serveur/serveur
+
+=== Le pare-feu ===
+
+Dans le cas d'un pare-feu, si vous utilisez l'outil simplifié [[UFW]], copiez ces commandes dans un terminal :
+
+  sudo ufw allow 5222/tcp
+  sudo ufw allow 5269/tcp
+
+Vous pouvez bien aussi utiliser directement [[Iptables]] (pour utilisateurs avancés)
+
+=== Box/routeur ===
+
+Si vous avez une box/routeur, le plus souvent l'interface d'administration est accessible directement depuis l'adresse réseau locale [[http://192.168.1.1]] ou encore [[http://192.168.0.1]].\\
+Pour plus d'information, consultez la documentation dédié à votre appareil.\\
+Concernant les Box, vous pouvez consulter ce [[https://craym.eu/tutoriels/utilitaires/ouvrir_les_ports_de_sa_box.html|site internet]].
+
+
+
+==== Le fichier de configuration ====
+
+Nous y sommes ! Nous avons le fichier de configuration de Prosody à configurer pour "activer" le serveur en quelques sortes, pour lui dire d'accepter les connexions.
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/etc/prosody/prosody.cfg.lua**.
+
+Votre éditeur de texte favori s'ouvre (ou pas, ça dépend des goûts !), et vous présente le magnifique fichier de configuration de Prosody. Nous allons donc commencer par activer le serveur : défilez tout en bas du fichier, et recherchez la ligne :
+
+<file lua>enabled = false -- Remove this line to enable this host</file> 
+sur laquelle vous remplacerez **false** par **true** (non, sans blague !)
+
+Ceci fait, nous allons ajouter un hôte à notre serveur. Vous avez probablement un nom de domaine associé à votre serveur du genre "example.com", ou encore "monsite.dyndns.org" si vous avez une IP dynamique. Repérez tout simplement la ligne :
+
+<file lua>Virtualhost "example.com"</file>
+
+<note>Vous devrez remplacer **example.com** par votre propre nom de domaine tout au long de cette explication.</note>
+
+=== Chiffrement SSL ===
+
+Si vous souhaitez utiliser le [[wpfr>Transport_Layer_Security|SSL]], placez vous en tant qu'administrateur dans le répertoire /etc/prosody/certs ([[tutoriel/console_commandes_de_base#cd|en utilisant cd]]) puis entrez la commande suivante pour créer le certificat :
+<code bash>openssl req -new -x509 -nodes -out example.com.crt -keyout example.com.key -days 1000</code>
+
+Nous avons presque fini ! Après avoir bien configuré les chemins des clés de chiffrement dans le fichier **prosody.cfg.lua**
+<file lua>ssl = {
+	key = "/etc/prosody/certs/example.com.key";
+	certificate = "/etc/prosody/certs/example.com.cert";
+}</file>
+
+<note> Vous pouvez utiliser un certificat signé par une autorité de certification si vous le souhaitez, par exemple avec Letsencrypt. Le principe est le même que vu plus haut </note>
+
+<file lua>ssl = {
+            certificate = "/etc/letsencrypt/live/example.com/fullchain.pem"; -- Note: Seulement lisible par root par défaut (penser à accorder les droits nécessaire.)
+            key = "/etc/letsencrypt/live/example.com/privkey.pem";
+}</file>
+
+
+
+=== Gestion des comptes utilisateurs ===
+
+Pour faire simple, il existe deux manières pour créer un compte utilisateur: soit par commandes, soit en utilisant un [[xmpp#clients_xmpp|client XMPP]]. La seconde méthode est désactivé par défaut, mais si vous comptez donner la possibilité à quiconque d'utiliser votre serveur XMPP, alors il peut être intéressant de l'activer. Dans le fichier **prosody.cfg.lua**, à la ligne,
+<file lua>allow_registration = false;</file>
+remplacez **false** par **true**
+
+Si vous souhaitez que certains comptes aient des droits d'administrations, il faut les lister sur cette ligne (les comptes devront être au préalable créés). Cette fonctionnalité n'est pas utile si le serveur sera utilisé que par quelques utilisateurs. À la ligne,
+<file lua>admins = {  }</file>
+ajoutez par exemple : **admins = { "moi@example.com", "paul@example.com" }**\\
+(n'oubliez pas les guillemets autour de l'adresse/JID)
+
+=== Divers ===
+
+Avant de confirmer la nouvelle configuration, je vous laisse parcourir le reste du fichier (désactiver/activer des modules, etc...), sauvegarder, puis nous allons redémarrer Prosody :
+
+<code bash>sudo /etc/init.d/prosody restart</code>
+
+Normalement, si tout s'est bien passé, vous n'avez aucun message d'erreur, et vous pouvez à présent accéder à votre serveur depuis votre ordinateur avec un logiciel comme [[Gajim]].
+
+==== Réseau local ====
+
+Si votre serveur se trouve sur votre ordinateur où vous allez l'utiliser, il est conseillé de rajouter une ligne au fichier hosts.
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/etc/hosts**.
+
+Puis rajoutez une ligne du type :
+
+**127.0.0.1      example.com** (ce qui résoudra les problèmes de connexion en local avec certains routeurs)
+
+===== Gestion des comptes utilisateurs =====
+
+==== En ligne de commande ====
+
+Pour créer un compte utilisateur écrivez :
+
+  sudo prosodyctl adduser moi@example.com
+
+Le mot de passe sera demandé deux fois (après éventuellement la demande du mot de passe sudo).
+
+Pour modifier le mot de passe d'un compte utilisateur :
+
+  sudo prosodyctl passwd moi@example.com
+
+Pour supprimer un compte :
+
+  sudo prosodyctl deluser moi@example.com
+
+Pour connaître l'état des comptes utilisateurs :
+
+  sudo prosodyctl status
+==== Via un client XMPP ====
+
+Les clients XMPP (par exemple gajim, pidgin, chatsecure, conversations etc ...) sont capables de créer des comptes utilisateurs, à condition que cela soit accepté dans les configuration du serveur (voir précédemment).\\
+[[pidgin#creer_un_compte|Voici comment procéder avec Pidgin]].
+
+Et voilà ! Vous pouvez maintenant chatter en toute liberté sur les réseaux libres XMPP, utilisant le (magnifique) protocole XMPP !
+
+
+[[https://cyberjinh.fr/|Exemple avec ChatSecure (iOS), Xabber (Android), gajim (Linux, windows, MacOS]]
+===== Désinstallation =====
+
+Pour supprimer Prosody, il suffit d'entrer la commande suivante :
+
+<code bash>sudo apt-get remove --purge prosody</code>
+
+Vous pouvez aussi désinstaller les paquets de la librairie Lua s'ils ne sont plus utilisés.
+
+===== Voir aussi =====
+
+  * (en) [[https://prosody.im/|Site officiel de Prosody]]
+  * (en) [[https://prosody.im/doc/configure|Configurer Prosody]]
+  * [[https://toutetrien.lithio.fr/article/installer-son-serveur-xmpp-avec-prosody|Tutoriel sur Prosody]] 
+
+----
+
+//Contributeurs : Vanaryon, [[:utilisateurs:axel55|Axelos]]//, Anawel86

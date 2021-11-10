@@ -1,0 +1,463 @@
+
+{{tag>Trusty tutoriel clavier BROUILLON}}
+----
+
+====== Exemple de création d'un agencement de clavier personnalisé ======
+Cette page illustre par un exemple concret et complet, la mise en place d'un agencement personnalisé disponible ensuite dans l'interface graphique au même titre que ceux fournis avec la distribution.
+
+Il s'agit avant tout de la description **détaillée** des raisonnements suivis et de l'utilisation des outils disponibles pour faciliter ce travail. Néanmoins, pour faciliter la vision d'ensemble, les grandes lignes de la méthode sont présentées sur la page « ** [[tutoriel:creer_et_utiliser_un_agencement_de_clavier_personnalise|Créer et utiliser un agencement de clavier personnalisé]]** ».
+
+<note>S'agissant ici d'un exemple pour lequel aucune latitude n'est laissée au lecteur qui doit rester relativement passif en s'attachant simplement à comprendre ce qui se passe et en le reproduisant éventuellement, la deuxième personne du pluriel qui prévaut en général dans les tutoriels est ici volontairement remplacée par une première personne du pluriel.\\
+En bref, écoutez et comprenez ce que** nous faisons**. Vous aurez ensuite tout le loisir de l'adapter à vos fins.</note> 
+
+La lecture de cette page suppose compris les concepts généraux présentés sur la page « **[[tutoriel:comprendre_la_configuration_du_clavier|Comprendre la configuration du clavier]]** ».
+
+===== Description de l'objectif =====
+L'objectif est de :
+  - disposer d'un agencement personnalisé basé sur [[http://typematrix.com/bepo.php|le clavier bépo français 2030 USB de marque Typematrix]],
+  - compléter, voire ré-organiser, la distribution des symboles sur les touches.
+  - en particulier, créer des niveaux supplémentaires pour ajouter à certaines touches les symboles monétaires de certaines devises et quelques symboles mathématiques.
+  - utiliser la touche //Alt// de gauche pour accéder aux niveaux au delà de quatre.
+
+===== Prise de connaissance de la configuration actuelle =====
+
+==== Manipulations préliminaires ====
+Pour éviter toute interférence nuisible à la perception de la situation de base, nous ne conserverons qu'un seul agencement (pour les besoin de cet exemple //"France - Bepo, ergonomic, Dvorak way"//), qui servira de base, en utilisant le dialogue des préférences du clavier accessible par le menu //Paramètres système -> Clavier -> Saisie de texte//. 
+
+Ensuite, par le bouton //Paramètres de clavier...// à droite de la fenêtre, supprimons toutes les options, en les notant si besoin, qui s'écartent de la configuration par défaut, exceptée celle qui se trouve sous la rubrique //**Séquence de touche pour fermer le serveur X : Control +Alt + Eff. arrière**// que nous conservons, ou ajoutons le cas échéant.
+
+==== Connaître avec le clavier ====
+
+Depuis un [[:terminal]], entrons la [[:commande_shell|commande]] suivante :
+<code>xkbprint -label name $DISPLAY - | gv -orientation=seascape -</code>
+Une image du clavier portant les noms symboliques des touches et le code de ces touches, apparaît. Nous devrons nous y référer chaque fois qu'il nous sera nécessaire d'identifier précisément une touche.
+
+<note important>Attention cependant, la description de ce clavier fait intervenir des fichiers descriptifs indépendants du fonctionnement du clavier. Il arrive que ces fichiers soient erronés sans que cela ait le moindre retentissement sur le fonctionnement, ce qui ne facilite pas la mise en évidence des erreurs. Pour garantir les informations sur la touche, il faut faire appel à l'utilitaire **xev**</note>
+
+Ouvrons un [[:terminal]] et entrons la [[:commande_shell|commande]] suivante :
+<code>xev</code>
+Une fenêtre de terminal s'ouvre ainsi qu'une fenêtre plus petite intitulée //Event tester//.\\
+Frappons sur une touche (k par exemple). Dans la fenêtre du terminal, un grand nombre d'informations sur les différents évènements générés s'affichent. Nous y trouvons en particulier les lignes suivantes :
+
+>KeyRelease event, serial 37, synthetic NO, window 0x4c00001,
+>    root 0x15a, subw 0x0, time 50238474, (229,1101), root:(230,1128),
+>   state 0x10, **keycode 56 (keysym 0x6b, k)**, same_screen YES,
+>   XLookupString gives 1 bytes: (6b) "k"
+>    XFilterEvent returns: False
+
+La partie qui nous intéresse ici est en gras. Elle devrait confirmer les informations de l'image précédente, à savoir que le code de la touche marquée «k» est 56 et que le symbole de touche associé est k ((à condition de ne pas appuyer sur ⇧en même temps. ))
+
+==== Connaître les fichiers de configuration actifs ====
+
+Dans un [[:terminal]], entrons la [[:commande_shell|commande]] suivante :
+<code>setxkbmap -print</code>
+Le résultat affiché est le suivant :
+<code>xkb_keymap {
+xkb_keycodes  { include "evdev+aliases(azerty)"	};
+xkb_types     { include "complete"	};
+xkb_compat    { include "complete"	};
+xkb_symbols   { include "pc+fr(bepo)+inet(evdev)+terminate(ctrl_alt_bksp)"	};
+xkb_geometry  { include "typematrix(tm2030USB)"	};
+};
+</code>
+ 
+=== Les options ===
+
+Avant de nous intéresser aux autres fichiers de configuration, arrêtons nous un instant sur la fin de la ligne qui commence par xkb_symbols, c'est à dire : ''"+terminate(ctrl_alt_bksp)"''.\\
+Cette expression représente la traduction, en terme de configuration de l'option que nous n'avons pas supprimée, définissant le choix de la commande à utiliser pour arrêter le serveur X.
+
+Si nous explorons le dossier **/usr/share/X11/xkb/symbols** où sont censés se trouver les fichiers de définitions des symboles associés aux touches, nous y trouvons le fichier //terminate// dont le contenu est le suivant :
+
+>partial default modifier_keys
+>xkb_symbols "ctrl_alt_bksp" {
+>   key <BKSP> {
+>        type="CTRL+ALT",
+>        symbols[Group1] = [ NoSymbol,       ** Terminate_Server** ]
+>   };
+>};
+
+Nous voyons que le symbole de terminaison du serveur, //Terminate_Server//, en gras ici, est associé à la touche <BKSP> qui possède deux niveaux et dont l'accès au deuxième niveau est donné par la combinaison de touches //Ctrl + Alt// comme le décrit l'extrait suivant du fichier **/usr/share/X11/xkb/types/pc** :
+
+>   ** type "CTRL+ALT"** {
+>	modifiers = Control+Alt;
+>	map[Control+Alt] = Level2;
+>	level_name[Level1] = "Base";
+>	**level_name[Level2] = "Ctrl+Alt";**
+>    };
+
+Nous notons au passage que l'option, introduite par un signe **+**, s'ajoute ((selon les règles de fusion citées à la section **Mise en œuvre des modes de fusion** de la page << [[tutoriel:comprendre_la_configuration_du_clavier|Comprendre la configuration du clavier]] >>)) en mode //**override**//, c'est à dire qu'elle prend l'avantage sur toute déclaration antérieure. 
+
+<note>Notons également qu'il en va de même pour toutes les options qui ont pour ainsi dire le dernier mot.</note>
+
+=== Les fichiers de symboles ===
+
+Reprenons la ligne qui parle des symboles dans la sortie de la commande //setxkbmap -print// :
+<code>
+xkb_symbols   { include "pc+fr(bepo)+inet(evdev)+terminate(ctrl_alt_bksp)"	};
+</code>
+Mise à part les options qui viennent en plus, nous lisons que l'affectation des symboles de touche aux touches, se fait par les définitions du fichier //**pc**// auxquelles viennent se surajouter, en mode //**override**//  (signe +), celles de la section //**bépo**// du fichier //**fr**//, puis celles de la section //**evdev**// du fichier //**inet**//. Tous ces fichiers étant bien-sûr ceux du dossier  **/usr/share/X11/xkb/symbols**.
+
+En regardant les instructions d'inclusion à l'intérieur des fichiers, nous pouvons établir le schéma structurel suivant :
+{{ :tutoriel:symbols-str.jpg?400 |}}
+
+
+Dans ces fichiers, seul nous intéresse le contenu de la section //fr (bépo)//; a priori, nous n'avons pas besoin de changer les fichiers inclus.\\
+Il nous faudra néanmoins rajouter quelque part une section pour permuter les rôles des touches //Alt// de gauche et //Logo// de gauche et faire de la touche //Alt// une touche de sélection des niveaux supérieurs à quatre.
+
+<note important>Le schéma ci-dessus concerne l'agencement pris en exemple et n'a pas valeur générale. Dans le cas d'un autre agencement. la structure aurait pu être totalement différente. Il importe cependant de se représenter très clairement cette structure avant toute tentative de modification.</note>
+
+===== Création d'un agencement ordinaire sur huit niveaux =====
+
+==== Récupération d'une base de départ ====
+
+Dans un [[:terminal]], entrons la [[:commande_shell|commande]] suivante :
+<code>gksudo gedit /usr/share/X11/xkb/symbols/fr</code>
+Après avoir saisi notre mot de passe, enregistrons le fichier ouvert sous le nom : //**mon_fr_bépo**//.
+
+Ajoutons en tête des commentaires de début, la ligne suivante : 
+<file>créé le «« août 2011 par jaaf64 sur la base de fr</file>
+
+Ne conservons que la section «bépo». C'est à dire supprimons les lignes depuis :
+<file>partial default alphanumeric_keys
+xkb_symbols "basic" {</file>
+incluse, jusqu'aux lignes 
+<file>partial alphanumeric_keys
+xkb_symbols "bepo" {</file>
+non comprises. 
+
+Puis les lignes depuis :
+<file>partial alphanumeric_keys
+xkb_symbols "bepo_latin9" {</file>
+incluses, jusqu'à la fin.
+
+Transformons également la ligne: 
+ <file>name[Group1]= "France - Bepo, ergonomic, Dvorak way";</file>
+en :
+<file>name[Group1]= "France - Bepo, personnalisé";</file>
+C'est ce nom qui apparaîtra dans l'interface graphique.
+
+
+Nous remarquons que certaines lignes portent une information sur le type 
+<file>type[group1] = "FOUR_LEVEL_SEMIALPHABETIC"</file>celle-ci annihile le choix du type par défaut. Si nous nous référons aux indications données dans le fichier **/usr/share/X11/xkb/types/extra**, nous observons que ce type se différencie très légèrement du type par défaut //"FOUR_LEVEL_ALPHABETIC"// dans l'interprétation de la touche //Verr num// pour les niveaux 3 et 4.
+
+ Nous n'allons pas toucher ces lignes ici, mais si nous le faisions il nous faudrait faire un choix quant à ce fonctionnement.
+
+==== Introduction des niveaux supérieurs à quatre ====
+
+Nous allons maintenant avoir besoin d'un type de touche à plus de quatre niveaux. Nous devons explorer les fichiers du dossier **/usr/share/X11/xkb/types** pour savoir si un tel type n'existe pas déjà. Le fichier level5 ((niveau5)) devrait logiquement faire l'affaire. Bingo ! Il existe bien dans ce fichier le type suivant :
+
+<file>  type "EIGHT_LEVEL_ALPHABETIC" {
+	modifiers = Shift+Lock+LevelThree+LevelFive;
+	map[None] = Level1;
+	map[Shift] = Level2;
+	map[Lock]  = Level2;
+	map[LevelThree] = Level3;
+	map[Shift+LevelThree] = Level4;
+	map[Lock+LevelThree] =  Level4;
+	map[Lock+Shift+LevelThree] = Level3;
+	map[LevelFive] = Level5;
+	map[Shift+LevelFive] = Level6;
+	map[Lock+LevelFive]  = Level6;
+	map[LevelThree+LevelFive] = Level7;
+	map[Shift+LevelThree+LevelFive] = Level8;
+	map[Lock+LevelThree+LevelFive] =  Level8;
+	map[Lock+Shift+LevelThree+LevelFive] = Level7;
+
+	level_name[Level1] = "Base";
+	level_name[Level2] = "Shift";
+	level_name[Level3] = "Alt Base";
+	level_name[Level4] = "Shift Alt";
+	level_name[Level5] = "X";
+	level_name[Level6] = "X Shift";
+	level_name[Level7] = "X Alt Base";
+	level_name[Level8] = "X Shift Alt";
+   };
+</file>
+Celui-ci fait parfaitement notre affaire. Nous allons donc ajouter devant le signe **[** de chacune des lignes de touches alphabétiques de notre nouveau fichier **/usr/share/X11/xkb/symbols/mon_fr_bépo**, le texte suivant :
+<file>type[group1] = "EIGHT_LEVEL_ALPHABETIC", </file>
+puis, derrière le dernier symbole précédant le signe **]** de ces mêmes lignes, le texte suivant :
+<file>, noSymbol, noSymbol, noSymbol, noSymbol</file>
+Une ligne modifiée devrait se présenter ainsi :
+<file>key <AD01> { type[group1] = "EIGHT_LEVEL_ALPHABETIC", [  b,  B,  bar, brokenbar, noSymbol, noSymbol, noSymbol, noSymbol] }; // b B | ¦</file>
+
+ <note important>On veillera à ne pas insérer d'espace entre le dernier symbole pré-existant et la première virgule du texte inséré. Par contre, on veillera à bien laisser une espace au moins juste avant le signe **[**.
+</note>
+<note>Si le fichier décrivant le type à huit niveaux n'avait pas été présent ( cas d'une distribution différente par exemple), il nous aurait alors fallu le créer.</note>
+
+==== Ajout des nouveaux symboles ====
+
+Aux emplacements des nouveaux niveaux, on remplacera les //noSymbol// par les symboles nouveaux dont nous souhaitons disposer. À titre d'exemple voici la ligne du **i** sur laquelle nous avons rajouté les symboles de la //roupie indienne// et du nouveau //sheqel// israélien. ((notre moyen mnémotechnique ici étant de placer les monnaies selon l'initiale du pays.))
+<file>key <AC03> { type[group1] = "EIGHT_LEVEL_ALPHABETIC", [  i, I, dead_diaeresis,  dead_abovedot, grave, U20B9, U20AA, noSymbol, noSymbol  ] }; // i I ̈ ˙ ₹ ₪</file>
+<note>Les symboles de touche sont entrés sous forme UXXXX de l'Unicode. Attention : le U doit impérativement être en majuscule:</note>
+
+==== Création de la touche d'accès au niveau 5 et supérieurs ====
+Rappelons que nous souhaitons permuter les rôles des touches //Alt//et //Logo// de gauche et faire de la touche //Alt// de gauche la touche d'accès au niveau 5.
+
+Pour nous donner une idée sur la manière de procéder, dans le dialogue des préférences du clavier, ajoutons l'option //**Right Alt chose fifth level**//((La touche Alt de droite choisit le niveau 5)), dans la partie //**Keys to chose fifth level**//.((Touche pour choisir le niveau 5)) (FIXME : présente dans Natty mais quid des versions antérieures ?)
+
+Dans un [[:terminal]], entrons à nouveau la [[:commande_shell|commande]] suivante :
+<code>setxkbmap -print</code>
+
+Le résultat est le suivant :
+>xkb_symbols   { include "pc+fr(bepo)+inet(evdev)+terminate(ctrl_alt_bksp)**+level5(ralt_switch_lock)"**	};
+
+Il nous montre que l'accès au niveau 5 est défini dans la section "ralt_switch_lock" du fichier **/usr/share/X11/xkb/symbols/level5**.\\
+Pour simplifier, comme nous ne cherchons pas à avoir des fonctions de verrouillage sur les niveaux hauts, nous nous intéresserons plutôt à une section "ralt_switch" dont le texte sera le suivant :\\
+__**Texte option 1**__
+<file>partial modifier_keys
+xkb_symbols "ralt_switch" {
+  key <RALT> {
+    type[Group1]="ONE_LEVEL",
+    symbols[Group1] = [ ISO_Level5_Shift ]
+   };
+  modifier_map Mod3   { ISO_Level5_Shift };
+};.
+</file>
+
+Maintenant, toujours dans le dialogue des préférences du clavier supprimons cette option et ajoutons l'option "//La touche Alt de gauche est échangée avec la touche Logo de gauche//" dans la partie //Comportement des touches Alt et Logo//. 
+
+Dans un [[:terminal]], entrons une fois de plus la [[:commande_shell|commande]] suivante :
+<code>setxkbmap -print</code>
+
+Le résultat est le suivant :
+> xkb_symbols   { include "pc+fr(bepo)+inet(evdev)**+altwin(swap_lalt_lwin)**+terminate(ctrl_alt_bksp)"	};
+
+Il nous montre que la permutation est définie dans la section **swap_lalt_lwin** du fichier **du dossier /usr/share/X11/xkb/symbols/altwin** dont voici le texte :\\
+__**Texte option 2**__
+<file>partial modifier_keys 
+xkb_symbols "swap_lalt_lwin" {
+   key <LALT> { type[Group1] = "ONE_LEVEL",
+                 symbols[Group1] = [ Super_L ] };
+   key <LWIN> {	[	Alt_L,	Meta_L		]	};
+};
+</file>
+Nous pouvons, en nous inspirant de ces deux extraits((**Texte option 1** et **Texte option 2**)), écrire notre option personnalisée comme suit :
+<file>partial modifier_keys 
+xkb_symbols "my_swap_lalt_lwin" {
+  key <LALT> { type[Group1]="ONE_LEVEL", symbols[Group1] = [ ISO_Level5_Shift ] };
+  key <LWIN> {	[	Alt_L,	Meta_L		]	};
+  modifier_map Mod3   { ISO_Level5_Shift };
+};
+</file>
+
+Puis la placer dans un fichier //my_level5// du dossier   ///usr/share/X11/xkb/symbols//.par exemple. 
+
+=== Utiliser l'option ===
+Maintenant, en début de notre agencement personnalisé, derrière la ligne :
+ <file>include "level3(ralt_switch)"
+ </file>
+placons la ligne suivante
+ <file>include "my_level5(my_swap_lalt_lwin)"
+ </file>
+puis déconnectons nous pour nous re-connecter aussitôt.
+
+<note warning>Il est nécessaire d'effacer l'ensemble des fichiers *.xkm du répertoire **/var/lib/xkb** puis de redémarrer le système pour que les modifications de clavier soient prises en compte.</note>
+
+Nous avons maintenant accès aux niveaux des touches selon le tableau suivant :
+^ Niveau ^ Touche d'accès ^
+|Niveau 1| pas de touche modificatrice|
+|Niveau 2| ⇧ |
+|Niveau 3| Alt gr|
+|Niveau 4| Alt gr + ⇧|
+|Niveau 5| Alt|
+|Niveau 6| Alt + ⇧|
+|Niveau 7| Alt gr + Alt|
+|Niveau 8| Alt gr + Alt + ⇧|
+
+<note>Pensons à   [[:tutoriel:comment_sauver_et_restaurer_un_fichier|sauvegarder]] les fichiers **mon_fr_bepo** et **my_level5** dans un dossier personnel, car en cas de réinstallation, ils seraient irrémédiablement écrasés.</note>
+
+===== Problème non résolus =====
+  * FIXME Il semblerait que l'accès aux niveaux supérieurs à 4 nécessite que l'agencement soit placé en tête de liste dans les préférences du clavier.
+  * FIXME Il faut parfois effectuer une commutation des agencements pour réactiver les niveaux supérieurs à 4.
+
+===== Autre exemple : clavier se comportant comme sous Windows (Xfce) =====
+
+De nombreuses personnes désirant passer de Windows à Linux sont souvent déstabilisées par le clavier (comportement différent avec la touche Verrouillage majuscule) sous Xubuntu (Xfce). 
+
+Contrairement à Gnome (expliqué [[:raccourcis clavier#comme sous Windows: VerrMaj active les chiffres du clavier|ici]], il n'existe pas d'outils graphique de configuration d'agencement de clavier sous Xfce. Du coup, cet exemple va vous guider pour créer une variante d'agencement simulant le comportement d'un clavier comme sous Windows pour Xcfe.
+
+==== Pré-requis ====
+
+  * Disposer des [[:sudo|droits d'administration]].
+
+==== Sauvegarde des fichiers ====
+Avant toute manipulation, il est intéressant de sauvegarder les fichiers que nous allons manipuler car un Linuxien avertit en vaut deux :). Ça vous évitera de devoir réinstaller votre système en entier en cas de "plantage".
+Donc les fichiers à sauvegarder sont les suivants :
+  * le fichier de définition des agencements du clavier (/usr/share/X11/xkb/rules/evdev.xml).
+  * le fichier des symboles (touches) correspondant à la langue Française (/usr/share/X11/xkb/symbols/fr).
+
+=== Sauvegarde du fichier de définition des agencements du clavier ===
+  * Ouvrez un [[:terminal|terminal]] (Console ou Émulateur de terminal).
+  * Collez-y (Ctrl + Shift + V) la [[:commande_shell|commande]] suivante : 
+
+  sudo cp /usr/share/X11/xkb/rules/evdev.xml /usr/share/X11/xkb/rules/evdev_original.xml
+
+=== Sauvegarde du fichier des symboles (touches) correspondant à la langue Française ===
+  * Ouvrez un [[:terminal|terminal]] (Console ou Émulateur de terminal).
+  * Collez-y (Ctrl + Shift + V) la [[:commande_shell|commande]] suivante : 
+
+  sudo cp /usr/share/X11/xkb/symbols/fr /usr/share/X11/xkb/symbols/fr_original
+
+==== Déclaration de la variante ====
+
+Le but de la manœuvre va être de dire à Xubuntu (le gestionnaire xkb pour être exact) qu'on veut lui déclarer une nouvelle variante de clavier Français qu'on appellera : Français (style Windows). 
+Pour ce :
+  * Ouvrez le fichier **/usr/share/X11/xkb/rules/evdev.xml** avec un [[:tutoriel/comment_modifier_un_fichier#sous_xubuntu_xfce|éditeur de texte en mode administrateur]].
+  * Recherchez le bloc suivant : 
+<file xml>
+        <variant>
+          <configItem>
+            <name>geo</name>
+            <description>Georgian (France, AZERTY Tskapo)</description>
+            <languageList>
+              <iso639Id>geo</iso639Id>
+            </languageList>
+          </configItem>
+        </variant>
+</file>
+  * A la suite de ce bloc, et avant </variantList> insérez le bloc suivant : 
+<file xml>
+        <variant>
+          <configItem>
+            <name>win_fr</name>
+            <description>Français (style Windows)</description>
+            <languageList>
+              <iso639Id>fr</iso639Id>
+            </languageList>
+          </configItem>
+        </variant>
+</file>
+résultat :
+<file xml>
+          </configItem>
+        </variant>
+        <variant>
+          <configItem>
+            <name>geo</name>
+            <description>Georgian (France, AZERTY Tskapo)</description>
+            <languageList>
+              <iso639Id>geo</iso639Id>
+            </languageList>
+          </configItem>
+        </variant>
+       <variant>
+        <configItem>
+          <name>win_fr</name>
+          <description>Français (style Windows)</description>
+          <languageList>
+            <iso639Id>fr</iso639Id>
+          </languageList>
+        </configItem>
+      </variant>            
+      </variantList>
+    </layout>
+     <layout>
+      <configItem>
+</file>
+
+
+Explications pour les curieux : 
+  * Structure du bloc : 
+    * Le format de fichier est de type XML qui est un format structuré délimité par des balises.
+    * Le bloc que nous insérons est composé de 6 balises : **variant**, **configItem**, **name**, **description**, **languageList** et **iso639Id**. 
+    * Chaque balise est toujours délimitée par une balise de début <> et une balise de fin </>. Dans le cas de la balise **variant**, la balise de début est **<variant>** et la balise de fin **</variant>**.
+    * La balise **iso639Id** est incluse (appartient) à la balise **languageList**. Les balises **name**, **description** et **languageList** sont incluses dans la balise **configItem** qui elle même est incluse dans la balise **variant**.
+    * En Français, ça donne : la nouvelle variante ajoutée à pour nom **win_fr**, pour description **Français (style Windows)** et est basée sur la norme ISO 639 **fr** qui définit la disposition de base du clavier pour la France.
+    * Les petits malins se seront aperçus que notre nouvelle balise **variant** est elle même incluse dans une balise **variantList** qui est incluse dans une balise **layout** incluse elle-même dans etc.
+
+
+==== Création de la variante ====
+
+Dans cette partie, nous allons ajouter notre variante avec les touches redéfinies. 
+
+  * Ouvrez le fichier **/usr/share/X11/xkb/symbols/fr** avec un [[:tutoriel/comment_modifier_un_fichier#sous_xubuntu_xfce|éditeur de texte en mode administrateur]].
+  * Tout à la fin du fichier, ajouter le bloc suivant :
+
+<file>
+partial default alphanumeric_keys
+xkb_symbols "win_fr" {
+
+    include "latin"
+
+    name[Group1]="Français (style Windows)";
+
+    key <AE01>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [ ampersand,          1,  onesuperior,   exclamdown ]	};
+    key <AE02>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [    eacute,          2,   asciitilde,    oneeighth ]	};
+    key <AE03>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [  quotedbl,          3,   numbersign,     sterling ]	};
+    key <AE04>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [apostrophe,          4,    braceleft,       dollar ]	};
+    key <AE05>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [ parenleft,          5,  bracketleft, threeeighths ]	};
+    key <AE06>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [     minus,          6,          bar,  fiveeighths ]	};
+    key <AE07>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [    egrave,          7,        grave, seveneighths ]	};
+    key <AE08>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [underscore,          8,    backslash,    trademark ]	};
+    key <AE09>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [  ccedilla,          9,  asciicircum,    plusminus ]	};
+    key <AE10>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [    agrave,          0,           at,       degree ]	};
+    key <AE11>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [parenright,     degree, bracketright, questiondown ]	};
+    key <AE12>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [     equal,       plus,   braceright,  dead_ogonek ]	};
+
+    key <AD01>	{ [         a,          A,           ae,           AE ]	};
+    key <AD02>	{ [         z,          Z, guillemotleft,        less ]	};
+    key <AD03>	{ [         e,          E,     EuroSign,         cent ]	};
+    key <AD11>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [dead_circumflex, dead_diaeresis, dead_diaeresis, dead_abovering ] };
+    key <AD12>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [    dollar,   sterling,     currency,  dead_macron ]	};
+
+    key <AC01>	{ [         q,          Q,           at,  Greek_OMEGA ]	};
+    key <AC10>	{ [         m,          M,           mu,    masculine ]	};
+    key <AC11>	{ [    ugrave,    percent, dead_circumflex, dead_caron]	};
+    key <TLDE>	{ [twosuperior, asciitilde,     notsign,      notsign ]	};
+
+    key <BKSL>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [  asterisk,         mu,   dead_grave,   dead_breve ]	};
+    key <AB01>	{ [         w,          W,      lstroke,      Lstroke ]	};
+    key <AB07>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [     comma,   question,   dead_acute, dead_doubleacute ] };
+    key <AB08>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [ semicolon,     period, horizconnector,   multiply ]	};
+    key <AB09>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [     colon,      slash, periodcentered,   division ]	};
+    key <AB10>	{ type[group1] = "FOUR_LEVEL_SEMIALPHABETIC", [    exclam,    section, dead_belowdot, dead_abovedot ] };
+
+    include "level3(ralt_switch)"
+};
+</file>
+
+<note important>Les deux touches windows LWIN et RWIN ne fonctionnent pas pour le moment.</note>
+
+Explications pour les curieux :
+
+  * Structure du bloc :
+    * Le format de fichier n'est malheureusement pas de type XML, snif :-( Il est néanmoins très compréhensible même si de premier abord, il fait peur :-D.
+
+<note important>En cours de rédaction :-)</note>
+
+
+==== Vérification de la présence de la variante dans la configuration clavier Xfce ====
+
+  * Redémarrez l'ordinateur, en ayant pris soins d'avoir mémorisé l'adresse de cette page pour y revenir après le redémarrage. Pour redémarrer en mode console entrez la [[:commande_shell|commande]] suivante dans un [[:terminal|terminal]]  :
+
+<code>
+xfce4-session-logout -r
+</code>
+
+Après le redémarrage,
+  * Exécutez le programme **xfce4-keyboard-settings** en entrant la [[:commande_shell|commande]] suivante dans un [[:terminal]] :
+
+  xfce4-keyboard-settings
+
+  * Dans l'onglet **Disposition**, décochez la case **Utiliser les paramètres par défaut**.
+  * Dans la liste disposition du clavier ajoutez la variante que l'on a créée : **Français (style Windows)** qui se trouve dans le sous-menu clavier Français.
+  * Déconnectez-vous de votre session (xfce4-session-logout -l) puis reconnectez-vous.
+  * Votre clavier fonctionne maintenant comme sous Windows.
+
+<note>Au fur et à mesure, essayez d'abandonner progressivement l'utilisation du clavier style Windows sur Xubuntu. Au début, c'est un peu difficile mais au bout d'un mois, on s'y habitue :-D 
+Pour revenir à un clavier style Linux, re-cochez la case  **Utiliser les paramètres par défaut**.</note>
+
+==== Restauration des fichiers de sauvegarde (si besoin) ====
+
+Votre clavier se comporte bizarrement. Pas de panique :-) Voilà la méthode pour restaurer vos fichiers originaux :
+  * Ouvrez un [[:terminal|terminal]] (Console ou Émulateur de terminal).
+  * Collez-y (Ctrl + Shift + V) la [[:commande_shell|commande]] suivante :
+
+  sudo cp /usr/share/X11/xkb/rules/evdev_original.xml /usr/share/X11/xkb/rules/evdev.xml
+
+* Puis collez-y (Ctrl + Shift + V) la [[:commande_shell|commande]] suivante :
+
+  sudo cp /usr/share/X11/xkb/symbols/fr_original /usr/share/X11/xkb/symbols/fr
+
+----
+//Contributeurs: [[:utilisateurs:jaaf64]], [[:utilisateurs:fabienCo]]//

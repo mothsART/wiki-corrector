@@ -1,0 +1,199 @@
+
+{{tag>Xenial Bionic serveur multimedia media_center}}
+{{ :logo:jellyfin.png?80}}
+
+====== Jellyfin  ======
+ 
+Jellyfin est un serveur multimedia. Il s'agit d'un fork de //[[https://emby.media/|Emby]]// (anciennement //Media Browser//) devenu officiellement propriétaire en 2018.
+
+Il permet de mettre sa médiathèque à disposition sur le [[:web]], qu'il s'agisse de contenu vidéo (films et séries, télévision), audio, ou d'images.
+
+Il permet de récupérer automatiquement les informations concernant les films et les séries depuis [[https://www.imdb.com/|IMDb]] et [[https://www.themoviedb.org/|TheMovieDb]] : descriptions, affiches, réalisateurs, acteurs, etc.\\ 
+Ceci permet de naviguer entre les différents réalisateurs, ou les différents genres, de trier par date, de voir tous les films avec un acteur particulier, sa photo et sa biographie etc.
+
+De base avec Jellyfin cette médiathèque est donc accessible et visionnable avec n'importe quel navigateur web, mais il existe de plus de nombreux [[#clients]] qui permettent de simplifier son utilisation en fonction de l'appareil qu'on utilise.
+
+On peut aussi créer des comptes supplémentaires pour partager ce contenu avec ses amis.
+
+
+===== Installation =====
+ 
+==== Depuis le Dépôt pour Ubuntu de Jellyfin ====
+
+L'équipe de Jellyfin fournit un dépôt pour l'installation sur Ubuntu Xenial / Bionic / Cosmic / Disco. Les architectures prises en charge sont amd64 , arm64 et armhf.
+
+<note important>Sur Ubuntu Xenial seul amd64 est pris en charge .</note>
+<note>Microsoft ne fournit pas de .NET pour les systèmes Linux x86 32 bits. Jellyfin n'est donc pas pris en charge sur l'architecture i386 .</note> 
+
+  * Activez HTTPS pour APT :
+<code>sudo apt install apt-transport-https</code>
+
+  * Activez le dépôt Univers pour certaines dépendances :
+<code>sudo add-apt-repository universe</code>
+
+  * Importez la clé signée par l’équipe Jellyfin :
+<code>wget -O - https://repo.jellyfin.org/ubuntu/jellyfin_team.gpg.key | sudo apt-key add -</code>
+
+  * Ajoutez le dépôt dans /etc/apt/sources.list.d/jellyfin.list :
+<code>echo "deb [arch=$( dpkg --print-architecture )] https://repo.jellyfin.org/ubuntu $( lsb_release -c -s ) main" | sudo tee /etc/apt/sources.list.d/jellyfin.list</code>
+
+  * Mettre à jour les dépôts :
+<code>sudo apt update</code>
+
+  * Installez Jellyfin :
+<code>sudo apt install jellyfin</code>
+
+==== Depuis Docker ====
+
+La méthode d'installation la plus simple pour le moment est d'utiliser **[[:docker|Docker]]**.\\ 
+**Jellyfin** est disponible sur [[https://hub.docker.com/r/jellyfin/jellyfin/|Docker Hub]].
+
+Pour des raisons de simplicité (et éviter des lignes de commande à rallonge) on utilisera ici l'outil **[[https://docs.docker.com/compose/|Docker Compose]]**.
+
+Pour commencer [[#comment_ouvrir_un_terminal|ouvrez un nouveau terminal]] et assurez-vous d'être placé dans votre répertoire ''home'' :
+<code>cd</code>
+
+Installez ensuite ces deux outils :
+<code>sudo apt install docker.io docker-compose</code>
+
+Puis créez un répertoire qui contiendra la configuration et la base de données de Jellyfin :
+<code>mkdir jellyfin</code>
+
+On créé ensuite un fichier ''docker-compose.yml'' (ici avec l'éditeur [[:nano]]) :
+<code>nano docker-compose.yml</code>
+
+Ce fichier contiendra la configuration du container ''jellyfin'' pour Docker :
+<file - docker-compose.yml>version: '3'
+services:
+  jellyfin:
+    image: jellyfin/jellyfin
+    ports:
+    - '8096:8096'
+    network_mode: "host"
+    volumes:
+    - /home/utilisateur_courant/jellyfin:/config
+    - /home/utilisateur_courant/Vidéos:/media
+    environment:
+    - UID=1000
+    - GID=1000
+    restart: always</file>
+Ce contenu est à adapter :
+  * remplacez ''utilisateur_courant'' par votre nom d'utilisateur
+  * et éventuellement ''/home/utilisateur_courant/Vidéos'' par le chemin de votre médiathèque.
+  * on peut aussi choisir un autre port que le port 8096, il suffit de remplacer le premier numéro de la ligne ''- '8096:8096%%'%%''.
+Par ex. :
+<file>- '80:8096'</file>
+  * ''UID'' et ''GID'' correspondent respectivement aux ID de l'utilisateur courant et de son groupe principal. Sur Ubuntu si vous n'avez qu'un utilisateur il s'agit très probablement de ''1000'' / ''1000''. Vous pouvez vous assurer de cela avec la commande :
+<code>id</code>
+
+<note tip>D'une manière générale avec Docker pour les ''ports'', ''volumes'' et ''devices'', on spécifie à gauche l'élément de la machine hôte (par ex. le port ou le chemin local qu'on souhaite utiliser), puis '':'', puis à droite l'élément qui lui correspondra dans le container (en général on n'y touche pas, cela dépend de l'image Docker qu'on utilise).</note>
+
+Sauvegardez et quittez (''Ctrl + O'' puis ''Ctrl + X'' avec [[:nano]]).
+
+Vous pouvez dès lors installer Jellyfin et le lancer en une commande :
+<code>sudo docker-compose up</code>
+
+Jellyfin est alors disponible à l'adresse [[http://localhost:8096]].
+
+Lors du premier accès, un guide d'installation (//wizard//) s'affiche, grâce auquel vous pouvez paramétrer votre serveur pas à pas :
+  * choisissez par exemple //French// comme //Preferred display language//, puis cliquez sur //Next//
+  * choisissez ensuite un nom d'utilisateur
+  * puis ajoutez une nouvelle bibliothèque par ex. //Movies// pour des films, dans laquelle vous pouvez ajouter le //Folder// ''/media'' (tel que défini dans la colonne de droite du volume correspondant dans le fichier ''docker-compose.yml'' créé précédemment)
+  * choisissez d'obtenir les //metadata// en //French// dans //Preferred metadata language//.
+  * //ok// puis //Next//, choisissez les langues et pays préférés par défaut pour les //metadata//.
+  * Mieux vaut désactiver l'UPnP dans un premier temps.
+
+
+===== Utilisation =====
+
+==== Méthode "normale" ====
+Jellyfin est accessible par son Interface Web à l'adresse http://locahost:8096.
+
+Suivez l'assistant de configuration initiale. Il vous permettra, entre autre, de choisir la langue par défaut des métadonnées et d'importer votre bibliothèque. 
+Selon le nombres de fichiers à scanner, cela peut prendre du temps la première fois pour que Jellyfin rapatrie toutes les metadonnées.
+
+Le DLNA est activé par défaut et votre bibliothèque devrait être vu sur votre réseau.
+
+Jellyfin est installé en tant que service système. Vous n'avez rien à lancer manuellement. Les commandes suivantes peuvent toutefois vous être utiles dans certains cas :
+<code>sudo service jellyfin status</code>
+<code>sudo service jellyfin stop</code>
+<code>sudo service jellyfin start</code>
+ 
+Après certaines modifications via une [[:console]] :
+<code>sudo service jellyfin restart</code>
+
+==== Méthode "Docker" ====
+Jellyfin est disponible à l'adresse [[http://localhost:8096]].
+
+Après l'installation vous pouvez démarrer ou arrêter le service avec ''sudo docker-compose start jellyfin'' et ''sudo docker-compose stop jellyfin''.\\ 
+Si vous modifiez le fichier ''docker-compose.yml'', utilisez plutôt ''sudo docker-compose up'' et ''sudo docker-compose down''.
+
+Un menu sandwich en haut à gauche donne accès à la gestion du serveur et au gestionnaire de métadonnées.
+
+Vous pouvez ajouter plusieurs répertoires de médias depuis le menu -> //Gérer le serveur// -> //Médiathèque//.
+<note>
+Attention si vous utilisez docker, et que votre médiathèque est dispersée sur votre ou vos stockages locaux : vous devez faire correspondre chaque répertoire local à un répertoire dans le container, qui sera visible par Jellyfin (depuis un container, Jellyfin n'a pas accès à l'arborescence de l'hôte). Par ex. :
+<file - docker-compose.yml>    volumes:
+    - /home/utilisateur_courant/jellyfin:/config
+    - /mnt/usb/media/Vidéos:/media/Vidéos
+    - /home/utilisateur_courant/Musique:/media/Musique</file>
+Dans cette configuration les répertoires de médiathèques à indiquer à Jellyfin seront ''/media/Vidéos'' et ''/media/Musique''.
+</note>
+
+
+===== Accélération matérielle =====
+
+Jellyfin prend en charge l'accélération matérielle pour du codage/décodage/transcodage vidéo à l'aide de FFMpeg. Il prend en charge plusieurs types d'accélération, AMD AMF, Intel Quick Sync, OpenMax OMX, nVidia NVENC, Intel/AMD VAAPI ...
+
+Les options d'accélération matérielle se trouvent dans le panneau d'administration sous la section Transcodage. Sélectionnez une option d'accélération matérielle dans le menu déroulant, indiquez un périphérique si besoin, et cochez Activer l'encodage matériel.
+
+L'accélération matérielle est disponible immédiatement pour la lecture multimédia. Aucun redémarrage du serveur n'est requis. 
+
+Chaque type d'accélération matérielle, ainsi que chaque type d'installation Jellyfin, nécessite différentes options de configuration avant de pouvoir être utilisé.
+
+====Méthode VA API====
+
+Avant d'activer cette fonction, veuillez lire le sujet [[vaapi|VA API]] de la documentation.
+  
+Nous installons le paquet mesa-utils puis nous vérifions que l'accélération graphique est bien supporté.
+<code>sudo apt install mesa-utils</code>
+<code>glxinfo | grep "direct rendering"</code>
+Cela devrait retourner, "//direct rendering: **Yes**//"
+
+Nous vérifions quel groupe est disponible pour le périphérique "//render//" 
+<code>ls -l /dev/dri</code> 
+
+Vous devriez voir une ligne comme celle ci
+<code>crw-rw----+ 1 root video 226, 128 juin  21 15:11 renderD128</code>
+Le **groupe** dans cet exemple est //**video**//
+
+Nous ajoutons l'utilisateur du service à ce groupe pour permettre au processus jellyfin-ffmpeg d'accéder au périphérique :
+<code>sudo usermod -aG video jellyfin</code>
+
+Nous redémarrons le service Jellyfin
+<code>sudo service jellyfin restart</code>
+
+
+===== Clients =====
+
+On peut utiliser n'importe quel navigateur web pour accéder à du contenu sur Jellyfin, mais les formats et codecs disponibles dépendent du navigateur.
+
+La liste des clients existants ou en développement est disponible [[https://jellyfin.readthedocs.io/en/latest/clients/|ici]].
+
+Pour Ubuntu il existe en particulier [[https://flathub.org/apps/details/com.github.iwalton3.jellyfin-mpv-shim|Jellyfin MPV Shim]], basé sur le lecteur libre [[https://mpv.io/|MPV]], et disponible en [[:Flatpak]]. Contrairement à un navigateur web de très nombreux formats sont lisibles nativement, et il n'est donc généralement pas nécessaire de réencoder à la volée côté serveur (ce qui est très gourmand en ressources).
+
+On peut aussi noter :
+  * une [[https://github.com/jellyfin/jellyfin-kodi|extension]] pour [[:Kodi]] qui permet de remplacer complètement son contenu.
+  * une [[https://github.com/jellyfin/jellyfin-android|application pour Android]] disponible [[https://repo.jellyfin.org/releases/client/android/|ici]].
+  * une [[https://github.com/jellyfin/jellyfin-androidtv|application pour AndroidTV]] disponible [[https://repo.jellyfin.org/releases/client/androidtv/|là]].
+  * une [[https://github.com/jellyfin/jellyfin-theater-electron|application Jellyfin Theater]] qui devrait être fonctionnelle sur Ubuntu quand elle sera terminée.
+
+===== Voir aussi =====
+
+  * (//en//) [[https://github.com/jellyfin/jellyfin|site officiel]]
+  * (//en//) [[https://jellyfin.readthedocs.io/|documentation officielle]]
+
+----
+
+Contributeurs principaux : [[utilisateurs:krodelabestiole]]//
+Contributeurs : [[utilisateurs:stylou]]//

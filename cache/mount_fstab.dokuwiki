@@ -1,0 +1,371 @@
+
+{{tag>système partitions}}
+
+----
+
+====== mount et fstab : Le montage des systèmes de fichiers ======
+
+Un nouveau périphérique de stockage, lorsqu'il est détecté, est la plupart du temps monté automatiquement. Mais il peut être intéressant de monter manuellement, ou de spécifier des options de montage ou de modifier celles des partitions système.\\
+
+Outre les outils graphiques, la gestion du montage des périphériques de stockage peut s'effectuer en ligne de commande, ou grâce au fichier ''/etc/fstab'' (montage automatique).\\
+Nous allons découvrir ces outils, ainsi que quelques commandes utiles.
+
+<note tip>Il existe 2 logiciels graphiques très pratiques pour ceci : [[:gnome-disk-utility]] est dans les dépôts, et sa documentation explique clairement que faire. [[:disk-manager|Disk-Manager]] est encore plus simple, mais n'est plus maintenu et donc plus dans les dépôts.
+
+Outre la documentation des 2 logiciels ci-dessus, le montage graphique est documenté sur la page [[:montage|Rendre accessible manuellement une partition et d’autres unités de stockage]].</note>
+
+<note important>Les informations de cette page s'adressent aux utilisateurs avancés, ou à ceux qui souhaiteraient le devenir ^_^</note>
+
+<note warning>Le montage des partitions a un impact sur le système et nécessite donc les [[:sudo|droits d'administration]]. \\ L'utilisation des droits d'administration permet de modifier le système, et risquer de l'abîmer. \\ Il est préférable de sauvegarder votre fichier ''/etc/fstab'' avant manipulation.</note>
+
+Quelques liens : [[montage|montage]], [[:systeme_de_fichiers|les systèmes de fichiers sous Linux]] ainsi que le portail [[:partitions|Partitions]].
+===== Rappel sur la désignation des partitions =====
+Les périphériques sont désignés par le système par des fichiers dans le répertoire ''/dev/''. \\
+
+Les périphériques de stockage seront donc reconnus par ''/dev/sda'', ''/dev/sdb'', etc.\\
+Les [[:partitions#regle_de_denomination|partitions]] sont désignées par leur numéro dans le disque (''/dev/sda1'', ''/dev/sda2'', ...)
+
+Les partitions peuvent aussi être reconnues par leur [[:uuid_et_label|UUID ou leur label]].
+
+C'est une partition que l'on monte (sdb1, par exemple), JAMAIS un disque (sdb, par exemple) : cela ne fonctionne pas.
+
+==== Liste des partitions ====
+Vous pouvez lister les partitions en lançant la commande : <code> sudo fdisk -l </code>
+Ce qui vous ressortira quelque chose comme :
+<code>Disk /dev/sda: 117.3 GB, 117298257920 bytes
+255 têtes, 63 secteurs/piste, 14260 cylindres, total 229098160 secteurs
+Unités = secteurs de 1 * 512 = 512 octets
+Taille de secteur (logique / physique) : 512 octets / 512 octets
+taille d'E/S (minimale / optimale) : 512 octets / 512 octets
+Identifiant de disque : 0x00067e35
+
+Périphérique Amorce  Début        Fin      Blocs     Id  Système
+/dev/sda1            2048    41945087    20971520   83  Linux
+/dev/sda2        41945088    58722303     8388608   82  partition d'échange Linux / Solaris
+/dev/sda3        58722304   121636863    31457280   83  Linux
+/dev/sda4   *   121636864   206187183    42275160    7  HPFS/NTFS/exFAT
+
+Disk /dev/sdb: 500.1 GB, 500107862016 bytes
+255 têtes, 63 secteurs/piste, 60801 cylindres, total 976773168 secteurs
+Unités = secteurs de 1 * 512 = 512 octets
+Taille de secteur (logique / physique) : 512 octets / 4096 octets
+taille d'E/S (minimale / optimale) : 4096 octets / 4096 octets
+Identifiant de disque : 0x000e4fe9
+
+Périphérique Amorce  Début        Fin      Blocs     Id  Système
+/dev/sdb1            2048   976773119   488385536   83  Linux
+</code> 
+Vous pouvez alors lire la liste des périphériques de stockage (disques dur, clés usb,…) avec la liste des partitions et leur taille.
+
+==== Note sur les UUIDs ====
+L'[[:uuid_et_label|UUID]] est défini pour chaque partition de façon quasi-unique, et assure qu'il n'y aura pas d'ambiguïtés dans votre fstab.\\
+
+Pour obtenir les UUIDs de vos partitions, tapez 
+<code>sudo blkid</code>
+Vous obtiendrez la liste de vos partitions et pour chacune, son chemin d'accès, son UUID, son étiquette, le type de système de fichier qu'elle contient :
+<code>
+/dev/sda1: UUID="8bf33340-e94c-4c4c-981d-35e73f8bc65c" TYPE="ext4" 
+/dev/sda2: UUID="ac56a704-260b-45f5-85ac-e1b451bb79bc" TYPE="swap" 
+/dev/sda3: LABEL="Home" UUID="8244710a-5cce-49ad-8b93-a92b5d2e53a0" TYPE="ext4" 
+/dev/sda4: UUID="DCF041AFF0419126" TYPE="ntfs" 
+/dev/sdb1: LABEL="Home" UUID="2c313d40-6bdc-4e42-917a-b04f88764aac" UUID_SUB="c21f5351-4022-41af-b504-6b59b455bf23" TYPE="btrfs" 
+</code>
+On peut aussi taper la commande :
+<code>lsblk -fe7</code>
+qui donne sensiblement les mêmes résultats :
+<code>NAME   FSTYPE LABEL       UUID                                 FSAVAIL FSUSE% MOUNTPOINT
+sda                                                                           
+├─sda1 ntfs   WIN10       6C8CA3038CA2C6C4                                    
+├─sda2 ext4   MINT        727a95e9-70a4-4d6e-a739-cb884c4188df   19,1G    40% /
+├─sda3 ext4   HOMEMINT    4bdc4735-801e-43fe-b3f1-58fd832638f5   23,6G    71% /home                                                                                                                                                                                    
+└─sda4 ext4   DATAS       ca07415a-2704-497f-8091-1d9a4a58f3d0  297,2G    43% /media/DATAS</code>
+Ainsi, dans votre fstab, les trois lignes suivantes sont équivalentes :\\
+<file>
+/dev/sda3                                     /home ext4 defaults    0 0
+UUID=8244710a-5cce-49ad-8b93-a92b5d2e53a0     /home ext4 defaults    0 0
+LABEL=Home                               /home ext4 defaults    0 0
+</file>
+La première ligne est déconseillée dans la mesure où le chemin d'accès à la partition (/dev/sda3) dépend du contexte dans lequel le fichier /etc/fstab est exploité ; la seconde est la plus solide, car l'UUID d'une partition n'est qu'exceptionnellement modifiée ; la troisième est la plus claire, mais l'unicité de l'étiquette n'est pas garantie, ni sa pérennité, l'utilisateur ayant tout loisir de nommer ses partitions comme il l'entend (des conflits peuvent survenir du fait de la présence au démarrage de temps à autre de périphériques amovibles).
+
+===== La commande mount =====
+
+Pour monter un périphérique, il faut connaître son nom, qui sera de la forme /dev/sda1, par exemple.
+
+La commande mount permet de manipuler tous les montages de systèmes de fichier de manière très précise.
+Par exemple, pour monter l'unité de stockage "/dev/sdc3" dans le dossier "/media/stock" :
+<code>sudo mount /dev/sdc3 /media/stock</code>
+Le système de fichier utilisé est détecté automatiquement.
+
+Le point de montage doit être un dossier, quelconque mais **existant** et **vide** au moment du montage.\\
+Ubuntu monte automatiquement les disques dans des sous-dossiers du répertoire /media par exemple, dossiers qu'il crée automatiquement avant.
+
+<note importante>
+**__Point de montage dont le nom comporte un espace.__**
+
+__Pour la commande mount :__ l'espace doit être précédé d'un caractère d’échappement **\**, ou le nom du dossier mis entre guillemets **""** .
+
+__Pour Fstab :__ l'espace doit être remplacé par **\040** .
+</note>
+
+Nous allons voir comment spécifier des options ou le système de fichiers.
+
+==== Format de la partition ====
+Le type de fichiers est normalement détecté par la commande ''mount''. Néanmoins il peut être nécessaire de lui imposer un format :
+<code>sudo mount -t [type] /dev/sdc3 /media/stock</code>
+[type] est le format de système de fichiers ([[:systeme_de_fichiers|Les systèmes de fichiers]]). Voici les plus fréquents : \\
+''ext2, ext3, ext4, f2fs, fat'' (Fat16), ''vfat'' (Fat32), ''ntfs, reiserfs, btrfs, tmpfs, iso9660''(Disques)'',…''
+
+Exemples : 
+<code>
+mount -t ext4 /dev/sdc3 /media/stock       # Système de fichiers en ext4
+mount -t vfat /dev/sdc3 /media/partage     # Système de fichiers et Fat32
+mount -t iso9660 /dev/sdd /media/cdrom     # CD
+</code>
+\\
+On peut aussi monter des fichiers, comme par exemple des Isos (images disque) :
+<code>mount -o loop ubuntu-cdrom.iso /media/cd-installation</code>
+
+==== Droits par défaut du volume ====
+=== Système de fichier linux ===
+En ce qui concerne les systèmes de fichiers qui ont une gestion des permissions (comme Ext2, Ext3, ReiserFs etc...), si vous souhaitez pouvoir écrire dans cette partition en tant que simple utilisateur, vous devez [[/permissions#modifier_les_permissions|changer les permissions ou l'appartenance du répertoire racine de la partition]]. 
+
+Dans notre exemple précédent, si ''/dev/sdc3'' est en ext3 :\\
+Après avoir monté la partition dans ''/media/stock'' :
+<code>
+sudo chown utilisateur /media/stock
+</code>
+
+Désormais cette partition appartient à l'utilisateur, peu importe où elle sera montée ensuite.\\
+(Les droits sont attachés au répertoire racine de la partition et non au répertoire du point de montage)\\
+\\
+=== Système de fichier non linux ===
+Cas concret : vous avez une partition en vfat sur votre disque dur et vous voudriez, en tant qu'utilisateur lambda, pouvoir lire et écrire dessus. \\ Le système de fichier vfat ne spécifiant aucun droit, nous devons les lui spécifier lors du montage. Il faut alors indiquer à mount la valeur de [[wpfr>umask]] adéquate grâce à l'option homonyme.
+
+<code>sudo mount -o umask=0 /dev/hda7 /media/win_d</code>
+
+Cette méthode a un inconvénient : les autorisations en exécution sont nécessaires pour les répertoires mais pénibles pour les fichiers. On peut alors préciser un umask pour chacun d'eux :
+
+<code>sudo mount -o fmask=111 -o dmask=0 /dev/hda7 /media/win_d</code>
+
+Vous pouvez également restreindre les droits en montant le système de fichier en lecture seule (c'est-à-dire avec aucun droit en écriture). L'option "-o umask=0222" est alors tout indiquée.
+
+
+==== Autres options ====
+D'autres options peuvent être spécifiées au montage comme nous le verrons dans le paragraphe suivant. Les mêmes options (''default'', etc) peuvent être spécifiées avec ''mount'', après "''-o''". Par exemple :
+<code>mount -t vfat -o defaults,rw,user,umask=022,uid=1000 /dev/sdc3 /media/stock</code>
+
+
+===== Le fichier fstab (montage automatique) =====
+
+Le fichier **''/etc/fstab''** liste les partitions qui seront montées __automatiquement au démarrage__ ou à la connexion du périphérique, avec toujours les mêmes options. \\ 
+Il est composé de plusieurs lignes décrivant chacune les conditions de montage de chaque partition / système de fichier.\\ 
+Le fichier **fstab** est créé lors de l'installation, avec le montage de la partition principale, et de la [[swap|swap]]. Mais on peut y ajouter manuellement des partitions supplémentaires, qui seront alors automatiquement lues par le système au démarrage.
+
+<note important> Si le nom d'un point de montage contient un espace, cet espace doit être remplacé dans ''/etc/fstab'' par ''**\040**''</note>
+
+==== Les bases ====
+Le fichier /etc/fstab suivant résume une configuration classique :
+<file>
+# /etc/fstab: static file system information.
+#
+# Use 'blkid' to print the universally unique identifier for a
+# device; this may be used with UUID= as a more robust way to name devices
+# that works even if disks are added and removed. See fstab(5).
+#
+# <file system> <mount point>   <type>  <options>       <dump>  <pass>
+# / was on /dev/sda7 during installation
+UUID=33b870b8-a81e-4203-a4fd-7affa9f412fb    /               ext4    errors=remount-ro 0       1
+# /boot was on /dev/sda5 during installation
+/dev/sda5                                    /boot           ext2    defaults        0       2
+# /musique was on /dev/sda8 during installation
+LABEL=ma-musique                             /musique        ext4    defaults        0       2
+# swap was on /dev/sda6 during installation
+UUID=2c442228-1991-48c7-bad9-a80dfc8267cf    none            swap    sw              0       0
+</file>
+Ici, le disque principal est sda7, et son swap est sda6. Ces lignes ont été créées par l'installateur. Les partitions additionnelles montées sont sda5 et sda8, et ont été ajoutées à la main.
+  - la colonne **<file system>** indique la partition elle-même. Il y a plusieurs solutions, mais les 3 principales sont :
+    - l'UUID ([[https://fr.wikipedia.org/wiki/Universal_Unique_Identifier|Universal Unique Identifier]]) de la partition. Celle-ci sera obtenue via un **sudo blkid**, via [[gnome-disk-utility|gnome-disk]], ou via [[gparted|gparted]]. Un UUID ressemble à cela **UUID=2c442228-1991-48c7-bad9-a80dfc8267cf**
+    - La référence directe à la partition sous la forme **/dev/sda2** ou **/dev/sdb2** (**sd** signifie disque dur, la lettre est l'ordre du disque dans le boot, et le N° est celui de la partition. **/dev/sdb2** est donc la 2e partition du 2e disque dur). Inconvénient de cette méthode : si vous changez le 1er disque de démarrage dans le boot, la signification de sdb2 (par exemple) changera en même temps. l'UUID est donc un identifiant plus stable et plus sûr.
+    - Le LABEL de la partition à monter. On peut en effet donner un nom (label, ou étiquette) à une partition, même si ce n'est pas obligatoire. Dans ce cas, l'identifiant de la colonne **<file system>** prendra la forme **LABEL=nom-partition**, où **nom-partition** est à remplacer par le LABEL réel.
+  - la colonne **<mount point>** indique un répertoire quelconque sur la partition principale, et qui servira de point de montage. Pour la partition principale elle-même, c'est évidemment "**/**" (la racine). Pour une partition montée additionnelle, on choisit en général (ce n'est pas un emplacement obligatoire) un répertoire /media/xxx (où **xxx** est le nom que vous choisissez pour la partition de montage). Vous devez créer manuellement cette partition de montage __une fois pour toutes__ par un **sudo mkdir /media/xxx**. Laissez-la vide, et n'y touchez plus jamais. Elle sert juste d'ancrage au fstab pour son montage.
+  - La colonne **<type>** donne le type de système de fichiers de la partition montée. Pour une partition linux, c'est souvent ext4.
+  - La colonne **<option>** permet de choisir des options au montage. Sauf si vous êtes un expert, laissez **defaults** pour une partition ajoutée par vous au montage.
+  - la colonne **<dump>** règle les sauvegardes via l'utilitaire **[[dump|dump]]**. La valeur classique est **0** (dump n'est presque jamais actif ou utilisé).
+  - la colonne **<pass>** règle la priorité de vérification des erreurs éventuelles du système de fichiers au démarrage. Laissez-y les valeurs par défaut de l'installation. Si vous ajoutez manuellement des partitions, les valeurs de <pass> doivent être:
+     * **1** pour la racine (votre partition principale) => vérif de cette partition en priorité,
+     * **2** pour les autres partitions Linux (les partitions "externes" que vous souhaitez monter) => ce **2** fera les vérifs __après__ la partition racine (démarrage plus rapide),
+     * **0** pour le swap et les partitions windows (cf. [[man>fstab]]) => pas de vérification.
+
+Par exemple une ligne **fstab** type pour un montage d'une partition linux **ext4** sera :\\
+''/dev/sdb2   /media/partition-plus   ext4  defaults  0  2''\\
+Qui monte automatiquement la 2e partition du 2e disque dur.\\
+Il ne faut juste pas oublier de créer "l'ancrage" ''/media/partition-plus'' par un **sudo mkdir /media/partition-plus**
+
+Lorsqu'un système de fichiers (partition) est présent dans le fichier /etc/fstab, il est monté automatiquement au démarrage de la machine. \\
+Les utilisateurs peuvent également le démonter manuellement ou le re-monter en tapant **umount** ou **mount /media/xxx** (où **xxx** est le nom de votre répertoire de montage). \\
+==== Utilisation avancée ====
+Pour aller plus loin, voici la liste des options pour la colonne **<option>**.
+Certaines options sont communes à tous les systèmes de fichiers, d'autres sont spécifiques à la norme [[wpfr>POSIX]] (tous les systèmes de fichiers Linux), d'autres à certains systèmes de fichiers. Voici la plupart des options que vous pourrez rencontrer :
+
+^ Options ^ Description ^ Compatible ^
+| //''defaults''// | //Correspond à: ''rw,suid,dev,exec,auto,nouser,async''// | Tous |
+| ''**rw**/ro'' | Montage en lecture/écriture (par défaut) ou lecture seule | Tous |
+| ''**suid**/nosuid'' | Les bits [[http://fr.wikipedia.org/wiki/Setuid|SUID et SGID]] sont pris en compte (ou non) \\ Relatif aux droits donnés aux exécutables sur la partition | Tous |
+| ''**dev**/nodev'' | Interprète ou non les fichiers spéciaux de périphériques présents sur le système (par défaut) | Tous |
+| ''**exec**/noexec'' | Autorise l'exécution des programmes (par défaut)  | Tous |
+| ''**auto**/noauto'' | Montage automatique (ou non) lors d'un appel mount -a (par défaut) | Tous |
+| ''**nouser**'' | Seul le compte root peut monter/démonter le système de fichier (par défaut) | Tous |
+| ''**_netdev**'' | Le système de fichiers est sur une machine qui nécessite un accès réseau. Cela indique au système d'attendre que la configuration réseau soit active avant de procéder au montage | ?? |
+| ''**async**'' | Montage asynchrone (par défaut) | Tous |
+| ''**atime**/noatime'' | Inscrit (ou non) la date d'accès (préférez ''noatime'' pour les SSD) | Norme POSIX |
+| ''sw'' | Spécifique à l'activation des partitions swap | swap |
+| ''discard'' | active le [[/ssd_solid_state_drive#la_commande_trimactivation_et_utilisation|TRIM]] sur les partitions SSD (à rajouter manuellement) | ext4, btrfs (SSD) |
+
+D'autres options restent moins fréquentes (Liste non exhaustive) :
+^ Options ^ Description ^ Compatible ^
+| ''users'' | Autorise l'utilisateur courant à monter/démonter le système de fichier. Ceci entraîne l'utilisation des options noexec, nosuid, et nodev (à moins que exec,dev,suid ne soient spécifiés). | Tous |
+| ''sync'' | Montage synchrone (semblerait déconseillé) | ext2-3, fat, vfat, ufs |
+| ''uid='' | Spécifie le n° du propriétaire des fichiers pour les systèmes de fichiers non-Linux (où ce n'est donc pas spécifié). Vous pouvez trouver le votre dans "/etc/passwd". \\  * Si non spécifié : root \\  * Si ''uid'' ou ''gid'' spécifié sans nombre, utilisateur actuel. | Formats non-Linux |
+| ''gid='' | Pareil pour les groupes propriétaires (Les numéros de groupes sont dans ''/etc/group'') | Formats non-Linux |
+| ''umask='' | Spécifie les permissions (droits d'accès/lecture/écriture) sur la partition, même fonctionnement que ''uid'' et ''gid''.  | Formats non-Linux (fat)|
+| ''dir_mode='' | Spécifie les droits d'usage des dossiers (si omis : ''umask'' actuel)  | Formats non-Linux  |
+| ''dmask='' | Spécifie les droits d'usage des dossiers (si omis : ''umask'' actuel) | Formats non-Linux (fat) |
+| ''file_mode='' | Spécifie les droits d'usage des fichiers (si omis : umask actuel)  | Formats non-Linux  |
+| ''fmask='' | Spécifie les droits d'usage des fichiers (si omis : umask actuel) | Formats non-Linux (fat) |
+| ''utf8'' | Convertit l'encodage unicode 16 bits des caractères en  utf8 pour les noms de fichiers | ISO9660 (Images CD/DVD), Ntfs, Fat32 |
+| ''windows_names'' | Empêche  l'usage des caractères non compatibles avec Windows dans les noms de fichiers : \\ / \ : ? * < > " barre verticale.  | fat, ntfs |
+<note tip>Attention l'option **sync** ne concerne pas que le montage. En version 16.04.1, il semble que chaque  écriture sur partition NTFS  devienne synchrone avec le système de fichier et  la copie d'un fichier peut prendre 1000 (mille) fois plus de temps. Le débit chutant à **10 Ko/s**</note> 
+
+Il y a aussi d'autres options possibles, Voir [[http://manpages.ubuntu.com/manpages/xenial/fr/man8/mount.8.html|man mount]] ou [[http://www.dsm.fordham.edu/cgi-bin/man-cgi.pl?topic=systemd.mount&ampsect=5]]
+    
+Voir aussi la page [[tutoriel:comment_acceder_a_ses_partitions_windows|Comment accéder à ses partitions Windows depuis GNU/Linux ?]]
+et [[tutoriel:monterpartagewindows|Monter des partages Windows au démarrage]]
+
+__Problèmes rencontrés lors de l'ajout d'un disque dur secondaire__  :\\
+1) Une erreur peut survenir lorsque l'on tente d'éditer le fichier fstab //(avec gedit par exemple)//.
+Si le message suivant apparaît : <code> (gedit:...): Gtk-WARNING ** </code> il est préférable d'utiliser la commande **gk**sudo (**kde**sudo dans **K**ubuntu) à la place de sudo.
+
+2) Accessibilité\\
+Une fois que la partition du disque supplémentaire est ainsi ajoutée dans le fichier fstab :
+<code> # /sauvegarde  sur /dev/sdb1 ajoutée le...
+UUID=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX  /sauvegarde  ext4  rw,suid,dev,noexec,auto,nouser,async,noatime  0  2</code>
+
+et son point de montage ainsi créé :
+<code>sudo mkdir /sauvegarde</code>
+Comme ce dernier appartient à root, il est momentanément inaccessible. Il faut donc se rendre **propriétaire** du point de montage.\\
+<note warning> C'est bien une question de propriétaire (**chown**), et non de droits (**chmod**).\\
+Rappelons qu'un "chmod 777" est DANGEREUX. </note>
+Si on est __seul__ utilisateur du pc, voici qui suffira :
+<code>sudo chown -R $USER:$USER /sauvegarde</code>
+Mais dans le cadre d'une utilisation __familiale__, avec plusieurs utilisateurs et un groupe appelé, disons "famille", on procédera autrement :
+<code>sudo chown $USER:famille /sauvegarde</code>
+Noter l'absence, cette fois, de l'option "-R".\\
+Et c'est seulement après avoir créé dans "sauvegarde" les sous-répertoires "famille", toto", tata", "titi"... que vous réutiliserez l'option de récursivité "-R" **à l'intérieur de ces sous-répertoires** :\\
+<code>sudo chown -R toto:toto  /sauvegarde/toto
+sudo chown -R tata:tata  /sauvegarde/tata
+sudo chown -R titi:titi  /sauvegarde/titi
+sudo chown -R $USER:famille  /sauvegarde/famille</code>
+\\
+\\
+Enfin, pour avoir le **lien** vers "sauvegarde" dans le volet de gauche de votre gestionnaire de fichiers, il sera nécessaire de vous rendre manuellement dans ce répertoire, puis de lui attribuer un signet ou marque-page (le nom et la méthode varient selon votre gestionnaire de fichiers).
+==== Masquer le montage d'une partition.====
+
+Dans certains [[https://forum.ubuntu-fr.org/viewtopic.php?id=2036205|contextes]], il peut être intéressant de ne pas monter automatiquement une partition et de la masquer aux techniques de montage en mode graphique.    Cela n'exclut pas une possibilité de montage en ligne de commande.
+
+Par exemple, pour masquer la partition contenant le  logiciel de windows, les deux lignes à ajouter pourraient être 
+<code>
+##   Masquer le montage de la partition windows  qui est sur sda5
+/dev/sda5	none	ignore	defaults	0	0
+</code>
+===== Le fichier mtab =====
+
+Le fichier ///**etc/mtab**// contient la liste des montages effectués, que ce soit via fstab ou en ligne de commande avec mount. Il peut être utile de visualiser son contenu pour vérifier qu'un montage est effectif. \\
+Mieux encore, il peut servir de base, après un test avec mount, pour modifier le fichier fstab. Voir le tutoriel à ce sujet : [[tutoriel/monter_un_volume_automatiquement|tutoriel monter un volume automatiquement]]
+
+===== Monter un répertoire avec l'option ''bind'' de la commande ''mount'' =====
+
+Il est parfois utile de monter non pas un volume, mais un dossier dans un autre. Ceci peut ressembler à un lien logique mais c'est beaucoup plus puissant, notamment :
+  * pour un [[:chroot|chroot]] dans un compte FTP
+  * pour monter des fichiers dans un système de fichiers en lecture seule (où on ne peut donc pas créer de liens) (CD,…)
+  * pour monter des fichiers (fichiers compressés squashfs,…)
+Cela est possible avec l'option "bind". \\
+
+Par exemple, dans le cas où ''/mnt/read-only'' est en lecture seule et où on veut remplacer ''/mnt/read-only/mauvais-fichier'' par ''/home/linux/bon-fichier'' :
+<code>
+mount --bind /home/linux/bon-fichier /mnt/read-only/mauvais-fichier
+</code> \\
+
+Si on veut rendre un dossier privé public (comme un lien, en fait )
+<code>mount --bind /home/moi/dossier-à-partager /home/répertoire-accessible-à-tous</code>
+Ici, les droits d'écriture ne changent pas : si vous voulez donner le droit d'écrire aux autres utilisateurs, il faudra modifier aussi les droits de ''/home/moi/dossier-à-partager'' et pas seulement à ''/home/répertoire-accessible-à-tous''.
+
+
+Pour rendre persistants ces montages, nous les spécifions dans ''/etc/fstab'' comme habituellement.
+
+Voici un exemple :
+<file>
+# /etc/fstab: static file system information.
+# <file system>               <mount point>                 <type>  <options>  <dump>  <pass>
+[…]
+# Un montage bind :
+/home/linux/bon-fichier   /mnt/read-only/mauvais-fichier     none       bind      0   0
+</file>
+
+
+===== Problèmes éventuels =====
+==== UUID non valides ====
+Le fichier fstab peut vouloir monter des partitions avec des erreurs dans les identifiants UUID.
+
+Ce script permet de vérifier que tous les UUID sont correctes dans le fstab :
+
+
+<code>
+fstabUUID=$(cat /etc/fstab | cut -d"#" -f1 | grep UUID= | cut -c6- | cut -d" " -f1 | cut -d$'\t' -f1)
+validUUID=$(ls -l /dev/disk/by-uuid | cut -d" " -f10)
+	
+for uuid in $fstabUUID; do
+echo $validUUID | grep $uuid > /dev/null
+	
+if [[ $? == 0 ]];then
+echo $uuid OK
+else
+echo $uuid is in fstab but not in the system /dev/disk/by-uuid
+fi
+done
+</code>
+
+==== Dossier de montage inexistant====
+Il arrive que le répertoire de montage n'existe pas. Dans ce cas, la commande ''mount'' renvoie une erreur explicite. Il suffit de le recréer.\\
+Toujours dans notre exemple : (l'option ''-p'' permet de créer récursivement les dossiers parents s'il n'existent pas)
+<code>
+sudo mkdir -p /media/stock
+</code>
+==== Fichiers occupés ====
+Un système de fichier ne peut être démonté tant que certains de ses fichiers sont ouverts par des processus. \\
+Le cas le plus simple est que le répertoire de travail actuel est dans le volume que vous voulez démonter. Sinon, la commande ''lsof'' permet de lister tous les fichiers ouverts. En arrêtant les processus qui utilisent le volume, le démontage devient possible. \\
+Par exemple :
+<code>sudo lsof | grep /media/stock </code>
+(grep permet de n'afficher que les lignes contenant "''/media/stock''")
+
+==== Les logiciels utilisant un volume sont perdus ====
+Imaginons que vous ayez modifié le dossier de montage de ''/media/moi/stock'' en ''/home/moi/stockage''. \\
+
+Il est possible que des logiciels utilisent des fichiers dans ''/media/moi/stock'' ; Pour éviter des problèmes de fonctionnement, vous pouvez (si vous pensez que c'est nécessaire) créer un lien symbolique de l'ancien point de montage vers le nouveau :
+  * Assurez-vous que rien n'est monté dans ''/media/moi/stock'' : <code>ls /media/moi/stock</code>
+  * Supprimez l'ancien point de montage : <code>sudo rmdir /media/moi/stock</code>
+  * Créez un lien : <code>ln -s /home/moi/stockage /media/moi/stock</code>
+
+Voilà !
+===== Autres pages sur le sujet =====
+  * [[:fuse|FUSE]] : Montage simplifié des systèmes de fichiers.
+  * [[:sshfs|SSH Filesystem]] : Montage de système de fichiers à travers le réseau.
+  * [[:fusauto|FUSAUTO]] : faciliter l'usage de FUSE
+  * [[:autofs|AutoFS]] : Automatisation du montage des systèmes de fichiers
+  * [[:tutoriel:monterpartagewindows|Monter un Partage Windows]]
+
+
+
+
+----
+
+//Contributeurs : [[:utilisateurs:helly|helly]]// (Auteur principal) //[[utilisateurs:felixp|FélixP]]// (Retouche Octobre2013)

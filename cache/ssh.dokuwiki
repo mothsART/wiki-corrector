@@ -1,0 +1,531 @@
+
+{{tag>administration sécurité serveur}}
+
+====== SSH ======
+
+<note>Cette page présente les usages les plus courants de SSH et sa configuration de base.
+
+Voir sur [[:ssh avancé|SSH Avancé]] pour les autres usages.</note>
+
+{{ :logo_openssh.png|Puffy la mascotte de OpenSSH}}
+
+[[wpfr>Secure_Shell|SSH]] est un protocole permettant d'établir une communication chiffrée, donc sécurisée (on parle parfois de //tunnel//), sur un réseau informatique (intranet ou Internet) entre une machine locale (le //client//) et une machine distante (le //serveur//).
+
+La sécurité du chiffrement peut être assurée par différentes méthodes, entre autre par [[#authentification_par_mot_de_passe|mot de passe]] ou par un [[#authentification_par_un_systeme_de_cles_publiqueprivee|système de clés publique / privée]] (mieux sécurisé, on parle alors de [[wpfr>cryptographie asymétrique]]).
+
+SSH remplace de manière sécurisée :
+  * Telnet : vous pouvez exécuter des commandes depuis un réseau local ou Internet via SSH
+  * FTP : si vous ne souhaitez qu'ajouter ou modifier des fichiers sur un serveur, SFTP est bien plus adapté que FTP
+  * Et d'autres, via le « tunneling » : on peut accéder à un service réseau en le faisant circuler dans un tunnel SSH pour profiter de toutes les protections qu'il apporte. Vous pouvez donc sécuriser n'importe quel service grâce à SSH, comme VNC par exemple.
+
+<note important>Beaucoup d'utilisateurs de Telnet, Rlogin, FTP, ou autres programmes de communication ne se rendent pas compte que leurs données et notamment les mots de passe sont transmis en clair sur le réseau, ce qui constitue une faille de sécurité évidente (voir //[[wpfr>Analyseur_de_paquets|sniffing]]//).</note>
+
+Les usages de SSH sont entre autre :
+  * Accéder à distance à la console en ligne commande (shell), ce qui permet d'effectuer la totalité des opérations courantes et/ou d'administration sur la machine distante.
+  * Déporter l'affichage graphique de la machine distante.
+  * Transferts de fichiers en ligne de commande.
+  * Montage ponctuel de répertoires distants, soit en ligne de commande, soit via [[:Nautilus]] sous [[:GNOME]] par exemple.
+  * Montage automatique de répertoires distants.
+  * Déporter de nombreux autres services ou protocoles (voir [[:ssh avancé|SSH Avancé]]).
+
+**OpenSSH** est la solution la plus utilisée pour mettre en place une communication SSH via un ensemble d'outils libres dont certains sont installés par défaut sur Ubuntu.\\ 
+Comme son nom l'indique, **OpenSSH** est développé dans le cadre du projet [[http://www.openbsd.org|OpenBSD]].\\ 
+C'est cette solution que nous traiterons sur cette page.
+
+===== Installation =====
+Si vous voulez accéder à un ordinateur (votre ordinateur personnel, votre serveur local, un serveur distant dont vous effectuez l'administration, etc.).
+Vous devez installer **[[apt>openssh-server]]** sur la machine à joindre en SSH,  cette machine sera le "serveur" SSH. 
+
+La partie cliente est fournie par le paquet [[apt>openssh-client]], qui est installé par défaut sous Ubuntu.
+
+Vous pouvez vérifier ce qui est déjà installé en tapant ces commandes : 
+<code>ssh -V</code>
+qui retourne une ligne du type :
+<code>OpenSSH_6.6p1 Ubuntu-2ubuntu1, OpenSSL 1.0.1f 6 Jan 2014</code>
+et aussi la commande suivante pour connaître la version de la bibliothèque ssl:
+<code>dpkg -l libssl*</code>
+==== Installation du serveur SSH ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>openssh-server|openssh-server]]** sur votre poste.
+
+=== Utilisation du serveur SSH ===
+Le serveur SSH fonctionne en tant que [[:services|service]] lancé automatiquement au démarrage de la machine.\\
+Il est possible notamment de :
+  * L'[[#activer]] ou l'[[#arrêter]] : par exemple si vous souhaitez désactiver momentanément le serveur SSH
+  * Le [[#relancer]] : par exemple si vous faites une modification de configuration
+
+Vous trouverez en fin de cette page plus d'information sur la [[#Configuration du serveur SSH]], peu sécurisée par défaut.
+
+== Activer ==
+Saisissez dans un [[:terminal]] la [[:commande_shell|commande]] suivante :
+<code>sudo systemctl start ssh</code>
+
+== Arrêter ==
+<code>sudo systemctl stop ssh</code>
+
+== Relancer ==
+<code>sudo systemctl restart ssh</code>
+
+==== Installation du client SSH ====
+
+Sur le poste client **openssh-client** est déjà installé par défaut. Dans le cas contraire [[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>openssh-client]]**.\\
+
+== Clients pour machines qui ne sont pas sous Linux ==
+<note tips>
+Sous windows10 vous pouvez installer une Ubuntu via [[wpfr>Windows_Subsystem_for_Linux|WSL]], vous aurez alors accès à un vrai client SSH :)
+</note>
+
+Si vous devez prendre le contrôle depuis un poste équipé de Windows vous pouvez installer [[http://www.chiark.greenend.org.uk/~sgtatham/putty/|PuTTY]] qui est disponible sous licence MIT (une licence libre comparable à la licence BSD), openssh est installable dans le shell Windows depuis la version 1809 https://docs.microsoft.com/fr-fr/windows-server/administration/openssh/openssh_install_firstuse.
+
+Si vous voulez établir une connexion SSH depuis un smartphone Blackberry(r), vous pouvez installer [[http://bbssh.org/|bbssh]], qui est sous licence libre GPLv2, les sources sont fournies.
+
+Il existe aussi des clients SSH pour Android (connectbot), J2ME (téléphones portables Java), iPhone, et quasiment tous les systèmes d'exploitation trouvables.
+
+<note tip>Vérifiez bien que [[:UFW]], le gestionnaire de firewall standard sous Ubuntu, n'est pas actif sur le __serveur SSH__ **AVANT** l'installation de SSH. Il ne devrait pas fonctionner si vous ne l'avez pas activé.\\
+Si UFW est actif,  vous avez intérêt à vérifier s'il laisse passer le port standard du protocole SSH, le 22. Si ce n'est pas le cas, vous ne pourrez pas utiliser SSH sur cette machine.\\
+Voyez la page [[:UFW]] pour connaître le fonctionnement du pare-feu, ou, utilisez [[:gufw|Gufw]] l'interface graphique du pare-feu UFW.
+</note>
+
+===== Utilisations de SSH=====
+
+==== Accès à distance à la console en ligne de commande (shell ssh) ====
+
+Pour ouvrir une session distant ayant un serveur SSH, vous devez écrire quelque chose comme ceci :
+<code>ssh <nom_utilisateur>@<ipaddress> -p <num_port></code>
+__Exemple__ :
+<code>ssh phyrex@192.168.23.42 -p 12345</code>
+L'option **-p <num_port>** qui précise le port utilisé par le serveur est facultative. Si rien n'est précisé, c'est le port 22 qui sera utilisé par défaut (protocole TCP).
+
+Pour se connecter avec SSH en IPV6 depuis un terminal, écrire sans crochet :
+<code>ssh -6 <nom_utilisateur>@<adresse ipv6> </code>
+__Exemple__ :
+par exemple pour un lien Internet :
+<code>ssh -6 alfred@2a01:e35:2431::2e57</code>
+
+Attention pour pouvoir vous connecter en IPV6 il faut que le serveur écoute les adresses IPV6. Pour cela il faut ajouter le code suivant dans le fichier **/etc/ssh/sshd_config** du serveur :
+<code>ListenAddress ::</code>
+
+<note tip>
+Vous pouvez aussi appeler un ordinateur par son nom :
+<code>ssh utilisateur@nom_machine</code>
+à partir du moment où celui-ci est résolu par votre machine.
+
+Cela peut se faire sur le réseau local par le fichier **/etc/hosts**  (ou bien, pour passer par une interface graphique, en tapant dans un terminal  <code>network-admin</code> puis en allant dans l'onglet "Hôtes", continuer en déverrouillant les droits administration en cliquant sur le cadenas, et enfin, en cliquant sur le bouton "ajouter"), éventuellement distribué d'un serveur vers les clients locaux au travers de [[wpfr>Network_Information_Service|NIS]], ou bien par un service de [[wpfr>Domain_Name_System|DNS]] si vous accédez à une machine distante (serveur loué) pour lequel vous avez enregistré un nom de domaine.
+</note>
+<note tip>Si vous voulez vous connecter à plusieurs machines situées derrière un routeur vous pouvez configurer celui-ci afin qu'il redirige chaque port TCP entrant vers une machine donnée.\\ __Exemple__ :\\ port externe 22001 redirigé vers 192.168.0.1:22\\
+port externe 22002 redirigé vers 192.168.0.2:22\\ Ensuite utilisez l'option -p 22002 pour connecter par exemple la machine ayant pour adresse 192.168.0.2 sur le réseau local</note>
+
+==== Outil graphique pour les connexions SSH ====
+
+[[:remmina|Remmina]] est actuellement l'outil le plus complet pour la gestion des bureaux à distance.
+
+==== Affichage graphique déporté (Tunneling serveurX par ssh) - Accéder aux applications graphiques ==== 
+
+La commande ssh offre une fonctionnalité intéressante: la possibilité d'exécuter des applications X-Window à distance, ce qui est bien pratique pour travailler à distance, partager une machine ou simplement effectuer des tâches d'administration.
+
+Il suffit de passer l'option -X à ssh :
+<code>ssh -X nomtilisateur@Ipserver</code>
+
+<note>L'option **-X** permet le déport d'applications X-Window (affichage graphique à distance). Cette possibilité est offerte grâce aux fonctions de tunneling réseau présentes dans SSH. N'oubliez pas qu'Ubuntu (Unix en général) est un système d'exploitation client/serveur, ce qui s'applique aussi à l'affichage géré par X-Window.</note>
+
+Et on peut lancer :
+<code>nomUtilisateur@Ipserver$ xeyes</code>
+
+là, l’œil de Moscou vous regarde depuis votre écran local ! \\
+N.B. : pour que cet exemple fonctionne il faut que le paquet //x11-apps// qui fournit //xeyes// soit installé sur le serveur.
+
+<note important>Pour que vous puissiez afficher des applications X11 via SSH il faut que votre serveur ait la fonction "X11Forwarding" activée et que xauth y soit installé ! Allez [[#configuration_du_serveur_ssh|À la fin de cette page]] pour savoir comment configurer votre serveur SSH.</note>
+
+
+==== Transfert - copie de fichiers ====
+
+Pour copier un fichier à partir d'un ordinateur sur un autre avec SSH, vous devrez utiliser la commande **scp** ou **rcp**. Cela ressemblera à ceci :
+<code>scp <fichier> <username>@<ipaddressDistant>:<DestinationDirectory></code>
+et en IPv6
+<code>scp -6 <élément> <nom>@[addresse ipv6]:<destination></code>
+
+==Exemples ==
+//__Pour un fichier:__//
+
+<code>scp fichier.txt hornbeck@192.168.1.103:/home/hornbeck</code>
+et en IPv6
+<code>scp -6 fichier.txt albertine@[2a01:e35:2431::2a34]:/home/albertine</code>
+
+//__Pour un répertoire:__//
+
+<code>scp -r répertoire hornbeck@192.168.1.103:/home/hornbeck/</code>
+et en IPv6
+<code>scp -6r répertoire/ albertine@[2a01:e35:2431::2a34]:/home/albertine</code>
+
+Vous pouvez aussi bien copier des fichiers à partir des ordinateurs à distance sur votre disque local :
+<code>scp hornbeck@192.168.1.103:/home/hornbeck/urls.txt .</code>
+Ici, le point **.** à la fin de commande indique de copier le fichier dans le répertoire courant.
+
+<note tip>
+Pour les noms avec des espaces :
+de distant vers local
+<code>
+$ scp utilisateur@12.345.678.90:"le\ fichier" .
+$ scp utilisateur@12.345.678.90:'"le fichier"' .  
+# Notez les simples ' ET doubles " guillemets ' "
+</code>
+<code>
+$ fichier="le fichier" #ou
+$ fichier=le\ fichier
+$ scp utilisateur@12.345.678.90:"'$fichier'" .
+
+$ fichier="le\ fichier"
+$ scp utilisateur@12.345.678.90:"$fichier" .
+</code>
+</note>
+<note>
+Pour les noms avec des espaces :
+
+de local vers distant c'est différent
+<code>
+$ scp  le\ fichier utilisateur@12.345.678.90:
+le fichier                          100%    0     0.0KB/s   00:00    
+
+$ scp  "le fichier" utilisateur@12.345.678.90:
+le fichier                          100%    0     0.0KB/s   00:00    
+</code>
+<code>
+$ fichier="le fichier"  # ou
+$ fichier=le\ fichier
+$ scp  "$fichier" utilisateur@12.345.678.90:
+le fichier                          100%    0     0.0KB/s   00:00    
+</code>
+cf : https://forum.ubuntu-fr.org/viewtopic.php?pid=21768296#p21768296
+</note>
+
+Vous pouvez aussi le renommer en le copiant (« mon.txt ») sur le disque local (toujours dans le répertoire courant):
+<code>scp hornbeck@192.168.1.103:/home/hornbeck/urls.txt ./mon.txt</code>
+
+Vous pouvez très bien copier un fichier d'un ordinateur vers un autre tout en étant sur un troisième ordinateur :
+<code>scp nom@ordi1:chemin/fichier nom@ordi2:chemin/fichier</code>
+
+Dans le cas où le port SSH du serveur ne serait pas le port par défaut (22), il faut indiquer le port distant à utiliser :
+<code>scp -P port fichier.txt hornbeck@192.168.1.103:/home/hornbeck</code>
+
+<note important>Lorsque l'on copie des fichiers ou des répertoires sur d'autres machines, ne pas oublier que les fichiers ou répertoires deviendront propriété du compte avec lequel on se connecte à distance. Pour préserver les propriétaire et groupe de chaque fichier ou répertoire, il sera donc utile de recourir à un logiciel tel que [[:tar|tar]] pour enregistrer l'intégralité des informations relatives à ce que l'on transfère.</note>
+
+==== Monter un répertoire distant, navigation via SFTP (Secure File Transfer Protocol) ====
+
+[[wpfr>SSH_file_transfer_protocol|SFTP]] est une autre méthode pour accéder à ses fichiers via SSH. Au lieu de travailler fichier par fichier, il est possible grâce à cette méthode de naviguer dans ses fichiers depuis un client SFTP. Ce type d'accès est possible grâce à des outils comme [[#Nautilus]], [[#Konqueror]], [[#Dolphin]], [[#WinSCP]], [[#Pcmanfm]]  ou [[#FileZilla]], dont la mise en œuvre est décrite dans les sections suivantes.
+
+=== Nautilus ===
+
+En utilisant le [[:gestionnaire de fichiers]] **[[:Nautilus]]**, vous pouvez également accéder aux emplacements à distance par l'intermédiaire de SSH pour passer en revue, modifier et copier des fichiers.\\
+Ouvrez Nautilus, puis dans la fenêtre emplacement (Ctrl + L), entrez l'URL suivante en remplaçant ''nom_utilisateur'', ''hostname'' et ''port'' en conséquence :
+<code>ssh://nom_utilisateur@hostname:port</code>
+
+La copie de fichier se fait avec le glisser-déposer dans la fenêtre de Nautilus comme sur votre système de fichiers local.
+
+Pour accéder directement à un répertoire donné (pratique avec l'utilisation des signets), il suffit de rajouter le chemin en fin d'URL :
+<code>ssh://username@hostname:port/le/chemin/voulu/</code>
+
+Il est également possible d'y avoir accès dans Nautilus par  le menu //Fichier -> Se connecter à un serveur...// et choisir le ''Type de service'' « ssh ».
+
+=== Konqueror ===
+
+Le principe est similaire à celui utilisé par [[#Nautilus]], à l'exception du nom de protocole : ''fish''.\\
+Dans la barre d'adresse, tapez :
+<code>fish://<nom_utilisateur>@<hostname></code>
+Une boîte de dialogue apparaîtra et demandera le mot de passe.
+
+**Attention:** Si vous ne mentionnez pas le nom d'utilisateur, c'est l'utilisateur courant sur la machine locale qui aura la main.
+
+=== Dolphin  ===
+
+Le nouveau navigateur de [[:KDE]] permet de faire ça très simplement.\\
+Cliquez sur le raccourci ''Réseau'', puis ''Ajoutez un dossier réseau''. Remplissez ensuite les champs demandés. Pensez à mettre la racine (dossier **/**) comme dossier d'accès pour pouvoir rentrer sur l'intégralité de l'ordinateur distant.
+
+Il est également possible de rentrer l'adresse et d'enregistrer le lien dans ses emplacements favoris :
+<code>sftp://nom_utilisateur@hostname:port</code>
+
+=== WinSCP ===
+
+Parce qu'il est parfois nécessaire de faire un transfert de fichier à partir d'une machine sous MS Windows, il existe un logiciel libre nommé ''WinSCP'' qui permet de faire du SFTP avec une interface semblable à celle des clients FTP.
+
+[[http://winscp.net/eng/docs/lang:fr|Site officiel du logiciel WinSCP]]
+
+=== FileZilla ===
+
+Sans avoir à chercher trop loin, [[:filezilla|FileZilla]], le client FTP compatible Linux, Windows et Mac OS X, permet aussi la connexion à un serveur SFTP (SSH File Transfer Protocol) depuis la version 3.
+
+=== Mozilla Firefox ===
+<del>L'extension FireFTP de Mozilla Firefox permet d'établir une connexion SFTP : Lors de la création d'un profil de connexion, sélectionner dans l'onglet Connexion le Type de sécurité SFTP et indiquer les paramètres nécessaires.</del>
+
+=== PCManFM ===
+
+Dans la barre d'adresse de [[:PCManFM|PCManFM]], rentrez ceci :
+<code>sftp://nom_utilisateur_distant@IPduSERVEUR/dossier/que/je/veux</code>
+==== Monter un répertoire distant de manière automatique (SFTP grâce à SSHFS) ====
+
+**SSHFS** est un outil permettant d'utiliser le protocole **SSH** comme un système de fichier et ainsi monter un répertoire distant à travers le protocole SSH pour y accéder comme n'importe quel répertoire local à la manière d'un partage [[:nfs|NFS]]; mais sécurisé ! \\
+Voir la page [[:sshfs|SSH Filesystem]].
+
+===== Authentification  =====
+
+==== Authentification par mot de passe ====
+
+L'authentification par mot de passe (transmis chiffré) est le mode d'identification par défaut.
+
+Suite à l'installation du paquet **openssh-server** il peut parfois être nécessaire de modifier le fichier de configuration **/etc/ssh/sshd_config** notamment si vous rencontrez le problème suivant :
+<code>moi@maison:~$ ssh user@domain.com
+  Permission denied (publickey).
+</code>
+Dans ce cas, il faut très simplement [[:tutoriel:comment_editer_un_fichier|modifier avec les droits d'administration]] le fichier **/etc/ssh/sshd_config**  sur le serveur SSH de la manière suivante :
+<file>
+# Change to yes to enable tunnelled clear text passwords
+PasswordAuthentication yes
+</file>
+
+Puis en cas de modifications, [[#relancer]] le service.
+
+<note warning>Si vous ouvrez votre serveur SSH sur Internet, par exemple pour y accéder depuis l'ordinateur d'un ami(e) ou lui permettre d'accéder à certains de vos fichiers, n'oubliez JAMAIS qu'Internet est parcouru par des robots qui scannent et testent en permanence tous les serveurs disponibles (SSH et autres) et qu'ils vont faire des tentatives pour trouver vos mots de passe de compte (on parle d'[[wpfr>attaque par force brute]]). L'usage des clés est donc très fortement recommandé.
+
+Si vous ne pouvez vraiment pas faire autrement, utilisez des mots de passe longs et complexes ainsi qu'un système de protection tel que [[:fail2ban]] qui permet de bannir des adresses IP au bout d'un certain nombre de tentatives erronées.\\
+Voir aussi [[:denyhosts]] notamment en cas de:
+<code>ssh_exchange_identification: read: Connection reset by peer</code></note>
+
+==== Authentification par un système de clés publique/privée ====
+
+=== Description ===
+
+Autrefois tout le monde employait l'authentification typique par le principe //identifiant - mot de passe//. Cependant si quelqu'un connaît votre mot de passe ou le découvre au moyen d'une attaque la sécurité est compromise. De plus, utiliser un mot de passe différent pour chaque serveur et l'entrer à chaque connexion peut s'avérer contraignant.
+
+Pour être débarrassé des ces problèmes, SSH propose un système d'authentification par clé publique/privée au lieu des mots de passe « simples ».
+
+Ceci peut permettre par exemple :
+  * à un administrateur de se connecter à des centaines de machines sans devoir connaître des centaines de mots de passe différents ;
+  * de ne pas avoir un mot de passe à saisir toutes les 2 minutes (en utilisant //ssh-agent//).
+
+Ces clés restent des chaînes de caractère (en français courant : du texte), mais sont beaucoup plus longues et aléatoires que de simples mots de passe.
+
+La clé privée est en principe unique : chaque utilisateur possède une clé privée qu'il peut copier sur les terminaux auxquels il accède physiquement et depuis lesquels il a besoin d'un accès SSH (via le client SSH). Cette clé se trouve généralement dans le fichier ''~/.ssh/id_rsa''. C'est un document sensible très personnel, il faut y appliquer des droits très restrictifs : ''r-x --- ---'' (500) pour le répertoire .ssh et ''r-- --- ---'' (400) pour le fichier id_rsa.\\ 
+Pour un maximum de sécurité il est possible de protéger cette clé privée au moyen d'un mot de passe (qu'il faudra dans ce cas entrer lors de chaque connexion).
+
+De son côté la clé publique est envoyée à tous les serveurs auxquels on veut accéder à distance afin qu'ils nous identifient avec certitude (ils seront au moins sûrs qu'on possède bien la clé privée associée). Côté serveur cette clé publique sera stockée dans le fichier ''~/.ssh/authorized_keys'' (avec éventuellement les clés publique d'autres utilisateurs, une clé publique par ligne).
+Localement on peut stocker une clé publique par ex. dans un fichier ''id_rsa.pub'' qui peut aussi se trouver dans le répertoire ''~/.ssh'', ou ailleurs (ce n'est pas un document sensible).
+
+On peut générer une nouvelle clé publique depuis une clé privée mais pas l'inverse.
+
+=== Mise en place des clés ===
+
+À moins que vous n'ayez déjà un couple de clés, vous devez d'abord en créer.\\
+Exemple pour une clé utilisant le protocole de chiffrement RSA, vous saisirez dans le [[:terminal]] du client :
+<code>ssh-keygen -t rsa  -b 4096 -C "email@example.com"</code>
+
+<note tip>les options //-b 4096// et //-C…// sont facultatives mais permettent respectivement d'augmenter la force de la clé et d'ajouter un commentaire, ici l'email, pratique si on veut se créer plusieurs clés, par exemple perso/pro</note>
+
+Il vous sera alors demandé où sauver la clé privée (acceptez juste l'endroit par défaut : **~/.ssh**, et ne changez pas le nom du fichier généré) puis de choisir une //passphrase// (phrase de reconnaissance).
+<note warning>Bien que non obligatoire, l'utilisation d'une //passphrase// est recommandée pour protéger votre clé privée. En effet toute personne qui obtiendrait l'accès à votre clé privée (non protégée) aurait alors vos permissions sur d'autres ordinateurs. Veuillez prendre un instant et choisissez une très bonne //passphrase// c'est à dire longue et complexe.</note>
+
+Votre clef publique a été créée avec la nouvelle clef privée. Elles sont habituellement localisées dans le [[:fichier_cache|dossier caché]] **~/.ssh**:
+
+**~/.ssh/id_rsa.pub** pour la clé publique et **~/.ssh/id_rsa** pour la clé privée.
+
+
+Pour que votre ssh-agent reconnaisse cette paire de clef, il faut utiliser la commande ssh-add :
+<code>ssh-add
+#ou plus directement 
+ssh-add /chemin-complet/vers-la-cle/nom-cle</code>
+Vous pouvez également vérifier la liste des paires de clefs existantes avec l'option -l (-list) :
+<code>ssh-add -l</code>
+<note tip>Si cette commande ressort : <code>The agent has no identities.</code> alors aucune clef n'est actuellement prise en compte. Il faut recommencer les étapes ci-dessus.
+
+Si vous avez : <code>Could not open a connection to your authentication agent.</code> alors faire <code>eval `ssh-agent -s`</code> puis de nouveau <code>ssh-add</code>
+</note>
+<note tip>pistes pour débugger : 
+  * forcer l'utilisation uniquement de clefs dans la commande ssh : ssh **-o PubkeyAuthentication=yes -o PreferredAuthentications=publickey**
+  * utiliser les options **-v** ou **-vv** ou **-vvv** dans le commande ssh 
+</note>
+Il faut maintenant envoyer au serveur votre clé publique pour qu'il puisse vous chiffrer des messages.
+
+<note>**En résumé** (car les paragraphes ci-dessous utilisant des scripts peuvent sembler confus à certains)
+  * Coté client : Il faut que le client ait mis sa clé privée en $HOME/.ssh/ (côté client).
+  * Coté client : la clé doit etre "enregistrer/déclarée" à l'agent ssh (ssh-add)
+  * Coté client : Le répertoire $HOME/.ssh doit appartenir (chown) au propriétaire de $HOME et être en protection 700 (interdit aux autres).
+  * Coté serveur : La clé publique du client doit se trouver dans le fichier $HOME/.ssh/authorized_keys du serveur.
+  * Coté serveur : il vaut mieux refuser l'accès par mot de passe ("PasswordAuthentication no" dans /etc/ssh/sshd_config du serveur) 
+</note>
+
+L'utilisateur distant doit avoir cette clé (c'est une ligne de caractères en code ASCII) dans son fichier de clés d'autorisation situé à **~/.ssh/authorized_keys** sur le système distant. Employez la commande //ssh-copy-id//.
+
+//ssh-copy-id// est un script qui utilise ssh pour se connecter à une machine à distance en utilisant le mot de passe de l'utilisateur. L'[[#authentification par mot de passe]] doit donc être autorisée dans le fichier de configuration du serveur ssh (par défaut sur Ubuntu). Il change également les permissions des répertoires **~/.ssh** et **~/.ssh/authorized_keys** de l'hôte distant pour enlever l'accès en écriture du groupe (qui vous empêcherait de vous connecter si le serveur distant ssh a "StrictModes yes" dans son fichier de configuration, ce qui est le cas par défaut sur Ubuntu).
+<code>ssh-copy-id -i ~/.ssh/id_rsa.pub <username>@<ipaddress></code>
+ou si le port est différent du port standard 22 ([[http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=99785|notez les guillemets]]):
+<code>ssh-copy-id -i ~/.ssh/id_rsa.pub -p <num_port> "<username>@<ipaddress>"</code>
+
+Vous devrez alors donner le mot de passe //utilisateur// de cet ordinateur. Après l'ajout votre clé publique, vous devenez un hôte de confiance.
+
+Si l'[[#authentification par mot de passe est désactivée]]((donc PasswordAuthentication **no** dans **/etc/ssh/sshd_config** sur le serveur)) , alors vous aurez besoin de copier-coller votre clé suivant un autre moyen.\\
+Voici une ligne à copier pour ajouter sa clé publique sur le serveur distant :
+<code>ssh login@serveur "echo $(cat ~/.ssh/id_rsa.pub) >> .ssh/authorized_keys"</code>
+Lancez :
+<code>ssh <username>@<ipaddress> -p <num_port></code>
+Dorénavant n'utilisez plus votre mot de passe mais votre **passphrase** pour vous connecter. Celle-ci sert à déchiffrer votre //clé privée// de votre système local.
+
+Si ça ne marche pas, c'est-à-dire que le mot de passe vous est quand même demandé, essayez sur votre serveur la commande :
+<code>tail -f /var/log/auth.log</code>
+tandis que vous essayez de vous connecter. Si on vous parle de "//vulnkey//", c'est que par malchance ''ssh-keygen'' a généré une clé vulnérable. Recommencez alors la procédure depuis [[#Authentification par un système de clés publique/privée|le début]]((donc à partir de ''ssh-keygen''))
+
+Pour résumer, deux choses sont nécessaires pour obtenir un accès réellement sécurisant (et sécurisé ;-)) par authentification à clé publique par rapport à l'authentification par mot de passe classique :
+  - **Votre clé privée**, chiffrée ;
+  - **Votre passphrase**, utilisée pour déchiffrer votre clé privée.
+
+Si vous choisissez de ne pas avoir de mot de passe (ce qui est possible, voyez la prochaine section), vous aurez une sécurité moindre, ainsi que si vous utilisez une authentification uniquement par mot de passe, comparé à celle que vous pouvez avoir en combinant les deux.
+
+=== Éléments importants en lien avec l'usage des clés ===
+
+== Authentification par mot de passe et / ou par clé ==
+Vous pouvez avoir avec SSH les deux modes d'authentifications actifs en même temps, par mot de passe et par clés.
+
+Vous pouvez vouloir neutraliser l'authentification par mot de passe pour des raisons de sécurité, pour cela il faut modifier le fichier de configuration **/etc/ssh/sshd_config** de la manière suivante :
+
+- A la ligne ''PasswordAuthentication'' mettre ''no''
+
+- A la ligne ''UsePAM'' mettre "no"
+<note>
+Avec ChallengeResponseAuthentication et PasswordAuthentication à **no** 
+on peut continuer à utiliser PAM en bloquant l'usage des mots de passe pour ssh.
+</note>
+N'oubliez pas de [[#relancer]] le service ssh sur votre serveur après avoir changé la configuration.
+
+== Vulnérabilité des anciennes clés ==
+
+Au mois de mai 2008 a été découvert une faiblesse dans la génération des clés par OpenSSL des packages Debian et dérivés tels qu'Ubuntu. Pour résumer, si vous avez généré vos clés entre 2006 et mai 2008, il faut en créer de nouvelles après avoir mis à jour le système. Pensez alors à bien rediffuser vos clés.
+
+== Mot de passe toujours demandés avec authentification par clés ==
+
+Si, après avoir suivi ce tutoriel, un mot de passe est toujours demandé, il se peut que ce soit dû à un problème de [[:droits]] sur votre //Dossier Personnel//.\\
+Sur la machine distante [[:tutoriel:comment_modifier_un_fichier|regardez le fichier]] **/var/log/auth.log** pour y trouver des indications et notamment si la ligne suivante apparaît :
+<file>Authentication refused: bad ownership or modes for directory /home/votre_login</file>
+Alors faites :
+<code>chmod 755 $HOME</code>
+Et tout devrait rentrer dans l'ordre.
+
+Si ce n'est toujours pas le cas, c'est que le serveur doit être configuré en mode de sécurité strict (c'est le cas par défaut sur Ubuntu).\\
+Effectuez les opérations suivantes : 
+
+Sur le serveur : \\
+  * dans le fichier **/etc/ssh/sshd_config**, la ligne ''StrictModes yes'' indique que le serveur va être très pointilleux sur les droits du compte sur lequel on se connecte en ssh.\\ 
+  * saisissez ensuite les commandes suivantes
+<code>chmod go-w ~/
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/authorized_keys</code>
+
+  * Sur le client, dans **/etc/ssh/ssh_config**, rajoutez la ligne ''PreferredAuthentications publickey''.\\
+
+== Gestion des clés ==
+
+Parfois les clés de vos correspondants peuvent changer (réinstallation de machine par exemple), vous aurez alors droit à ce charmant message :
+<code>
+  @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+  @    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
+  @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+  IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
+  Someone could be eavesdropping on you right now (man-in-the-middle attack)!
+  It is also possible that the RSA host key has just been changed.
+  The fingerprint for the RSA key sent by the remote host is
+  xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx.
+  Please contact your system administrator.
+  Add correct host key in /home/<vous>/.ssh/known_hosts to get rid of this message.
+  Offending key in /home/<vous>/.ssh/known_hosts:4
+  RSA host key for <ip> has changed and you have requested strict checking.
+  Host key verification failed.
+</code>
+  
+Soit l'information est exacte et une machine a été corrompue, ou bien il s'agit juste d'un changement de clé (réinstallation par exemple) et dans ce cas il faut effacer les entrées dans le fichier **.ssh/known_hosts** de votre compte.\\
+Avant la chose était relativement simple, la clé était directement associée au nom ou à l'IP de la machine cible. Ce n'est plus le cas à présent où elle est associée par UUID rendant quasiment impossible l'identification visuelle de la ligne concernée. Mais ssh étant sympathique, il vous indique quelle est la ligne du fichier concernée.\\
+Pour reprendre l'exemple précédent on peut lire la ligne Offending key in /home/<vous>/.ssh/known_hosts:4 → la clé en erreur est donc située ligne 4 du fichier **.ssh/known_hosts**
+
+Il existe cependant une méthode plus subtile en employant la commande suivante :
+<code>ssh-keygen -R <ip></code>
+  
+Vous pourrez ainsi effacer seulement l'adresse IP concernée et relancer un ssh.
+
+== Connexion à un répertoire /home chiffré ==
+
+Si vous souhaitez vous connecter par SSH avec une clef publique sur un compte dont le home est chiffré, il est important de faire attention à ce que sur le serveur le fichier/dossier **.ssh/authorized_keys** soit à la fois dans le home chiffré et déchiffré. En effet si le fichier authorized_keys est dans le home sous forme chiffré (.private), open_ssh ne pourra pas lire la clef publique attendue. Il faut donc créer un dossier .ssh et y mettre le fichier authorized_keys quand le home est démonté donc chiffré. Cependant, si vous ne le laissez pas aussi dans le home déchiffré et donc monté, la connexion SSH se fera avec la clef publique mais le home ne sera pas déchiffré automatiquement.
+
+La meilleure solution est de créer des liens virtuels vers un dossier qui n'est pas soumis au chiffrement/déchiffrement comme expliqué [[https://rohieb.wordpress.com/2010/10/09/84/|ici]] 
+
+== Authentification SSH avec plusieurs clés privées ==
+
+En principe chaque utilisateur possède une clé privée unique qui lui est propre, et envoie sa clé publique à autant de serveurs qu'il le souhaite.\\ 
+Cependant il est techniquement faisable de posséder plusieurs clés privées (mais c'est moins pratique et ça n'est pas plus sécurisé).
+
+Lorsqu'on se connecte à plusieurs serveurs avec des clés privées différentes, il faut pouvoir indiquer à SSH quelle clé on veut utiliser pour la connexion, sinon, on rencontre par exemple l'erreur:
+<code bash>git@gitlab.com: Permission denied (publickey).</code>
+
+Pour indiquer au client SSH la clé qu'il doit utiliser pour chacun des serveurs on peut créer un fichier **~/.ssh/config** (ou **/etc/ssh/ssh_config** pour tous les utilisateurs de la machine) dans lequel il faut spécifier pour chacun des serveurs la clé qui doit être utilisée :
+<file>
+Host adresse-serveur-sans-passphrase.com
+User votreutilisateur
+IdentityFile ~/.ssh/key-sans-passphrase
+  
+Host adresse-serveur-avec-passphrase.com
+User votreutilisateur
+IdentityFile ~/.ssh/key-avec-passphrase
+</file>
+
+Pour plus d'options, comme l'utilisateur ou le port à utiliser par défaut, voir le [[:man|manuel]] de **ssh_config**, cf. aussi [[https://gitlab.com/help/ssh/README#working-with-non-default-ssh-key-pair-paths|l'aide de gitlab (en)]]
+
+<note tip>L'astuce pour différencier les clefs avec passphrase de celles sans passphrase, serait de créer une clef de type [[wpfr>ECDSA]] pour les identifications sans passphrase et [[wpfr>Digital_Signature_Algorithm|DSA]] pour les identifications avec passphrase. 
+
+Ce qui donnerait pour le premier:
+<file>IdentityFile ~/.ssh/id_ecrsa.pub</file>
+et pour le second
+<file>IdentityFile ~/.ssh/id_rsa.pub</file></note>
+
+== Les empreintes (fingerprint) ==
+
+Retrouver l'empreinte de notre clef SSH, pour la communiquer à une personne qui veut se connecter et va utiliser notre clef publique :
+<code>ssh-keygen -l</code>
+Ensuite la commande demande le fichier de la clef publique. Sur un serveur on spécifiera **/etc/ssh/ssh_host_rsa_key.pub**.
+===== Configuration du serveur SSH =====
+La configuration par défaut du serveur SSH sous Ubuntu est suffisante pour fonctionner correctement. Le fichier de configuration à [[:tutoriel:comment_editer_un_fichier|éditer avec les droits d'administration]] est  **/etc/ssh/sshd_config**.
+
+Tableau des principales directives à modifier le cas échéant :
+
+^Directive du fichier^Valeur par défaut sous Ubuntu^Valeur possible^Effet de la valeur choisie^
+|Port  | 22 | Tous les ports qui ne sont pas utilisés par un autre service  | Le changement du port par défaut , souvent conseillé, n'augmentera pas la sécurité. C'est même l'inverse si vous choisissez un port non privilégié, c'est à dire supérieur à 1024  |
+|PermitRootLogin|without-password / prohibit-password|yes no without-password forced-commands-only prohibit-password| cf [[http://manpages.ubuntu.com/manpages/lucid/man5/sshd_config.5.html| le man]] |
+|PubkeyAuthentication|yes|no|Laisser yes si vous voulez établir l'authentification par clé comme expliqué plus haut|
+|PasswordAuthentication|yes|no|On peut parfaitement conserver l'authentification par clé pour certains utilisateurs avec celle par mot de passe pour d'autres utilisateurs. Conserver cette valeur à yes tant que l'authentification par clé n'est pas pleinement fonctionnelle, sinon vous perdrez toute connexion en SSH|
+|X11Forwarding|yes|no|Laisser yes pour faire de l'affichage graphique déporté|
+|#MaxStartups 10:30:60|ligne commentée donc inactive|décommenter (enlever symbole #)|Le 10 représente le nombre de connexions acceptées sans qu'un utilisateur ait réussi à s'identifier, si cela passe au dessus de 10, il y a 30 % de probalités que les suivantes soient bloquées, et ce pourcentage augmente linéairement jusqu'à 100 % lorsque le //full// est atteint, à 60 connexions. Très utile pour éviter [[http://linuxfr.org/~dark_star/18379.html|ce genre]] de désagrément.|
+|#Banner /etc/issue.net|Ligne commentée donc inactive|Décommenter|Lorsque vous essayez de vous connecter à votre serveur par SSH, le fichier ''/etc/issue.net'' est affiché (à vous de le personnaliser pour dire bonjour ou mettre un avertissement, un guide, etc.)|
+|UsePAM|yes|no|Attention, bien lire la page de man sshd_config, ce paramètre interagit avec //ChallengeResponseAuthentication// et //PasswordAuthentication// |
+|AllowUsers|Ligne absente (autorisé à tous)|ajouter la ligne avec valeur(s) : AllowUsers Alice Bob |Spécifie les //logins// des seuls utilisateurs autorisés à se connecter. //Idéal pour ouvrir un compte FTP à un ami tout en restreignant l'accès au shell via SSH//.|
+|DenyUsers|Ligne absente (interdit à personne)|Ajouter la ligne avec valeur(s)|Interdit l'accès à SSH aux utilisateurs listés|
+|AllowGroups|Ligne absente (autorisé à tous les groupes)|ajouter la ligne avec valeur(s) : AllowGroups groupname1 groupname2|L'authentification via SSH ne sera possible que par des utilisateurs des groupes désigné par leur nom (pas par GID)|
+|DenyGroups|Ligne absente (interdit à aucun groupe)|Ajouter la ligne avec valeur(s)|Interdit l'accès à SSH aux utilisateurs des groupes listés|
+|ClientAliveInterval|Ligne absente|Ajouter la ligne avec valeur en secondes : ClientAliveInterval 300|Permet dans certains cas de maintenir une connexion sans coupures|
+Informations et éléments de configurations sécuritaires avancées, voir [[http://www.cyberciti.biz/tips/linux-unix-bsd-openssh-server-best-practices.html|cyberciti]]
+
+===== Configuration du client SSH =====
+Le client peut aussi être configuré… via le fichier **/etc/ssh/ssh_config**
+Il est notamment intéressant d'ajouter
+<code>
+	ServerAliveInterval 240
+</code>
+Pour que le client envoie des infos au server (ici toute les 4 minutes) et que ce dernier ne coupe pas la liaison, ce qui bloque (fige) le terminal.
+Pour voir les autres options: [[https://man.openbsd.org/ssh_config]] (en)
+===== Accéder à un serveur SSH dont les ports entrants sont bloqués =====
+Il peut arriver que les ports des connexions entrantes sur un serveur SSH soient bloqués ((le cas peut se présenter notamment en entreprise ou derrière une box)). Cependant, il est rare que les ports sortants soient fermés. Dans ce cas, il est possible de faire appel à du << //Reverse-SSH// >> tel qu'expliqué dans **[[:tutoriel:reverse_ssh|cette page]]**
+===== Voir aussi =====
+  * [[http://www.openssl.org/|site officiel]]
+  * [[http://fr.openclassrooms.com/informatique/cours/reprenez-le-controle-a-l-aide-de-linux/la-connexion-securisee-a-distance-avec-ssh|explications et tutoriel détaillé sur OpenClassRooms]]
+  * [[:cssh]] : Cluster SSH
+  * [[http://www.ssi.gouv.fr/uploads/2014/01/NT_OpenSSH.pdf|note ministérielle du 17 août 2015]] : Recommandations pour un usage sécurisé d'(Open)SSH
+  * [[https://www.schneier.com/blog/archives/2014/04/heartbleed.html|page du blog de l'expert en sécurité Bruce Schneier sur le bug Heartbleed]]
+<del>  * [[http://www.ubuntu.com/usn/usn-2165-1/|page d'ubuntu.com sur OpenSSL vulnerabilities]]
+  * [[http://heartbleed.com/|page sur le bug majeur d'avril 2014, nommée heartbleed]]</del>
+  * [[http://www.it-connect.fr/cours-tutoriels/administration-systemes/linux/ssh/|Tutoriels sur l'utilisation et la configuration avancée de SSH]] sur IT-Connect
+  * [[https://wiki.visionduweb.fr/index.php?title=SSH|Notes complémentaires sur la configuration d'un serveur SSH]] : Consulter le wiki de Vision du web.
+  * [[:ssh_avance]] Fixme !
+
+//Contributeurs: [[:utilisateurs:sx1]], [[:utilisateurs:krodelabestiole]], [[:utilisateurs:Zer00CooL]]//

@@ -1,0 +1,146 @@
+
+{{tag>tutoriel freebox}}
+----
+====== Monter les disques connectés sur le NAS de la Freebox Revolution Server avec un script ======
+
+===== Introduction =====
+
+Le routeur de la [[:freeboxv6|Freebox Revolution]] offrant la fonction de serveur de fichiers [[wpfr>Serveur de stockage en réseau|NAS]], tout disque dur ou clé USB connecté dessus deviendra automatiquement disponible sur le réseau et donc visible sur votre réseau Wifi ou Ethernet.\\
+Vous trouverez sur cette page comment les [[:mount_fstab|monter]] en ligne de commande avec l'outil **gvfs-mount**.\\
+
+<note important>Le Périphérique USB doit être branché sur le __routeur__ de la Freebox ((Freebox Revolution Server)) et non sur le __lecteur Blu-Ray__ ((Freebox Revolution Player))</note>
+
+===== Connaître les périphériques partagés sur la Freebox Revolution =====
+
+Pour connaître la liste des disques à partager, saisissez dans un [[:terminal]] la [[:commande_shell|commande]] suivante:
+
+<code>
+smbclient -L mafreebox.freebox.fr -N | grep "Disk" | cut -c -17
+</code>
+
+Celà vous retournera la liste complète de tous les disques branchés sur votre routeur Freebox.
+
+=== Exemple ===
+L'exemple donne ici le retour de la commande pour une clé USB connectée sur le routeur de la Freebox et le disque dur NAS d'origine de Free.
+<code>
+Domain=[WORKGROUP] OS=[Unix] Server=[Samba 3.0.37]
+Domain=[WORKGROUP] OS=[Unix] Server=[Samba 3.0.37]
+	Disque dur      
+	NO NAME     
+</code>
+Ici il s'agit de **Disque dur** et de **NO NAME**\\
+<note>gvfs-mount semble insensible à la casse, dans les commandes suivantes utiliser "**D**isque dur" ou "**d**isque dur" est équivalent.</note>
+
+
+===== Comment monter les disques partagés ? =====
+
+Maintenant que vous avez repéré les disques disponibles, vous pouvez les [[:mount_fstab|monter]] avec la commande gvfs-mount.\\
+Pour reprendre la réponse de l'[[#exemple]] précédent, vous saisirez l'une après l'autre ces commandes:
+<code>
+gvfs-mount smb://mafreebox.freebox.fr/disque%20dur
+gvfs-mount smb://mafreebox.freebox.fr/NO%20NAME
+</code>
+
+Et le tour est joué !
+
+<note important>important</note>**conseil:**
+L’utilisation semble obsolète.
+gvfs-mount
+This tool has been deprecated, use '**gio moun**t' instead.
+See 'gio help mount' for more info.
+
+Vérifier votre version os.
+ 
+
+===== Comment démonter les disques partagés ? =====
+
+Toujours avec la commande gvfs-mount et en se basant sur l'[[#exemple]] initial:
+<code>
+gvfs-mount -u smb://mafreebox.freebox.fr/disque%20dur
+gvfs-mount -u smb://mafreebox.freebox.fr/NO%20NAME
+</code>
+
+===== Automatiser par un script =====
+
+Le [[:script]] proposé ici permet de rechercher la liste des disques branchés sur la Freebox et vous propose de sélectionner le disque à monter ou démonter.\\
+Faites un copier/coller de ce script dans un [[:tutoriel:comment_modifier_un_fichier|fichier vierge]] puis rendez-le exécutable en éditant ses propriétés et en cochant //Autoriser l’exécution de ce fichier comme un programme// dans l'onglet "Permission".
+<note tip>Le script fait appel à l'outil [[:zenity]]. Installez-le s'il ne l'est pas déjà sur votre système.</note>
+
+<code>
+#!/bin/sh
+# permet de monter un partage de ma freebox revolution
+set -xv #Option de débug#
+old_IFS=$IFS     # sauvegarde du séparateur de champ  
+IFS=$'|'  
+smbclient -L mafreebox.freebox.fr -N | grep "Disk" | cut -c -17 > fix
+
+while read line; do liste_dossier=$liste_dossier"$line""|"; done < fix
+
+choix_dossier=`zenity \
+--list \
+--separator "|" \
+--column "Choisisez le partage réseau Free à monter" \
+$liste_dossier `
+
+if [ $choix_dossier ]
+  then
+	chaine1=$( echo $choix_dossier | cut -d' ' -f1 )
+	chaine1=`echo $chaine1 | tr -d "[:space:]" `
+	
+	chaine2=$( echo $choix_dossier | cut -d' ' -f2 )
+	chaine2=`echo $chaine2 | tr -d "[:space:]" `
+
+	chaine3=$( echo $choix_dossier | cut -d' ' -f3 )
+	chaine3=`echo $chaine3 | tr -d "[:space:]" `
+
+	disque_dur=$chaine1
+
+	if [ $chaine2 ]
+	  then
+		disque_dur=$chaine1"%20"$chaine2
+	fi
+
+
+	if [ $chaine3 ]
+  	  then
+		disque_dur=$chaine1"%20"$chaine2"%20"$chaine3
+	fi
+
+	recherche=`echo $disque_dur | tr 'A-Z' 'a-z' `
+	gvfs-mount -l | grep $recherche	
+	
+	if [ $? = 1 ]
+	  then	
+		zenity --question --text "Monter disque : $chaine1 $chaine2 $chaine3 ? "
+		if [ $? = 0 ]
+		 then 
+			gvfs-mount smb://mafreebox.freebox.fr/$disque_dur
+		fi
+	  else
+		zenity --question --text "Disque déjà monté, voulez vous démonter : $chaine1 $chaine2 $chaine3 ?"	
+		if [ $? = 0 ]
+		 then 
+			gvfs-mount -u smb://mafreebox.freebox.fr/$disque_dur
+		fi
+	fi
+fi
+IFS=$old_IFS
+
+</code>
+
+==== Utilisation du script =====
+
+En partant toujours du résultat donné dans l'[[#exemple]], en exécutant le script cette fenêtre est obtenue:
+{{ :capture_du_2012-01-28_13:43:02.png?300 |Liste des disques connectés}}\\
+
+Ici le disque //NO NAME// sera choisi avant validation ce qui entrainera cette boite de dialogue:
+{{ :capture_du_2012-01-28_13:45:15.png?300 |Confirmer disque à monter}}\\
+
+En ouvrant [[:Nautilus]], on peut constater en bas de la fenêtre que la connexion réseau avec la clé usb est alors bien effective
+{{ :capture_du_2012-01-28_13:49:09.png?300 |Clé usb accessible à travers le réseau}}\\
+
+En relançant le script et que le disque "NO NAME" est sélectionné à nouveau, il sera proposé de démonter le disque en question
+{{ :capture_du_2012-01-28_13:51:31.png?300 |Démontage du disque ?}}
+
+----
+//Contributeurs:[[:utilisateurs:warrio.fll]]//

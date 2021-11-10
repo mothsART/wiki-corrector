@@ -1,0 +1,238 @@
+
+{{tag>réseau}}
+
+----
+
+====== Wakeonlan : démarrer un ordinateur à distance ======
+
+Le Wake-on-LAN (WOL) ou mise en marche du PC depuis le réseau est une technologie développée par AMD et IBM, permettant à un ordinateur mis en veille d'être démarré à distance par l'envoi d'un "magic-packet" sur la carte réseau supportant le Wake-on-LAN.
+
+Plus techniquement, le réveil est déclenché quand la carte Ethernet de l'ordinateur reçoit un "magic packet" qui est une trame de données Ethernet contenant les octets FF FF FF FF FF FF suivis de seize répétitions de l'adresse MAC de la cible, puis d'un mot de passe (si nécessaire) de quatre ou six octets
+
+Cet article vous explique comment configurer votre machine Ubuntu à réveiller((Pour démarrer votre ordinateur avec Ubuntu depuis un autre poste, c'est sur l'autre poste qu'il faut installer le programme)) et comment installer l'application //wakeonlan// pour démarrer un ordinateur distant (toutes plate-formes) depuis votre distribution Ubuntu.
+
+===== Pré-requis =====
+
+Pour la suite des opérations, des pré-requis sont nécessaires : 
+  * Disposer des [[:sudo|droits d'administration]] ;
+  * Disposer d'une connexion à Internet configurée et activée pour télécharger le logiciel ;
+  * [[:tutoriel/comment_configurer_son_reseau_local|Avoir fixé l'adresse IP]] de la machine à réveiller (chapitre 1.1.1) ;
+  * Consulter le site constructeur afin de savoir si la carte mère est compatible WLAN ou WOL ;
+  * Avoir activé l'accès au [[:depots|dépôt APT]] 'universe'.
+
+===== Activer le WOL =====
+==== Vérifier que la carte réseau supporte le WOL =====
+
+Le WOL doit être activé pour la carte réseau. Ce n'est pas toujours le cas pour des raisons évidentes de sécurité, puisque n'importe qui pourrait démarrer un ordinateur en connaissant uniquement l'adresse mac. L'activation s'effectue dans le BIOS de l'ordinateur à démarrer.
+
+Sous Ubuntu, pour voir si votre carte réseau supporte le WOL, installer le paquet **[[apt>ethtool]]** et exécuter la commande:
+<code>sudo ethtool eth0  | egrep "^[[:blank:]]*Wake-on: (g|d)"</code>
+<note>**eth0** est l'identifiant de votre carte réseau (par défaut si le paramètre noyau **biosdevname=0** à été passé au boot ou sur les systèmes anciens). Pour être sûr que l'identifiant est correct, entrer la commande **ifconfig** qui vous donnera la liste des périphériques réseaux</note>
+Vous devez obtenir la ligne suivante:
+<file>Wake-on: g</file>
+
+Si vous obtenez la ligne <file>Wake-on: d</file> c'est que votre carte réseau n'est pas activée pour le WOL. Pour l'activer taper la commande :
+<code>sudo ethtool -s eth0 wol g</code>
+
+=== Conserver le paramétrage | Méthode 1===
+
+Avec certaines versions d'Ubuntu et/ou certains matériels, lors de l'extinction, le système désactive les interfaces réseaux.
+
+**Après essais**, si le WOL ne fonctionne pas, pour supprimer cette sécurité((elle évite que la machine puisse être réveillée par le réseau sans une intervention volontaire)), un des moyens est d'écrire la ligne de commande suivante dans le fichier **/etc/rc.local** : <code>/sbin/ethtool -s eth0 wol g</code> A mettre avant la ligne : <file>exit 0</file>
+
+Ainsi à chaque démarrage, la ligne de commande est exécutée, activant la carte réseau pour le prochain démarrage.
+
+=== Conserver le paramétrage | Méthode 2 (testé 18.04)===
+
+Un autre moyens est d'écrire les lignes de commande suivante dans le fichier **/etc/network/interfaces** : 
+<code>auto lo
+iface lo inet loopback
+up ethtool -s eth0 wol g
+</code>
+
+=== Conserver le paramétrage | Méthode 3 (testé 20.04)===
+
+Un autre moyens est d'écrire les lignes de commande suivante dans un fichier **/etc/network/if-up.d/wol_fix** : 
+<code>
+#!/bin/sh
+/sbin/ethtool -s [votre-carte] wol g
+</code>
+
+puis rendre executable
+<code>
+sudo chmod +x /etc/network/if-up.d/wol_fix
+</code>
+==== Identifier l'adresse MAC ====
+
+L'adresse MAC de la carte réseau est un identifiant unique attaché à chaque matériel réseau. Pour réveiller l'ordinateur vous devez connaître l'adresse MAC de sa carte réseau où nous enverrons le paquet magique.
+
+Si vous avez un accès au pc (distant ou local), la commande((adaptez le nom de l'interface à votre configuration : eth1, eth2)) <code>ifconfig eth0</code> vous indiquera l'adresse MAC. Elle est précédée du champ **HWaddr** dans la première ligne.
+
+Pour notre exemple, l'adresse MAC est **00:15:60:B1:DB:D4** :
+<file>eth0    Lien encap:Ethernet  HWaddr 00:15:60:B1:DB:D4
+          inet adr:192.168.1.xx  Bcast:192.168.1.255  Masque:255.255.255.0
+          adr inet6: fe80::215:60ff:feb1:2316/64 Scope:Lien
+          UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+          Packets reçus:4722 erreurs:0 :0 overruns:0 frame:0
+          TX packets:2971 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 lg file transmission:1000
+          Octets reçus:918022 (896.5 KiB) Octets transmis:329459 (321.7 KiB)
+          Interruption:169
+</file>
+
+Si vous n'avez pas d'accès à la machine, essayez la commande suivante qui devrait vous renvoyer une liste d'adresses mac associées aux adresses ip sur le réseau : <code>arp -a</code>
+
+===== Envoi du paquet magique =====
+==== Cas des cartes mère NVidia ====
+
+Si vous avez une carte réseau intégrée dans une carte mère à chipset NVidia((pilote //forcedeth//)) (par exemple : //ASUS M2NPV-VM ou M2N-SLIdeluxe//) et que l'envoi de paquet magique ne produit aucun effet, **avant de casser tous les scripts de votre machine**, essayez simplement d'envoyer **l'adresse MAC à l'envers**, exemple **00:1a:9f:81:ce:a4 => a4:ce:81:9f:1a:00**.
+
+Les modifications à faire sont extrêmement simples pour faire marcher le WOL (peut-être que ces commandes fonctionnent encore avec les nouvelles versions d'Ubuntu) :
+  * Mettre **NETDOWN=no** dans ///etc/default/halt// ;
+  * Mettre **ethtool -s eth0 wol g** (ou le nom de l'interface que vous utilisez) dans ///etc/rc.local//, avant la ligne **exit 0**.
+
+==== Cas de certaines cartes mère Asus ====
+
+Si vous avez une carte mère Asus, et que votre ordinateur redémarre à chaque fois que vous l'éteignez, installer le paquet **[[apt>laptop-mode-tools]]** peut résoudre votre problème(([[http://askubuntu.com/questions/452750/reboot-after-shutdown-ubuntu-14-04-also-12-04-dell-latitude-e7440]])).
+
+==== Installation ====
+
+Pour cela, il nous faut installer un logiciel capable de construire la trame de donnée. Les dépôts Ubuntu contiennent deux logiciels : 
+   * **[[apt>etherwake]]**
+   * **[[apt>wakeonlan]]**
+
+Contrairement à **wakeonlan**, le paquet **etherwake** ne permet pas de démarrer un pc en passant par internet. Nous installerons donc **wakeonlan** disponible dans le dépôt universe.
+
+==== Avec interface graphique ====
+
+Il existe une interface graphique nommée GWakeOnLan permettant de gérer une liste de machine à réveiller.
+
+[[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>gwakeonlan|gwakeonlan]]**. Autrement vous pouvez installer une des solution suivante à la place :
+- [[http://fr.congelli.eu/prog_info_c501wakeonlan.html|C501 Wake On Lan]] ;
+- [[http://forum.ubuntu-fr.org/viewtopic.php?pid=2748926#p2748926|Scription d'activation et installation de WOL]].
+
+==== En ligne de commande ====
+
+Après avoir installé le paquet **[[apt>wakeonlan]]** vous pouvez réveiller une machine avec la commande (adaptez avec votre adresse MAC) <code>wakeonlan 00:15:60:B1:DB:D4</code>
+
+Si cela ne fonctionne pas alors que cela fonctionne avec etherwake, essayez de renseigner **l'adresse de Broadcast**  de votre réseau grâce à l'option **//-i//**. Le [[http://www.isiweb.org/outils/ipcalc.php|calculateur d'adresse IP d'isiweb.org]] pourrait vous aider à déterminer la bonne adresse (dans cet exemple : 192.168.0.255) :
+<code>wakeonlan -i 192.168.0.255 00:0D:9D:9B:BA:xx</code>
+
+Pour réveiller une machine en passant par internet, exécutez la commande suivante dans un terminal, en remplaçant l'adresse IP par votre IP publique, visible sur [[http://www.hostip.fr/|hostip.fr]] et l'adresse MAC par celle du poste à démarrer :
+<code>wakeonlan -i 78.yyy.xxx.zzz 00:0D:9D:9B:BA:xx</code>
+
+Pour démarrer **plusieurs stations sur le lan**, exécutez la commande suivante dans un terminal en séparant les adresses mac par des espaces :
+<code>wakeonlan 00:0D:9D:9B:BA:xx 00:0D:9D:9B:yy 00:0D:9D:9B:zz</code>
+
+Pour démarrer **une station derrière un pare-feu**, pensez à paramétrer dans votre routeur un transfert du port que vous utiliserez dans la ligne de commande grâce à l'option **//-p//** (9 par défaut)
+
+Si tout s'est bien passé, la machine distante devrait être en train de démarrer. Si vous avez besoin de plus d'information sur la commande wakeonlan, consultez son manuel avec la commande <code>man wakeonlan</code>
+
+
+===== Tester le WOL à travers internet =====
+
+Il peut être intéressant pour tester son installation de se faire envoyer un **packet magique** depuis internet,notamment si l'ordinateur que l'on souhaite réveiller est derrière un routeur.
+
+  - La première solution qui vient à l'esprit est de téléphoner à un ami distant de quelques kilomètres, disponible et connecté à Internet ; cela n'est pas toujours facile.
+  - L'autre solution est de réaliser **un script PHP** que l'on télécharge sur les pages perso de son Fournisseur d'accès préféré. Il suffit ensuite de lancer ce script à l'aide de n'importe quel navigateur web. Vous devez également rediriger le port 9 (ou autre) en UDP vers votre ordinateur à partir de votre routeur.
+  - Une troisième solution est d'installer une application de Wake-On-Lan sur son smartphone (il en existe plusieurs sur Android, voir [[:wakeonlan#references|§ references]]). Pour le test, n'oubliez pas de déconnecter le smartphone du Wi-Fi.
+
+<note tip>
+Sans éteindre votre machine, pour savoir si le **paquet magique** est bien reçu, utilisez la commande <code>sudo tcpdump -i eth0 port 9</code>
+**eth0** étant le nom de votre interface réseau. Il faut que **[[apt>tcpdump]]** soit installé.
+</note>
+
+==== Avec un script PHP ====
+
+**Vous pouvez ainsi réveiller votre ordinateur à l'aide de n'importe quel autre ordinateur possédant seulement un navigateur**. Ceci peut être pratique quand on n'a pas tous les droits sur un réseau et que l'on souhaite réveiller son ordinateur chez soi pour accéder à ses ressources. Cela évite aussi de se souvenir de ses adresses MAC et IP.
+
+Il vous suffit de modifier la fin du code en l'adaptant à votre installation. Changez le port, l'adresse MAC en mettant celle de votre carte réseau et l'adresse IP ou le nom de domaine de l'ordinateur à réveiller.
+
+<code>
+ <?php
+         # Wake on LAN - (c) HotKey@spr.at, upgraded by Murzik
+         # Modified by Allan Barizo http://www.hackernotcracker.com
+
+         flush();
+         
+         function WakeOnLan($addr, $mac,$socket_number) {
+
+           $addr_byte = explode(':', $mac);
+           $hw_addr = '';
+           for ($a=0; $a <6; $a++) $hw_addr .= chr(hexdec($addr_byte[$a]));
+           $msg = chr(255).chr(255).chr(255).chr(255).chr(255).chr(255);
+
+          for ($a = 1; $a <= 16; $a++) $msg .= $hw_addr;
+          // send it to the broadcast address using UDP
+          // SQL_BROADCAST option isn't help!!
+          $s = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
+
+          if ($s == false) {
+            echo "Error creating socket!\n";
+            echo "Error code is '".socket_last_error($s)."' - " . socket_strerror(socket_last_error($s));
+            return FALSE;
+            }
+          else {
+            // setting a broadcast option to socket:
+            $opt_ret = socket_set_option($s, 1, 6, TRUE);
+
+            if($opt_ret <0) {
+              echo "setsockopt() failed, error: " . strerror($opt_ret) . "\n";
+              return FALSE;
+              }
+
+            if(socket_sendto($s, $msg, strlen($msg), 0, $addr, $socket_number)) {
+              echo "Magic Packet sent successfully!";
+              socket_close($s);
+              return TRUE;
+              }
+            else {
+              echo "Magic packet failed!";
+              return FALSE;
+              }
+           
+            }
+          }
+
+        // Port number where the computer is listening. Usually, any number between 1-50000 will do. Normally people choose 7 or 9.
+        $socket_number = "9";
+        // MAC Address of the listening computer's network device
+        $mac_addy = "XX:XX:XX:XX:XX:XX";
+        // IP address of the listening computer. Input the domain name if you are using a hostname (like when under Dynamic DNS/IP)
+        $ip_addy = gethostbyname("my.dns.domain.com");
+        
+        WakeOnLan($ip_addy, $mac_addy,$socket_number);
+      ?>
+</code>
+
+===== Types de Wake On Lan =====
+
+Selon votre besoin parfois il est utile d'utiliser la fonctionnalité du WOL sans le paquet magique. pour cela il y a différentes variables.
+ <code>ethtool -s eth0 wol V</code>
+(En remplaçant V par une lettre ci-dessous)
+              p  Réveil dès moindre activité physique
+              u  Réveil dès réception d'un message unicast
+              m  Réveil dès réception d'un message multicast
+              b  Réveil dès réception d'un message broadcast
+              a  Réveil dès réception d'un ARP
+              g  Réveil dès réception d'un MagicPacket(tm)
+              s  Réveil dès réception d'un message SecureOn(tm) (mot de passe) pour MagicPacket(tm)
+              d  Désactiver
+
+===== Désactiver le WOL =====
+On peut vouloir désactiver le WOL pour des raisons de sécurité ou plus généralement pour éviter de consommer de l'énergie sur un appareil mobile par exemple. Par défaut les systèmes récent l'activent. la commande powertop (paquet powertop) rappelle qu'il vaut mieux le désactiver pour réduire la consommation électrique de la carte réseau).
+
+Il faut pour cela utiliser la même commande mais avec l'option d :
+<code>sudo ethtool -s eth0 wol d</code>
+
+Vous pouvez remplacer l'exemple précédent de conservation permanente en remplaçant le g par le d en fin de commande, comme ici.
+
+===== Références =====
+
+  * [[http://fr.wikipedia.org/wiki/Wake-on-LAN|Le Wake-on-Lan sur Wikipedia]] ;
+  * [[http://lists.us.dell.com/pipermail/linux-poweredge/2007-December/034000.html |Web de Dell]] ;
+  * [[https://play.google.com/store/apps/details?id=com.benfinnigan.wol&feature=search_result|Application Wake On Lan sur Android]].
+
+----
+
+//Contributeurs// : [[:utilisateurs:sidney_v]], [[:utilisateurs:claudiux]], [[:utilisateurs:wysiwyg31]], [[:utilisateurs:Percherie]]

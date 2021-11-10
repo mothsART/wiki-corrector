@@ -1,0 +1,379 @@
+
+
+====== LIRC, dans le vif du sujet  ! ======
+
+<note>Valable pour Maverick</note>
+
+<note>Attention, vous êtes sur une page qui traite en détail de LIRC, pour une page plus accessible aux débutant, rendez-vous sur [[http://doc.ubuntu-fr.org/lirc|http://doc.ubuntu-fr.org/lirc]].FIXME page à refaire !</note>
+
+
+
+
+LIRC est une excellente suite logicielle visant à utiliser des télécommandes avec GNU/Linux. Sa compatibilité avec tout et n’importe quoi et sa versatilité en font un incontournable de tout PC orienté Home Cinema.
+Concrètement, et c’est souvent ce qu’on a du mal à comprendre la première fois qu’on y touche,  LIRC est un mot fourre-tout pour ce qui est à la fois une paquet exécutables  (sous forme de démon ou non), un framework (utilisable par les application tierces), et un ensemble de modules noyaux (pour piloter le hardware de vos récepteurs).
+
+
+LIRC permet d'utiliser une télécommande infrarouge. Presque toutes (mais pas toutes) sont compatibles.
+
+Par défaut, Les scripts d'initialisation de LIRC sont correctement configurés pour la gestion d'un seul appareil, mais en réalité les scripts du pilote peuvent en gérer plusieurs. Si vous cherchez à configurer un transmetteur infrarouge et un récepteur, plusieurs transmetteurs, ou plusieurs récepteurs, commencez d'abord par configurer un seul appareil et vérifiez son bon fonctionnement. Après cela seulement, vous pourrez vous intéresser à la section traitant la configuration de multiples appareils. 
+
+
+===== Ce qui a changé =====
+Résumer ce que l'on trouve ici : http://mythtv-fr.tuxfamily.org/wiki/lirc
+FIXME
+
+
+===== Trouver des infos correspondant à notre périphérique =====
+
+==== Liste des périphériques d'entrée ====
+
+  cat /proc/bus/input/devices
+Puis trouver le bloc correspondant à votre récepteur infrarouge.
+
+Si vous voyez dans ce bloc
+  H: Handlers=kdb event8
+Cela signifie que votre télécommande sera reconnu comme un clavier par Xorg (kdb = keyboard = clavier).
+
+==== Journal de Xorg ====
+
+Brancher le récepteur et lancer : 
+  tail /var/log/Xorg.0.log
+Les dernières lignes donneront des infos sur votre récepteur infrarouge.
+
+==== Sortie du noyau ====
+Brancher le récepteur et lancer : 
+    dmesg | tail -20
+Les dernières lignes donneront des infos sur votre récepteur infrarouge.
+
+==== Nom de l'événement associé au récepteur ====
+
+Vous pouvez aller voir ici
+  ls -l /dev/input/by-path
+On repère la ligne qui contient ir (infra rouge). Si vous avez un doute, débranchez et rebranchez votre récepteur infrarouge, pour voir quelle ligne apparait.
+
+On remarque qu'il s'agit juste d'un lien symbolique sur un évènement, et cet évènement nous avais déjà été renseigner par les commandes ci-dessus.
+Udev peut décider d'attribuer à votre périphérique un fichier ///dev/input/eventx// différent à chaque démarrage, d'où l'intérêt de ce chemin qui ne bougera jamais (cela évite de créer une règle udev qui fixe un ///dev/input/eventx// particulier).
+
+Vous devez donc retenir un chemin de la forme "///dev/input/by-path/xxx//" xxx variant suivant votre modèle.
+
+
+
+==== Récupérer les signaux émis par la télécommande ====
+
+=== Signaux attrapés par Xorg : ===
+Si xorg arrive à attraper les signaux de la télécommande, cette commande affichera les touches appuyés : 
+
+Si le périphérique est considéré comme un clavier par xorg, 
+on peut savoir ce qui sa passe sur ce périphérique (les évènements "attrapés" par le xorg) grâce à 
+  sudo evtest votre_periph
+//votre_periph// correspondant au chemin trouvé plus haut.
+
+Penser a installer le paquet [[apt://evtest]] si nécessaire.
+
+
+=== Signaux attrapés par LIRC ===
+Il faut configurer LIRC avec le fichier /etc/lirc/hardware.conf et /etc/lirc/lircd.conf (voir plus bas).
+Ensuite il suffit de lancer 
+  irw
+Puis appuyez sur les touches de la télécommande, si des lignes s'affichent, cela veux dire que LIRC attrape bien les événement de la télécommande.
+
+
+===== 2 systèmes de gestion de la télécommande, que faire ?? =====
+==== Garder juste la gestion xorg ====
+Utiliser xmodmap pour assigner les touches a des actions : http://doc.ubuntu-fr.org/clavier_multimedia#les_keysyms_de_x .
+Cependant c'est moins puissant que LIRC.
+
+==== Utiliser LIRC ====
+Pour cela voir plus bas.
+
+===== Configurer LIRC =====
+
+Pour commencer, il faut l'installer : [[:tutoriel:comment_installer_un_paquet|installer]] [[apt://lirc]].
+FIXME donner les bon paramètres a l'installation fait gagner du temps.
+
+==== Fichier de configuration matériel ou /etc/lirc/hardware.conf ====
+
+C’est ici qu’est défini le matériel. 
+Par contre, **il ne fait pas partie de LIRC** ! Ce fichier de configuration est une aide, laissée par les packageurs de votre distribution (Ubuntu dans notre cas) afin de simplifier l’utilisation des démons contrôlant LIRC. Il est donc nécessaire de faire attention à ce que vous lisez sur Internet, car en fonction de votre distribution les paramètres peuvent drastiquement changer. Le fichier peut même être totalement inutile. (Pour l’anecdote, je l’ai appris à mes dépends en perdant quelques heures lors d’une migration Ubuntu vers Debian)
+Concrètement, ce fichier est lu par le script de démarrage de LIRC (/etc/init.d/lirc,  dont le contenu change selon les distributions). Celui-ci  prépare l’environnement et construit la ligne de commande adéquate pour lancer le démon LIRC.
+
+Il y a plusieurs paramètre a regler dans ce fichier : 
+=== REMOTE ===
+Vous pouvez entrer ici le nom de votre télécommande, vous choisissez ce nom.
+
+=== REMOTE_DRIVER ===
+
+Ceci indique à LIRC quel pilote utiliser pour dialoguer. Cette notion de pilote est fois interne à LIRC  : Il ne s’agit pas de périphérique noyau mais juste de définir comment LIRC va dialoguer avec votre périphérique /dev/machin. La subtilité, c’est que LIRC peut très bien avoir été compilé sans le support du périphérique que vous voulez utiliser. 
+Vous aurez la liste des drivers supportés en lançant : 
+  lircd -H help 
+  
+Si vote récepteur IR est reconnu comme clavier, vous pouvez utiliser **devinput**.
+
+=== REMOTE_DEVICE ===
+C’est le fichier périphérique qui a été créé par le module noyau que vous avez chargé. Ceci indique au démon LIRC avec qui il va devoir dialoguer.
+
+Entrer ici le chemin du récepteur IR trouvé plus haut ou quelque chose de la forme : LIRC_DEVICE="name=cx88\?IR\?\?Hauppauge\?Nova-S-Plus\?".
+
+=== REMOTE_LIRCD_CONF ===
+L’emplacement du fichier de configuration des télécommandes (habituellement **/etc/lirc/lircd.conf**, mais vous pouvez mettre ce que vous voulez) .
+
+
+=== Pour aller plus loin (non nécessaire) ===
+Comme décrit plus haut, ces informations servent juste à lancer le démon lircd.
+Une fois ces informations en main, vous pouvez donc le lancer manuellement avec : 
+  sudo lircd -H REMOTE_DRIVER -d REMOTE_DEVICE -n
+Les autres options vus plus haut étant facultative, je ne ne les ai pas écrite, reportez vous a la documentation pour les ajouter.
+
+-n permet de lancer le programme en tant que démon, en tache de fond, ne pas le mettre si vous voulez voir les retours du programme : 
+  sudo lircd -H REMOTE_DRIVER -d REMOTE_DEVICE
+Vous pouvez ensuite tenter de lancer irw dans un autre terminal, et voir ce qu'il se passe.
+
+
+Un exemple pour le boitier USBuirt : un passage de /etc/init.d/lirc start me donne maintenant un démon lancé comme ça:
+
+  /usr/sbin/lircd --driver=usb_uirt_raw --device=/dev/ttyUSB0 --output=/dev/lircd --listen
+
+Tout ça pour ça, pourrait-on se dire…
+Mais au moins, maintenant, à chaque fois que je lance LIRC par le script d’initialisation j’obtiens : des modules chargés, un périphérique bloc /dev/ttyUSB0 monté, un joli démon lancé sur ma machine pour dialoguer avec ce /dev/ttyUSB0 selon le langage « usb_uirt_raw », et ce même démon me crée une jolie socket unix /dev/lircd pour mes logiciels favoris (voir plus bas le rôle de cette socket).
+
+  
+
+==== /etc/lirc/lircd.conf ====
+Jusqu’ici le démon lircd que vous pouvez maintenant lancer sait comment dialoguer avec votre périphérique émetteur ou récepteur. Mais il ne sait pas vraiment ce qu’il va trouver pendant son dialogue, qu’est ce qu’il doit garder et qu’est ce qu’il doit jeter. Ce fichier lircd.conf est là pour ça : c’est une sorte de « carte » de votre télécommande. A l’intérieur, des listes de télécommande (si vous en utilisez plusieurs) et pour chaque télécommande des touches avec des jolis noms « user-friendly » et les codes infrarouges correspondant.
+
+Deux cas peuvent se présenter : 
+
+=== Vous utilisez le driver devinput ===
+
+Les codes seront directement envoyés par XOrg (je trompe-je ??).
+Ils suivent une norme, le fichier est donc universel, vous pouvez le trouver 
+
+ici : [[http://lirc.sourceforge.net/remotes/devinput/lircd.conf.devinput|http://lirc.sourceforge.net/remotes/devinput/lircd.conf.devinput]]
+
+source : [[http://www.lirc.org/html/devinput.html|http://www.lirc.org/html/devinput.html]]
+
+Attention, ce fichier contient donc les correspondance de toute les touches que peuvent reconnaitre Xorg, il contient donc de touches que votre télécommande ne possède pas, je ne sais pas si cela a une influence.
+
+=== Vous n'utilisez le driver devinput ===
+
+
+Où trouver ce fichier de configuration? Par exemple ici : [[http://lirc.sourceforge.net/remotes/|http://lirc.sourceforge.net/remotes/]].
+Mais si il ne s’y trouve pas, vous pouvez le faire vous même. Vous allez devoir utiliser irrecord pour ça. C’est un exécutable livré ordinairement avec LIRC. Il prend grosso modo les même paramètres que le démon « lircd », donc si vous êtes capables de configurer le fichier hardware.conf et que celui ci vous génère à chaque lancement de /etc/init.d/lirc une belle ligne de commande, alors le plus gros du travail est fait.
+Exemple :
+
+  irrecord --driver=usb_uirt_raw --device=/dev/ttyUSB0 monlircd.conf
+
+Comme irrecord dialogue directement avec le bloc périphérique, comme lircd, il ne faut pas que ce dernier soit lancé (ils sont exclusifs et très jaloux).
+Coté utilisation, c’est très facile : vous suivez les instructions, et il enregistre toutes vos touches les unes après les autres en leur attribuant le joli nom que vous souhaitez.
+
+
+A ajouter : Une partie des fichier est déjà présent par défaut, pour les visualiser naviguer dans ces fichiers : 
+  ls -R /usr/share/lirc
+Pour les inclure : ?? include ~/émetteur/lircd.conf
+
+==== Le point ====
+//Mais alors, comment mes applications savent jouer avec LIRC ?//
+
+C’est simple, vous vous souvenez de la socket unix dont je parlais plus haut, celle qui est préparée par le démon LIRC? Et bien les applications  se connectent à celle-ci  et écoutent toutes les touches que vous pouvez taper.
+Cette socket est nommée /dev/lircd le plus souvent. Si vous souhaitez donner son chemin vous même (par exemple si vous en avez plusieurs), il est défini par le paramètre –output du démon lircd. La plupart des application vont se connecter à /dev/lircd, mais certaines d’entre elles peuvent être configurées pour se connecter au chemin de votre choix (c’est le cas par exemple de mon cher mythtv qui possède ce paramètre dans un coin de la configuration du frontend). Je vous conseille de tout laisser par défaut, c’est suffisant pour 90% des cas.
+
+Vous l’avez compris, mais je me permets de le rappeler : pour qu’une application fonctionne avec LIRC, il faut qu’elle se branche sur la socket unix, et donc qu’elle ait été codée pour çà ! Cela semble évident au premier abord mais c’est pourtant loin d’être automatique si l’on se réfère aux questions qu’on trouve souvent sur les forums.
+
+Et la configuration de ces applications, où se fait-elle?
+
+==== /home/<user>/.lircrc ==== 
+
+=== Qu'est-ce ? ===
+
+Les applications se connectent à la socket lircd, OK. Mais comment l’application sait quoi faire selon la touche pressée? C’est ici qu’intervient le fichier .lircrc.
+Contrairement à une autre idée fréquemment répandue, ce n’est pas un fichier de configuration de LIRC. C’est un fichier de configuration de vos applications finales !
+En effet, celles ci parcourent immanquablement le fichier ~/.lircrc (et les éventuels sous fichier inclus avec la directive include), y repèrent leur propre marqueur (c’est le rôle de l’attribut " prog " ), et enregistre la carte des événements déclenchés en fonction des touches appuyées. Exemple :
+
+  begin
+  remote = NOVA-T500
+  prog = mplayer
+  button = Play
+  config = pause
+  end
+
+L’appui de la touche « Play » (touche nommée ainsi dans le fichier /etc/lirc/lircd.conf qui établit la correspondance nom <–> code infrarouge), provoque l’événement « pause » dans l’application mplayer.
+
+=== Ou trouver ce fichier ? ===
+Plusieurs possibilités : des gens distribuent leur propre fichier, les application peuvent proposer leurs fichiers, ...
+
+Sinon des programme peuvent éssayer de les générés comme celui ci : [[apt://mythbuntu-lircrc-generator]] qui permet de gérer les applications mythtv, mplayer, xine, vlc, elisa (moovida), xmess, et xmame.
+
+=== A savoir pour le faire soi-même ===
+
+[[:tutoriel:comment_editer_un_fichier|Créer le fichier]] ''.lircrc'' en utilisateur.
+
+La syntaxe basique pour l'action d'un bouton est
+<code>
+begin
+    prog = PROGRAMME
+    button = BOUTON
+    config = ACTION
+end
+</code>
+
+Où :
+  * ''PROGRAMME'' est le programme qui va utiliser ce bouton, par exemple : ''PROGRAMME'' sera ''mythtv'', ''mplayer'', ''xine'', ''vlc'' ou bien ''irexec'' ;
+  * ''BOUTON'' est le nom du bouton qui se trouve dans ''/etc/lirc/lircd.conf'' ;
+  * ''ACTION'' est l'action qui sera lancée quand on appuie sur le bouton.
+
+Un [[lircrc|tutoriel spécifique]] existe pour la création des fichiers lircrc (fichiers définissant l'interprétation des commandes IR par les logiciels).
+
+Vous pourrez trouver des fichiers d'exemples sur [[https://help.ubuntu.com/community/Install_Lirc_Edgy#head-c3cababa402d7e016b14d54d58c481591a54bdd1le|cette page]] (mais en cherchant un peu sur Internet, vous trouverez certainement un fichier plus adapté à votre utilisation).
+
+Pour des informations plus détaillées sur ce fichier, consultez [[http://www.lirc.org/html/configure.html#lircrc_format|la documentation de lirc sur son site]] (en anglais).
+
+
+== IRexec ==
+FIXME
+IRexec permet de lancer une application sur la pression d'une touche. La syntaxe est la suivante :
+
+begin
+    prog = irexec
+    button = BOUTONS
+    config = APPLICATION
+end
+
+Où APPLICATION est le chemin vers l'exécutable à lancer.
+
+== IRKick ==
+Pour kde.FIXME
+
+===== Lancer LIRC =====
+
+
+==== Une petite synthèse ====
+lircd est un démon qui s’interface avec un périphérique /dev/machinX (donc le fichier bloc est créé par un module noyau appartenant parfois au projet LIRC) selon un protocole de communication appelé « driver » par LIRC. Une fois que lircd est lancé, celui ci va à son tour lire un fichier de conf (/etc/lirc/lircd.conf par défaut). Ce fichier décrit les codes infrarouges susceptibles d’être échangés avec le périphérique (les codes sont regroupés en appareil). Le démon créé ensuite une socket de type /dev/lircdX avec lequel les programmes peuvent s’interfacer facilement.
+Les programmes se connectent à cette belle socket, lisent un fichier de conf .lircrc dans le home de l’utilisateur, repèrent le mappage touche <–> événement à déclencher, et VOUS POUVEZ ENFIN REGARDER DES VIDEOS DEPUIS VOTRE CANAPE.
+
+
+==== Lancer / redémarrer / arrêter LIRC (enfin !) : ====
+
+Voici les commandes correspondantes : 
+
+  sudo service lirc start
+  sudo service lirc restart
+  sudo service lirc stop
+
+===== Problèmes =====
+==== Chaque clics est interprétés 2 foix ====
+Chaque clics est interprétés 2 foix : une foix par le xorg, et une foix par LIRC (ce n'est pas pratique pour un bouton comme mute, car l'action est effectué 2 fois.).
+
+Pour empêcher Xorg d'interpréter les touches de la télécommande,  créer et éditer ce fichier : /usr/share/X11/xorg.conf.d/60-remote.conf 
+et inscrire 
+
+  Section "InputClass"
+     Identifier     "Télécommande Nova-T 500"
+     ## Eventuellement, rajouter la ligne ci-dessous non commentée
+     #  MatchIsKeyboard  "on"
+     MatchProduct   "<la description trouvée dans Xorg.0.log>"
+     Option         "Ignore" "on"
+  EndSection
+
+==== Je ne sais pas si ma télécommande marche (piles HS ?, télécommande morte ?) ====
+Si la transmission de fonctionne pas immédiatement, la meilleure méthode pour commencer un diagnostic est d'utiliser un appareil photo numérique. Allumez l'appareil photo et regardez la DÉL infrarouge de laquelle vous essayez de transmettre à travers l'objectif. Vous devriez voir des flashs violets venant de la DÉL infrarouge quand vous essayez de transmettre. Si vous ne voyez rien, votre appareil ne transmet rien.
+
+ 
+
+==== Je veux utiliser plusieurs télécommandes ====
+<note important>Cette section est-elle a jours ?? c'est une copie d'une ancienne page</note>
+=== Modification des scripts d'initialisation ===
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] '/etc/lirc/hardware.conf' :
+  * Assurez-vous que tous vos modules figurent sur la ligne MODULES="", séparés par des espaces. Prenez garde à l'ordre dans lequel vous les mentionnez. Ce sera l'ordre dans lequel LIRC reconnaîtra les appareils. C'est donc important si vous voulez faire une différence entre ceux-ci.
+  * Modifiez les lignes du côté de LIRCD_ARGS="" pour faire correspondre le tout à
+<file>
+LIRCD_ARGS="--device=/dev/lirc0 --output=/dev/lircd1 --pidfile=/var/run/lircd1.pid --listen"
+LIRCD2_ARGS="--device=/dev/lirc1 --output=/dev/lircd --pidfile=/var/run/lircd.pid --connect=localhost:8765"
+</file>
+
+<note>Il faut adapter les paramètres ''device'' à votre configuration.</note>
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] ''/etc/init.d/lirc'' :
+  * Changez :
+<file>
+      LIRCD_ARGS=`build_args $LIRCD_ARGS`
+      start-stop-daemon --start --quiet --exec /usr/sbin/lircd -- $LIRCD_ARGS 
+                < /dev/null
+</file>
+en :
+<file>
+      LIRCD_ARGS=`build_args $LIRCD_ARGS`
+      LIRCD2_ARGS=`build_args $LIRCD2_ARGS`
+      start-stop-daemon --start --quiet --exec /usr/sbin/lircd -- $LIRCD_ARGS 
+                < /dev/null
+      /usr/sbin/lircd $LIRCD2_ARGS 
+               < /dev/null
+</file>
+
+Faites les manipulations sur ''/etc/lirc/hardware.conf'' et ''/etc/init.d/lirc'' pour chaque nouvel appareil.
+
+
+=== Essai ===
+
+Démarrez LIRC :
+  sudo /etc/init.d/lirc start
+
+Vous devriez avoir deux lircd actifs. Tout processus lirc qui tentera d'interagir avec lircd devra se faire spécifier un paramètre lui indiquant à quelle instance il s'adresse.
+
+==== Je veux tester sans ma télécommande sous la main ====
+<note important>FIXME Je ne sais pas si cette section est toujours fonctionnelle</note>
+
+La syntaxe pour la transmission est la suivante :
+
+  irsend -d $LIRCDPROCESS SEND_ONCE $REMOTE $BUTTON
+
+où :
+
+  * $LIRCDPROCESS représente l'appareil lircd de /dev/ utilisé pour la transmission ;
+  * $REMOTE représente le nom de la télécommande, comme écrit dans le fichier /etc/lirc/lircd.conf ;
+  * $BUTTON représente le bouton que vous essayez de transmettre.
+
+Voici un exemple :
+
+  irsend -d /dev/lircd SEND_ONCE my_favorite_remote power
+
+Ceci va transmettre le bouton de marche pour la télécommande « my_favourite_remote » en utilisant le processus lircd primaire. 
+
+==== Mon récepteur Generic Mceusb ne marche pas ====
+Voir ce post : [[http://art.ubuntuforums.org/showpost.php?p=9984844&postcount=4| Poste 1]]
+et celui la : [[http://mythtv-fr.tuxfamily.org/forums/viewtopic.php?id=1523&p=3 | Poste 2]].
+
+===== Aller plus loin =====
+
+Un logiciel de configuration automatique : http://live.gnome.org/gnome-lirc-properties .
+
+Pour le fichier lircrc : voir 
+
+
+----
+
+
+
+Sources : 
+  * Merci à Gwendal Roulleau, http://mmed.roulleau.net/?p=7
+  * http://mythtv-fr.tuxfamily.org/wiki/lirc_devinput
+  * http://mythtv-fr.tuxfamily.org/wiki/lirc
+  * http://www.lirc.org/html/devinput.html
+
+Documentation : 
+  * Quelques aides pour le fichier lircrc : http://www.mythtv.org/docs/mythtv-HOWTO-8.html
+  * http://www.lirc.org/html/configure.html (pas a jours).
+  * http://www.mythtv.org/wiki/LIRC
+  * .lircrc avec la notation devinput pour mythTV : http://www.mythtv.org/wiki/Soundgraph_iMON_Antec_Veris_Mythbuntu_10.10#Step_2_-_Button_Configuration
+  * [[http://www.lirc.org/|site officiel de lirc]]
+  * [[http://lirc.sourceforge.net/remotes/|Fichier de configuration pour télécomande]]
+  * [[http://www.lirc.org/receivers.html|Faire son récepteur pour quelque euro]]
+  * http://www.lirc.org/html/table.html#@hw-soundcard
+
+Discussion intéressantes : 
+  * http://mythtv-fr.tuxfamily.org/forums/viewtopic.php?id=1523&p=2
+  * http://mythtv-fr.tuxfamily.org/forums/viewtopic.php?id=1491&p=2,
+
+
+Contributeur : 
+  * Quent57

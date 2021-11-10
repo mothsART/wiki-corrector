@@ -1,0 +1,723 @@
+
+{{tag>brouillon administration réseau sécurité vpn vétuste}}
+
+----
+
+{{ :openvpn:openvpn_00.png?nolink|}}
+
+====== OpenVPN ======
+
+**OpenVPN** est un logiciel libre permettant de créer un réseau privé virtuel [[:vpn|VPN]]. \\
+[[:vpn#differentes_utilisations_de_vpn|Différents usages nécessitent l'utilisation d'un VPN]]\\
+Il peut être utilisé pour simplement accéder à un serveur VPN existant ou pour mettre en place un serveur… et y accéder.
+
+Que ce soit en configuration client ou serveur, il est possible de tout configurer en [[:commande_shell|CLI]] ou par interface graphique.
+
+===== Installation =====
+
+Il faut aussi installer le support pour gnome :
+<code>sudo apt-get install network-manager-openvpn network-manager-openvpn-gnome</code>
+
+Dans le cas contraire, cela affiche une erreur dans la gestion de l'identité :
+"impossible de charger l'éditeur de connexions VPN"
+
+==== Par paquet ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] : 
+
+  * Pour le serveur openvpn :
+     * **[[apt>openvpn]]**
+     * (vivement recommandé) [[fail2ban]] : le seul risque de sécurité subsistant sur votre serveur vpn sera une attaque de type force brute, et ddos, il est donc nécessaire de limiter le nombre d'essais possibles. ((openvpn est mis à jour rapidement en cas de trou de sécurité, ou de problème lié à certaines clés sensibles))
+     * (facultatif selon le choix de l'utilisateur) : **[[apt>gadmin-openvpn-server]]** : outil à interface graphique pour administrer un serveur openvpn, permet également de générer et éditer la configuration.
+  * Pour le [[client openvpn]] :
+     * **[[apt>openvpn]]**
+     * **[[apt>network-manager-openvpn]]** : plugin openvpn pour le gestionnaire réseau, vous permettant de configurer facilement un client, et ensuite pouvoir le démarrer. ((pour [[gnome]], ou [[kde]]))
+     * (facultatif selon le choix de l'utilisateur) **[[apt>gadmin-openvpn-client]]** : outil à interface graphique pour le client d'un serveur openvpn, permet également de générer et éditer la configuration.
+
+<note help>Les ports par défaut pour OpenVPN sont :
+  * 1194 TCP
+  * 1194 UDP
+</note>
+==== Webmin : Interface d'administration web ====
+
+Un module [[:Webmin]] est disponible pour faciliter le paramétrage d'[[http://www.webmin.com/cgi-bin/search_third.cgi?search=openvpn|OpenVPN]].
+
+<note tips>
+Bien sur, l'usage de webmin n'est pas nécessaire.
+
+Certains diraient même que c'est a déconseiller.
+</note>
+===== Configuration des VPN =====
+
+==== Cas d'un fournisseur de VPN ====
+
+Vous avez un accès VPN de type OpenVPN et vous souhaitez configurer cet accès ? Voici la procédure.
+
+  - Téléchargez le fichier de configuration de votre fournisseur VPN.
+  - Placez ce fichier ***.ovpn** dans le dossier **/etc/openvpn/** et renommer ce fichier pour enlever les espaces (si besoin). Pour avoir l'accès en écriture de ce dossier, faites un clic droit sur le dossier **openvpn** et choisissez **Ouvrir en tant qu'administrateur**.
+  - Faites un clic droit sur l’icône réseau et choisis de modifier les connexions.
+  - Ajoutez une nouvelle connexion.
+  - Sélectionnez **Importer une configuration VPN enregistrée**.
+  - Sélectionnez votre fichier ***.ovpn**
+  - Vérifiez ou indiquez l’adresse du serveur VPN, choisissez le type **Mot de passe**, tapez le login du VPN et son mot de passe.
+  - Enregistrez, quittez et connectez votre VPN.
+
+Retrouvez ces étapes en images ci-dessous (cliquez pour agrandir), issu d'un fournisseur de VPN (ce n'est pas de la pub mais un exemple) :
+
+{{::openvpn-ubuntu-12.jpg?200|}}
+{{::openvpn-ubuntu-13.jpg?200|}}
+{{::openvpn-ubuntu-14.jpg?200|}}
+{{::openvpn-ubuntu-16.jpg?200|}}
+{{::openvpn-ubuntu-17.jpg?200|}}
+{{::openvpn-ubuntu-18.jpg?200|}}
+{{::openvpn-ubuntu-18-new.jpg?200|}}
+
+==== Certificats de sécurité ====
+
+=== Principe ===
+
+La première étape dans la construction d'une configuration OpenVPN 2.0 est d'établir une **ICP** (**I**nfrastructure de **C**lés **P**ubliques) (PKI en anglais). Une ICP fonctionne grâce à :
+
+  * Une clé publique pour le serveur et une clé privée pour chacun des clients
+  * Un certificat de l'Autorité de Certification maître et des clés qui sont utilisées pour identifier (signer, identifier…) chaque certificat serveur et client.
+
+OpenVPN supporte une authentification bidirectionnelle basée sur les certificats, ce qui signifie que le client doit authentifier le certificat du serveur et le serveur doit authentifier le certificat du client avant qu'une confiance mutuelle puisse être établie.
+
+Ce modèle de sécurité a un nombre de possibilités intéressante pour une utilisation en VPN :
+
+  * Le serveur n'a besoin que de ses propres certificats/clés, il n'a pas besoin de connaître chacune des clés des clients qui peuvent s'y connecter.
+  * Le serveur n'acceptera les clients que lorsque le certificat sera signé par l'Autorité de Certification maître (qui l'aura généré avant). Et comme le serveur peut vérifier cette signature sans avoir besoin d'accéder à la clé privée de l'Autorité de Certification elle-même, il est possible pour la clé de l'Autorité de Certification (clé la plus sensible dans toute l'Infrastructure de Clés Publiques) de résider sur une toute autre machine, même une sans connexion réseau. 
+  * Si une clé privée est compromise, il est possible de la désactiver en ajoutant son certificat à une Liste de Révocation de Certificat (LRC ou CRL en anglais). La LRC permet aux certificats compromis d'être rejetés sélectivement sans nécessiter une entière refonte de l'Infrastructure de Clé Publiques.
+
+Nous allons générer successivement un certificat/une clé de l'Autorité de Certification maître, un certificat/une clé pour le serveur et des certificats/des clés pour 3 clients différents.
+
+=== Générer le certificat et la clé de l'Autorité de Certification maître ===
+
+Pour la gestion de l'ICP, nous utiliserons un jeu de scripts livrés avec OpenVPN.
+
+
+Il faut tout d'abord ouvrir un terminal et effectuer une copie dans son dossier /home des scripts de génération de clés : 
+
+<code>cp /usr/share/doc/openvpn/examples/easy-rsa ~/openvpn/ -R</code>
+<note important> le dossier easy-rsa peut également se trouver sous /usr/share/doc/openvpn </note>
+<note important>Sous Trusty :
+Il se peut que easy-rsa ne soit pas installé d'office <code>sudo apt-get install easy-rsa
+make-cadir my_ca
+cd my_ca/</code>
+</note>
+
+Se connecter en root :
+
+  sudo -i
+
+Maintenant [[:tutoriel:comment_editer_un_fichier|éditez le fichier]] **vars** et initialiser les variables **KEY_COUNTRY, KEY_PROVINCE, KEY_CITY, KEY_ORG, and KEY_EMAIL**.
+Ne laisser surtout pas un seul champ vide. 
+
+Il faut modifier les dernières lignes à sa convenance. Dans notre cas :
+
+<file>
+export KEY_COUNTRY=FR
+export KEY_PROVINCE=drome
+export KEY_CITY=valence
+export KEY_ORG=boiteinformatique
+export KEY_EMAIL=xxxxxxxxx@xxx.com
+</file>
+
+<note important>Depuis Ubuntu 12.04 LTS (« The Precise Pangolin ») : le fichier openssl.cnf n'existe plus. Il s’appelle openssl-1.0.0.cnf ; Il faut donc le lier :
+<code>ln -s openssl-1.0.0.cnf openssl.cnf</code></note> 
+
+On initialise les variables :
+<note important> Sur la 19.10 easyrsa est en version 3 pour générer le PKI il faut utiliser:
+<code>./easyrsa init-pki
+ ./easyrsa build-ca
+ ./easyrsa gen-req hakase-server nopass
+ ./easyrsa sign-req server hakase-server
+  openssl dhparam -out dh2048.pem 2048</code></note>
+  
+<code>source ./vars</code>
+
+
+On nettoie toutes les clés et certificats existants :
+
+<code>./clean-all</code>
+
+
+Puis, nous créons le certificat et la clé de l'Autorité de Certification Maitre (master Certificate Authority (CA) :
+
+<code>./build-ca</code>
+
+La dernière commande (''build-ca'') va construire le certificat de l'Autorité de Certification et la clé en utilisant la commande interactive openssl et sortira :
+<file>
+''Generating a 1024 bit RSA private key''
+
+''............++++++''
+
+''...........++++++''
+
+''writing new private key to 'ca.key'''''-----''
+
+''You are about to be asked to enter information that will be incorporated into your certificate request.''
+
+''What you are about to enter is what is called a Distinguished Name or a DN.''
+
+''There are quite a few fields but you can leave some blank''
+
+''For some fields there will be a default value,''
+
+''If you enter '.', the field will be left blank.''
+
+''-----''
+
+''Country Name (2 letter code) [FR]:''
+
+''State or Province Name (full name) [drome]:''
+
+''Locality Name (eg, city) [valence]:''
+
+''Organization Name (eg, company) [boiteinformatique]:''
+
+''Organizational Unit Name (eg, section) []:''
+
+''Common Name (eg, your name or your server's hostname) []:''
+
+"Name : "
+
+''Email Address [xxxxxxxx@xxxx.com]:''
+
+</file>
+
+<note>On remarque les champs peuvent être omis puisque l'on a prédéfini des valeurs par défaut (valeurs entre crochets). Si un champ est laissé vide, il faut entrer un point '.'. Le seul paramètre devant être impérativement complété est le **Common Name**.</note>
+
+Le certificat et la clé de l'Autorité de Certification sont à présent créés : ca.crt et ca.key dans un dossier keys.
+
+
+=== Générer un certificat et une clé pour le serveur ===
+
+Nous allons générer un certificat et une clé privée pour le serveur :
+
+Dans cet exemple, le nom de notre serveur est : **server**
+<code>./build-key-server server</code>
+
+
+Quand le **Common Name** est demandé, il faut entrer « server » comme le dernier paramètre entré dans la commande précédente. Puis il faut mettre un mot de passe et un nom d'entreprise (facultatif). 
+
+Suivent deux dernières questions qui requièrent des réponses positives :
+
+<file>
+ Certificate is to be certified until Oct 26 21:48:37 2017 GMT (3650 days)
+Sign the certificate ? [y/n] :y
+1 out of 1 certificate requests certified, commit ? [y/n] y
+</file>
+Le certificat et la clé du serveur sont à présent créés : server.crt et server.key.
+
+
+=== Générer les certificats et les clés pour 3 clients ===
+
+Générer des certificats et des clés pour les clients est une étape similaire à l'étape précédente. 
+
+<note important>
+   * Pour protéger la clé avec un mot de passe, il faut utiliser ''./build-key-pass'' au lieu de ''./build-key''.
+   * Si possible faire un couple "utilisateur" / "clés" ((associer un accès client vpn à un seul utilisateur))
+Ce qui élèvera le niveau de sécurité, dans le cadre de perte de données, de matériel, ou tout simplement à cause d'une erreur humaine(( le plus grand risque )).
+
+</note>
+<note important>Depuis la 19.10 easyrsa 3 pour générer et signer vos clées:
+<code>./easyrsa gen-req client01 nopass
+./easyrsa sign-req client client01
+</code>
+</note>
+Exemple avec un client nommé **client1** :
+
+<code>./build-key client1</code>
+
+Quand le **Common Name** est demandé, il faudra donc entrer « client1 »
+
+
+<code>./build-key client2</code>
+
+<code>./build-key client3</code>
+
+Il faut toujours se rappeler que pour chaque client, le champ **Common Name** doit être renseigné et unique.
+
+Les certificats et les clés des clients sont créés.
+
+<note>Cette étape aurait pu se faire sur le client même, ce qui aurait évité de faire circuler des clés sur des canaux moins sûr. Pour cela, il fallait simplement le certificat ''ca.crt'' sur la machine cliente qui génère son certificat et sa clé.
+</note>
+
+==== Générer des paramètres Diffie-Hellman(¹) ====
+
+Les paramètres Diffie Hellman doivent être générés pour le serveur OpenVPN :
+
+<note important> Sur la 19.10 easyrsa est en version 3 pour générer le Diffie Hellman il faut utiliser:
+<code>./easyrsa gen-dh
+./easyrsa gen-crl</code></note>
+
+<code>./build-dh</code>
+
+Ce qui donne :
+<file>
+Generating DH parameters, 1024 bit long safe prime, generator 2
+This is going to take a long time
+.................+...........................................
+...................+.............+.................+.........
+......................................
+
+etc...
+</file>
+
+Les paramètres Diffie Hellman sont copiés dans le répertoire keys : dh1024.pem
+===== Les fichiers clés =====
+
+Maintenant, nous pouvons trouver les clés et les certificats fraichement générés dans le dossier **keys**. Suit une explication de ce que contiennent les fichiers du dossier **keys**.
+
+
+^ Nom de fichier ^ Utile à ^ Utilité ^ Secret ? ^
+| ''ca.crt'' | Serveur et tous les clients | Certificat racine CA | **Non** |
+| ''ca.key'' | Clé signant la machine seulement | Clé racine CA | **Oui** |
+| ''dh{n}.pem'' | Serveur seulement | Paramètres Diffie Hellman | **Non** |
+| ''server.crt'' | Serveur seulement | Certificat serveur | **Non** |
+| ''server.key'' | Serveur seulement | Clé serveur | **Oui** |
+| ''client1.crt'' | Client1 seulement | Certificat Client1 | **Non** |
+| ''client1.key'' | Client1 seulement | Clé Client1 | **Oui** |
+| ''client2.crt'' | Client2 seulement | Certificat Client2 | **Non** |
+| ''client2.key'' | Client2 seulement | Clé Client2 | **Oui** |
+| ''client3.crt'' | Client3 seulement | Certificat Client3 | **Non** |
+| ''client3.key'' | Client3 seulement | Clé Client3 | **Oui** |
+
+L'étape finale dans ce processus de génération de clés est de copier tous les fichiers sur la machine qui en a besoin, en prenant soin de les copier à travers un tunnel sûr.
+
+Au lieu de générer les certificats et les clés clients sur le serveur, le client aurait pu générer sa propre clé privée localement, et ensuite, soumettre un CSR (Certificat Signing Request ou Demande de Signature de Certificat) à la machine qui signe les clés. A son tour, la machine signant les clés peut procéder au CSR et retourner un certificat signé au client. Tout ceci peut se faire sans avoir besoin qu'un fichier secret ''.key'' quitte le disque dur de la machine qui l'a généré.
+
+Copie des fichiers serveur :
+<note important> Sur la 19.10 easyrsa est en version 3 pour copier les clées il faut utiliser:
+<code>cp pki/ca.crt /etc/openvpn/server/
+cp pki/issued/hakase-server.crt /etc/openvpn/server/
+cp pki/private/hakase-server.key /etc/openvpn/server/
+cp pki/dh.pem /etc/openvpn/server/
+cp pki/crl.pem /etc/openvpn/server/</code></note>
+<code>cp keys/dh*.pem keys/ca.crt keys/server.crt keys/server.key /etc/openvpn/</code>
+
+
+
+
+==== Création des fichiers de configuration pour le serveur et les clients ====
+
+=== Obtenir les fichiers d'exemple de configuration ===
+
+Dans le répertoire **/usr/share/doc/openvpn/examples/sample-config-files/**, vous trouverez des fichiers de configuration **client.conf** et **server.conf** qui peuvent vous servir de base pour la configuration de votre serveur/vos clients.\\
+Si vous devez travailler avec des machines sous Windows l'extension ".conf" doit être changée en ".ovpn" sur le pc Windows.
+
+=== Configuration du serveur ===
+
+Le fichier d'exemple étant compressé : server.conf.gz, il faut procéder comme suit:
+
+<code>sudo zcat /usr/share/doc/openvpn/examples/sample-config-files/server.conf.gz > /etc/openvpn/server.conf</code>
+
+Il faut donc [[:tutoriel:comment_editer_un_fichier|éditer le fichier]] **/etc/openvpn/server.conf**
+
+Le fichier d'exemple de configuration pour le serveur est un point de départ pour une configuration serveur d'OpenVPN. Il va créer un VPN utilisant une interface réseau virtuel TUN (pour le routage), écouter les connections clients sur le port UDP 1194 (port officiel d'OpenVPN), et distribuer des adresses virtuelles aux clients se connectant depuis le réseau 10.8.0.0/24.
+
+À présent, le fichier de configuration serveur est utilisable. Néanmoins, il est toujours possible de modifier le fichier plus en détail :
+
+  * En cas d'utilisation d'Ethernet bridgé, il faut utiliser **server-bridge** et **dev tap** au lieu de **server** et **dev tun**
+  * Si le serveur doit écouter sur un port TCP au lieu d'UDP, il faut mettre **proto tcp** au lieu de **proto udp** (si OpenVPN doit écouter sur les deux, il faut créer deux instances séparées d'OpenVPN)
+  * Si l'adresse IP virtuelle utilisée doit être différente de 10.8.0.0/24, il faut modifier la directive **server**. Ne jamais oublier que la plage d'adresse IP virtuelles doit être inutilisée sur les réseaux de chaque côté du VPN.
+  * Pour que les clients soient capables de s'atteindre à travers le VPN, il faut décommenter la directive **client-to-client**. Par défaut, les clients ne peuvent atteindre que le serveur.
+  * Pour augmenter la sécurité, il est possible de décommenter les directives **user nobody** et **group nobody**. Diverses options de cryptage et de sécurité peuvent aussi être modifiées. (Le groupe nobody n'existe pas dans ubuntu, il faut donc mettre **nogroup**)
+
+Pour faire fonctionner plusieurs instances d'OpenVPN sur la même machine, chacune utilisant un fichier de configuration différent, il faut :
+
+  * Utiliser un port différent pour chaque instances (les protocoles UDP et TCP utilisent différent espaces de port, donc un processus peut écouter le port UDP-1194 et un autre le port TCP-1194)
+  * Faire attention, lorsque les instances d'OpenVPN utilisent le même dossier, que chacune n'écrive pas sur les mêmes sorties. C'est-à-dire qu'il faut modifier les directives **log**, **log-append**, **status** et **ifconfig-pool-persist**.
+
+
+=== Configuration du client ===
+<note important>Depuis la 19.10 easyrsa 3 pour copier vos clées:
+<code>cp pki/ca.crt /etc/openvpn/client/
+cp pki/issued/client01.crt /etc/openvpn/client/
+cp pki/private/client01.key /etc/openvpn/client/
+</code>
+</note>
+Le fichier d'exemple de configuration du client **client.conf** reflète les directives mises dans le fichier **server.conf**.
+
+  * Comme le fichier de configuration du serveur, éditez d'abord les paramètres **ca**, **cert** et **key** pour pointer vers les fichiers générés précédemment. Chaque client doit avoir sa propre paire ''cert''/''key''. Seul le fichier ca est universel à travers le VPN (le serveur et tous les clients).
+  * Editez ensuite la directive **remote** pour indiquer l'adresse IP/nom d'hôte et le port du serveur OpenVPN (s'il est derrière un routeur, il faut indiquer l'adresse publique et le port sur lequel le routeur transfère vers le serveur OpenVPN)
+
+  * Pour terminer, il faut vérifier que la configuration client correspond bien à la configuration serveur. Les directives principales à vérifier sont :
+
+**dev (tun ou tap)**
+
+**proto (udp ou tcp)**
+
+**comp-lzo**
+
+**fragment**
+
+===== Démarrage automatique d'OpenVPN au lancement du système =====
+
+Pour qu'OpenVPN se lance au démarrage du serveur ou du client, il faut placer le fichier de configuration au bon endroit. 
+
+  * Pour le serveur, copiez le fichier **server.conf** dans le répertoire **/etc/openvpn**
+  * Pour les clients, copiez le fichier **client.conf** dans **/etc/openvpn**
+
+Il faut également déplacer les clés et certificats dans le dossier **/etc/openvpn**. Sont concernés :
+
+  * pour le serveur :
+    * ca.crt
+    * server.crt
+    * server.key
+    * dh1024.pem
+
+  * Pour le client : 
+    * ca.crt
+    * client.crt
+    * client.key
+
+
+===== Démarrage du VPN et tests de la connectivité =====
+
+==== Démarrage du serveur ====
+
+Premièrement, il faut vérifier que le serveur OpenVPN sera accessible depuis Internet. Ce qui signifie que :
+
+  * le port 1194 UDP (ou celui configuré) est bien ouvert sur le pare-feu
+  * une règle de transfert pour transférer le port 1194 UDP depuis le firewall vers le serveur OpenVPN est bien établie
+
+Ensuite, il faut vérifier que l'interface TUN/TAP n'est pas derrière un pare-feu.
+
+Pour simplifier la recherche de problèmes, il est préférable de démarrer le serveur OpenVPN depuis la ligne de commande plutôt que de démarrer le démon. Dans un [[:terminal]] :
+
+<code>cd /etc/openvpn
+sudo openvpn server.conf
+</code>
+
+Un démarrage normal ressemble à ça :
+
+<file>Tue Oct 30 05:22:17 2007 OpenVPN 2.0.9 i486-pc-linux-gnu [SSL] [LZO] [EPOLL] built on May 21 2007
+Tue Oct 30 05:22:17 2007 Diffie-Hellman initialized with 1024 bit key
+Tue Oct 30 05:22:17 2007 TLS-Auth MTU parms [ L:1542 D:138 EF:38 EB:0 ET:0 EL:0 ]
+Tue Oct 30 05:22:17 2007 TUN/TAP device tun0 opened
+Tue Oct 30 05:22:17 2007 ifconfig tun0 10.8.0.1 pointopoint 10.8.0.2 mtu 1500
+Tue Oct 30 05:22:17 2007 route add -net 10.8.0.0 netmask 255.255.255.0 gw 10.8.0.2
+Tue Oct 30 05:22:17 2007 Data Channel MTU parms [ L:1542 D:1450 EF:42 EB:23 ET:0 EL:0 AF:3/1 ]
+Tue Oct 30 05:22:17 2007 UDPv4 link local (bound): [undef]:1194
+Tue Oct 30 05:22:17 2007 UDPv4 link remote: [undef]
+Tue Oct 30 05:22:17 2007 MULTI: multi_init called, r=256 v=256
+Tue Oct 30 05:22:17 2007 IFCONFIG POOL: base=10.8.0.4 size=62
+Tue Oct 30 05:22:17 2007 IFCONFIG POOL LIST
+Tue Oct 30 05:22:17 2007 Initialization Sequence Completed
+</file>
+
+==== Démarrage du client ====
+
+Comme dans la configuration serveur, il est préférable de démarrer le client OpenVPN depuis une ligne de commande. Exemple pour le client1 configuré plus haut :
+<code> cd /etc/openvpn && sudo openvpn client.conf</code>
+
+Un démarrage normal d'un client doit se terminer comme sur un démarrage de serveur :
+<file>
+Tue Oct 30 05:22:17 2007 Initialization Sequence Completed
+</file>
+
+Une fois que vous êtes sûr que votre configuration fonctionne, vous pouvez choisir de démarrer le daemon automatiquement au démarrage du système:
+<code> sudo systemctl enable openvpn@client.service</code>
+<note>
+Si votre fichier de configuration s'appelle //server//, cette commande sera changée en <code> sudo systemctl enable openvpn@server.service</code>. Plus globalement, la partie suivant directement le //@// est le nom de votre fichier de configuration.
+</note>
+
+
+==== Test ====
+
+Maintenant, essayons de pinguer à travers le VPN depuis le client. 
+
+Dans une configuration bridgée (c'est-à-dire qu'il y a ''dev tap'' et non ''dev'' ''tun'' dans ''server.conf''), on peut essayer de pinguer le serveur (adresse par défaut 10.8.0.1 si vous n'avez pas changé le sous-réseau attribué) :
+
+<code>ping 10.8.0.1</code>
+
+Si le ping a fonctionné, le VPN fonctionne !
+
+<note important>A cette étape vous êtes seulement connecté à votre serveur, mais vous n'avez pas encore accès à Internet au travers de votre VPN.
+</note>
+
+<note important>Si le poste client exécute openvpn sous Windows Vista et 7, il est probable que le ping vers 10.8.0.1 ne passe pas. il faut d'abord ajouter ces 2 lignes à la fin du fichier de configuration du client :
+
+  * route-method exe
+  * route-delay 2
+
+**Attention** : pour que Windows soit d’accord d’ajouter des routes il faut impérativement qu’OpenVPN soit lancé en **mode administrateur** (en tout cas pour Windows 7)
+</note>
+
+puis exécuter une fenetre MS-DOS en "administrateur" et exécuter la commande suivante : 
+
+<code>netsh firewall set icmpsetting 8 enable</code>
+
+Pour Windows 7, la commande à exécuter est la suivante :
+
+<code>netsh advfirewall firewall add rule name="All ICMP V4" protocol=icmpv4:any,any dir=in action=allow</code>
+
+cette commande permet d'activer le ping des interfaces réseaux. 
+
+pour désactiver le ping ensuite, il faut exécuter cette commande : 
+
+<code>netsh firewall set icmpsetting 8 disable</code>
+
+Pour Windows 7, la commande à exécuter est la suivante :
+
+<code>netsh advfirewall firewall add rule name="All ICMP V4" protocol=icmpv4:any,any dir=in action=block </code>
+==== En cas d'utilisation de Firestarter ====
+
+FIXME La méthode suivante a été testée pour une machine cliente en mode route. A tester pour le mode bridge ou un serveur.
+
+Il faut configurer FireStarter pour permettre le passage du VPN au travers du firewall :
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] de configuration **/etc/firestarter/user-pre** en mode [[:sudo|administrateur]]:
+
+
+Ecrire ou Ajouter les lignes suivantes :
+
+<file># Allow traffic on the OpenVPN interface
+$IPT -A INPUT -i tun+ -j ACCEPT
+$IPT -A OUTPUT -o tun+ -j ACCEPT
+</file>
+Redémarrez Firestarter
+
+<code bash>sudo /etc/init.d/firestarter restart</code>
+
+===== Accéder à internet par votre VPN =====
+
+<note>Cette étape est redondante avec la partie **Inclure des machines côté serveur avec un VPN routé**, mais cette dernière est incomplète.
+Si vous suivez les explications ici présentes cela sera vos dernières manipulations pour que les clients accèdent à internet par le biais du serveur VPN</note>
+
+Pour une utilisation simple de votre VPN, et obtenir facilement l'accès à internet, il est conseillé d'utiliser le VPN en mode routé, soit tun (le mode par défaut après installation). Vous pouvez vérifier que vous utilisez bien ce mode en cherchant la ligne "dev tun" dans vos fichiers .conf client et serveur.
+
+Avant toute chose, on s'assure que le forwarding est activé sur le serveur (à faire en root)
+
+<code>
+echo "1" > /proc/sys/net/ipv4/ip_forward
+</code>
+
+Si vous rencontrez l'erreur ip_forward e667 fsync failed, il est probable qu'il faille éditer /etc/sysctl.conf et modifier net.ipv4.ip_forward = 1
+
+Ensuite, indiquer au serveur que l'on souhaite qui redirige le traffic des clients vers internet, en ajoutant à /etc/openvpn/server.conf :
+
+<code>
+push "redirect-gateway def1 bypass-dhcp"
+</code>
+
+Il peut être utile de préciser quel DNS utiliser, ici nous choisissons OpenDNS :
+
+<code>
+push "dhcp-option DNS 208.67.222.222"
+push "dhcp-option DNS 208.67.220.220"
+</code>
+
+Enfin, ajouter cette règle à iptables avec la commande suivante sur le serveur :
+
+<code>
+iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o eth0 -j MASQUERADE
+</code>
+Attention, cette commande n'apporte pas de changements permanents. Pour exécuter cette règle à chaque démarrage, il faut l'ajouter dans le fichier **/etc/rc.local**
+
+
+Rédemarrez le serveur, et vous devez avoir un accès complet à internet au travers de votre VPN.
+
+<code>
+sudo service openvpn restart
+</code>
+
+Vous pouvez à présent vous connecter à l'aide du [[client OpenVPN]] (network-manager-openvpn). Il gère automatiquement les règles de routage en local pour avoir un accès complet à internet. Sinon, vous devrez le faire à la main.
+
+Problèmes connus : 
+  * Par défaut le serveur utilise la compression LZO, il faut donc l'activer également dans les paramètres avancés du manager gnome.
+  * Selon ce que vous avez fait précédemment, vous pouvez avoir plusieurs instances du client en cours. Vérifier que vous n'avez qu'une seule interface tun0 en local avec la commande ifconfig.
+  * Pensez à lancer le serveur en ligne de commande pour pouvoir voir les éventuels messages d'erreurs lors de la connexion du client.
+===== Administration du serveur VPN =====
+==== Par telnet ====
+
+Il faut au préalable modifier le fichier de configuration du serveur.
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/openvpn/server.conf**.
+
+et ajoutez-y : 
+<file>
+management localhost <un numéro de port>
+</file>
+
+Le numéro de port est libre pour peu qu'il ne soit pas utilisé par un autre service ou application.
+
+Une fois la configuration modifiée, recharger ou redémarrez OpenVPN.
+
+Un **telnet localhost <le numéro de port>** vous confirmera que tout s'est bien passé.
+
+La commande //help// vous affichera la liste de commandes disponibles.
+
+==== Utilisation de Webmin ====
+
+Si vous avez installé cet outil et le module d'administration d'OpenVPN, un sous-menu **OpenVPN + CA** a fait son apparition dans le menu **Serveurs**
+
+Ainsi, depuis Webmin, il est possible :
+
+  * de créer et/ou gérer les Autorités de Certification
+  * de créer et/ou gérer les VPN
+  * de lister les connexions actives
+
+
+
+==== Informations complémentaires ====
+
+=== Inclure des machines côté serveur avec un VPN routé ===
+
+Une fois que le VPN est opérationel entre le client et le serveur, il peut être utile d'étendre le champ du VPN pour que les clients puissent accéder à de multiples machines sur le réseau du serveur, au lieu de pouvoir accéder seulement au serveur lui-même.
+
+Pour l'exemple, nous admettrons que le sous-réseau côté serveur est en ''192.168.1.0/24'' et le pool d'adresse IP du VPN est ''10.8.0.0/24'' comme utilisé précédemment. Pour être sûr de la configuration, il faut vérifier le fichier **/etc/openvpn/server.conf**.
+
+La première chose à faire, c'est indiquer au client que le réseau ''192.168.1.0/24'' peut-être accessible à travers le VPN. Ceci peut-être fait facilement en utilisant la directive côté serveur suivante :
+
+<code>push "route 192.168.1.0 255.255.255.0"</code>
+
+Puis, il faut créer une route sur la passerelle réseau côté serveur pour router le sous-réseau VPN du client vers le serveur OpenVPN (seulement si le serveur OpenVPN n'est pas aussi la passerelle). Pour ceci, il faut voir la documentation de votre passerelle et lui dire que tout le trafic venant de l'extérieur sur le port attribué au VPN doit être redirigé sur le serveur OpenVPN (''adresseIP:port'').
+
+<note>L'IP forwarding et le TUN/TAP forwarding doivent être activés sur le serveur OpenVPN.</note>
+
+Pour le vérifier, il est possible de tester chaque interface ou le système en général :
+
+Vérification de l'interface TUN :
+
+<code>cat /proc/sys/net/ipv4/conf/tun0/forwarding</code>
+
+Vérification de l'interface réseau (exemple pour eth0) :
+
+<code>cat /proc/sys/net/ipv4/conf/eth0/forwarding</code>
+
+
+Vérification de toutes les interfaces :
+
+<code>cat /proc/sys/net/ipv4/conf/all/forwarding</code>
+
+Vérification de l'IP forwarding en général :
+
+<code>cat /proc/sys/net/ipv4/ip_forward</code>
+
+
+=== Inclure des machines côté serveur avec un VPN bridgé ===
+
+Dans cette configuration, les machines sont inclues directement sans avoir à modifier quoi que ce soit.
+
+
+=== Inclure des machines avec un VPN routé ===
+
+Dans un scénario typique d'accès distant ou même d'utilisation itinérante, la machine cliente se connecte au VPN comme étant seule. Mais supposons que la machine cliente est une passerelle pour un réseau local, et que chaque machine veut être capable de router à travers le VPN.
+
+Pour l'exemple, nous admettrons que le sous-réseau côté client est en 192.168.4.0/24, et que le client VPN utilise un certificat avec le «common name» ''client2''. Le but est de créer un VPN qui permettrait à chaque machine du réseau client de communiquer avec chaque machine du réseau serveur à travers le VPN.
+
+Avant de commencer, il y a des prérequis qui doivent être suivis :
+
+  * Le sous-réseau client (192.168.4.0/24 dans l'exemple) doit être unique. Il peut y avoir des conflits en cas de sous-réseau identique.
+  * Le client doit avoir un «common name» unique dans son certificat et le marqueur «duplicate-cn» (ce marqueur permet d'avoir des clients avec le même nom de certificat) ne doit pas être utilisé dans le fichier de configuration du serveur OpenVPN.
+<note>
+L'IP forwarding et le TUN/TAP forwarding doivent être activés sur le client OpenVPN qui servira de passerelle.</note>
+
+Puis, il faut modifier des configurations côté serveur. Si le fichier de configuration du serveur ne fait pas référence à un dossier de configuration client, il faut en créer un :
+
+<code>mkdir /etc/openvpn/ccd</code>
+(il peut être créé ailleurs mais il faudra penser à modifier à chaque fois son chemin)
+
+Puis, dans le fichier **server.conf**, il faut ajouter la ligne :
+
+<file>client-config-dir ccd</file>
+
+
+Dans cette directive, «ccd» fait référence au répertoire qui vient d'être créé.
+
+Quand un nouveau client se connecte au serveur OpenVPN, le processus OpenVPN va vérifier ce dossier pour y trouver un fichier qui porte le même nom que le «common name» du certificat du client.
+Si un fichier correspondant est trouvé, il sera lu et utilisé pour appliquer des directives supplémentaires au client.
+
+L'étape suivant est de créer un fichier nommé «client2» dans le dossier **/etc/openvpn/ccd** dans lequel vous ajouterez (dans cet exemple) :
+
+<file>
+iroute 192.168.4.0 255.255.255.0
+</file>
+
+
+Ceci permet d'indiquer au serveur OpenVPN que le sous-réseau ''192.168.4.0/24'' peut être routé vers le ''client2''.
+
+Dans le fichier de configuration du serveur **/etc/openvpn/server.conf** (et **non** dans **ccd/client2**), il faut ajouter :
+
+<file>route 192.168.4.0 255.255.255.0</file>
+
+
+Pourquoi mettre des informations redondantes ?
+« route » contrôle le routage dans le noyau vers le serveur OpenVPN (via l'interface tun) alors que «iroute» contrôle le routage depuis le serveur OpenVPN vers le client distant. Les deux sont nécessaires.
+
+Maitenant, la question est : Est-ce que l'on veut permettre aux différents clients du VPN de dialoguer ensemble. Si c'est le cas, il faut ajouter dans le fichier de configuration du serveur **/etc/openvpn/server.conf** :
+
+<file>client-to-client
+push "route 192.168.4.0 255.255.255.0"</file>
+
+Ceci permet au serveur OpenVPN d'indiquer aux autres clients que le réseau du client2 existe. 
+
+La dernière étape, celle qui est souvent oubliée, est d'ajouter une route sur la passerelle du réseau côté serveur qui redirigera le trafic allant vers 192.168.4.0/24 vers le serveur OpenVPN (inutile si la passerelle est le serveur OpenVPN). 
+
+Pour ceci, il faut voir la documentation de votre passerelle et lui indiquer que tout le trafic allant vers 192.168.4.0/24 doit être redirigé sur le serveur OpenVPN (''adresseIP:port'').
+
+Si cette étape n'est pas faite, et qu'il faille pinguer une machine sur le réseau côté serveur depuis le 192.168.4.8, le ping sortant atteindrait probablement la machine mais ensuite, la machine ne saurait pas comment router la réponse au ping parce qu'elle n'a aucune idée de comment elle peut atteindre 192.168.4.0/24.
+
+La règle empirique à utiliser est que le routage d'un réseau entier à travers un VPN (c'est-à-dire lorsque le serveur OpenVPN n'est pas la passerelle) nécessite que la passerelle route tous les sous-réseaux VPN vers le serveur OpenVPN.
+
+De manière identique, si la machine client utilisant OpenVPN n'est pas la passerelle pour le réseau côté client, il faut que la passerelle côté client route tous les sous-réseaux atteignables à travers le VPN vers la machine client OpenVPN.
+
+
+=== Inclure des machines côté client avec un VPN bridgé ===
+
+Ceci requiert une installation plus complexe (mais peut-être moins complexe en pratique qu'à expliquer en détails), il faut :
+
+  * Faire un pont entre l'interface tap et l'interface réseau sur le client
+  * Fixer manuellement l'adresse IP et le masque de sous-réseau de l'interface tap du client
+  * Configurer les machines côté client pour qu'elles utilisent une adresse IP et un masque de sous-réseau pour être sur le même sous-réseau que l'interface tap du client OpenVPN. Il est possible de faire attribuer une adresse automatiquement par un serveur DHCP du côté serveur
+
+=== Attribuer des options DHCP aux clients ===
+
+Le serveur OpenVPN peut attribuer une adresse automatique aux clients mais aussi toutes les options DHCP tels que les adresses des serveurs DNS ou WINS. Il faut que le client soit configuré de telle manière qu'il soit capable d'accepter ce genre d'information.
+
+Exemple : supposons que le client veuille utiliser un serveur DNS et un serveur WINS internes à son réseau. Pour ceci, il faut ajouter au fichier de configuration du serveur OpenVPN :
+
+<file>
+push "dhcp-option DNS 192.168.1.4" 
+push "dhcp-option DNS 192.168.1.5"
+push "dhcp-option WINS 192.168.1.8"
+</file>
+
+
+===== Créer un VPN avec une adresse IP dynamique =====
+
+Alors que les clients peuvent facilement accéder au serveur en ayant une adresse IP dynamique, ça devient plus intéressant quand le serveur lui-même a une adresse IP publique dynamique. Bien qu'OpenVPN fonctionne très bien avec ce genre de schéma, il faut quand même configurer certaines choses.
+
+La première étape est d'obtenir un DNS dynamique qui peut être configuré pour suivre le serveur chaque fois que l'adresse IP change. Il y a beaucoup de service de DNS dynamique disponible tel que [[http://dyndns.org|DynDNS]].
+
+<note important>[[http://dyndns.org|DynDNS]] est maintenant payant, utiliser [[http://www.noip.com|No-Ip]] par exemple</note>
+
+Il faudra toutefois s'assurer de la mise à jour de l'adresse IP correspondant au nom d'hôte choisi afin de pouvoir retrouver facilement le serveur VPN.
+
+
+===== Voir aussi =====
+
+==== Liens externes ====
+
+  * Le [[http://openvpn.net|site officiel d'OpenVPN]]
+  * Un [[http://howto.landure.fr/lone-wolf-scripts/gnu-linux/debian-4-0-etch/installer-et-configurer-openvpn-sur-debian-4-0-etch|HOWTO sur l'installation/configuration d'OpenVPN sous Debian Etch]] (que vous pouvez suivre en lançant en premier lieu un shell super utilisateur avec la commande « sudo -s »)
+  * Un [[http://15minutesoffame.be/nico/blog2/?article16/creer-un-serveur-openvpn|autre tuto testé avec 11.04]]
+  * [[wpfr>OpenVPN|Article sur Wikipédia]]
+  * [[http://www.system-linux.eu/index.php?category/VPN|Tutoriels et documentations complémentaire sur OpenVPN]]
+  * [[http://www.system-linux.eu/index.php?post/2010/05/24/Installation-ipsec-Host-to-Host-et-Network-to-Network|Pour ceux qui prefereraient IPSEC]]
+  * [[http://www.webmin.com/cgi-bin/search_third.cgi?search=openvpn|Modules OpenVPN pour Webmin]]
+
+
+
+==== Notes ====
+
+  - [[wpfr>Échange_de_clés_Diffie-Hellman]]
+
+----
+
+Pour plus d'informations, n'hésitez pas à contacter [[utilisateurs:pezzos]].
+
+//Contributeurs : [[:utilisateurs:pezzos]], [[:utilisateurs:krop]] (élagage, nettoyage, corrections), [[:utilisateurs:zedtux]], [[:utilisateurs:nicoxinchao]] (ajout de la partie "Accédez à Internet), LukePerp (ajout config cas d'un fournisseur vpn).//

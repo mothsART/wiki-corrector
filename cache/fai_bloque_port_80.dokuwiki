@@ -1,0 +1,74 @@
+
+====== Votre FAI Bloque le port 80? ======
+----
+
+Nous verrons comment rerouter les connexions vers un autre port d'apache ET, le plus important, transformer le site monsupersite.com:xxxx en monsupersite.com sans devoir payer le double à votre FAI pour faire déverrouiller les ports. Il va falloir faire affaire avec un service de DNS en ligne, celui que je vous propose vous coûtera 1$/mois, dans le meilleur des mondes, le service serait gratuit, mais après plusieurs recherche, il n'existe pas de service de DNS professionnel gratuit.
+
+Premièrement on va démystifier quelques réponses "invalides" que vous auriez pu trouver sur internet.
+
+**Il suffit de faire une redirection dans le router!**
+
+NON! Le problème c'est que le FAI bloque le port 80 avant même qu'il arrive au routeur, vous avez beau faire un forward, aucun trafic ne sera dirigé vers le port.
+
+**Faites une iframe qui redirige vers le site avec l'autre port.**
+
+Oui, mais non ... Où vous l'hébergeriez cette iframe? Sur un autre hébergeur? VRAIMENT? Autant mettre tout le site sur l'autre hébergeant qu'à faire!
+
+**Spécifiez le port dans bind9.**
+
+Bind9 redirige vers un IP pas vers un port, vous pouvez vous en servir pour faire du forward mais le problème c'est que comme dit précédemment, le port 80 est bloqué donc ça reviendrait à l'idée du routeur.
+
+L'idée est de demander à un DNS EXTERNE de faire le forwrard. Voilà! Un combiné de toutes les réponses que vous avez pu trouver. Donc, commençons.
+
+====== 1.La configuration d'apache ======
+
+Premièrement, demandons à apache2 d'écouter sur un port différent. Utilisez le port que vous voulez, l'important c'est qu'il soit libre. Dans cet exemple nous allons utiliser le port 81.
+
+Éditez le fichier de configuration /etc/apache2/ports.conf et changez 80 pour le port désiré dans les lignes suivantes:
+<note>NameVirtualHost *:81
+Listen *:81</note>
+Maintenant dirigez vous vers le répertoire /etc/apache2/sites-available et changez le port du virtualhost :
+<note><VirtualHost *:81></note>
+Nous allors maintenant désactiver le site qui est actuellement actif pour activer les nouvelles configuration et recharger apache, exécutez la comande :
+<note>sudo service apache2 reload</note>
+À partir de ce moment vous êtres capable d'accéder à votre site à partir de monsupersite.com:81 , mais ce procédé à deux inconvénients. Premièrement, les 'novices' de l'internet ne savent même pas ce qu'est un port, ils penseront certainement pas à le mettre, ensuite, les intermédiaires pourraient voir un site écrit de cette façon comme "non-professionnel".Vous imaginez vous aller sur ebay.fr et devoir spécifier ebay.fr:81 ?
+
+Donc maintenant nous allons demander à www.zoneedit.com de faire un lien entre le site, le serveur et le port!
+
+====== 2. Configurer zoneedit ======
+
+Créez un compte sur zoneedit.com et créditez votre compte dans le "Member Center" un crédit = 1 mois de dns par zone. Donc chaque site internet que vous avez vous coûtera 1$/mois. Ce n'est pas énorme!
+
+Maintenant allez dans l'onglet "Manage Zones" du "Member Center" et cliquez sur "Create New Zone". Dans le champ Zone Name écrivez votre nom de domaine (ex : monsupersite.com). Renseigniez les champs comme ceci en remplaçant 8.8.8.8 par votre IP :
+
+{{ :dns.png |}}
+
+Il ne reste plus qu'à configurer les redirections, remplacez http://monsupersite.com:81/ par votre site et votre port en créant une redirection vers www et @. Si vous ne voulez pas que le site devienne automatiquement http://monsupersite.com:81/ dans la barre de l'url, vous devez cocher "Cloaked?" et spécifier le titre du site web. Cependant, cette façon a beau être plus professionnelle et esthétique, elle à l'inconvénient d'empêcher les gens de mettre des liens vers des pages de votre site et sans cochez cette page, quand quelqu'un tapera monsupersite.com le site deviendra ww2.monsupersite.com:81, c'est à vous de choisir, pratique ou esthétique!
+
+{{ :forward.png |}}
+
+Cliquez sur Validate et normalement vous aurez ce message "This Zone has passed validation"! Il ne reste plus qu'à cliquer sur Save et sur Save and Publish Immediately. Félicitation, votre DNS fonctionne!
+
+====== 3. Configurez votre domaine avec le nouveau DNS ======
+
+Comme chaque domaine est différent, je vous abandonne sur ce point (retenez vos lames). Les NS sont spécifiés dans la page de votre zone sur zoneedit.com
+
+====== 4. Configurer resolv.conf ======
+
+Vous allez avoir besoin des ips de vos deux nouveaux nameservers, pour ce faire dans la page de votre zone notez les 2 NS, dans l'exemple il s'agit de ns8.zoneedit.com et de ns6.zoneedit.com. Faite un ping sur chacun de ces serveurs et vous obtiendrez leurs IP.
+
+====== 4.1 Si vous utilisez DHCP pour attributer un IP à votre serveur. ======
+
+Éditez le fichier /etc/dhcp9/dhclient.conf ( /etc/dhcp/dhclient.conf sous debian) décommentez/modifiez la ligne :
+<note>#prepend domain-name-servers 127.0.0.1;</note>
+Pour qu'elle devienne
+<note>prepend domain-name-servers 1.1.1.1, 2.2.2.2;</note>
+En remplaçant 1.1.1.1/2.2.2.2 par l'ip de vos name servers.
+
+====== 4.2 Si vous avez configuré manuellement votre IP sur votre serveur. ======
+
+Éditez le fichier /etc/resolv.conf pour ajouter les deux ips en début de document.
+
+Maintenant redémarrez votre serveur.
+Resolv.conf est maintenant configuré et votre serveur est maintenant informé qu'il existe, c'est bien! Il ne reste plus qu'à taper monsupersite.com et à profiter du résultat  :-) et à tout hasard, n'oubliez pas de déverrouiller le port dans iptables et dans le firewall du routeur ;-)
+<note warning>ATTENTION : Vos liens doivent obligatoirement pointer vers ww2.monsupersite.com:81/page.html ! Les autres requêtes seront perdues! </note>

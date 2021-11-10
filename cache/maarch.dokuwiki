@@ -1,0 +1,210 @@
+
+{{tag>Xenial serveur BROUILLON}}
+
+----
+
+====== Maarch ======
+<note warning>Cette page n'est pas à jour, [[http://wiki.maarch.org/Maarch_RM/Proc%C3%A9dure_d%27installation|ici]] vous trouverez un tutoriel complet pour l'installer à partir des sources.</note>
+Le logiciel **Maarch** est un logiciel de gestion électronique des documents (GED) sous licence libre distribué sous plusieurs formes. Cette documentation est dédiée à l'installation de la version //Enterprise// du logiciel.
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'un serveur d'envoi de courrier électronique SMTP.
+  * Avoir [[:tutoriel:comment_installer_un_paquet|installé les paquets]] **[[apt://apache2|apache2]]**, **[[apt://php5|php5]]** et **[[apt://postgresql|postgresql]]**.
+  * Télécharger l'archive de [[http://www.maarch.fr/download/mep10|Maarch Enterprise 1.0]].
+
+===== Installation =====
+
+Etant donné que ce logiciel n'est pas préconfiguré pour Ubuntu, nous tenterons de l'installer en respectant la nomenclature habituelle des logiciels du même type (comme par exemple [[phpmyadmin|phpmyadmin]]).
+
+==== Répertoire des fichiers de configuration de Maarch ====
+
+Il faut commencer par créer un répertoire de configuration pour Maarch, qui contiendra notamment le fichier de configuration d'Apache. A cet effet, il est nécessaire de créer le répertoire ''/etc/maarch'' via la commande suivante, lancée depuis un terminal :
+
+<code>sudo mkdir /etc/maarch</code>
+
+==== Fichier de configuration d'Apache 2 ====
+
+Ensuite, nous allons créer le fichier de configuration d'Apache 2 nécessaire au fonctionnement de Maarch. Ce fichier de configuration permettra notamment de préciser l'emplacement des répertoires constituant l'application, du contexte d'URL à utiliser et des droits d'accès. Le fichier de configuration que nous proposons n'autorise que les accès depuis la machine en local. Nous verrons ultérieurement comment élargir le périmètre des utilisateurs autorisés à se connecter au système.
+
+Ainsi pour créer ce fameux fichier, veuillez lancer la commande soit dans un terminal soit directement depuis le bureau Gnome (en tapant Alt-F2) : ''gksudo gedit /etc/maarch/apache.conf'', puis copiez-y le contenu du paragraphe suivant en prenant soin de remplacer ''<nom-de-votre-serveur-smtp>'' par le nom d'hôte de votre serveur d'envoi de courrier électronique SMTP et sauvez votre fichier :
+
+<code>
+Alias /maarch /usr/share/maarch/
+
+<Directory /usr/share/maarch/>
+
+DirectoryIndex index.php
+
+Options +FollowSymLinks
+AllowOverride None
+
+order deny,allow
+deny from all
+allow from 127.0.0.0/255.0.0.0 ::1/128
+# allow from all
+
+<IfModule mod_php5.c>
+  php_value error_reporting E_ALL & ~E_NOTICE
+  php_flag display_errors On
+  php_flag register_globals Off
+  php_value session.auto_start 0
+  php_flag short_open_tag On
+  php_value default_charset "UTF-8"
+  php_flag magic_quotes_gpc Off
+  php_flag magic_quotes_runtime Off
+  php_flag magic_quotes_sybase Off
+  php_value smtp <nom-de-votre-serveur-smtp>
+  php_value smtp_port 25
+</IfModule>
+
+</Directory>
+</code>
+
+Maintenant, il nous faut lier ce fichier à la liste des fichiers de configuration pris en charge par [[apache2|apache 2]]. Pour cela, il suffit de créer un lien symbolique dans le répertoire ''/etc/apache2/conf.d'' qui pointera vers notre nouveau fichier. A cet effet, lancez la commande suivante dans un terminal :
+
+<code>sudo ln -s /etc/maarch/apache.conf /etc/apache2/conf.d/maarch.conf </code>
+
+==== Création de la base de données ====
+
+L'équipe de développement de Maarch préconique l'utilisation de la base de données [[postgresql|PostgreSQL]] pour l'installation de leur produit logiciel. Cependant, il est possible également d'utiliser d'autres types de bases de données que nous ne détaillerons pas dans ce document.
+
+Pour la suite de ces opérations, nous allons avoir besoin du contenu du fichier ZIP d'installation de Maarch Enterprise. Créez à l'occasion le répertoire ''/tmp/maarch'' et décompressez le contenu de l'archive dans ce dernier.
+
+Pour la création de la structure de base de données de Maarch, nous allons opérer en ligne de commande. A cet effet, ouvrez un terminal et tapez la séquence de commandes suivantes en entrant chacune des lignes indiquées suivies de la touche Entrée :
+
+<code>
+mkdir /tmp/maarch 
+cd /tmp/maarch
+sudo su postgres
+psql template1;
+CREATE DATABASE maarch WITH OWNER = postgres ENCODING = 'UNICODE' TABLESPACE pg_default;
+\connect maarch
+CREATE USER maarch PASSWORD 'maarch' VALID UNTIL 'infinity';
+GRANT ALL ON SCHEMA public TO maarch;
+\i structure.sql
+\i data.sql
+\quit
+</code>
+==== Création du répertoire de stockage des documents ====
+
+Maarch exploite un répertoire dédié au stockage des documents à archiver dans la GED, intitulé //docserver//. Nous allons nous charger dans cette partie de la documentation de créer ce répertoire et de le configurer.
+
+A cet effet, tapez la commande suivante dans un terminal :
+
+<code>
+sudo mkdir -p /var/cache/maarch/docserver
+</code>
+
+Il faut ensuite donner les droits nécessaires et suffisants à [[apache2|Apache]] afin qu'il puisse y accéder. Pour cela tapez les commandes suivantes dans un terminal :
+
+<code>
+sudo chown www-data:www-data /var/cache/maarch/docserver
+sudo chmod 700 /var/cache/maarch/docserver
+</code>
+
+==== Création du répertoire de l'application web ====
+
+Maarch est une application [[php|PHP]] qui doit être disponible dans un emplacement dédié. Dans cette partie de la documentation, nous allons nous charger de cette tâche.
+
+Ainsi, tapez les commandes suivantes dans un terminal :
+
+<code>
+sudo mkdir -p /usr/share/maarch
+sudo cp -Rf /tmp/maarch/* /usr/share/maarch/
+sudo chown -Rf www-data:www-data /usr/share/maarch
+sudo chmod -Rf 700 /usr/share/maarch
+</code>
+
+===== Configuration =====
+
+En théorie, notre installation est terminée, il reste maintenant à configurer Maarch. Cette partie du document est dédiée à cette tâche.
+
+==== Configuration du répertoire des documents ====
+
+Pour spécifier à Maarch où se trouve le répertoire destiné à stocker les documents, il faut ajouter une entrée dans la base de données. A cet effet, connectez-vous à la base de données en tant que l'utilisateur ''maarch'' (nous avons initialisé le mot de passe à '''maarch''') en tapant les commandes suivantes dans un terminal :
+
+<code>
+
+psql -u maarch -p maarch maarch;
+</code>
+
+Vous serez ensuite en mesure d'exécuter des requêtes SQL. Lancez la requête suivante en tapant dans le terminal le texte ci-dessous :
+
+<code>
+INSERT INTO docservers (docserver_id, path_template,  size_limit, creation_date, coll_id, priority)
+VALUES ('mydocserver','/var/cache/maarch/docserver', 10000000000, now(),'coll_1', 10);
+</code>
+
+=====Liens=====
+   * [[http://www.maarch.org/|Site officiel]]
+   * [[http://adullact.net/projects/maarch/|Sur FusionForge(adullact)]]
+====Ressources====
+
+===Maarch Entreprise===
+
+La GED de production complète basée sur le Framework 3
+
+   * [[http://wiki.maarch.org/Maarch_Entreprise|Lien sur le site officiel]]
+
+=== Maarch LetterBox===
+
+L'application de gestion de courrier pour les collectivités basée sur le Framework d'archivage Maarch
+
+   * [[http://wiki.maarch.org/Maarch_Entreprise|Lien sur le site officiel]]
+
+   * [[http://wiki.maarch.org/Maarch_LetterBox/Guide_d'installation_et_d'administration|Maarch LetterBox/Guide d'installation et d'administration]]
+   * Suivre une installation normale ( selon votre choix de bdd)
+<code>mysql -h localhost -u root -p maarch <  structure.sql
+mysql -h localhost -u root -p maarch < data_minimal_fr.sql
+</code>
+===Maarch Framework 3===
+
+Documentation technique de la v3.0 du Framework
+
+   * [[http://wiki.maarch.org/Maarch_Framework_3|Lien sur le site officiel]]
+
+
+===Maarch AutoImport===
+
+Un outil d'import de masse pour toute la gamme Maarch (LetterBox et Framework)
+
+   * [[http://wiki.maarch.org/Maarch_AutoImport|Lien sur le site officiel]]
+
+===Maarch Capture Connector===
+
+Le connecteur entre votre scanner et les applications
+
+   * [[http://wiki.maarch.org/Maarch_Capture_Connector|Lien sur le site officiel]]
+
+===Maarch ScanSnap Connector===
+
+L'outil de numérisation en ligne pour un enregistrement ultra rapide et pratique
+
+   * [[http://wiki.maarch.org/Maarch_ScanSnap_Connector|Lien sur le site officiel]]
+
+===Maarch SAI===
+
+Le serveur de communication et de transformation des images en sortie de numérisation de masse
+
+   * [[http://wiki.maarch.org/Maarch_SAI|Lien sur le site officiel]]
+
+===Maarch PeopleBox===
+
+Un exemple d'application de gestion des documents RH basé sur l'ancien Framework Maarch 2.1
+
+   * [[http://wiki.maarch.org/Maarch_PeopleBox|Lien sur le site officiel]]
+
+===Maarch Framework 2.1===
+
+Une architecture simple et robuste d'archivage documentaire (ancienne version 2.1)
+
+   * [[http://wiki.maarch.org/Maarch_Framework_2.1|Lien sur le site officiel]]
+
+
+====Tutoriels====
+
+----
+
+//Contributeurs principaux : [[utilisateurs:hoani.cross|Hoani CROSS]].//

@@ -1,0 +1,221 @@
+
+{{tag>Xenial entreprise serveur}}
+----
+====== Puppet ======
+
+Puppet est un outil de gestion de la configuration de serveurs, il permet le télédéploiement de configuration sur un ensemble de serveurs en quelques minutes. L'intérêt de cette solution open source réside dans son support multi-plateformes (basé sur Ruby), sa sécurité (TLS), son développement actif et sa relative simplicité à mettre en œuvre.
+\\
+{{:administration:puppet.png|}}
+
+Systèmes supportés :
+Puppet fonctionne sur la plupart des systèmes Unix et sur Windows. voir [[http://www.puppetlabs.com/puppet/requirements/|ici]] pour plus de détails.
+
+
+===== Pré-requis =====
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Disposez de plusieurs serveurs à administrer sans quoi le gain de temps et d'énergie ne sera pas effectif.
+  * Notions en administration système.
+
+
+
+===== Installation =====
+Puppet est présent dans les [[:dépôts]], installez les paquets puppet, facter et puppetmaster (pour le serveur maître) :
+  * Sur le client : <code>apt-get install puppet</code>
+  * Sur le master : <code>apt-get install puppetmaster</code>
+Cependant si vous souhaitez une version différente rendez-vous sur la page de téléchargement [[http://www.puppetlabs.com/misc/download-options/|officielle]] pour obtenir un package .tar.gz. Autre solution installer puppet sous forme de [[http://puppetlabs.com/downloads/gems/|gem]] (le système de paquet ruby). Dans ce cas l'installation est tout aussi simple :
+<code>
+apt-get install rubygems
+gem install facter
+gem install puppet
+</code>
+
+===== Configuration =====
+
+==== Maître ====
+=== Fichiers de configuration ===
+<note tip>Les fichiers de configuration sont donnés à titre d'exemple. Vous êtes libre d'indiquer d'autres paramètres.</note>
+
+On [[:tutoriel:comment_modifier_un_fichier|modifie le fichier]] **/etc/puppet/puppet.conf** :
+<file>
+[main]
+logdir =        /var/log/puppet
+vardir =        /var/lib/puppet
+ssldir =        $vardir/ssl
+rundir =        /var/run/puppet
+confdir =       $vardir
+factpath =      $vardir/lib/facter
+pluginsync =    false
+server =        hostnameduserveur
+report =        true
+reports =       log,store
+
+[master]
+templatedir =   $vardir/templates
+modulepath =    $vardir/modules
+libdir  =       $vardir/plugins
+syslogfacility = user
+</file>
+
+=== Pare-feu ===
+On modifie également notre pare-feu afin de laisser passer les flux :
+<code>
+iptables -A OUTPUT -p tcp -m state --state NEW,ESTABLISHED -s ipdumaster --sport 8140 -d ipduclient -j ACCEPT
+iptables -A INPUT -p tcp -m state --state NEW,ESTABLISHED -s ipduclient -d ipdumaster --dport 8140 -j ACCEPT
+</code>
+
+==== Esclave ====
+
+=== Configuration de l'agent Puppet ===
+On [[:tutoriel:comment_modifier_un_fichier|modifie le fichier]] **/etc/puppet/puppet.conf** :
+<file>
+[main]
+server =        hostnamedevotremaster
+report =        true
+rundir =        /var/run/puppet/
+runinterval =   50
+
+[agent]
+listen=true
+</file>
+
+Le **runinterval** permet de spécifier, en secondes, l'intervalle entre deux connexions que fera le client, vers le serveur. Pour qu'elles soient vraiment lancées régulièrement, il faut que le daemon puppet soit lancé (/etc/init.d/puppet start).
+
+Le paramètre **listen** et les fichiers auth.conf et namespaceauth.conf sont nécessaires pour activer le déploiement à partir du master (**puppet kick** ou **puppetrun**) si vous ne souhaitez pas utiliser ces commandes, ces fichiers sont inutiles.
+
+/etc/puppet/auth.conf
+<file>
+path /run
+method save
+allow *
+</file>
+
+<note warning>Attention le fichier auth.conf donné en exemple est dédié à des phases de tests, il autorise par défaut toutes les connexions sur l'ensemble des éléments</note>
+
+/etc/puppet/namespaceauth.conf
+<file>[puppetrunner]
+allow *
+[puppetbucket]
+allow *
+[puppetreports]
+allow *
+[resource]
+allow *
+[kick]
+allow *
+</file>
+
+=== Pare-feu ===
+Si vous disposez d'un pare-feu actif il faut songer à ouvrir le port 8139 :
+<code>
+iptables -A OUTPUT -p tcp -m state --state NEW,ESTABLISHED -s ipduclient --sport 8139 -d ipdumaster -j ACCEPT
+iptables -A INPUT -p tcp -m state --state NEW,ESTABLISHED -s ipdumaster -d ipduclient --dport 8139 -j ACCEPT
+</code>
+
+===== Validation d'un client =====
+Avant de pouvoir utiliser un client il faut préalablement le valider auprès du master. Pour cela sur le client lancer la commande :
+<code>puppetd --test</code>
+Cela va générer un certificat que l'on nous demandera de valider. Pour cela sur le serveur :
+<code>puppetca --list
+nomduclient
+</code>
+doit nous retourner le nom du serveur en attente de validation ensuite on signe le certificat en attente :
+<code>puppetca --sign nomduclient</code> ou bien <code>puppetca -s nomduclient</code>
+
+===== Déploiement à partir du master =====
+
+==== Via la commande Puppetrun ====
+Pour lancer le **puppetd --test** sans devoir être connecté à chaque client on lance
+<code>puppet kick nomduclient</code>
+ou encore
+<code>puppetrun nomduclient</code>
+<note tip>Si cela ne fonctionne pas vérifiez bien qu'un déploiement sur le client est fonctionnel ainsi que l'ouverture des ports du parefeu.</note>
+
+==== Via l'API REST (conseillé) ====
+L'API REST permet à une requête HTTP d'envoyer un équivalent du **puppetrun** mais permet en plus le passage d'arguments tel que l'environnement.
+Il suffira ainsi de passer la commande suivante via **CURL** pour lancer un puppetrun sur l'environnement de production. Cette dernière renverra alors le retour du déploiement au format **Yaml**
+<code>curl -k -X PUT -H "Content-Type: text/pson" -d "{}" https://puppetclient:8139/production/run/no_key</code>
+
+L'utilisation de l'API est explicitée [[http://docs.puppetlabs.com/guides/rest_api.html|[en] ici]]
+===== Problèmes =====
+==== Désactivez le déploiement automatique d'un client ====
+Un client **puppetd** qui tourne en daemon à la fâcheuse tendance d'être configuré pour exécuter un //**puppetd --test**// à intervalles réguliers. Pour solutionner ce problème tout en gardant un daemon à l'écoute du **puppetrun** du master il faut lancer le process **puppetd** avec l'option **--no-client** soit :
+<code>puppetd --no-client</code> pour automatiser l'ensemble on pourra le rajouter dans le fichier /etc/init.d/puppet
+
+==== err: Could not retrieve catalog: Could not parse for environment development: Could not match '' ====
+Ce problème peut survenir au cours d'un déploiement, il s'agit d'un mauvais encodage du/des fichier(s) de scripts puppet lorsqu'ils ont été créés à partir d'un poste sous Windows, pour résoudre ce souci un petit coup de dos2unix fera l'affaire =) :
+<code>dos2unix le/fichier/de/script</code>
+
+==== no certificate found and waitforcert is disabled ====
+<code>warning: peer certificate won't be verified in this SSL session
+Exiting; no certificate found and waitforcert is disabled</code>
+Le certificat n'a pas encore été signé sur le master.
+
+==== Run of Puppet configuration client already in progress ====
+<code>notice: Run of Puppet configuration client already in progress; skipping</code>
+Indique que Puppet est déjà en cours d'exécution sur la machine.
+
+==== certificate verify failed ====
+<code>err: Could not retrieve catalog from remote server: SSL_connect returned=1 errno=0 state=SSLv3 read server certificate B: certificate verify failed</code>
+indique que le certificat que possède le client diffère de celui du master, aussi la solution la plus simple est de régénérer un certificat sur le client puis de le signer sur le master. Pour ce faire on supprime le certificat précédent.
+<code>rm -rf /etc/puppet/ssl</code>
+<note important>Le répertoire peut différer en fonction de votre configuration, il s'agit de la valeur de la variable **ssldir** dans le fichier **///etc/puppet/puppet.conf//**</note>
+On effectue une nouvelle tentative de déploiement qui va générer un nouveau certificat
+<code>puppetd --test
+info: Creating a new SSL key for votreserveur.fr
+warning: peer certificate won't be verified in this SSL session
+info: Caching certificate for ca
+warning: peer certificate won't be verified in this SSL session
+warning: peer certificate won't be verified in this SSL session
+info: Creating a new SSL certificate request for votreserveur.fr
+info: Certificate Request fingerprint (md5): 80:AE:23:1C:03:DF:5D:65:0D:8F:04:82:AC:D2:BF:C1
+</code>
+On peut ensuite signer le certificat sur le puppetmaster et déployer de nouveau.
+
+<note tip>Si le problème persiste toujours il s'agit alors sans doute d'une mauvaise synchronisation horaire entre le client et le master.</note>
+
+==== err: Could not request certificate: Neither PUB key nor PRIV key:: header too long ====
+Si lors du lancement de la commande puppetd --test vous obtenez cette erreur :
+<code>
+puppetd --test
+info: Creating a new SSL key for hostnameduserveur
+warning: peer certificate won't be verified in this SSL session
+info: Caching certificate for ca
+warning: peer certificate won't be verified in this SSL session
+warning: peer certificate won't be verified in this SSL session
+info: Caching certificate_request for hostnameduserveur
+err: Cached certificate for ca failed: header too long
+warning: peer certificate won't be verified in this SSL session
+info: Caching certificate for ca
+warning: peer certificate won't be verified in this SSL session
+err: Cached certificate for ca failed: header too long
+warning: peer certificate won't be verified in this SSL session
+info: Caching certificate for ca
+warning: peer certificate won't be verified in this SSL session
+Exiting; no certificate found and waitforcert is disabled
+
+puppetd --test
+err: Could not request certificate: Neither PUB key nor PRIV key:: header too long
+Exiting; failed to retrieve certificate and waitforcert is disabled</code>
+Ce problème survient lorsque le système de fichier sur lequel Puppet essaye de créer le certificat est plein.
+
+==== Processus fantôme ====
+Si le déploiement renvoie une erreur de ce type :
+<code>puppetd --test
+notice: Run of Puppet configuration client already in progress; skipping
+</code>
+mais qu'il n'existe aucun processus ou fichier .pid sous **/var/run/puppet**, c'est qu'il existe probablement un fichier verrou qui n'a pas été correctement supprimé. Pour ce faire passer la commande suivante :
+<code>rm /var/lib/puppet/state/puppetdlock</code>
+===== Désinstallation =====
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. Si vous avez choisi l'option des gems il vous suffira de faire :
+<code>gem uninstall puppet
+gem uninstall facter</code>.
+
+===== Liens =====
+  * **en** [[http://www.puppetlabs.com/|Site officiel]]
+  * **en** [[http://docs.puppetlabs.com/|Documentation officielle]]
+  * [[http://puppetlabs.com/downloads/gems/|Dépôt de gems]]
+  * **fr** [[wpfr>Puppet|Fiche sur Wikipédia]]
+
+----
+//Contributeurs principaux : [[:utilisateurs:Herrleiche]].//

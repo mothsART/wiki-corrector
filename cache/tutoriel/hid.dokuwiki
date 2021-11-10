@@ -1,0 +1,276 @@
+
+{{tag>tutoriel}}
+----
+
+====== Utilisation d'un périphérique HID ======
+
+Les périphériques de la norme HID permettent d'envoyer des commandes au serveur X.
+Toutefois toutes les commandes reçues ne sont pas toujours exploitables directement sous linux...
+C'est pourquoi il est intéressant de pouvoir les "remapper", c'est à dire les attribuer aux commandes linux (**inputdev**) de notre choix.
+
+Dans ce tutoriel, une télécommande [[http://www.aliexpress.com/product-gs/492454030-IR-USB-Mouse-Media-Desktop-Computer-PC-Remote-Controller-Control-Media-Center-wholesalers.html|disponible pour 5€65]] sera configurée afin d'effectuer de nombreuses actions ainsi que d'émuler le déplacement de la souris.
+
+En second lieu, on verra comment configuer **LIRC** pour exploiter ce matériel.
+=====Préalables=====
+
+==== Identification du matériel compatible ====
+
+Tout d'abord, lancer la commande suivante afin d'identifier le matériel que vous souhaitez configurer :
+<code>cat /proc/bus/input/devices</code>
+Dans mon cas, le matériel est le suivant :
+<file>
+I: Bus=0003 Vendor=0755 Product=2626 Version=0110
+N: Name="www.irfmedia.com W-01RN USB_V3.1"
+P: Phys=usb-0000:00:02.0-7/input0
+S: Sysfs=/devices/pci0000:00/0000:00:02.0/usb2/2-7/2-7:1.0/input/input5
+U: Uniq=
+H: Handlers=sysrq kbd event5 
+B: PROP=0
+B: EV=120013
+B: KEY=e080ffdf01cfffff fffffffffffffffe
+B: MSC=10
+B: LED=1f
+
+I: Bus=0003 Vendor=0755 Product=2626 Version=0110
+N: Name="www.irfmedia.com  W-01RN USB_V3.1"
+P: Phys=usb-0000:00:02.0-7/input1
+S: Sysfs=/devices/pci0000:00/0000:00:02.0/usb2/2-7/2-7:1.1/input/input6
+U: Uniq=
+H: Handlers=kbd mouse1 event6 
+B: PROP=0
+B: EV=1f
+B: KEY=4837fff072ff32d bf54444600000000 1f0001 20c100b17c000 267bfad941dfed 9e168000004400 10000002
+B: REL=1c3
+B: ABS=100000000
+B: MSC=10
+</file>
+
+
+==== Blacklist de l'entrée du périphérique ====
+
+Afin que les entrées ne produisent pas d'effet direct dans notre serveur X, nous devons lui dire de l'ignorer.
+Pour cela créer le fichier suivant :
+<code>sudo nano /usr/share/X11/xorg.conf.d/50-HID-blacklist.conf</code>
+Et y copier ces lignes, en rensigant MatchProduct en fonction de ce que vous avez obtenu ci-dessus : 
+<file>
+Section "InputClass"
+Identifier "HID blacklist"
+MatchProduct "W-01RN USB_V3.1"
+Option "Ignore" "on"
+EndSection
+</file>
+
+
+===== HID_MAPPER =====
+
+On va ensuite utiliser le programme présenté [[http://forum.xbmc.org/showthread.php?tid=88560|ici]] pour assigner les commandes voulues aux évènements générés par notre périphérique. 
+
+
+====Installation====
+
+L'installation de hid_mapper s'effectue par les commandes suivantes :
+<code>wget http://www.coldsource.net/hid_mapper_beta.tar.gz
+tar zxvf hid_mapper_beta.tar.gz
+cd hid_mapper_beta
+make
+sudo cp hid_mapper /usr/local/bin/
+sudo chmod +x /usr/local/bin/hid_mapper</code>
+
+
+====Configuration====
+
+===Enregistrement des évènements ===
+
+Nous allons ensuite "écouter ce que raconte notre périphérique lorque nous apuyons sur chacune des touches. Lancer la commande suivante en rensignant les options manufacturer et product avec les ID obtenus précédemment (ici Vendor=0755 et Product=2626) :
+<code>sudo hid_mapper --learn --lookup-id --manufacturer '0755' --product '2626' --map ''</code>
+
+Sous la pression d'une touche, on voit apparaitre des lignes similaires à celles-ci :
+<file>Found HID device at /dev/hidraw0
+038100000000
+01 00 00 00 00 00 00 00 00
+04003d0000000000
+01 00 00 00 00 00 00 00 00</file>
+Chaque code tel que **038100000000** ou  **04003d0000000000** correspondent à une touche, et ici **010000000000000000** est sans importance puisqu'il apparaît pour chaque touche...
+
+
+===Assignation des évènement à des actions===
+
+On relève alors les codes obtenus ci-dessus pour générer au choix 1 ou 2 fichier de configuration : remote.map et mouse.map
+Les codes d'actions qui peuvent-être utilisées sont disponible dans le fichier /usr/include/linux/input.h.
+
+==Fichier remote.map==
+
+On constitue le fichier **remote.map** de la manière suivante, cet exemple correspondant à ma télécommande.
+<file>
+038100000000:KEY_POWER
+04003d0000000000:KEY_CLOSE
+0100080000000000:KEY_VIDEO
+0300170000000000:KEY_TV
+0100040000000000:KEY_RADIO
+01000c0000000000:KEY_P
+0100100000000000:KEY_AUDIO
+0300100000000000:KEY_MENU
+0300050000000000:KEY_REWIND
+02b700000000:KEY_STOP
+02b300000000:KEY_FORWARD
+02b600000000:KEY_PREVIOUSSONG
+02cd00000000:KEY_PLAYPAUSE
+02b500000000:KEY_NEXTSONG
+02e900000000:KEY_VOLUMEUP
+02e200000000:KEY_MUTE
+0800070000000000:KEY_HOME
+00004b0000000000:KEY_CHANNELUP
+02ea00000000:KEY_VOLUMEDOWN
+0c00280000000000:KEY_MEDIA
+00004e0000000000:KEY_CHANNELDOWN
+0000520000000000:KEY_UP
+0000500000000000:KEY_LEFT
+0000280000000000:KEY_ENTER
+00004f0000000000:KEY_RIGHT
+0000510000000000:KEY_DOWN
+00002a0000000000:KEY_BACK
+0000650000000000:KEY_INFO
+0100150000000000:KEY_RED
+022302000000:KEY_GREEN
+028a01000000:KEY_YELLOW
+00001e0000000000:KEY_1
+00001f0000000000:KEY_2
+0000200000000000:KEY_3
+022402000000:KEY_PREVIOUS
+0000210000000000:KEY_4
+0000220000000000:KEY_5
+0000230000000000:KEY_6
+022502000000:KEY_NEXT
+0000240000000000:KEY_7
+0000250000000000:KEY_8
+0000260000000000:KEY_9
+0000270000000000:KEY_0
+0200250000000000:KEY_SUBTITLE
+0200200000000000:KEY_LANGUAGE
+0000290000000000:KEY_CLEAR
+0400280000000000:KEY_ZOOM
+010100000000:BTN_LEFT  #clic gauche de la souris
+010200000000:BTN_RIGHT #clic droit de la souris
+</file>
+
+==Fichier mouse.map==
+
+Dans mon cas, ma télécommande a une fonction spéciale d'émulation du déplacement du curseur de la souris, et affiche différents codes en fonction du temps d'appui sur les flèches directionnelles. 
+Celui sera configurable de la manière suivante dans le fichier **mouse.map**. 
+- REL_Y correspond à un déplacement sur l'axe vertical
+- REL_X sur l'axe horizontal
+- Le dernier chiffre de chaque ligne à la taille du déplacement en nombre de pixel.
+
+<file>010000fe0000:REL_Y:-1  # haut -->  -1->-8de plus en plus vite 
+010000fc0000:REL_Y:-4
+010000f80000:REL_Y:-8
+010000020000:REL_Y:1    # bas --> 1->8 de plus en plus vite 
+010000040000:REL_Y:4
+010000080000:REL_Y:8
+0100fe000000:REL_X:-1     # gauche --> -1->-8 de plus en plus vite
+0100fc000000:REL_X:-4
+0100f8000000:REL_X:-8
+010002000000:REL_X:1       # droite -->  1->8 de plus en plus vite
+010004000000:REL_X:4
+010008000000:REL_X:8
+</file>
+
+
+====Lancement====
+
+On peut alors lancer le "mappage" pour assigner les nouveaux codes aux évènements envoyés par notre périphérique.
+
+===Manuel===
+
+Le démarrage de hid_mapper s'effectue de la manière suivante :
+<code>sudo hid_mapper --lookup-id --manufacturer '0755' --product '2626' --map '/repertoire/contenant/remote.map' --map-mouse '/repertoire/contenant/mouse.map'</code>
+
+===Automatique===
+
+On peut également créer une règle udev pour lancer hid_mapper à la détection du matériel.
+
+Pour cela créer un fichier :
+<code>
+sudo nano /etc/udev/rules.d/10-HID-REMOTE.rules
+</code>
+contenant le code (penser à adapter idVendor et idProduct):
+<file>
+SUBSYSTEM=="usb", ENV{INTERFACE}=="*/2",ATTRS{idVendor}=="0755",ATTRS{idProduct}=="2626",ENV{HID_MAPPER_SUPPORTED}="1", RUN+="/bin/sh -c '/sbin/modprobe -b uinput; sleep 1 && /usr/local/bin/hid_mapper --lookup-id --manufacturer 0755 --product 2626 --map /repertoire/contenant/remote.map --map-mouse /repertoire/contenant/mouse.map 2>&1 &'"
+</file>
+
+**hid_mapper** se lancera alors au démarrage et permettra d'assigner des raccourcis clavier aux codes correspondant aux touches de la télécommande.
+
+
+===== Utilisation du HID avec LIRC =====
+
+Pour les habitués de [[lirc|LIRC]], il est possible d'utiliser le périphérique précédemment configuré.
+Pour cela, on attribue un lien symbolique à l' input/eventx générée par hid_mapper en ajoutant la ligne suivante au fichier 10-HID-REMOTE.rules que l'on vient de créer :
+<file>
+KERNEL=="event*",ATTRS{name}=="Generic USB input mapper",SYMLINK="input/hid_mapper"
+</file>
+
+Il nous faudra également  ajouter les [[http://lirc.sourceforge.net/remotes/devinput/lircd.conf.devinput
+|codes devinput]] au fichier **/etc/lirc/lircd.conf**. 
+
+Pour des raisons pédagogiques, admettons que vous avez une télécommande MiroPCTV connectée sur le port série ttyS0 (lirc_serial).
+
+
+===Démarrage manuel===
+
+Lancer deux instances lircd, dont l'une est connectée à l'autre :
+<code>
+sudo lircd -H pinsys --device=/dev/ttyS0 --output=/var/run/lirc/lircd1 --pidfile=/var/run/lircd1.pid --listen
+sudo lircd -H dev/input -d /dev/input/hid_mapper -o /var/run/lirc/lircd --pidfile=/var/run/lircd.pid --connect=localhost:8765
+</code>
+
+
+===Démarrage automatique===
+
+On doit pour cela mofifier les fichiers de configuration de LIRC pour intégrer le support de notre nouvelle télécommande :
+
+<file>
+# /etc/lirc/hardware.conf
+#
+#Chosen Remote Control
+REMOTE_MODULES="lirc_dev lirc_serial"
+REMOTE_DRIVER=""
+REMOTE_DEVICE=""
+REMOTE_SOCKET=""
+REMOTE_LIRCD_CONF="/etc/lirc/lircd.conf"
+REMOTE_LIRCD_ARGS="-H pinsys --device=/dev/ttyS0 --output=/var/run/lirc/lircd1 --pidfile=/var/run/lircd1.pid --listen"
+REMOTE_LIRCD2_ARGS="-H dev/input --device=/dev/input/hid_mapper --output=/var/run/lirc/lircd --pidfile=/var/run/lircd.pid --connect=localhost:8765"
+
+#Enable lircd
+START_LIRCD="true"
+#Try to load appropriate kernel modules
+LOAD_MODULES="true"
+</file>
+
+
+- Enfin, on modifie le sript de lancement de lirc pour qu'il démarre les 2 instances de lircd :
+
+Editer le fichier **/etc/init.d/lirc** et le modifier vers la ligne 160 :
+
+- Remplacer :
+<file>
+REMOTE_LIRCD_ARGS=`build_remote_args $REMOTE_LIRCD_ARGS`
+</file>
+par 
+<file>
+REMOTE_LIRCD_ARGS=`build_remote_args $REMOTE_LIRCD_ARGS`
+REMOTE_LIRCD2_ARGS=`build_remote_args $REMOTE_LIRCD2_ARGS`
+</file>
+
+- Ainsi que :
+<file>
+start-stop-daemon --start --quiet --oknodo --exec /usr/sbin/lircd -- $REMOTE_LIRCD_ARGS < /dev/null
+</file>
+par :
+<file>
+start-stop-daemon --start --quiet --oknodo --name lirc1 --exec /usr/sbin/lircd -- $REMOTE_LIRCD_ARGS < /dev/null
+start-stop-daemon --start --quiet --oknodo --name lirc2 --exec /usr/sbin/lircd -- $REMOTE_LIRCD2_ARGS < /dev/null
+</file>
+
+
+
+Source pricipale : http://forum.xbmc.org/showthread.php?tid=88560&page=17

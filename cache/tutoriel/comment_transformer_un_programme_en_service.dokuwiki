@@ -1,0 +1,160 @@
+
+{{tag>tutoriel Precise serveur logiciels services}}
+----
+
+====== Comment transformer un programme en service ======
+
+===== Définition =====
+
+Service est traduit en anglais par daemon. Originellement **DAEMON** pour « Disk And Execution MONitor » est un programme réalisant des tâches de fond du système sous Unix. Appelé aussi driver sur d'autres systèmes. En temps normal, son fonctionnement ne doit pas être remarqué par l'utilisateur. Un démon peut aussi être un sous-programme appelé par un programme principal (dans ce cas on parle « sérieusement » de bibliothèque partagée).
+
+===== Pourquoi ce tutoriel =====
+
+Il est parfois nécessaire de transformer un programme en daemon, surtout lors de mise en place de serveur. Par exemple, les serveurs de jeux, ou des programmes de téléchargement automatique tel que **SABnzbd**. Le problème est que les scripts pour « daemonizer » que l'on trouve sur internet, sont mal conçus, voire dangereux pour le système en cas de mauvaise utilisation.
+
+===== Mise en place =====
+
+Il faut d'abord [[:tutoriel:comment_modifier_un_fichier|créer]] un script **sh** que nous appellerons dans notre exemple **SABnzbd.sh**. Le nom ici donné est tout à fait arbitraire. Généralement, par facilité, on préférera lui donner le même nom que le programme que l'on va transformer en démon.
+
+Il faudra ensuite rendre ce [[:tutoriel:script_shell|programme]] **SABnzbd.sh** [[:permissions|programme exécutable]].<
+
+==== Script ====
+
+On utilise proprement ''start-stop-daemon'' qui permet de transformer n'importe quel programme en démon.
+
+<note important>Configurer correctement l'entête du script en fonction de votre utilisation!</note>
+
+Voici un exemple pour **SABnzbd** :
+
+<file bash SABnzbd.sh>
+#!/bin/sh -e
+#
+### BEGIN INIT INFO
+# Provides:          SABnzbd
+# Required-Start:    $all
+# Required-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: description du programme
+### END INIT INFO
+
+DAEMON="/opt/SABnzbd-0.4.11/SABnzbd.py" #ligne de commande du programme, attention à l'extension .py.
+daemon_OPT="-d -p -f /home/Utilisateur/SABnzbd/sabnzbd.ini"  #argument à utiliser par le programme - Remplacer Utilisateur par votre nom de login
+DAEMONUSER="user" #utilisateur du programme
+daemon_NAME="SABnzbd.py" #Nom du programme (doit être identique à l'exécutable).
+#Attention le script est un script bash, le script ne portera donc pas l'extension .py mais .sh.
+
+PATH="/sbin:/bin:/usr/sbin:/usr/bin" #Ne pas toucher
+
+test -x $DAEMON || exit 0
+
+. /lib/lsb/init-functions
+
+d_start () {
+        log_daemon_msg "Starting system $daemon_NAME Daemon"
+	start-stop-daemon --background --name $daemon_NAME --start --quiet --chuid $DAEMONUSER --exec $DAEMON -- $daemon_OPT
+        log_end_msg $?
+}
+
+d_stop () {
+        log_daemon_msg "Stopping system $daemon_NAME Daemon"
+        start-stop-daemon --name $daemon_NAME --stop --retry 5 --quiet --name $daemon_NAME
+	log_end_msg $?
+}
+
+case "$1" in
+
+        start|stop)
+                d_${1}
+                ;;
+
+        restart|reload|force-reload)
+                        d_stop
+                        d_start
+                ;;
+
+        force-stop)
+               d_stop
+                killall -q $daemon_NAME || true
+                sleep 2
+                killall -q -9 $daemon_NAME || true
+                ;;
+
+        status)
+                status_of_proc "$daemon_NAME" "$DAEMON" "system-wide $daemon_NAME" && exit 0 || exit $?
+                ;;
+        *)
+                echo "Usage: /etc/init.d/$daemon_NAME {start|stop|force-stop|restart|reload|force-reload|status}"
+                exit 1
+                ;;
+esac
+exit 0
+</file>
+
+Maintenant on sauvegarde le fichier dans son **Dossier Personnel/sabnzbd**, ensuite on va le déplacer dans /etc/init.d et lui donner les bons droits d'exécution.
+
+<code>
+sudo cp ~/sabnzbd /etc/init.d/.
+sudo chmod 0755 /etc/init.d/sabnzbd
+</code>
+
+On reload les daemons du système :
+<code>
+systemctl daemon-reload
+</code>
+
+On teste notre script :
+
+<code>
+sudo /etc/init.d/sabnzbd start
+* Starting system SABnzbd Daemon 
+
+sudo /etc/init.d/sabnzbd stop
+* Stopping system SABnzbd Daemon  
+</code>
+
+Maintenant on ajoute le service au démarrage de l'ordinateur :
+
+<code>
+sudo update-rc.d sabnzbd defaults
+
+ Adding system startup for /etc/init.d/sabnzbd ...
+   /etc/rc0.d/K20sabnzbd -> ../init.d/sabnzbd
+   /etc/rc1.d/K20sabnzbd -> ../init.d/sabnzbd
+   /etc/rc6.d/K20sabnzbd -> ../init.d/sabnzbd
+   /etc/rc2.d/S20sabnzbd -> ../init.d/sabnzbd
+   /etc/rc3.d/S20sabnzbd -> ../init.d/sabnzbd
+   /etc/rc4.d/S20sabnzbd -> ../init.d/sabnzbd
+   /etc/rc5.d/S20sabnzbd -> ../init.d/sabnzbd
+
+</code>
+
+Pour le retirer :
+
+<code>
+sudo update-rc.d -f sabnzbd remove
+
+ Removing any system startup links for /etc/init.d/sabnzbd ...
+   /etc/rc0.d/K20sabnzbd
+   /etc/rc1.d/K20sabnzbd
+   /etc/rc2.d/S20sabnzbd
+   /etc/rc3.d/S20sabnzbd
+   /etc/rc4.d/S20sabnzbd
+   /etc/rc5.d/S20sabnzbd
+   /etc/rc6.d/K20sabnzbd
+</code>
+
+Voila, votre programme fonctionne en tant que daemon et sera lancé automatique au démarrage de l'ordinateur.
+
+----
+
+===== Documentation supplémentaire  et liens =====
+
+  * [[man>start-stop-daemon]] de Ian Jackson
+  * [[man>update-rc.d]]
+  * [[wpfr>Daemon_(informatique)]]
+  * http://jargonf.org/wiki/d%C3%A9mon
+  * http://www.linuxtricks.fr/wiki/systemd-les-commandes-essentielles
+
+----
+//Contributeurs : Rédigée et maintenue par [[:utilisateurs/RedLemon]]//

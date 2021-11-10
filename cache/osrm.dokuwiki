@@ -1,0 +1,190 @@
+
+{{tag>Bionic SIG openstreetmap BROUILLON}}
+----
+ 
+====== OSRM  ======
+ 
+OSRM est un moteur de calcul d’itinéraire open source très léger et très efficace qui utilise les données Openstreetmap. Pour les experts, on peut ajouter qu'OSRM se démarque des autres moteurs de calcul d’itinéraires en utilisant l’algorithme Contraction hiérarchies moins répandu que le A* par exemple.
+ 
+OSRM peut être utilisé en ligne mais également installé sur un serveur ou une station de travail personnelle, ce que vous propose cette page.
+
+<note tip>**Tester OSRM en ligne :**
+
+[[http://router.project-osrm.org/viaroute?loc=48.85755,2.34727&loc=43.29528,5.37439&instructions=true|Itinéraire entre la place du Châtelet à Paris (point 48,85755 - 2,34727) et le quai des Belges à Marseille (point 43,29528 - 5,37439)]].
+Syntaxe du lien : <http://router.project-osrm.org/viaroute?loc=48.85755,2.34727&loc=43.29528,5.37439&instructions=true>
+
+[[http://router.project-osrm.org/viaroute?loc=48.57636,7.80027&loc=48.38453,-4.49472&instructions=true|Itinéraire entre le pont de l'Europe à Strasbourg (point 48,57636 - 7,80027) et le pont de Recouvrance à Brest (point 48,38453 / -4,49472)]].
+Syntaxe du lien : <http://router.project-osrm.org/viaroute?loc=48.57636,7.80027&loc=48.38453,-4.49472&instructions=true>
+</note>
+
+Vous allez pouvoir installer cette application sur votre propre ordinateur.
+
+Le résultat du calcul OSRM peut apparaître un peu difficile à lire. Voir en bas de page une suggestion de script pour y voir plus clair.
+
+=====Pré-requis=====
+
+[[:tutoriel:comment_installer_un_paquet|Installer les paquets]] : **[[apt>build-essential,git,cmake,pkg-config,libprotoc-dev,libprotobuf9v5,protobuf-compiler,libprotobuf-dev,libosmpbf-dev,libpng12-dev,libbz2-dev,libstxxl-dev,libstxxl-doc,libstxxl1v5,libxml2-dev,libzip-dev,libboost-all-dev,lua5.2,liblua5.2-dev,libtbb-dev,doxygen,checkinstall]]**.
+
+
+===== Installation =====
+
+  * Télécharger les sources : <code>git clone https://github.com/Project-OSRM/osrm-backend.git</code>
+  * Compiler en se plaçant dans le répertoire à l'intérieur duquel les sources ont été téléchargées : <code>cd osrm-backend</code>
+  * Puis lancer la compilation : <code>mkdir -p build
+cd build
+cmake ..
+make
+sudo checkinstall --pkgname osrm-backend
+</code>
+
+==== Création de liens ====
+
+<code>
+cd <répertoire build>
+mkdir profiles
+cd profiles
+ln -s ../../profiles/car.lua
+cd ..
+ln -s ../profiles/lib/
+</code>
+Le serveur est installé. 
+ 
+===== Configuration =====
+ 
+Il convient désormais d'installer les données cartographiques qui seront utilisées pour les calculs de routage.
+
+==== Télécharger les données cartographiques ====
+
+Le site Geofabrik (par exemple) fournit ce type de données. Par exemple pour la région PACA, se rendre sur :
+http://download.geofabrik.de/europe/france/provence-alpes-cote-d-azur.html
+
+et télécharger le fichier provence-alpes-cote-d-azur-latest.osm.pbf
+
+==== Création du fichier .stxxl ====
+
+La création de la base de données interne produit un fichier assez volumineux. Par défaut, ce fichier est installé sur la partition racine, au risque de  saturer l'espace disque disponible si votre système, comme cela est recommandé, est installé sur une partition séparée. Il est donc conseillé de créer dans le répertoire <build> d'osrm un fichier <.stxxl> qui comporte les instructions nécessaires à l'installation des données dans un autre répertoire, situé dans une autre partition.
+
+La syntaxe de l'instruction est la suivante :
+disque=nom_complet_du_disque,capacité,méthode_d’accès
+	*  nom_complet_du_disque : chemin complet d’accès au disque depuis la racine : /tmp/stxxl, /mnt/disk0, /media/utilisateur/mon_disque par exemple. 
+	*  capacité : capacité maximale du disque en mégaoctets. Sur le site osrm la valeur 25000 est souvent conseillée, plusieurs posts de forums suggèrent de porter cette valeur à 100000 pour le fichier de la planète entière.
+	*  méthode_d'accés : à choisr parmi les différentes implémentations d’accès au disque.
+		*  syscall : appels en lecture/écriture au système qui permettent des transferts directs du disque vers la mémoire paginée de l'utilisateur en évitant les copies superflues (généralement la méthode la plus rapide)
+		*  mmap : les transferts disques sont réalisés à travers des appels système à mmap et munmap
+		*  simdisk : simule l'horloge (timings ?) du disque IBM IC35L080AVVA07. nom_complet_du_disque doit pointer sur un fichier situé sur une partition RAM disposant d'un espace disque suffisant.
+
+Il est généralement conseillé d'installer le fichier de la planète entière sur une partition séparée afin de prévenir un grand nombre d’accès disque en lecture/écriture qui ralentissent le fonctionnement. 
+
+Exemple de création d'un fichier <.stxxl>
+<code>
+cd build
+echo "disk=/tmp/stxxl,25000,syscall" > .stxxl
+</code>
+
+<note tip>Lorsque la taille du fichier stxxl excède l'espace disponible sur la partition, l'erreur <"External memory block allocation error"> est affichée.</note>
+
+Pour plus d'information (en anglais) : [[https://github.com/Project-OSRM/osrm-backend/wiki/Running-OSRM|Projet OSRM]]
+==== Retraitement du fichier pbf ====
+Le retraitement du fichier pbf permettra l'élimination des données inutiles pour le routage et leur reformatage aux normes utilisées par Osrm.
+
+<note>
+Selon le site officiel, l'extraction de données couvrant la planète tout entière peut prendre plusieurs heures, en fonction essentiellement de la vitesse du disque dur. Avec un ordinateur Core i7 doté de 8 GO de RAM et disposant d'un disque dur (lent)  5400 RPM Samsung SATA, le retraitement d'un fichier PBF à couverture planétaire a duré 65 minutes. Ce temps de traitement est susceptible de varier fortement en fonction des caractéristiques de votre processeur et de votre disque dur. La majeure partie des données est en effet sauvegardée sur disque, la taille de la RAM est réduite et l'extraction des données correspondant à la planète peut constituer des fichiers de 35 GO ou davantage.
+</note>
+
+Se rendre dans le répertoire <build>
+<code>
+ ./osrm-extract provence-alpes-cote-d-azur-latest.osm.pbf 
+</code>
+
+<note>
+Attention : si vous obtenez l'erreur "TBB Warning: Exact exception propagation is requested by application but the linked library is built without support for it" c'est que votre machine manque de RAM... vous pouvez y remédier en ajoutant plus de swap :
+<code>
+fallocate -l 64G memory.swap
+chmod 600 memory.swap
+mkswap memory.swap
+sudo chown root: memory.swap
+sudo swapon memory.swap
+</code>
+</note>
+
+il est ensuite nécessaire de hiérarchiser ces données :
+<code>
+./osrm-contract provence-alpes-cote-d-azur-latest.osrm
+</code>
+
+C'est fini. Le serveur est fonctionnel.
+ 
+===== Utilisation =====
+==== Démarrage du serveur ====
+Le démarrage du serveur s'effectue en ligne de commande. Il suffit de lancer l'executable osrm-routed suivi du chemin vers le fichier .osrm créé avec osrm-extract et osrm-contract. Exemple :
+<code>
+./osrm-routed ../donnees_carto/provence-alpes-cote-d-azur-latest.osrm
+</code>
+
+Dés le lancement, un certain nombre d'informations sont affichées dans le terminal. Parmi celles-ci, la ligne <running and waiting for requests> indique que le serveur s'est lancé et est prêt à effectuer les calculs demandés :
+<code>
+[info] running and waiting for requests
+</code>
+
+<note>En fonction de la taille de votre carte et des performances de votre machine, ce message peut mettre du temps avant d'apparaitre : tant qu'il n'est pas affiché, inutile de lancer une requête pour tester si ça fonctionne !</note>
+
+==== Arrêt du serveur ====
+L'arrêt du serveur se fait par ctrl + C dans le terminal ou bien par la fermeture du terminal.
+
+Si le lancement est effectué en ligne de commande, passer par kill :
+<code>
+kill $(ps -x | grep osrm | grep -v grep | awk '{print $1;}')
+</code>
+==== Lancement des requêtes ====
+L'utilisation d'Osrm se fait dans le navigateur interne en saisissant localhost:5000 comme adresse.
+
+/!\ Documentation complète de l'API disponible sur la page du projet
+
+http://project-osrm.org/docs/v5.15.2/api/#nearest-service
+
+http://project-osrm.org/docs/v5.15.2/api/#general-options
+
+NB : la forme et les options d'appels de l'API ont un peu évolué par rapport aux exemples cités ci-après  
+
+La fonctionnalité utilisée pour obtenir un itinéraire est viaroute, suivi des coordonnées des points à relier.
+
+<note important>Les coordonnées sont saisies en faisant précéder la longitude par la latitude, les résultats d'une inversion de données peuvent être fantaisistes puisque mettant en relation deux points bien différents des points recherchés. Les latitudes nord sont positives, les latitudes sud sont négatives. Les longitudes est sont positives, les longitudes ouest sont négatives (selon le méridien de Greenwich évidemment).</note>
+
+Exemple : pour calculer l'itinéraire entre le quai des Belges à Marseille et la gare SNCF d'Aix en Provence, saisir :
+http://localhost:5000/viaroute?loc=43.29528,5.37439&loc=43.52339,5.44452&instructions=true
+
+{{ :viaroute.png?300 |}}
+
+Vous pouvez contrôler le résultat en ligne avec :
+http://router.project-osrm.org/viaroute?loc=43.29528,5.37439&loc=43.52339,5.44452&instructions=true
+
+Les résultats ne seront pas forcément identiques entre les deux serveurs selon les données figurant dans chacune des bases de donnée mais c'est excessivement proche. 
+
+<note tip>Pour connaître les coordonnées géographiques d'un point particulier, le site [[http://tile.openstreetmap.fr/|http://tile.openstreetmap.fr/]] permet de faire apparaître en bas à droite de l'écran les coordonnées du point survolé par le curseur de la souris. Utile pour un usage occasionnel, probablement pas si vous avez fait le choix d'installer OSRM. En effet, dans ce cas on peut supposer que vous disposez déjà d'un nombre conséquent de coordonnées géographiques organisées en base de données.</note>
+
+==== Retraiter les données ====
+Bien que fort utiles, les informations reçues mériteraient un peu de mise en forme et de retraitement. Le script ci-dessous est une proposition de solution pour y parvenir. Il est certainement très perfectible.
+
+Suite à venir
+===== Désinstallation =====
+ 
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée. Les journaux du système, et les fichiers de préférence des utilisateurs dans leurs dossiers personnels sont toujours conservés.
+
+<note tip>L'utilisation de checkinstall au lieu de make install lors de l'installation permet une suppression de paquet pour des applications compilées par l'utilisateur. C'est donc checkinstall qui a été utilisé ci-dessus.</note>
+ 
+===== Voir aussi =====
+
+    * [[nominatim|Nominatim]]
+
+   * **(en)** [[http://project-osrm.org/|Projet OSRM]]
+
+  * **(fr)** [[http://dogeo.fr/osrm-installation/|Dogeo]]
+
+  * **(fr)** [[http://openstreetmap.fr/osrm-10M|OSRM sur openstreetmap]]
+ 
+----
+//Contributeurs principaux : [[zococo|Zococo]].//
+ 
+//Basé sur [[https://github.com/Project-OSRM/osrm-backend/wiki/Building%20OSRM|« Building OSRM »]] parDaniel J. H.//
+
+

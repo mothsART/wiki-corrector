@@ -1,0 +1,429 @@
+
+{{tag>serveur}}
+
+----
+
+{{ :serveur:nginx-logo.png?nolink&128}}
+
+====== Nginx : serveur Web asynchrone ======
+
+**Nginx** (Engine X, prononcez [n-gèn-x]) est un serveur Web asynchrone écrit par Igor Sysoev pour les besoins d'un site russe à très fort trafic. Il peut être configuré pour faire office de serveur reverse proxy Web et de serveur proxy de messagerie électronique (IMAP/POP3). Une partie de la documentation a été traduite du russe vers l'anglais puis vers le français. Ses sources sont disponibles sous une licence de type BSD.
+
+----
+
+===== Installation =====
+[[http://wiki.nginx.org/Install#Ubuntu_PPA|Deux dépôts]] proposent les installateurs du serveur Nginx: le dépôt **stable** et le dépôt ** développement**. Le dépôt **stable** est fourni par défaut ; les versions les plus récentes n'y sont pas proposées mais leur stabilité est éprouvée. Le dépôt de développement propose des versions plus récentes. Elles sont loin d'êtres instables mais les tests effectués sont moins poussés et doivent donc être évitées pour des usages de production. Vous devrez [[ppa|ajouter]] ce dépôt (**ppa:nginx/development**) si vous souhaitez utiliser ces versions.
+
+Vous pouvez aussi choisir le packaging de votre Nginx. En effet, Nginx est proposé en 3 packagings offrants des lots de fonctionnalités différents. Dans le doute, choisissez le paquet **Nginx**.
+^ 																^ nginx-extras	^ nginx-full	^ nginx-light	^
+| Core, Access, Auth Basic, Auto Index, Charset, Empty GIF, FastCGI, Gzip, Headers, Index, Log, Map, Proxy, Rewrite, Upstream	| 	X	|	X	|	X	|
+| User ID, UWSGI, Browser, Geo, Limit Requests, Limit Zone, Memcached, Referer, SCGI, Split Clients, SSI			| 	X	|	X	|		| 
+| Gzip Precompression, IPv6, SSL, Stub Status											|  	X	|	X	|	X	|
+| Substitution, WebDAV, XSLT, Addition, Debug, GeoIP, Image Filter, Real IP							|  	X	|	X	|		|
+| HTTP Sub															|  		|	X	|		|
+| Embedded Perl, FLV, MP4, Random Index, Secure Link										|  	X	|		|		|
+| Mail Core, IMAP, POP3, SMTP, SSL												|  	X	|	X	|		|
+| Echo																|  	X	|	X	|	X	|
+| Upstream Fair Queue, Auth PAM, DAV Ext											|  	X	|	X	|		|
+| Embedded Lua, HttpHeadersMore, http push, Nginx Development Kit, Upload module, Upload Progress, Chunkin			|  	X	|		|		|
+
+<note>Une fois votre choix fait, vous devez [[:tutoriel:comment_installer_un_paquet|installer le paquet]] qui vous convient.</note>
+
+----
+
+===== Configuration =====
+
+==== Configuration de Nginx ====
+La configuration de Nginx est modularisée en plusieurs fichiers de configuration [[:tutoriel:comment_modifier_un_fichier|textuel]] que vous trouverez dans le dossier ///etc/nginx//:
+  * **nginx.conf:** Le fichier de configuration globale du **serveur**. Les paramètres qui s'y trouvent doivent impacter l'ensemble du serveur ; vous n'y toucherez normalement pas.
+  * **mime.types:** La liste des types MIME résolus par les extensions de fichiers. Cette liste indique la nature des fichiers renvoyés par le serveur (ex: ceci est une page web ou ceci est une vidéo ogg).
+  * **sites-available:** Contient les fichiers de configurations de vos sites ou services (un fichier par pré-occupation/site/service). Ce dossier est un //dépôt// ; les fichiers de configuration qui y sont ne sont pas pris en compte.
+  * **sites-enabled:** Doit contenir des [[lien_physique_et_symbolique#exemple_de_lien_symbolique|liens symboliques]] vers les fichiers de **site-available** que vous souhaitez activer.
+  * **conf.d:**  Emplacement pour appliquer les paramètres communs à tous les sites. Peut également servir de la même façon que **site-available** (renommer ses fichiers ".conf" en ".disabled" pour désactiver les sites).
+
+----
+
+==== Le nginx.conf par défaut ====
+
+Le fichier **nginx.conf** est l'élément névralgique de votre serveur Nginx. Nous allons voir à quoi ressemble un fichier **nginx.conf** par défaut sous Ubuntu (avec une petite traduction en Français).
+
+FIXME EN COURS --- //[[:utilisateurs:beaver|beaver]] Le 11/08/2015, 15:30//.
+^ Les modules	^ Les explications	^                                                   
+|<code>user www-data; ##**Syntaxe:** **user** **user** **[group]**;</code> | Définit l'utilisateur et le groupe avec lequel le daemon Nginx sera lancé. Si le groupe est omis, un groupe dont le nom correspond à celui de l'utilisateur sera utilisé. |
+|<code>worker_processes 4; ##**Syntaxe:** worker_processes **nombre**  **auto**; </code> | La valeur optimale dépend de nombreux facteurs.. y compris (mais non limité à) au nombre de CPU que vous disposez; le nombre de disques durs.. etc :-). Si vous avez un doute sur la valeur à indiquer, veuillez prendre comme référence le nombre de CPU que vous disposez, vous pouvez aussi utiliser **auto**. | 
+|<code>pid /run/nginx.pid;##**Syntaxe:** pid **fichier.pid**;</code> | Le fichier stockera le [[https://fr.wikipedia.org/wiki/Identifiant_de_processus|PID]] de votre processus. |
+|<code>events { worker_connections 768; ##**Syntaxe:** worker_connections **nombre**;</code> | Définir le nombre maximal de connexions simultanées ouvertes par le processus. |
+| <code>multi_accept on;} ##**Syntaxe:** multi_accept **on**  **off**;</code> | Si **multi_accept** est désactivé, le processus acceptera une nouvelle connexion à la fois, dans le cas contraire, le processus acceptera toutes les nouvelles connexions en même temps. | 
+|<code>http { sendfile on; ##**Syntaxe;** sendfile **on** **off**;</code> | Nous allons dire que nous avons un **index  index.php;** dans notre virtual host, Sendfile permettra de se délester de PHP pour l’envoi des fichiers aux navigateurs. Il est fortement recommandé d’utiliser ce module pour alléger les process sur le serveur. | 
+|<code>tcp_nopush on; ##**Syntaxe:** tcp_nopush **on**  **off**</code> | Le module **tcp_nopush** fait le contraire de **tcp_nodelay** : au lieu d’optimiser les délais d’envoi des informations, il optimise la quantité d’informations envoyée. **tcp_nopush** et **sendfile** sont indissociable((comprendre qu'il faut absolument que sendfile soit actif.. .)). | 
+| <code>tcp_nodelay on; ##**Syntaxe:** tcp_nodelay **on**  **off**;</code> | Activer  ou désactiver l'algorithme de [[https://fr.wikipedia.org/wiki/Algorithme_de_Nagle|Nagle]]((utilisé uniquement si une connexion est passée en état (persistant)((keep TCP alive -> (KeepAlive) -> (maintenir TCP en vie) -> c'est à dire conserver la connexion TCP )). |
+|<code>keepalive_timeout 65; ##**Syntaxe:** keepalive_timeout **timeout** **[header_timeout]**;</code> | **Le premier paramètre est obligatoire** définit un délai pendant lequel une connexion cliente KeepAlive restera ouverte côté serveur. La valeur 0 désactive les connexions clientes KeepAlive. **Le deuxième paramètre quand à lui est facultatif** définit la valeur de délai de l'[[https://fr.wikipedia.org/wiki/Header|entête // header]]. | 
+|<code>types_hash_max_size 2048; ##**Syntaxe:** types_hash_max_size **taille**;</code> | Définit la taille maximale des types de [[https://fr.wikipedia.org/wiki/Table_de_hachage|tables de hachage]]. Les détails de la mise en place des tables de hachage sont fournis dans un document [[http://nginx.org/en/docs/hash.html|distinct]]. Pour traiter rapidement des ensembles de données statiques tels que le nom de votre serveur, les directions [[http://nginx.org/en/docs/http/ngx_http_map_module.html#map|map]], les [[https://fr.wikipedia.org/wiki/Type_MIME|Types MIME]], etc ... Nginx utilise les tables de hachage. |
+| <code>server_tokens off; ##**Syntaxe:** server_tokens **on**  **off**;</code> | Active ou désactive l'émission de votre [[https://ubuntu-fr.org/.ht|version]] Nginx. Dans notre exemple, nous voyons bien que le site ubuntu-fr.org cache sa version Nginx :-).| 
+|<code>server_names_hash_bucket_size 64; ##**Syntaxe:****server_names_hash_bucket_size** **taille**;</code>|Si vous avez un nom de domaine de plus de 64 chars, vous aurez besoin de ce module. Par défaut, sa valeur est de 64. Notez que si vous avez un domaine de 80 chars par exemple, vous ne réglerez pas la valeur à "80", vous utiliserez plutôt un multiple de 2 -> 128((64*2 == 128)).| 
+|<code>server_name_in_redirect off; ##**Syntaxe:** server_name_in_redirect **on**  **off**;</code>| Quand le module **name_server** n'est pas définit dans votre virtual host, le contenu de **Host** dans le header est utilisé. Si ce champ n'est pas présent, l'adresse IP du serveur est utilisée, si vous avez pas d'adresse IP ... -> m(. GET **/** <- Le chemin absolu ou se trouve le fichier index.html.  **HTTP/1.1**  <- La version http utilisée est 1.1, donc le **host**((https://www.ietf.org/rfc/rfc2616.txt)) est obligatoire. **Host: ubuntu-fr.org** <- Le nom de domaine, c'est cette partie que tentera de récupérer le module **server_name_in_redirect** si il est actif(( GET **/** **HTTP/1.1** User-Agent: curl/7.35.0 **Host: ubuntu-fr.org** Accept: */*)). |
+|<code>include /etc/nginx/mime.types; ##La liste des types MIME résolu par les extensions de fichiers.</code> | Cette liste indique la nature des fichiers renvoyées par le serveur (ex: ceci est une page web http://votrendd.tld/hello.html ou ceci est une vidéo ogg ..  http://votrendd.tld/mavideo.ogg pour que Nginx "comprenne" que c'est un format **.html** ou un format **.ogg** il lui faut un fichier mime.types).|
+|<code>default_type application/octet-stream; ##**Syntaxe:** default_type **mime-type**;</code> | Définit le [[https://fr.wikipedia.org/wiki/Type_MIME|Type MIME]]  par défaut d'une requête ACK. Un mappage sur l'extension de [[https://fr.wikipedia.org/wiki/Type_MIME|Type MIME]] peut être configuré avec le module [[http://nginx.org/en/docs/http/ngx_http_core_module.html#types|type]]. | 
+|<code>access_log /var/log/nginx/access.log;</code> | Vous retrouverez dans votre fichier **access.log** les **GET'S/POST'S** de chaque visiteur visitant votre site.|
+|<code>error_log /var/log/nginx/error.log;</code> | Ici à contrario vous retrouverez dans votre fichier **error.log** les erreurs **403, 404, 500, 503**, venant de vos visiteurs (par exemple):-).| 
+|<code>gzip on; ##**Syntaxe:**gzip **on** | **off**;</code>|**ngx_http_gzip_module** est un filtre qui compresse les requêtes de type ACK à l'aide de la méthode « gzip ». Souvent, ça permet de réduire la taille des données transmises.  Nous pouvons via ce module, réduire de moitié les données transmises, voir même plus :-). | 
+|<code>gzip_disable "msie6"; ##**Syntaxe:** gzip_disable **regex** ...;</code> | Désactive via une regexp gzip. Le module utilisera encore une fois le header((GET / HTTP/1.1 **User-Agent:** curl/7.35.0 Host: ubuntu-fr.org Accept: */*)) pour récupérer l'**User-Agent** de votre visiteur. Vous noterez qu'il existe une exception à la règle concernant les regexp -> [[https://fr.wikipedia.org/wiki/Internet_Explorer_6|msie6]] :-), si cette exception ne serait pas d'actualité, nous aurions utilisé cette regexp: <code>MSIE [4-6]\.</code>.|
+| <code>gzip_vary on; ##**Syntaxe:** gzip_vary **on** | **off**;</code> | Active ou désactive l'insertion de **Vary: Accept-Encoding** dans le header de votre requête ACK. Seulement si un des modules **gzip**, gzip_static ou gunzip sont actif. Dans le cas du site ubuntu-fr.org le module **gzip_vary** est sur **off**((http://stackoverflow.com/questions/7848796/what-does-varyaccept-encoding-mean)), la compression de notre header((HTTP/1.1 200 OK Server: nginxContent-Type: text/html; charset=utf-8 Expires: Sun, 19 Nov 1978 05:00:00 GMT Last-Modified: Wed, 12 Aug 2015 21:43:15 +0000 ETag: "1439415795" Content-Language: en X-Generator: Drupal 7 (http://drupal.org) Link: </intro>; rel="canonical",</node/17>; rel="shortlink" **Content-Encoding: gzip**)) ne semble donc pas active.. .|
+|<code>gzip_proxied any; ##**Syntaxe:** gzip_proxied off | expired | **no-cache**</code> <code>| no-store | private | no_last_modified | no_etag | auth | any;</code>| Active ou désactive la compression gzip pour les proxys. gzip_proxied vérifie le header((> GET / HTTP/1.1 User-Agent: curl/7.35.0 Host: ubuntu-fr.org Accept: */* HTTP/1.1 200 OK Server nginx is not blacklisted Server: nginx Content-Type: text/html; charset=utf-8 Expires: Sun, 19 Nov 1978 05:00:00 GMT Last-Modified: Wed, 12 Aug 2015 16:41:34 +0000 ETag: "1439397694" Content-Language: en X-Generator: Drupal 7 (http://drupal.org) Link: </intro>; rel="canonical",</node/17>; rel="shortlink" Content-Length: 15956 Accept-Ranges: bytes Date: Wed, 12 Aug 2015 16:41:34 GMT Age: 0 Connection: keep-alive **Cache-Control**: **no-cache**, must-revalidate, max-age=0)) de votre connexion ACK  (la partie **Cache-Control**). Nous voyons bien que le site active la compression pour les connexions ACK, seulement si le header comporte le paramètre **no-cache** dans le **Cache-Control**.|
+|<code>gzip_comp_level 6; ##**Syntaxe:** ?</code>| En cours | 
+|<code>gzip_buffers 16 8k; ##**Syntaxe:** ?</code>| En cours | 
+|<code>gzip_http_version 1.1; ##**Syntaxe:** ?</code> | En cours | 
+|<code>gzip_types text/plain text/css application/json application/x-javascript text/xml</code><code>application/xml application/xml+rss text/javascript; ##**Syntaxe:** ?</code>| En cours | 
+|<code>nginx-naxsi config ##**Syntaxe:** ?</code> | En cours |
+|<code>include /etc/nginx/naxsi_core.rules; ##**Syntaxe:** ?</code> | En cours |
+|<code>nginx-passenger config;##**Syntaxe:** ?</code> | En cours |
+|<code>passenger_root /usr; ##**Syntaxe:** ?</code> | En cours |
+|<code>passenger_ruby /usr/bin/ruby; ##**Syntaxe:** ?</code> | En cours |
+|<code>include /etc/nginx/conf.d/*.conf;</code> | En bash, le métacaractère ** * ** correspond à aucun caractère, n'importe quel caractère ou un ensemble de caractères, via ce métacaractère vous allez pouvoir charger tous vos fichiers **.conf** sans devoir en définir le nom au préalable. |
+| <code>include /etc/nginx/sites-enabled/*;}</code> | En bash, le métacaractère ** * ** correspond à aucun caractère, n'importe quel caractère ou un ensemble de caractères, via ce métacaractère vous allez pouvoir charger tous vos fichiers ***.***. Cette partie contiendra vos sites internet actifs, à savoir que vous devez au préalable utiliser **/etc/nginx/sites-available/** :-). |
+|<code>mail { auth_http localhost/auth.php; ##**Syntaxe:** ?</code>| En cours | 
+|<code>pop3_capabilities "TOP" "USER"; ##**Syntaxe:** ?</code>| En cours | 
+|<code>imap_capabilities "IMAP4rev1" "UIDPLUS"; ##**Syntaxe:** ?</code>| En cours | 
+|<code>server { listen     localhost:110; ##**Syntaxe:** ?</code> | En cours |
+|<code>protocol   pop3; ##**Syntaxe:** ?</code> | En cours |
+|<code>proxy      on; ##**Syntaxe:**?</code>| En cours |
+|<code>server { listen     localhost:143; ##**Syntaxe:** ?</code> | En cours |
+|<code>protocol   imap; ##**Syntaxe:**?</code> | En cours |
+|<code>proxy      on;}} ##**Syntaxe:**?</code> | En cours |
+
+----
+
+==== Nginx et les hôtes virtuels ====
+
+Nginx inclut un exemple de configuration d'un hôte virtuel((aussi appelé //virtual host// ou //vhost//)) que vous pouvez trouver dans « /etc/nginx/sites-available/default ».
+
+Si vous souhaitez le modifier, [[:tutoriel:comment_modifier_un_fichier|ouvrez (avec les droits administrateur) le fichier]] **/etc/nginx/sites-available/default**.
+
+Pour configurer votre nom de domaine (vhost), vous pouvez copier la configuration par défaut du vhost « default » puis y apporter vos modifications. Exemple :
+
+  sudo cp /etc/nginx/sites-available/default /etc/nginx/sites-available/mondomaine.tld
+
+Puis, modifier la configuration de votre nom de domaine mondomaine.tld en [[:tutoriel:comment_modifier_un_fichier|modifiant le fichier]] **/etc/nginx/sites-available/mondomaine.tld**.
+
+Le sous-répertoire « sites-available » stocke les vhosts mais pour que Nginx les prenne en considération, vous devez les activer en créant un lien symbolique dans « /etc/nginx/sites-enabled ». Par exemple :
+
+  sudo ln -s /etc/nginx/sites-available/mondomaine.tld /etc/nginx/sites-enabled/mondomaine.tld
+
+Il ne reste qu'à redémarrer Nginx :
+
+  sudo /etc/init.d/nginx restart
+
+----
+
+===== Configuration  du reverse proxy et du cache Web =====
+ 
+==== Configuration d'un reverse proxy et du cache avec Nginx ===
+
+Ce tutoriel montre la configuration de nginx en tant que reverse proxy cache.
+
+Cette configuration contiendra les éléments suivants:
+
+   * Cache au niveau du reverse proxy 
+   * Activation des champs expires dans la requête http
+   * Compression entre le client et le reverse proxy 
+   * Limitation des connexions entre le client et le reverse proxy (nombre et temps)
+
+==== Pré-requis ====
+
+  * Avoir lu la page de documentation sur [[:nginx|Nginx : serveur Web asynchrone]].
+  * Comprendre la fonction d'un reverse proxy ou un proxy inverse [[http://fr.wikipedia.org/wiki/Reverse_proxy|Article wikipedia]].
+
+==== Configuration ====
+
+<note important>
+Certains termes présents dans cet article ne sont pas très "académiques" n'hésitez pas à les modifier si vous les connaissez.
+</note>
+
+
+La configuration qui va suivre se décomposera en trois parties : 
+
+  * Le paramétrage global du serveur nginx.
+  * Le paramétrage des fonctions de reverse proxy et de cache.
+  * Un exemple de configuration du serveur web se trouvant derrière le reverse proxy. 
+
+Les fichiers et les dossiers de configuration utilisés seront :
+
+  /etc/nginx/nginx.conf
+  /etc/nginx/conf.d/proxy.conf
+  /etc/nginx/sites-enabled/
+  /etc/nginx/sites-available/
+  
+Cette séparation a pour but d'ajouter de la clarté dans la configuration car tous les fichiers de configuration sont inclus dans le fichier nginx.conf.
+
+=== Configuration du nginx.conf avec proxy ===
+
+La configuration se fait dans le fichier /etc/nginx/nginx.conf
+
+Contenu du fichier 
+
+<code>
+user www-data;
+worker_processes  1;
+error_log  /var/log/nginx/error.log;
+pid        /var/run/nginx.pid;
+events {
+	worker_connections  1024;
+}
+http {
+    include       /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    access_log  /var/log/nginx/access.log;
+    sendfile        on;
+    #tcp_nopush     on;
+    #keepalive_timeout  0;
+    keepalive_timeout  65;
+    tcp_nodelay        on;
+    # envoi moins d'information sur le serveur
+    server_tokens off;
+
+     # taille des buffers et taille max des requêtes normales
+    client_body_buffer_size 1k;
+    client_max_body_size    8m;
+    large_client_header_buffers 1 1K;
+    ignore_invalid_headers on;
+    
+    
+    # définition des différents timeout
+    client_body_timeout 5;
+    client_header_timeout 5;
+    keepalive_timeout 5 5;
+    send_timeout 5;
+    ignore_invalid_headers on;
+    server_name_in_redirect off;
+    
+    
+    # active la compression des pages sauf pour les navigateurs pourris
+    gzip  on;
+    gzip_comp_level 6;
+    gzip_proxied any;
+    gzip_vary on;
+    gzip_types  text/plain text/css application/x-javascript;
+    gzip_disable "MSIE [1-6]\.(?!.*SV1)";
+    
+    # limitation du nombre de connexion par client
+    limit_zone gulag $binary_remote_addr 1m;
+    limit_conn gulag 50;
+
+    include /etc/nginx/conf.d/*.conf;
+    include /etc/nginx/sites-enabled/*;
+}
+</code>
+
+^ options                  ^ explications          ^
+| user www-data; ##**Syntaxe:** **user** **user** **[group]**    | Définit l'utilisateur et le groupe avec lequel le daemon Nginx sera lancé. Si le groupe est omis, un groupe dont le nom correspond à celui de l'utilisateur sera utilisé. |
+| worker_processes 1; ##**Syntaxe:** worker_processes **nombre** **auto**; | La valeur optimale dépend de nombreux facteurs.. y compris (mais non limité à) au nombre de CPU que vous disposez; le nombre de disques durs.. etc :-). Si vous avez un doute sur la valeur à indiquer, veuillez prendre comme référence le nombre de CPU que vous disposez, vous pouvez aussi utiliser **auto**. |
+| worker_connections; ##**Syntaxe:** ? | fixer ce paramètre en fonction du calcul ci dessous (valable que sur un reverse proxy)    max_clients = worker_processes * worker_connections/4         |
+|access_log  | Vous retrouverez dans votre fichier **access.log** les **GET'S/POST'S** de chaque visiteur visitant votre site.|
+|error_log | Ici à contrario vous retrouverez dans votre fichier **error.log** les erreurs **403, 404, 500, 503**, venant de vos visiteurs (par exemple):-). |
+| default_type application/octet-stream; ##**Syntaxe:** default_type **mime-type**; | Définit le [[https://fr.wikipedia.org/wiki/Type_MIME|Type MIME]]  par défaut d'une requête ACK. Un mappage sur l'extension de [[https://fr.wikipedia.org/wiki/Type_MIME|Type MIME]] peut être configuré avec le module [[http://nginx.org/en/docs/http/ngx_http_core_module.html#types|type]]. |
+|server_tokens off; ##**Syntaxe:** server_tokens **on** **off** | Active ou désactive l'émission de votre [[https://ubuntu-fr.org/.ht|version]] Nginx.|
+|client_body_buffer_size ##**Syntaxe:** ? | définit la taille au delà de laquelle la requête sera enregistrée dans un fichier |
+|client_max_body_size ##**Syntaxe:** ? | taille max des données envoyées par un client  |
+| large_client_header_buffers ##**Syntaxe:** ?| définit le nombre de buffer ainsi que leurs tailles, la taille max de la requête URI est donc la multiplication de ces deux chiffres |
+| client_body_timeout ##**Syntaxe:** ? | si le client n'envoie pas la totalité de sa requête en 5 sec c'est mort ! |
+| client_header_timeout  ##**Syntaxe:** ? | si le client n'envoie pas l'entête de sa requête même traitement|
+| keepalive_timeout 5 5 ##**Syntaxe:** ?| premier chiffre temps max d'une connexion keepalive, deuxième chiffre indication de cette valeur dans le champ timeout de l'entête de la réponse |
+| keepalive_requests 100  ##**Syntaxe:** ? | nombre de requêtes keepalive sur une connexion |
+| send_timeout ##**Syntaxe:** ? | temps maximum de latence lors d'un envoi |
+| ignore_invalid_headers ##**Syntaxe:** ?| supprime les requêtes malformées |
+| server_name_in_redirect  ##**Syntaxe:** ?| désactive la réécriture du nom de serveur, protection contre les scans |
+| gzip ""; ##**Syntaxe:**gzip **on** **off**;| **ngx_http_gzip_module** est un filtre qui compresse les requêtes de type ACK à l'aide de la méthode « gzip ». Souvent, ça permet de réduire la taille des données transmises.  Nous pouvons via ce module, réduire de moitié les données transmises, voir même plus :-). |
+|gzip_comp_level ##**Syntaxe:** ?  | niveau de compression (peut aller jusqu'à 9) |
+| gzip_proxied any ##**Syntaxe:** ?  | activer la compression pour la réponse du serveur web derrière le reverse proxy |
+| gzip_vary on; ##**Syntaxe:** gzip_vary **on**  **off**; | Active ou désactive l'insertion de **Vary: Accept-Encoding** dans le header de votre requête ACK. Seulement si un des modules **gzip**, gzip_static ou gunzip sont actif. Dans le cas du site ubuntu-fr.org le module **gzip_vary** est sur **off**((http://stackoverflow.com/questions/7848796/what-does-varyaccept-encoding-mean)), la compression de notre header ne semble donc pas active.. .((
+HTTP/1.1 200 OK
+Server: nginx
+Content-Type: text/html; charset=utf-8
+Expires: Sun, 19 Nov 1978 05:00:00 GMT
+Last-Modified: Wed, 12 Aug 2015 21:43:15 +0000
+ETag: "1439415795"
+Content-Language: en
+X-Generator: Drupal 7 (http://drupal.org)
+Link: </intro>; rel="canonical",</node/17>; rel="shortlink"
+**Content-Encoding: gzip**
+Accept-Ranges: bytes
+Date: Wed, 12 Aug 2015 21:43:15 GMT
+Age: 0
+Connection: keep-alive
+Cache-Control: no-cache, must-revalidate, max-age=0
+Pragma: no-cache))  |
+| gzip_types ##**Syntaxe:** ?  | les types de fichier qui seront compréssés |
+| gzip_disable "msie6"; ##**Syntaxe:** gzip_disable **regex** ...; | Désactive via une regexp gzipping. Le module utilisera encore une fois le header(( GET / HTTP/1.1
+**User-Agent:** curl/7.35.0
+Host: ubuntu-fr.org
+Accept: */*)) pour récupérer l'**User-Agent** de votre visiteur. Vous noterez qu'il existe une exception à la règle concernant les regexp -> [[https://fr.wikipedia.org/wiki/Internet_Explorer_6|msie6]] :-), si cette exception ne serait pas d'actualité, nous aurions utilisé cette regexp: <code>MSIE [4-6]\.</code> |
+|limit_zone gulag $binary_remote_addr 1m ##**Syntaxe:** ? | crée une zone de stockage nommée « gulag » utilisant  moins de 1 mo de RAM, contenant l'état des connexions classé par adresse ip |
+| limit_conn gulag 50 ##**Syntaxe:** ? | limite le nombre de demande de connexions parallèles à 50 par client | 
+| include /etc/nginx/mime.types; ##La liste des types MIME résolu par les extensions de fichiers. | Cette liste indique la nature des fichiers renvoyées par le serveur (ex: ceci est une page web http://votrendd.tld/hello.html ou ceci est une vidéo ogg ..  http://votrendd.tld/mavideo.ogg pour que Nginx "comprenne" que c'est un format **.html** ou un format **.ogg** il lui faut un fichier mime.types). |
+
+
+
+==== Paramétrage des fonctions reverse proxy et cache ====
+
+Les paramètres du reverse proxy et du cache seront consignés dans le fichier /etc/nginx/conf.d/proxy.conf pour plus de clarté.
+
+Si vous voulez plus d'informations sur la configuration du proxy, allez voir la section de la documentation officielle [[http://wiki.nginx.org/NginxHttpProxyModule|ici]].
+
+Contenu du fichier  
+
+<code>
+proxy_redirect          off;
+proxy_set_header        Host            $host;
+proxy_set_header        X-Real-IP       $remote_addr;
+proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_hide_header       X-Powered-By;
+proxy_intercept_errors on;
+proxy_buffering on;
+
+
+proxy_cache_key "$scheme://$host$request_uri";
+proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=cache:10m inactive=7d max_size=700m;
+</code>
+
+
+^ options                  ^ explications          ^
+| proxy_redirect          off | permet une réécriture de l'adresse, inutile quand le serveur web ne se trouve pas sur la même machine physique |
+| proxy_set_header | permet de modifier les entêtes  |
+| proxy_hide_header | permet de cacher certains entêtes |
+| proxy_intercept_errors on | permet de contrôler les retours de code d'erreur du serveur web et de les modifier à la volé|
+| proxy_buffering on | Si l'on désactive cette option le serveur arrière doit attendre que les données soient envoyées au client pour fermer sa connexion avec nginx |
+| proxy_cache_min_uses       3   | La ressource devra être demandée 3 fois avant d'être mise en cache |
+| proxy_cache_key | clé permettant de stocker des fichiers de plusieurs sites différents dans le même cache. Les noms de fichiers seront le md5 de cette combinaison |
+| proxy_cache_path | indique le chemin vers le dossier de cache, organisation des dossiers  ( Si quelqu'un a plus d'information sur cette directive, sa participation est la bienvenue) \\ level 1:2 indique l'organisation des dossiers,\\ keys_zone définit le nom de cette zone, inactive définit le temps de conservation maximum d'un élément sans qu'il soit demandé par un client. Si le temps imparti est épuisé l'élément est supprimé, \\ max_size indique la taille maximale du cache|
+
+
+==== Exemple de configuration d'un serveur web arrière ====
+
+Nous allons créer le fichier trucbidule dans le répertoire /etc/nginx/sites-available/.
+
+Les éléments de la configuration :
+
+    * les requêtes arrivant sur le port 80 et ayant pour nom de domaine de destination trucbidul.fr seront redirigées vers le serveur web ayant l'adresse 192.168.0.100 
+    * seules les méthodes GET,HEAD et POST seront acceptées
+    * tous les fichiers seront mis en cache minimum 12 heures
+    * les fichiers statiques seront mis en cache 2 jours
+    * pas de mise en cache pour la section administration du site
+    * le champs expires de la requête http seront remplis
+    * les codes d'erreurs seront interceptés et une page sera renvoyée
+
+Contenu du fichier trucbidule:
+
+<code>
+server {
+
+    listen 80;
+    server_name www.trucbidule.fr trucbidule.fr;
+
+    # Ici on désactive les access_log pour ne pas faire doublon avec Apache
+    access_log off;
+    #access_log /var/log/nginx/default.access.log;
+
+if ($request_method !~ ^(GET|HEAD|POST)$ ) {
+return 444;
+}
+
+
+location / {
+    proxy_pass http://192.168.0.100:80/;
+    proxy_cache cache;
+    proxy_cache_valid 12h;
+    expires 12h;
+    proxy_cache_use_stale error timeout invalid_header updating;
+}
+
+
+location ~*^.+(swf|jpg|jpeg|gif|png|ico|css|zip|tgz|gz|rar|bz2|doc|xls|exe|pdf|ppt|txt|tar|mid|midi|wav|bmp|rtf|js)$ {
+    proxy_pass http://192.168.0.100:80;
+    proxy_cache cache;
+    proxy_cache_valid 2d;
+    expires max;
+}
+
+
+location ^~ (^/admin|^/identification) {
+    proxy_pass http://192.168.0.100:80;
+}
+
+error_page 400 401 402 403 404 405 406 407 408 409 410 411 412 413 414 415 416 417 500 501 502 503 504 505 506 507 /error.html;
+
+location = /error.html {
+    root /var/www/nginx-default;
+}
+}
+</code>
+
+
+^ options                  ^ explications          ^
+| listen   ##**Syntaxe:** ?      | adresse et port d'écoute, ici il écoute sur toutes les adresses |
+| server_name ##**Syntaxe:** ?| nom de domaine du serveur arrière, possibilité d'en spécifier plusieurs|
+| error_page ##**Syntaxe:** ? | redirection des erreurs suivantes vers le chemin indiqué |
+| proxy_pass  ##**Syntaxe:** ?| indique l'adresse du serveur web arrière |
+| proxy_cache_valid 12h ##**Syntaxe:** ? | toutes les pages retournant avec un code 200 301 et 302 seront stockées en cache pendant 12 heures. Il est possible de spécifier les codes html pour lesquels les fichiers doivent être mis en cache|
+| proxy_cache ##**Syntaxe:** ? | indique la zone de stockage pour le cache |
+| proxy_cache_use_stale ##**Syntaxe:** ? | Si le serveur arrière renvoi ces erreurs error timeout invalid_header updating nginx servira les fichiers qu'il possède en cache|
+| expires max ##**Syntaxe:** ?| donne une date d'expiration maximale pour que le client puisse mettre les fichiers statiques en cache|
+
+Quelque explications sur notre configuration. Comme vous l'avez vu toutes les requêtes ne sont pas traitées de la même manière. Différentes règles ont été créées pour séparer les contenus.
+
+   * Si l'adresse commence par un / (c'est à dire tout le temps) les éléments sont mis en cache pendant 12 h.
+   * Si l'adresse se termine par une des extensions de fichiers listées, alors les éléments sont mis en cache pendant 2 jours.
+   * Si l'adresse commence par /admin ou /administration il n'y a pas de mise en cache.
+   * Si l'adresse correspond à /error.html alors un fichier local est servit.
+
+Comme vous pouvez vous rendre compte dans certains cas plusieurs règles sont remplies. Il y a donc une hiérarchie parmi ces règles. La documentation officielle traite de ce sujet [[http://wiki.nginx.org/NginxHttpCoreModule#location|ici]].
+
+Pour résumer, voici la hiérarchie :
+
+   - =  Lorsque l'adresse est exactement la même la condition est remplie et les autres règles ne sont pas vérifiées.
+   - ^~ Lorsque l'adresse commence par l'expression les autres règles ne sont pas vérifiées.
+   - ~  Les expressions régulières sont analysées dans leur ordre d'apparition dans le fichier.
+   - Finalement la règle location / correspondant à tous les cas est appliquée dans le cas où l'adresse ne remplie pas les conditions des règles précédentes.
+
+Vous avez peut-être remarqué dans le fichier de configuration une petite étoile après la vague ~* . Cela indique que la règle n'est pas sensible a la casse.
+ 
+Il suffit, pour activer ce serveur, de créer un lien symbolique pointant vers le fichier précédent dans le répertoire :
+
+  sudo ln -s /etc/nginx/sites-available/trucbidule /etc/nginx/sites-enabled/trucbidule
+  
+==== Load balancing ====
+
+Il est possible de faire du load balancing avec nginx d'une manière assez simple. Il suffit de déclarer un groupe de serveurs et d'envoyer les requêtes vers ce groupe d'hôtes avec la directive //proxy_pass//. La documentation officielle détaillant la procédure ainsi que toutes les options possibles est disponible [[http://wiki.nginx.org/NginxHttpUpstreamModule|ici]].
+
+Voici l'exemple de la documentation officielle :
+
+<code>
+upstream backend  {
+  server backend1.example.com weight=5;
+  server backend2.example.com:8080;
+  server unix:/tmp/backend3;
+}
+ 
+server {
+  location / {
+    proxy_pass  http://backend;
+  }
+}
+</code>
+----
+
+
+===== Autres configurations de Nginx =====
+
+  * [[http://www.howtoforge.com/installing-php-5.3-nginx-and-php-fpm-on-ubuntu-debian|Installation de Nginx et PHP-FPM sur Debian/Ubuntu]] via HowToForge
+  * [[http://www.howtoforge.net/installing-nginx-with-php-5.3-and-php-fpm-on-ubuntu-lucid-lynx-10.04|Installation de Nginx et PHP-FPM sur Ubuntu 10.04]]
+  * Nginx et PHP tournant en FastCGI : FIXME à compléter
+
+----
+
+===== Voir aussi =====
+  * [[https://nginx.org/|Site officiel de Nginx]]
+  * [[wp>fr:Nginx|Nginx sur Wikipédia]]
+
+----
+
+//Contributeur principaux : [[:utilisateurs:ButterflyOfFire]], [[:utilisateurs:lildadou]], [[utilisateurs:##ubuntu-fr]], [[:utilisateurs:Miam Miam]] (Tutoriel Reverse Proxy Nginx), [[utilisateurs:BeAvEr]] (Refonte de l'intégralité du tutoriel).//

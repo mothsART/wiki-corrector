@@ -1,0 +1,83 @@
+
+====== qemu user emulation ======
+
+
+qemu-user est un émulateur d’architecture, cela signifie qu'il permet de faire tourner des programmes qui ne sont pas de l'architecture de votre processeur. (par exemple un exécutable arm sur votre ordinateur X86_64 ou i386)
+
+===== Utilisation =====
+
+compilons un helloworld pour une architecture différente de celle de l'hôte, <arch> . (vous devez avoir installé un compilateur croisé pour cette architecture préalablement [[:tutoriel:compilation_croisee]] ou utilisez crosstool-ng )
+[[:tutoriel:comment_modifier_un_fichier|Créez le fichier]]  
+<file c helloworld.c>#include <stdio.h>
+int main ()
+{
+  printf ("Hello World!\n");
+} </file>
+
+<code> <arch>-gcc helloworld.c </code>
+<note tip>attention le nom de gcc n'est pas toujours identique faites <code>ls /usr/bin/*gcc</code>  pour le retrouver facilement</note> 
+<code>./a.out
+bash: ./a.out : fichier binaire impossible à lancer </code>
+
+L'exécutable a.out étant pour une architecture différente de l'hôte il ne peut pas être exécuté
+
+[[:tutoriel:comment_installer_un_paquet|installez les paquets]] **[[apt>qemu-user-static]]** et **[[apt>binfmt-support]]**
+
+<code>./a.out
+/lib/ld-linux.so.3: No such file or directory </code>
+(ici il s'agit du cas d'une compilation pour arm)
+
+Cette librairie n'est pas installée (en tout cas pas si vous avez utilisé un compilateur externe à celui fourni dans les dépôts d'ubuntu) car nous ne nous trouvons pas sur un système de type arm.
+Trois solution s'offrent à vous
+  -  Installer les librairies arm sur votre ordinateur. (ce qui ne sera pas expliqué ici)
+  -  Compiler le programme en static c'est à dire insérer les librairies dans l'exécutable et ainsi ne plus avoir de dépendances à ces librairies.
+  -  Utiliser un linux (un système non lancé au démarrage mais présent sur une partition) de la même architecture que celle de l'exécutable et grâce à la commande chroot le "lancer" sous votre système hôte malgré la différence entre l'architecture hôte et celle de ce système.
+
+==== Faire une compilation static ====
+
+
+Il suffit de rajouter l'option -static lors de la compilation
+
+<code> <arch>-gcc -static helloworld.c
+./a.out
+Hello World! </code>
+
+==== Utilisation de qemu-user avec chroot ====
+
+
+C'est la manière la plus intéressante d'utiliser qemu-user car elle permet de lancer un système d'une architecture différente.
+(nous commençons directement avec un système d'une architecture différente de celle de l'hôte)
+<code> sudo chroot /<emplacement du chroot>/ </code>
+surprise !!! :-)
+<code>chroot: failed to run command ‘/bin/bash’: No such file or directory</code>
+
+cela s'explique que binfmt renseigne comme exécuteur de code <arch> /usr/bin/qemu-<arch>-static qui ne se trouve pas à cet endroit dans le système "chrooté"
+il suffit donc de le copier
+<code>cp /usr/bin/qemu-<arch>-static /<emplacement du chroot>/usr/bin/qemu-<arch>-static
+sudo chroot /<emplacement du chroot>/ </code>
+(Si toute fois le problème perdure c'est peut-être parce que bash n'est pas installé sur certains systèmes embarqués. Utilisez alors sudo chroot /<emplacement du chroot>/ /bin/sh )
+
+Vous avez alors un terminal avec bash presque comme si vous étiez sur le système (pour utiliser un chroot il est conseillé de monter les périphériques spéciaux comme /proc /dev et les autres)
+pour sortir du chroot tapez exit
+
+Lancer un programme "étranger" depuis un chroot 
+<code><arch>-gcc helloworld.c -o helloworld 
+cp helloworld /<emplacement du chroot>/usr/bin/helloworld
+sudo chroot /<emplacement du chroot>/ /usr/bin/helloworld
+Hello World!</code>
+
+(n'oubliez pas que les dépendances aux librairies doivent se trouver dans le système "chrooté")
+
+
+==== Avec Proot à la place de chroot ! ====
+Cela permet d'éviter d'utiliser les droits root et d'installer qemu-user-static et ainsi n'installer que qemu-user (plus petit).
+
+Tout d'abord [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>proot]]** (qui se prononce p-root pas proute :-) )
+
+(pas de sudo)
+<code>proot -q /usr/bin/qemu-<arch> -r /<racines des librairies etc...>/ /usr/bin/helloworld</code>
+
+===== Source =====
+[[https://wiki.debian.org/QemuUserEmulation]]
+
+Contributeurs: [[:utilisateurs:amj|amj]]

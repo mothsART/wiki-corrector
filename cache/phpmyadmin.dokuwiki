@@ -1,0 +1,138 @@
+
+{{tag>Bionic Xenial sgbd mysql serveur réseau}}
+
+----
+
+====== phpMyAdmin ======
+
+**[[http://www.phpmyadmin.net/|phpMyAdmin]]** est une interface web en PHP pour administrer à distance les [[:SGBD]] [[:MySQL]] et [[:MariaDB]].
+
+Il permet d'administrer les éléments suivants :
+  * les bases de données
+  * les tables et leurs champs (ajout, suppression, définition du type)
+  * les index, les clés primaires et étrangères
+  * les utilisateurs de la base et leurs permissions
+  * importer ou exporter les données dans divers formats (CSV, XML, PDF, OpenDocument, Word, Excel et LaTeX)
+
+{{:phpmyadmin.png}}
+
+Pour toute information complémentaire il faut vous référer à [[https://docs.phpmyadmin.net/fr/latest/|la documentation officielle de phpMyAdmin (en français).]]
+
+===== Pré-requis =====
+
+Avoir [[:tutoriel:comment_installer_un_paquet#paquet_present_dans_les_depots|installé les paquets]] suivants :
+  * le SGBD [[apt>mysql-server|MySQL]] ou [[apt>mariadb-server|MariaDB]]
+  * le serveur web [[apt>apache2]] (ou [[apt>lighttpd]])
+
+S'être assuré que le serveur web fonctionne et que les scripts PHP sont correctement interprétés.
+===== Installation via les dépôts =====
+
+Il est recommandé d'installer phpMyAdmin depuis les dépôts officiels afin d'avoir une installation immédiatement fonctionnelle et de bénéficier des mises à jour de sécurité.
+[[:tutoriel:comment_installer_un_paquet#paquet_present_dans_les_depots|Installer le paquet]] **[[apt>phpmyadmin]]**.\\ 
+Soit en ligne de commande :
+<code>sudo apt install phpmyadmin</code>
+
+Lors de l'installation, il vous sera posé quelques questions auxquelles il faut répondre avec soin :
+
+  * Créer la base de données phpmyadmin : **oui** 
+{{::screenshot_20171028_112911.png|}}
+  * Définir un mot de passe pour l'utilisateur MySQL phpmyadmin   :
+{{:screenshot_20171028_112939.png|}}
+  * L'écran suivant demandera la confirmation de ce mot de passe (a priori cette étape n'existe plus depuis [[bionic|Bionic 18.04]], voir paragraphe 3.3 plus bas).
+  * Indiquer le mot de passe de l'utilisateur MySQL « root » tel que défini à l'installation de mysql-server :
+{{:screenshot_20171028_113015.png|}}
+   * Choisir le serveur web à configurer automatiquement (utiliser les flèches du clavier ou la touche //tab// pour se déplacer et la barre d'espace pour sélectionner/désélectionner) :
+<note important>Le surlignage rouge n'est pas une sélection, il faut que ça affiche une étoile * entre les crochets, en utilisant la barre d'espace</note>
+{{:screenshot_20171028_125829.png|}}
+
+
+phpMyAdmin devrait être accessible à l'adresse http://localhost/phpmyadmin
+
+root
+
+==== Ajouter des thèmes graphiques ====
+Il est possible de changer de thème graphique, notamment avec les versions récentes, pour cela, rendez-vous sur
+[[https://www.phpmyadmin.net/themes|thèmes]]
+===== Problèmes courants =====
+
+==== Incompatibilité avec PHP 7.2 ====
+
+Sur [[:bionic|Bionic 18.04]], si vous rencontrez une erreur du type :
+<code>Warning in ./libraries/sql.lib.php#613
+count(): Parameter must be an array or an object that implements Countable</code>
+ceci est dû au fait que la version de phpMyAdmin fournie dans les dépôts officiels n'est pas pleinement compatible avec PHP 7.2.
+
+Il s'agit donc d'un bug d'Ubuntu.
+
+La [[https://stackoverflow.com/a/49483740/3175946|solution]] est de remplacer la ligne 613 du fichier ''/usr/share/phpmyadmin/libraries/sql.lib.php'' :
+<file>|| (count($analyzed_sql_results['select_expr'] == 1)</file>
+par
+<file>|| (count($analyzed_sql_results['select_expr']) == 1</file>\\
+
+Néanmoins, une erreur du même type peut persister lorsque l'on veut utiliser les fonction Import / Export. Il faut alors remplacer la ligne 551 du fichier ''/usr/share/phpmyadmin/libraries/plugin_interface.lib.php''
+<file>       if ($options != null && count($options) > 0) {</file>
+par
+<file>       if ($options != null && count((array)$options) > 0) {</file>
+
+
+
+Une meilleure solution consiste à installer manuellement une version plus récente de phpMyAdmin à télécharger depuis le [[https://www.phpmyadmin.net/downloads/|site officiel]].
+
+==== Erreur 404 avec Apache ====
+
+Concernant les problèmes de non accessibilité de phpMyAdmin, s'assurer auparavant que, lors de l'installation du paquet //phpmyadmin//, le serveur web souhaité (généralement Apache) a bien été sélectionné lorsque la question a été posée :\\
+l'interface n'est pas très claire à ce niveau et l'option //Apache// peut sembler sélectionnée alors qu'elle ne l'est pas. Il faut appuyer sur la barre d'espace et s'assurer d'avoir une astérisque ** * ** au niveau d'//Apache//.
+
+Utilisez la commande suivante pour pouvoir répondre à nouveau aux questions : 
+<code>sudo dpkg-reconfigure phpmyadmin</code>
+
+<note importante>
+Dans les écrans de configuration, les déplacement se font avec la touche TAB (ou les flèches du clavier), les sélections avec la barre d'espace et les validations avec la touche Entrée.
+</note>
+
+==== Accès root ====
+
+Avec [[:MySQL]] depuis [[:bionic|Bionic 18.04]], et [[:MariaDB]] depuis [[:xenial|Xenial 16.04]], l'authentification de l'utilisateur //root// de MySQL se fait au moyen du //[[:mysql#authentification|plugin auth_socket]]//, donc avec [[:sudo]].\\
+Cette méthode ne permet pas de se connecter avec phpMyAdmin, mais il est [[:mysql#ajouter_ou_changer_le_mot_de_passe_de_root|vivement déconseillé]] de modifier ce comportement.
+
+Si vous avez besoin d'un accès global à vos bases de données depuis un même compte, la solution conseillée est donc de créer un nouvel utilisateur et de lui attribuer tous les privilèges :
+<code>
+sudo mysql
+</code>
+Puis dans la console MySQL :
+<code mysql>
+CREATE USER 'nom_utilisateur_choisi'@'localhost' IDENTIFIED BY 'mot_de_passe_solide';
+GRANT ALL ON *.* TO 'nom_utilisateur_choisi'@'localhost' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+QUIT;
+</code>
+
+En remplaçant évidemment //nom_utilisateur_choisi// et //mot_de_passe_solide// dans cette requête.
+
+<note warning>Cette solution peut être utile sur un serveur de développement mais elle rend plus dangereuse une [[wpfr>attaque par force brute]] sur la page de connexion de phpMyAdmin. En production il est indispensable de protéger l'accès à phpMyAdmin grâce à l'outil [[:fail2ban]], ou/et à des mesures de restriction d'accès par IP, par ex.
+Et veillez à utiliser un couple identifiant / mot de passe différent pour chacun de vos sites ou applications web.</note>
+==== autres ====
+
+Si des erreurs apparaissent en fin de configuration, le plus simple est de [[:tutoriel:comment_supprimer_un_paquet| supprimer complètement (purger)]] phpMyAdmin et de le réinstaller.
+
+Si le problème persiste, [[http://forum.ubuntu-fr.org/|le forum]] est à votre disposition.
+
+
+Vous pouvez essayer de mettre phpmyadmin en login ( sans majuscule ) , ça a marché pour moi même avec php 7.2 !
+===== Désinstallation =====
+
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. La configuration de l'application sera conservée ou supprimée selon la méthode de désinstallation que vous choisirez.
+
+===== Alternative =====
+[[https://www.adminer.org/|Adminer]]
+
+===== Voir aussi =====
+
+Vous pouvez consulter les sites suivants pour obtenir un complément d'information...
+
+  * [[https://docs.phpmyadmin.net/fr/latest/|Documentation complète en français]] **(fr)** ;
+  * [[https://www.phpmyadmin.net|Site officiel du projet]] **(en)** ;
+
+----
+
+//Contributeurs : [[utilisateurs:guigouz|Guigouz]], [[utilisateurs:mcpeter|McPeter]], [[utilisateurs:krodelabestiole]]//

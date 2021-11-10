@@ -1,0 +1,275 @@
+
+{{tag>paquet programmation}}
+
+----
+
+====== Cas particuliers d'empaquetage ======
+
+//Cette page est le compte-rendu de la session classroom organisée par  [[:utilisateurs:gloubiboulga|gpocentek]] le 17 mai 2007 sur le canal IRC #ubuntu-fr-classroom.//
+
+Dans ce cours, nous verrons :
+  * logiciels ne nécessitant pas de compilation
+  * mise à jour de paquets à partir de ''debian/watch''
+  * paquets avec python
+  * patcher des sources
+
+===== Pré-requis =====
+
+Pour suivre ce cours, vous devez connaître les bases du packaging avec [[:tutoriel:creer_un_paquet|debhelper]] et [[:projets:paquets:creer_un_paquet_avec_cdbs|cdbs]]. Nous ne reviendrons donc pas sur ce qui a été vu dans les sessions précédentes sauf sur le fichier ''debian/rules''.
+
+<note help>
+**Petit rappel sur le fichier debian/rules**\\
+Le fichier //debian/rules// est le script (un Makefile) qui permet de construire le paquet. Même si la plupart du temps il passe par une étape de compilation des sources, ce n'est pas une nécessité. Si le logiciel que vous empaquetez n'a pas besoin d'être compilé, vous n'avez pas besoin que le debian/rules ne compile quelque chose. C'est le cas pour un script bash, ou pour un programme python par exemple.
+
+Le but de ce fichier est en fait d'installer les fichiers du logiciel dans ''**debian/paquet**''. Par exemple, si vous récupérez sur Internet un script ''**foo.sh**'',  il suffit de copier ce fichier dans ''**debian/foo/usr/bin/**'' pour créer le paquet.
+</note>
+
+===== Empaqueter un paquet ne nécessitant pas de compilation =====
+Tout d'abord, créez un répertoire propre (''~/packaging/classroom'' par exemple) pour éviter les soucis, placez-vous dedans et récupérez l'archive suivante :
+  wget http://gauvain.pocentek.net/u-classroom/2007-05-17/packages/u-script.tar.gz
+  tar xvf u-script.tar.gz
+
+Entrer dans le dossier "u-script/" puis exécutez :
+  dpkg-source -x *dsc
+
+Entrez dans le dossier source (venant d'être crée) qui contient le dossier **debian/** pour le paquet, et le script **u-script.sh**. Il n'y a rien d'autre, en particulier pas de //Makefile// ou autre donc cela va être au packageur de gérer l'installation (en respectant les standards).
+
+Le dossier **debian** contient :
+<file>changelog  compat  control  copyright  dirs  install  rules  u-classroom  watch</file>
+
+Les fichiers qui vont nous intéresser sont //dirs//, //install//, //rules//, //u-classroom// et //watch//.
+
+Le but est donc :
+  * d'installer le script source dans **/usr/share/u-classroom/**
+  * d'installer //debian/u-classroom// (qui est un wrapper) dans **/usr/bin**
+
+<note help>A quoi sert un **wrapper** :\\
+Dans le cadre de ce cours, cela ne sert pas à grand chose mais pour beaucoup de script, le script doit être dans le même dossier que les données ce qui signifie l'installer dans "**/usr/share/<paquet>** avec les images ou autre.\\
+Dans ce cas, le script n'est pas directement accessible puisqu'il n'est pas placé dans **/usr/bin**. Le wrapper sert juste d'intermédiaire entre le script original installé ou il faut et "l'interface utilisateur" (i.e. lancement du script facilement en console)
+</note>
+
+**Comment installer ces 2 fichiers ?**\\
+Les fichiers //debian/dirs// et //debian/install// servent à cela et ils sont respectivement utilisés par //dh_installdirs// et //dh_install//.
+
+**Le fichier //debian/rules// :**\\
+Nous pouvons déjà remarquer qu'il n'y a pas de cible ''"configure:"''. En effet, c'est inutile puisqu'il n'y a rien à configurer.\\
+Il y a une cible ''"build:"'', qui ne fait rien (rien à compiler) mais elle __doit__ être là (respect de la debian policy).\\
+Par contre la règle ''"install:"'' s'occupe d'installer les fichiers :
+//dh_installdirs// va lire le fichier //debian/dirs// et créer les dossiers nécessaires dans "debian/u-classroom/" (dans notre cas "usr/bin/" et "usr/share/u-classroom/").
+
+Lancer le debuild du paquet pour construire le paquet source :
+  debuild -us -uc
+
+Fin de cette partie :)
+
+===== Mettre à jour un paquet grâce à debian/watch =====
+
+Reprenez l'exemple précédent.
+
+Dans le dossier source (u-script-1.0/) Lancez :
+  uscan
+
+En regardant dans le répertoire parent
+  ls ..
+vous voyez que la version 0.2 a été téléchargée et l'archive des sources est présente avec un lien vers ''u-script_0.2.orig.tar.gz''.\\
+Nous allons nous servir de cela pour mettre à jour le paquet.
+
+Restez dans le répertoire source (u-script-1.0/) et lancez :
+  uupdate ../u-script_0.2.orig.tar.gz
+Puis placez vous de le répertoire nouvellement crée, comme le suggère le script
+  cd ../u-script-0.2
+Enfin, construisez le paquet source
+  debuild -us -uc
+
+Le paquet est mis à jour :)
+
+<note important>
+**ATTENTION**, //uupdate// n'est pas une formule magique !\\
+Tout est à revérifier pour une nouvelle version d'un paquet : vérifier que la licence n'a pas changé, que des fichiers n'ont pas été ajoutés...
+</note>
+
+==== Précisions sur le fichier ''debian/watch'' ====
+
+Il est composé de 2 lignes :
+<file>version=3</file>
+qui doit toujours être à cette valeur, et
+<file>http://gauvain.pocentek.net/u-classroom/2007-05-17/archive/u-script-(.*)\.tar\.gz
+</file>
+Le répertoire où se trouvent les sources est donc **http://gauvain.pocentek.net/u-classroom/2007-05-17/archive** et
+la fin de la ligne est une expression régulière qui laisse le choix pour la version. Les '**.**' dans les regexp sont des caractères particuliers donc ils doivent être "échappés" d'où le '**\**' devant.
+
+Pour plus d'informations sur **uscan** et ses recettes magiques :
+  man uscan
+
+===== Empaqueter un logiciel en Python =====
+
+En fait, empaqueter du python c'est comme empaqueter n'importe quoi mais il y a quelques règles à respecter : la fameuse [[http://www.debian.org/doc/packaging-manuals/python-policy/|Python Policy]].
+
+Pour suivre ce cours, récupérez l'archive suivante :
+  wget http://gauvain.pocentek.net/u-classroom/2007-05-17/packages/pyhw.tar.gz
+
+Il y a 4 versions du même paquet dans ce paquet source et nous allons commencer avec la version 1.\\
+Pour cela :
+  tar zxvf pyhw.tar.gz
+  cd pyhw/v1
+  dpkg-source -x *dsc
+
+Tout va se passer dans les fichiers //control//, //rules// et //pycompat//.
+
+==== pycompat ====
+
+Le fichier //debian/pycompat// contient juste "2", tout comme //debian/compat// contient "5". Ceci est juste une indication de compatibilité.
+
+==== control ====
+
+Pour ce qui concerne le fichier //debian/control//, c'est un peu plus "compliqué". Nous allons construire un module publique (module python) et nous allons avoir besoin des paquets **python-dev** et **python-central** pour construire le paquet. Il faut donc qu'ils soient [[:tutoriel:comment_installer_un_paquet|installés]] sur votre système.
+
+Ces deux dépendances n'ont rien à voir avec les sources, c'est vraiment propre au packaging avec Python.
+
+C'est pour cela (en simplifiant) qu'elles sont listées dans **Build-Depends-Indep**.
+
+**XS-Python-Version: current** permet de dire que l'on construit ce module pour la version courante de python, c'est à dire la version 2.5 depuis feisty.
+
+**XB-Python-Version: ${python:Versions}** est un champ qui va être utilisé pour savoir avec quelle(s) version(s) de python va être compatible le paquet binaire.
+
+**Depends: ${python:Depends}** permet de calculer les dépendances python (en incluant la version) et pycentral.
+
+<note>
+**python:Depends** ne calcule pas tout (pas comme **shlibs:Depends** dans les paquets "courants"). Si votre paquet a besoin de **python-gtk2** (par exemple), il faudra l'ajouter.
+</note>
+
+**${python:Provides}** : Dans notre exemple, cela ne sert à rien car notre paquet est **arch: all** (fonctionnel pour toutes les architectures) mais pour les modules privés de python (des .so), cela permet de définir des paquets virtuels.\\
+Par exemple si le module est compatible python 2.4 et 2.5 nous obtiendrons Provides: **python2.4-foo** et **python2.5-foo**. L'utilisateur pourra utiliser ces paquets virtuels comme n'importe quel autre paquet.
+
+Essayons maintenant de compiler le paquet ([[:tutoriel:comment_installer_un_paquet|installez les paquets]] **python-dev python-central** si nécessaire) :
+
+  cd pyhw-1.0
+  debuild -us -uc
+
+Nous obtiendrons une erreur :
+<file>install: ne peut créer le répertoire `/usr/lib/python2.4/site-packages/HelloWorld': Permission non accordée
+</file>
+
+Le problème se situe dans le Makefile. Ouvrez ce fichier pour comprendre pourquoi. Vous voyez alors :\\
+<file>
+install -d /usr/lib/python2.4/site-packages/HelloWorld</file>
+qui permet de créer un dossier mais ///usr/lib/python2.4/site-packages/HelloWorld// est inaccessible puisque nous ne sommes pas "root" et nous essayons de créer le dossier dans //debian/python-helloworld//...
+
+Cela ne peut pas marcher et il faudra donc modifier le Makefile pour utiliser **$(DESTDIR)/usr/lib/python2.4/site-packages/HelloWorld** (où DESTDIR sera en fait **debian/python-helloworld**).
+
+Comme tout bon packageur, vous savez qu'il __ne faut pas modifier les sources__ de upstream. Nous allons donc **patcher** le Makefile...
+
+===== Patcher des sources =====
+
+==== Paquet utilisant Debhelper ====
+
+Nous venons de voir ci-dessus qu'il était nécessaire de patcher le //Makefile// (et non modifier directement le fichier) et pour cela nous allons utiliser la v2 du paquet pyhw précédemment téléchargé :
+  cd pyhw/v2 && dpkg-source -x *.dsc
+
+Dans le dossier **debian**, nous avons un dossier **patches** qui contient le patch **01-makefile.dpatch** et le fichier **00list**, qui est en fait la liste des patches à appliquer.
+
+On utilise ici **dpatch** comme système de patch.
+
+Le fichier **debian/rules** contient :
+<file>
+# Include dpatch stuff.
+include /usr/share/dpatch/dpatch.make
+</file>
+
+Ceci permet d'inclure des règles toute faites qui automatisent le "patchage/dépatchage".
+
+Bien sûr, le paquet **dpatch** doit être [[:tutoriel:comment_installer_un_paquet|installé]] sur votre système.
+
+Pour la cible ''**build:**'' on ajoute **patch** et **unpatch** pour la cible ''**clean :**'', de façon à patcher les sources avant la compilation/installation et remettre les sources en l'état après la construction du paquet source.
+
+<note important>Si dans le **debian/rules** il y a une cible ''**configure:**'', c'est là qu'il faudra appliquer **patch**.</note>
+
+Maintenant que vous savez appliquer les patches, voyons comment en créer !
+
+Pour ce faire, nous allons repartir de zéro, et supprimer le patch déja présent dans le paquet :
+  rm debian/patches/*
+
+Pour créer un patch, il existe un outil très pratique: ''dpatch-edit-patch''
+
+Exécuter la commande suivant pour créer le patch :
+  dpatch-edit-patch 01-makefile
+
+<note tip>
+Quand il y a plusieurs patchs, ils sont appliqués dans l'ordre alphabétique.\\
+Commencer leur nom par un chiffre permet de savoir dans quel ordre ils seront appliqués. Lorsque l'on se retrouve avec 15-20 patches, c'est assez pratique.
+
+le nom du patch est arbitraire. Ici nous nommons le patch **01-makefile** car c'est le premier patch crée (à appliquer) et qu'il agit sur le Makefile...
+</note>
+
+Nous nous retrouvons dans un **nouveau shell**.
+
+Faites alors les modifications voulues, c'est à dire ajoutez **$(DESTDIR)** dans le //Makefile//, ce qui donne :
+<file>
+install -d $(DESTDIR)/usr/lib/python2.4/site-packages/HelloWorld
+install -m 644 src/*py $(DESTDIR)/usr/lib/python2.4/site-packages/HelloWorld/
+</file>
+
+Enregistrez le fichier, puis lorsque la modification pour ce patch est terminée, tapez :
+  exit 0
+pour quitter le shell "spécial" et revenir à votre shell habituel.
+
+Vous pouvez vérifier le contenu de **debian/patches** et vous y trouverez le patch **01-makefile** qui vient d'être crée.
+
+Il ne reste plus qu'à [[:tutoriel:comment_editer_un_fichier|créer un fichier]] **debian/patches/00list** qui contient la liste des patches à appliquer. Le contenu sera alors ici :
+<file>01-makefile</file>
+
+Vous venez de patcher le makefile :)
+
+Vous pouvez ensuite construire le paquet source :
+  debuild -us -uc
+
+Un Warning apparaîtra, nous reviendrons dessus plus bas : 
+<file>
+W: python-helloworld: script-not-executable
+./usr/share/pycentral/python-helloworld/site-packages/HelloWorld/HelloWorld.py
+</file>
+
+En lançant la commande
+  dpkg -f *deb
+vous verrez que pycentral a correctement remplacé les dépendances par les paquets appropriés :\\
+Le //Makefile// installait dans **/usr/lib/python2.4** et au final le script //HelloWorld.py// se trouvera dans **/usr/share/pycentral/python-helloworld/site-packages/HelloWorld/**.
+
+**Python-central** a donc complètement géré les problèmes de version de python (Depends: python, python-central (>= 0.5.8)).
+
+==== Paquet utilisant CDBS ====
+
+Nous allons passer directement à la version 4 de notre paquet **pyhw** (la v3 étant la même que la 2 mais version cdbs)
+
+  cd pyhw/v4 && dpkg-source -x *.dsc
+
+Dans **debian/patches**, le fichier **00list** a disparu, et les extensions des patchs sont **.patch**, et non plus **.dpatch** (cdbs peut gérer n'importe quelle extension mais c'est 'patch' par défaut).
+
+Le fichier **debian/rules** contient la ligne :
+<file>
+include /usr/share/cdbs/1/rules/simple-patchsys.mk
+</file>
+qui sert à inclure tout le système de patch de CDBS qui traitera tous fichier avec extension .patch du répertoire **debian/patches**.
+
+Nous allons refaire le 2ème patch du paquet. Celui-ci corrigera le //Warning// que nous avons eu plus haut.
+
+Supprimer donc le fichier **debian/patches/02-shebang.patch** et exécutez :
+  cdbs-edit-patch 02-shebang
+
+Ce //Warning// est assez courant avec tous les scripts et les modules python sont pas destinés à être exécutés et donc le shebang (#!/usr/bin/env python) n'a pas à sa place ici.
+
+Il faut donc supprimer la première ligne du fichier **src/HelloWorld.py**
+
+Une fois la modification effectuée, tapez
+  exit 0
+pour quitter cdbs-edit-patch.
+
+Votre patch est créé.
+
+===== Liens =====
+
+  * [[https://wiki.ubuntu.com/MOTU/School/PatchingSources|(en) Patching Ubuntu packages (session donnée par Martin Pitt aka pitti qui est l'auteur de {cdbs,dpatch}-edit-patch)]]
+  * [[http://wiki.debian.org/DebianPython/NewPolicy|(en) Debian Python NewPolicy]]
+
+----
+
+ //Contributeurs: [[:utilisateurs:ptitdav69]], [[:utilisateurs:_Enchained]]//

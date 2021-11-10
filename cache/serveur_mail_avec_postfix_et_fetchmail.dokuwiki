@@ -1,0 +1,270 @@
+
+{{tag>serveur réseau VÉTUSTE}}
+----
+
+====== Installer un serveur de courriel avec postfix, procmail et fetchmail ======
+
+===== Description =====
+
+L'objectif du tutorial est l'installation et l'utilisation de ''postfix'' pour l'envoi de courriels, de ''fetchmail'' pour la récupération et de deux courrielleurs pour la visualisation et l'envoi des courriels.
+
+__Pourquoi utiliser deux courrielleurs ?__\\
+Thunderbird permet la lecture des courriels depuis son PC comme le fait tout un chacun mais ''mutt'' lit ses courriels en console donc depuis n'importe quel PC pourvu que le serveur soit relié au net.
+
+Pour que le tutoriel soit plus clair, je vais définir **deux boites aux lettres**:
+  *la boite d'un **fournisseur d'accès** comme free, laposte **toto@fai.fr**
+  *la boite du **serveur de courriel interne toto@postfix.fr**
+__
+Installation des paquets__\\
+Avant tout il faut installer un certains nombres de paquets.
+Un simple
+   sudo apt-get install postfix fetchmail procmail mutt
+suffit.
+
+
+===== Configuration de fetchmail =====
+
+Passons maintenant à la configuration de ''fetchmail''. ''fetchmail'' est chargé de la récupération des courriels. Il faut définir un fichier dans le répertoire personnel de l'utilisateur.
+  sudo touch .fetchmailrc && sudo xdg-open .fetchmailrc
+Un fichier vide s'ouvre, il faut ajouter :
+<file>## fai : votre fournisseur d'accès Internet.
+poll pop.fai.fr    protocol pop3   user toto@fai.net  password    mot_de_passe_de_toto options keep</file>
+puis sauvegarder le fichier.
+
+L'option //keep// permet de faire des tests sans perdre de courriels. Je dis ça, vous êtes prévenus, ça m’est arrivé de perdre quelques courriels avant de me rendre compte de ce qu’il se passait.
+
+A la place de //keep//, vous pouvez par la suite utiliser le paramètre //fetchall//. Il permet de récupérer tous les courriels. c'est utile si on reçoit beaucoup de courriels et que l'on ne veut pas encombrer le serveur du FAI.
+
+__Protection du fichier__\\
+Maintenant il faut protéger ce fichier qui montre en clair les mots de passe du compte. C'est une étape que je n'ai pas encore réalisé (par fainéantise) mais je vous livre la méthode.
+
+On définit un utilisateur fetchmail (ça manque d’originalité, vous pouvez bien sûr l’appeler comme vous voulez) qui doit être créé.
+ 
+  su adduser -g 65534 -d /répertoire_des_courriels fetchmail
+
+  * -g ou (-gid) pour utiliser le groupe nogroup. Mettez le GID qui correspond à nogroup, ici 65534. En fait, vous mettez ce que vous voulez (100 pour users par exemple est pas mal non plus).
+  * -d ou (--home) pour utiliser le répertoire /home/toto/Maildir par exemple comme répertoire maison (= répertoire utilisateur).
+
+Changez les utilisateurs/droits pour que ça aille bien :
+
+  sudo chown fetchmail:nogroup /home/toto/.fetchmailrc
+  sudo chmod 600 /home/toto/.fetchmailrc
+  sudo chown -R fetchmail:nogroup /home/toto/Maildir
+  sudo chmod 700 /home/toto/Maildir
+
+Reste ensuite à vérifier 2 choses :
+  * Que le fichier /etc/default/fetchmail (sur Debian) autorise le lancement de fetchmail en démon : START_DAEMON doit être positionné à yes dans ce fichier.
+  * Que le script de lancement /etc/init.d/fetchmail écrive bien tout ce qu’il faut dans /home/toto/Maildir et pas ailleurs, sinon ça risque de ne pas fonctionner correctement.
+
+Voilà. Normalement, un lancement de fetchmail.
+
+
+
+===== Configuration de procmail =====
+
+Procmail est chargé de faire le tri de courriels à l'aide de filtres appelés **recettes**.
+créons un répertoire pour stocker les courriels dans le répertoire personnel de toto
+  sudo apt-get install maildrop
+  sudo maildirmake Maildir
+Ceci créera la boite de courriel Maildir/ dans votre ~, autrement dit, dans votre /home/toto.
+
+Une fois de plus il faut rédiger un fichier dans son répertoire personnel par exemple.
+  sudo touch .procmailrc && sudo xdg-open .procmailrc
+Il faut compléter la page vierge pour obtenir un fichier de ce type
+<file>MAILDIR=/home/toto/Maildir
+## Faites en sorte que ça existe.
+LOGFILE=/home/toto/.procmaillog
+LOGABSTRACT=no
+#VERBOSE=on (Est utilisé uniquement pour le débogage.)
+VERBOSE=off
+FORMAIL=/usr/bin/formail
+NL="
+## Les lignes de « recipe » commencent par « :0 ».
+## Ne mettez pas de commentaires dans les lignes de « recipe ».
+## Désactivez un « recipe » grace au NON logique (!).
+## Les conditions commencent par *, utilisez des expressions rationnelles.
+## Les conditions sont associées avec un ET logique.
+## Tout ce qui suit * est passé directement à egrep.
+## Une ligne d'action suit les conditions, ici c'est un nom de BAL.
+
+# Utilise formail pour les courriels dupliqués.
+:0 Whc: .msgid.lock
+| $FORMAIL -D 16384 .msgid.cache
+
+#utilisation de spamassassin
+:0 a
+$MAILDIR/duplicates
+:0fw
+| spamassassin -P
+:0:
+* ^X-Spam-Status: Yes
+$MAILDIR/spambox
+
+# Pourriels à la poubelle.
+:0
+* ^Subject:.*(credit|cash|money|debt|sex|sale|loan)
+$MAILDIR/spam
+
+# Plus de messages HTML.
+:0
+* ^Content-Type:.*html
+$MAILDIR/junk
+
+# mailing list du wiki-ubuntu
+:0
+* ^Subject:.*(UWiki)
+$MAILDIR/UWiki
+
+#tri des courriels locaux
+:0
+* ^TOtoto@postfix.fr
+$MAILDIR/locaux
+:0
+* ^TOroot@postfix.fr
+$MAILDIR/locaux
+  
+#######################################
+# Dernière règle : tout ce qui arrive #
+# ici va dans la boîte par défaut.    #
+#######################################
+:0
+* .*
+Inbox</file>
+
+MAILDIR=/home/toto/Maildir est le répertoire où seront stockés les courriels triés.\\
+LOGFILE=/home/toto/.procmaillog est le fichier d'erreurs.
+
+Viens ensuite les différentes recettes.
+On marque le début d'une recette par
+**:0** puis on indique le critère de tri par *** ^TO** ou ***^Subject** et enfin le fichier où l'on stocke les courriels. par exemple **$MAILDIR/locaux**
+
+Pour plus d'explications, il y a de nombreux sites parlant de la réalisation de recettes très élaborées.
+Dans le fichier on a :
+  * une recette pour éviter les courriels dupliqués
+  * l'utilisation de spamassassin
+  * un tri en fonction des listes de diffusions
+  * les courriels internes 
+  * et le restant est stocké dans le fichier Inbox.
+
+
+===== Vérification du fonctionnement du serveur =====
+Cette étape peut être faite à partir du moment où le serveur smtp est installé.
+Le plus simple est de s'envoyer des messages par son courrielleur habituel.
+ Ou utiliser la commande mail du paquet mailx.
+Par exemple :
+
+  mail -s essai toto@fai.net
+  Cc:<enter>
+  essai pour voir
+
+puis ctrl+d pour envoyer un courriel avec pour sujet essai à toto@fai.net et comme texte essai pour voir. sans copie particulière.\\
+__comment relever ses courriels avec fetchmail.__\\
+il suffit de taper
+  fetchmail -akv -m "/usr/bin/procmail -d %T"
+
+Si les droits sont bien attribués, on voit fetchmail interroger le FAI et le voir récupérer les courriels.
+
+Sinon il faut vous les réattribuer avec un chmod, chgrp et chown.
+
+__Comment vérifier le tri?__\\
+Il faut simplement aller dans le dossier **Maildir** et cliquer sur les fichiers définis dans procmail.
+Tant qu'un courriel n'est pas trié par la recette, le fichier correspondant n’apparaît pas.
+
+si vous ne les trouvez pas ils peuvent être stockés dans le répertoire **/var/mail/toto ou root.**
+
+
+
+
+===== Configuration de Thunderbird =====
+
+
+On définit un compte pop dans Thunderbird de façon classique. Puis on se rend dans **les paramètres du compte**, on change le répertoire du dossier local pour le rediriger vers le dossier Maildir crée auparavant.\\
+{{capture2.png|}}\\
+Ici, il y a **une petite subtilité importante**. D'autres trouveront peut-être une solution différente.\\
+
+Pour que les **fichiers triés par procmail** apparaissent et soient gérés par Thunderbird, il faut **créer des sous-dossiers dans les dossiers locaux**.
+
+Par exemple, créer un sous-dossier spambox pour récupérer les pourriels.
+Ou un sous-dossier locaux pour les messages internes.
+Il en faut autant que de fichier trié par procmail.
+
+
+{{capture-1.png|}}
+
+
+===== Configuration de postfix =====
+Enfin on utilise postfix pour envoyer des courriels. C'est une utilisation très simple de ce serveur de courriels.\\
+En fait, on va créer un domaine mais qui n'est hélas pas connu sur la toile. Il faut donc réécrire le nom de domaine lorsque l'on veut envoyer un courriel vers l'extérieur. Certains fournisseurs d'accès empêchent l'envoi de courriel lorsqu'ils ne connaissent le nom de domaine.\\
+
+On édite un fichier
+  sudo xdg-open /etc/postfix/main.cf
+Puis on va y modifier un certain nombre de ligne
+en voici un copie
+<file txt main.cf># See /usr/share/postfix/main.cf.dist for a commented, more complete version
+
+smtpd_banner = $myhostname ESMTP $mail_name (Ubuntu)
+biff = no
+
+# appending .domain is the MUA's job.
+append_dot_mydomain = no
+
+# Uncomment the next line to generate "delayed mail" warnings
+#delay_warning_time = 4h
+
+#nom du serveur de courriel
+myhostname = postfix.fr
+mydomain = ce que l'on veut
+mynetworks = 127.0.0.0/8
+
+#gestion des alias
+alias_maps = hash:/etc/aliases
+alias_database = hash:/etc/aliases
+
+myorigin = /etc/mailname
+mydestination = localhost.localdomain, postfix.fr, localhost, ubuntu,
+#relayhost = smtp.fai.fr
+
+mailbox_command = procmail -a "$EXTENSION"
+mailbox_size_limit = 0
+recipient_delimiter = +
+inet_interfaces = all
+
+#serveur imap renvoie sur le dossier Maildir
+home_mailbox=Maildir/
+
+#ligne pour la translation d'adresse(en plus)
+sender_canonical_maps = hash:/etc/postfix/canonical</file>
+Le nom de domaine**(myhostname)** correspond au nom de serveur de courriel interne. postfix.fr\\
+Le nom de domaine**(mydomain)** correspond à un domaine comme www.goolge.fr ou autre.
+Il existe la possibilité par exemple d'associer un nom de domaine(toto) à son adresse IP(80.truc.muche). je vous invite à voir la page correspondante [[:dns_dynamique]].
+
+Les alias(**alias_map**) servent à simplifier l'écriture des en-têtes des courriers ainsi en tapant //toto// cela signifie pour le serveur de courriel //toto@postfix.fr.// On peut même rediriger le courrier de //root// vers sa propre adresse. C'est relativement intéressant car certains programmes envoient des courriels internes pour prévenir des défaillances (exemple fail2ban).
+Pour cela il faut ouvrir le fichier /etc/aliases, on voit apparaître le nom de l'utilisateur et l'adresse courriel associée.
+
+Sur le courriel apparaît le nom du serveur qui a envoyé le mail**(myorigin**). Ici c'est le nom de notre domaine situé dans /etc/mailname(postfix.fr). C'est ce nom qu'il faudra modifier pour envoyer un courriel.\\
+**mydestinations** indique les autres noms possibles pour envoyer des courriels sur le réseau interne. Ainsi pour envoyer un courrier à toto, on peut écrire toto@postfix.fr mais aussi toto@localhost. Le courrier sera acheminé de la même façon.\\
+**La mailcommand** permet de commander procmail par postfix pour qu'il reçoivent le courrier.
+
+(**home_mailbox**) Si on a installé un serveur Imap(courrier-Imap) le courrier téléchargé est stocké dans le répertoire /Maildir.
+
+La ligne de réécriture d'adresse(**sender_canonical_maps**) est à ajouter. On va maintenant changer lors de l'envoi des courriels, l'adresse de l'expéditeur. On modifie toto@postfix.fr par toto@fai.fr.\\
+Il ne faut pas oublier de créer le fichier /etc/postfix/canonical
+  sudo touch /etc/postfix/canonical && sudo xdg-open /etc/postfix/canonical
+Une page vierge s'ouvre, on écrit :
+<file>toto@postfix.fr	   toto@fai.fr</file>
+Il faut enfin penser à charger la base de données liée à postfix par un
+postmap.
+   postmap /etc/postfix/canonical
+
+===== Conclusion =====
+J'ai décrit sur cette page l'installation personnelle de mon serveur de courriels, espérant que cela puisse aider d'autres personnes.\\
+L'installation de postfix n'est pas une utilisation très poussée. Pour plus d'explications, je vous invite à lire la documentation spécialisée.\\
+__webographie__ ensemble des liens qui m'ont permis d'élaborer le serveur.
+
+
+Pour plus d'informations rendez vous sur le forum[[http://forum.ubuntu-fr.org/viewtopic.php?id=71599]].
+
+
+----
+
+//Contributeur : [[utilisateurs:bidou]]//

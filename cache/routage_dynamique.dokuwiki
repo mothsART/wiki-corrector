@@ -1,0 +1,135 @@
+
+{{tag>Xenial réseau}}
+----
+
+====== Routage Dynamique sous Linux avec Bird ======
+
+
+Pour avoir les notions de routage, je vous conseille de lire cette page [[Routage]], elle vous permettra d'avoir une machine routeur
+pour accéder aux différents sous réseaux.
+
+Le but de cette documentation est d'éviter aux différents utilisateurs des sous-réseaux de mettre la table de routage à jour à la main.
+Quand le réseau est fixe, ce n'est pas dérangeant de paramétrer 1 fois la table de routage, mais si on ajoute des sous-réseaux régulièrement c'est un peu plus embêtant. Donc nous allons utiliser le logiciel [[http://bird.network.cz/|Bird]] (très peu de doc sur le net) pour mettre à jour automatiquement la table de routage de toutes les machines.
+
+ 
+Explication avec un schéma: 
+
+{{:reseau:schema_routage.png|}}
+
+===== Pré-requis =====
+
+Normalement compatible avec toutes les versions d'Ubuntu ayant le paquet Bird disponible.
+
+
+Pour faire un routeur dynamique, il vous faut :
+   * Une machine routeur (voir [[Routage]])
+   * Des machines dans les différents sous-réseaux
+
+
+===== Installation =====
+
+Il faut installer Bird sur la machine routeur et sur tous les postes qui veulent bénéficier de la mise à jour
+de la table de routage, [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>bird]]**.
+
+
+===== Configuration ===== 
+
+<note important>Il faut configurer le service Bird sur la machine routeur (serveur bird), puis mettre une configuration différente sur toutes les autres machines (client bird).</note>
+
+=== Coté machine routeur ===
+
+[[:tutoriel:comment_modifier_un_fichier|Editer]] **/etc/bird.conf** avec les [[:sudo|droits d'administration]] :
+<file /etc/bird.conf>
+protocol kernel {
+persist;                # Don’t remove routes on BIRD shutdown
+scan time 20;           # Scan kernel routing table every 20 seconds
+export all;             # Default is export none
+
+}
+
+protocol device {
+scan time 10;           # Scan interfaces every 10 seconds
+}
+
+protocol direct {
+export all;
+}
+
+protocol rip {
+export all;
+import all;
+port 1520;
+authentication plaintext;
+password “text”;
+honor always;
+interface “eth*”{ mode broadcast; };
+}
+</file>
+
+Il se peut que le service ne démarre pas tout seul.
+<code>
+sudo /etc/init.d/bird start
+</code>
+
+
+=== Coté client ===
+
+<note important>Dans notre exemple, nous nous plaçons sur une machine qui est dans le sous-réseau "192.168.160.0",donc il faut préciser dans notre fichier que nous voulons récupérer toutes les routes sauf la route pour le réseau local (192.168.160.0), car elle passe par un autre routeur.</note>
+
+
+[[:tutoriel:comment_modifier_un_fichier|Editer]] **/etc/bird.conf** avec les [[:sudo|droits d'administration]] :
+<file /etc/bird.conf>
+protocol kernel{
+learn;
+import all;
+export all;
+}
+
+protocol device{
+}
+
+protocol rip {
+import filter {
+if net ~ [ 192.168.160.0/24 ] then {   # Only remote networks
+reject;
+}
+else accept;
+};
+#    export all;
+port 1520;
+authentication plaintext;
+password “text”;
+honor neighbor;
+interface “eth*”{mode broadcast;};
+}
+</file>
+Il se peut que le service ne démarre pas tout seul.
+<code>sudo /etc/init.d/bird start
+</code>
+
+
+===== Vérification =====
+
+Après quelques secondes, nous vérifions la table de routage (côté client).
+
+<code>
+route
+</code>
+<code>
+192.168.220.0    192.168.160.61    255.255.255.0   UG    0      0        0 eth0
+192.168.160.0     *               255.255.255.0   U     0      0        0 eth0
+192.168.110.0    192.168.160.61    255.255.255.0   UG    0      0        0 eth0
+link-local      *               255.255.0.0     U     1000   0        0 eth0
+default         router-network-local 0.0.0.0         UG    0      0        0 eth0
+</code>
+
+
+Donc en ajoutant un sous-réseau à la machine routeur, celle-ci nous mettra à jour notre table de routage sans aucune modification manuellement.
+
+===== Voir aussi =====
+
+  * FIXME
+
+----
+
+//Contributeur principal : [[utilisateurs:winnie31]] et Patrice.//

@@ -1,0 +1,108 @@
+
+{{tag>Trusty Xenial système administration tutoriel sauvegarde paquet dépôts}}
+
+----
+
+====== Sauvegarde et restauration de la liste des paquets installés pour restauration, duplication ou migration ======
+
+
+Votre système est installé et vous avez ajouté au fil du temps des applications pour votre utilisation quotidienne. **Ce tutoriel vous sera utile dans les cas suivants :**
+
+  * Vous souhaitez tout simplement sauvegarder la liste de vos applications au cas où vous devriez réinstaller entièrement votre système.
+  * ou : la nouvelle version d'Ubuntu vient de sortir et vous aimeriez pouvoir l'installer sans passer par le gestionnaire de mises à jour, mais via une [[:reinstallation_ubuntu|réinstallation du système]] puis des logiciels.
+  * ou : vous souhaitez installer la même version d'Ubuntu sur un autre ordinateur et y placer également vos applications préférées.
+
+===== Pré-requis =====
+
+  - Niveau requis : être familiarisé avec  [[:terminal | le terminal]]
+  - Avoir une connexion internet opérationnelle
+  - Avoir les [[:sudo|droits d'administration]]
+  - Avoir configuré son fichier /etc/apt/sources.list (ou /etc/apt/sources.list.d ) pour les dépôts standards Ubuntu (ou Kubuntu ou Xubuntu)
+  - Pour un changement de version ou un clonage sur un autre PC, si vous utilisiez des [[:depots|dépôts]] spécifiques, le fichier [[:sources.list]] de la nouvelle version devra être adapté ainsi que les [[:tutoriel:comment_modifier_sources_maj#gerer_les_cles_d_authentification|clés d'authentification]] correspondantes
+  - Le paquet "dselect"
+===== Sauvegarde depuis le système opérationnel=====
+
+Récupérez la liste des paquets installés sur le système :
+
+  dpkg --get-selections > liste-des-paquets_`hostname`_`date +%Y-%m-%d-%H-%M`
+  # dpkg --get-selections > liste-des-paquets
+
+Cela crée un fichier "liste-des-paquets" dans le répertoire courant. Il contient la liste des paquets installés. Ce fichier est au format texte vous pouvez donc le consulter pour information
+
+== Si votre but est une sauvegarde pour une réinstallation ==
+
+Sauvegardez ce fichier (ainsi que le sources.list) sur un support externe (usb, web, etc.)
+
+Le fichier sources.list se trouve dans /etc/apt.
+
+== Si votre but est un changement de version ou un clonage sur un autre PC ==
+
+Éditez ce fichier et faites supprimer les paquets qui ne vous intéressent plus.
+
+Ne conservez __que vos__ paquets. Ceux que vous avez rajoutés et qui ne font pas partie de l'installation standard d'Ubuntu (les paquets systèmes, les paquets libxxxx, les paquets gnome-xxxxx, Firefox, et caetera). La liste des paquets de l'installation standard est disponible dans les fichiers «.manifest»((typiquement, //casper/filesystem.manifest// dans l'image ubuntu-18.04.1-desktop-amd64.iso)) fournis sur les dépôts des images iso. Ils contiennent une liste de lignes "nom du paquet - version du paquet".
+
+Voici un extrait en exemple d'un fichier "liste-des-paquets" modifié :
+<file>
+   acidrip                                      install
+   chromium-browser                             install
+   chromium-browser-l10n                        install
+   chromium-codecs-ffmpeg                       install
+   easytag                                      install
+   filezilla                                    install
+   filezilla-common                             install
+</file>
+Sauvegardez ce fichier (ainsi que le sources.list) sur un support externe (usb, web, etc.)
+
+Vous pouvez aussi compléter par la liste des applications installées avec cette commande
+<code>ls /usr/share/applications | awk -F '.desktop' ' { print $1}'</code>
+
+===== Sauvegarde depuis un support d'installation =====
+Il faut choisir l'option "essayer avant d'installer" et d'abord identifier la partition contenant le répertoire **/var**, faire un point de montage, l'autoriser en écriture, monter la partition et exécuter la recherche en précisant le bon répertoire.   
+
+Exemple
+<code bash>sudo mkdir             /media/DPKG
+sudo mount  /dev/sdc3  /media/DPKG
+sudo chown $USER:$USER /media/DPKG
+dpkg --admindir=/media/DPKG/var/lib/dpkg --get-selections >/media/DPKG/liste-des-paquets
+head -2 /media/DPKG/liste-des-paquets
+accountsservice					install
+acl						install
+sudo umount /media/DPKG</code>
+
+
+
+===== Restauration =====
+
+<note tip>
+Si vous réinstallez une version identique, remplacez le fichier sources.list par le votre.
+
+Si vous changez de version, adaptez si besoin le fichier sources.list avec vos dépôts spécifiques.
+</note>
+
+Récupérez votre fichier « liste-des-paquets » puis :
+
+  - sudo apt-get update
+  - sudo apt-get install dselect
+  - sudo dselect update
+  - sudo dpkg %%--set-selections%% < liste-des-paquets
+  - sudo apt-get -u dselect-upgrade
+
+Normalement vos applications préférées sont restaurées et si vous avez une sauvegarde de votre partition « home », vous pourrez également récupérer vos paramétrages spécifiques.
+
+<note important>
+Attention : la commande « ''sudo dpkg %%--clear-selections%%'' » est potentiellement très dangereuse : elle modifie le fichier /var/lib/dpkg/status en positionnant tous les paquets sur « à supprimer » ! 
+
+Si derrière est exécuté un « ''sudo apt-get -u dselect-upgrade'' » sans au préalable avoir fait un « ''sudo dpkg %%--set-selections%% < liste-des-paquets'' », on efface tous les paquets !
+
+Pour s'en sortir en cas de « ''sudo dpkg %%--clear-selections%%'' » sans avoir un fichier « liste-des-paquets » complet et valide, la solution consiste à renommer « ''/var/lib/dpkg/status.old'' » en « ''/var/lib/dpkg/status'' » si cela vient d'arriver, ou bien d'aller chercher une sauvegarde créée automatiquement dans « ''/var/backups/'' »
+</note>
+
+===== Voir aussi =====
+
+  * [[:Sauvegarde]]
+  * [[:Reinstallation ubuntu]] (sans perdre son /home)
+  * Le logiciel **[[https://teejeetech.in|aptik]]** (en anglais) permet une sauvegarde et une restauration des sources (ppas), des paquets installés (ou téléchargés) ainsi que des thèmes et icônes, avec interface graphique.
+  * Le site web <del>[[http://ubuntu.allmyapps.com/install-pc|allmyapps pour ubuntu]]</del> ([[https://www.maddyness.com/2015/05/18/allmyapps/|fermé]] en 2014) permettait de sauvegarder une liste de logiciels installés, et les réinstaller sur une autre machine équipée d'Ubuntu.
+----
+
+//Contributeurs : [[utilisateurs:ostaquet]] (L'auteur), [[utilisateurs:bobil78]], [[utilisateurs:mr_jay_01]], [[utilisateurs:sylvainsjc]], [[utilisateurs:YoBoY]], [[utilisateurs:bioman]], [[utilisateurs:lami|L'ami René]] (MAJ mise en page)+(Autres pages en lien avec les sujets), [[utilisateurs:draco31.fr]], [[utilisateurs:pipou24]], [[utilisateurs:yanntech]].//

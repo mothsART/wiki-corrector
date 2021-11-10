@@ -1,0 +1,1319 @@
+
+{{tag>bureau_à_distance réseau serveur tutoriel dns VÉTUSTE}}
+
+----
+
+
+
+====== Création d'un réseau d'entreprise pour une TPME ou une PME ======
+
+Si vous désirez monter un réseau d'entreprise de taille raisonnable (disons une vingtaine de postes voire plus via quelques aménagements), que vous désirez y incorporer du Windows pour quelques postes clients et que en plus, vous désirez expérimenter cela dans des machines virtuelles, ce tutoriel complet, complexe, pas uniquement réservé pour les gourous mais quand même... est pour vous.
+
+Bonne lecture et expérimentation.
+
+
+===== Description du projet =====
+
+Ce projet a pour but premier de servir d'aide mémoire et de partager mon expérience avec des gens de tous horizons. Ce tutoriel pourrait devenir une base d'échanges d'idées ou de critiques positives sur la gestion d'un réseau en général.
+
+Bien, commençons déjà par un schéma (car un dessin vaut mieux qu'un long discours).
+
+{{tutoriel:network-03.png?480|Cliquez pour agrandir.}}
+
+Comme vous pouvez vous en rendre compte, le réseau est somme toute fort classique. 2 Serveurs (PRIMARY et SECONDARY) ainsi que 2 WKS (CLIENT-1 "Windows" et CLIENT-2 "Ubuntu DESKTOP") et pour finir 2 switches (VSWITCH1 et VSWITCH2). Vous remarquerez également que tout ce joli petit monde est "émulé" ou "virtualisé". Nous verrons dans un instant comment réaliser tout cela. Bien entendu libre à vous d'utiliser des machines physiques pour réaliser l'installation.
+
+
+
+==== La virtualisation ====
+
+Pour exécuter ce projet, vous pouvez utiliser un virtualiseur comme VMWARE ou VIRTUALBOX. Ceci dit, de grosses différences séparent ces deux virtualiseurs et donc vous obligeront à plus ou moins de manipulations afin d'obtenir le même résultat. Celles-ci seront expliquées au fur et à mesure de l'évolution.
+
+
+
+==== Primary Server ====
+
+Sous cette appellation se trouve campée la clé de voute du système informatique. La plupart des services peuvent être secondés par un Secondary Server ou Backup Server. C'est d'ailleurs préférable, mais celui-ci ne vous permettra que de gagner du temps avant une chute inévitable. C'est pourquoi il est important d'apporter un maximum de soins aux scripts d'activations des services mais également à la structure même du réseau, clients compris.
+
+Voici les fonctionnalités assumées par le Primary Server :
+  * DHCP Serveur
+  * DNS Serveur
+  * Time Serveur
+  * SAMBA DOMAIN Controleur Serveur
+  * LDAP Serveur
+
+
+==== Secondary Serveur ====
+
+Le Secondary server sera utilisé pour soulager certaines fonctions du Primary Serveur en jouant le rôle de Backup mais également en proposant des fonctions inédites dans votre réseau d'entreprise.
+
+Voici les fonctionnalités assumées par le Secondary Serveur:
+  * Backup DNS Serveur
+  * ... (plus de détails à venir)
+
+==== Les clients ====
+
+L'aspect client sera ici traité indépendamment mais allant dans la même direction. Je m'explique, le but ici n'est pas d'offrir des fonctions différentes pour chaque famille d'OS, mais de démontrer l'hétérogénéité de Linux en tant que serveur offrant des fonctionnalités à des clients de tous horizons (sous certaines conditions).
+
+
+===== L'installation du virtualiseur et sa configuration =====
+
+
+==== VMWARE ====
+
+VMWARE jouit d'une assez bonne réputation dans le monde professionnel. Longtemps avant les autres, cette entreprise a su occuper une niche dans le monde informatique en offrant la possibilité de réduire les coûts des infrastructures en entreprise dédiées aux tests et à la phase de Quality Acceptance.
+
+=== Installation de VMWARE ===
+
+Pour installer VMWARE Server vous pouvez modifier votre fichier /etc/apt/sources.list via l'environnement graphique //Système -> Administration -> Sources logicielles ...// et sélectionner logiciels de tierces parties dépôt "partner" puis [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **vmware-server**.
+
+[[http://www.taltan.fr/post/2007/11/01/VMware-Server-104-sur-Ubuntu-710-Gutsy-Gibbon]]
+
+Pour plus d'information sur la création d'une machine virtuel avec vmware, vous pouvez consulter ce lien. 
+
+[[http://www.vmware.com/support/pubs/server_pubs.html]].
+
+Sachez juste qu'à l'heure de l'écriture de ce document une version bêta 2.0 est déjà téléchargeable et installable. Je n'en parlerai pas volontairement ici. Je me contenterai d'utiliser la version 1.4 dite stable.
+
+=== Configuration des cartes virtuelles ===
+
+Voilà une chose intéressante. VMWARE permet la configuration du subnet utilisé par chacune de ces cartes via une application en ligne de commande. Sous Windows cette opération est réalisée via un onglet dans le paramétrage de l'application. Pour quoi VMWARE n'a pas réédité la même logique, ... Bon retroussons nos manches et allons-y.
+
+  sudo vmware-config-network.pl
+
+<note important>toutes les questions qui vous seront posées peuvent soit être validée par défaut "la valeur entre []" avec la touche ENTER, soit par une nouvelle valeur. Si vous devez répondre spécifiquement à une de ces questions, je vous l'indiquerai</note>
+
+  Making sure services for VMware Server are stopped.
+  
+  Stopping VMware services:
+   Virtual machine monitor                                             done
+   Bridged networking on /dev/vmnet0                                   done
+   DHCP server on /dev/vmnet1                                          done
+   Host-only networking on /dev/vmnet1                                 done
+   DHCP server on /dev/vmnet8                                          done
+   NAT service on /dev/vmnet8                                          done
+   Host-only networking on /dev/vmnet8                                 done
+   Virtual ethernet                                                    done
+  
+  You have already setup networking.
+  
+  Would you like to skip networking setup and keep your old settings as they are?(yes/no) [yes] no
+  
+  Do you want networking for your virtual machines? (yes/no/help) [yes] 
+  
+  Would you prefer to modify your existing networking configuration using the 
+  wizard or the editor? (wizard/editor/help) [wizard] 
+  
+  The following bridged networks have been defined:
+  
+  . vmnet0 is bridged to eth0
+  
+  Do you wish to configure another bridged network? (yes/no) [no] no
+  
+  Do you want to be able to use NAT networking in your virtual machines? (yes/no)[yes] yes
+  
+  Configuring a NAT network for vmnet8.
+  
+  The NAT network is currently configured to use the private subnet 172.16.179.0/255.255.255.0.  Do you want to keep these settings? [yes] no  
+  
+  Do you want this program to probe for an unused private subnet? (yes/no/help) [yes] no
+  
+  What will be the IP address of your host on the private network? 192.168.254.0
+  
+  What will be the netmask of your private network? 255.255.255.0
+  
+  The following NAT networks have been defined:
+  
+  . vmnet8 is a NAT network on private subnet 192.168.254.0.
+  
+  Do you wish to configure another NAT network? (yes/no) [no] no
+  
+  Do you want to be able to use host-only networking in your virtual machines? [yes] yes
+  
+  Configuring a host-only network for vmnet1.
+  
+  The host-only network is currently configured to use the private subnet 
+  172.16.30.0/255.255.255.0.
+  Do you want to keep these settings? [yes] no
+  
+  Do you want this program to probe for an unused private subnet? (yes/no/help)   [yes] no
+  
+  What will be the IP address of your host on the private network? 192.168.2.0
+  
+  What will be the netmask of your private network? 255.255.255.0
+  
+  The following host-only networks have been defined:
+  
+  . vmnet1 is a host-only network on private subnet 192.168.2.0.
+  
+  Do you wish to configure another host-only network? (yes/no) [no] yes
+  
+  Configuring a host-only network for vmnet2.
+  
+  Do you want this program to probe for an unused private subnet? (yes/no/help) [yes] no
+  
+  What will be the IP address of your host on the private network? 192.168.3.0
+  
+  What will be the netmask of your private network? 255.255.255.0
+  
+  The following host-only networks have been defined:
+  
+  . vmnet1 is a host-only network on private subnet 192.168.2.0.
+  . vmnet2 is a host-only network on private subnet 192.168.3.0.
+  
+  Do you wish to configure another host-only network? (yes/no) [no] no
+  
+  Generating SSL Server Certificate
+  
+  Starting VMware services:
+   Virtual machine monitor                                             done
+   Virtual ethernet                                                    done
+   Bridged networking on /dev/vmnet0                                   done
+   Host-only networking on /dev/vmnet1 (background)                    done
+   Host-only networking on /dev/vmnet2 (background)                    done
+   Host-only networking on /dev/vmnet8 (background)                    done
+   NAT service on /dev/vmnet8                                          done
+   Starting VMware virtual machines...                                 done
+  
+
+Bien, vous voici en possession de deux nouvelles interfaces réseau virtuelles qui correspondent sur notre schéma d'implantation à VSWITCH-1 et VSWITCH-2.
+A ce stade vous pouvez créer votre machine virtuelle et ne connecter pour le moment qu'une seule carte réseau "eth0" qui sera connectée via un bridge "VMNET8" entre VMWARE et votre réseau local. Cela permettra de voir votre machine directement au travers de votre réseau comme s'il s'agissait d'une machine physique connectée à votre subnet.
+
+{{tutoriel:vmware-config-01.png?640}}
+
+
+
+
+==== VirtualBox ====
+
+Suivez ce lien [[:virtualbox_reseau]]
+
+Plusieurs différences majeures sont à signaler entre les virtualiser VirtualBox et VMWare.
+
+  * Virtualbox:
+    * Version OSE et non OSE :
+      * La version non OSE : contient des pilotes pour l'USB2 et la possibilité d'utiliser RDP pour prendre le contrôle à distance de la machine virtuel. Cette version est payante pour une utilisation en entreprise.
+      * La version OSE : open source, gratuite et supportée par Ubuntu dans les dépôts offciels. Elle peut-être utilisée en entreprise en toute gratuité.
+    * Un gros défaut, il est obligatoire de démarrer les machines virtuels dans un GUI alors que VMWARE serveur permet le démarrage des machines virtuels en mode service.
+
+<note important>C'est une erreur, VirtualBox n'a pas forcément besoin d'une GUI : "VBoxHeadless -startvm toto" lance une vm qui attend une connexion rdesktop ...</note>
+
+  * VMWare Serveur :
+    * La version 1.04 : disponible gratuitement, elle intègre une interface web (téléchargeable) l'USB, l'utilisation des cartes physique scsi si çà vous intéresse (vieux scanner ...) est gratuite en entreprise. Il est possible de démarrer automatiquement au logon de la machine host une ou plusieurs machines virtuelles et de les éteindres proprement au logoff.
+    * La version 2.0 bêta 1 : ne dispose plus d'une interface GTK mais uniquement d'une interface web (très lente), :!: vous oblige à travailler en root :!: et est normalement plus rapide ... 
+
+
+===== Installation d'Ubuntu Server 7.10 =====
+Démarrez votre machine virtuelle en ayant prit soins de modifier la configuration du cd-rom afin qu'il utilise soit un disque gravé contenant l'image de Ubuntu Server 7.10, soit de pointer directement sur l'image iso de l'Ubuntu Server 7.10
+
+{{tutoriel:vmware-ubuntu-serv-01.png|}}
+
+  F2 -> Français
+  F3 -> Belgium ou Français en fonction du votre
+  F4 -> 1024 * 768
+
+<note tip>Vous pouvez à tout moment de l'installation voir la progression détaillée en utilisant la combinaison de touche ALT+F4 et pour revenir à l'écran normal d'installation la combinaison ALT+F1</note>
+
+  Nom de la machine -> primary
+  Méthode de partitionnement -> Assistée - Utiliser le disque entier
+  Configurer l'horloge -> UTC
+  Nom complet du nouvel utilisateur -> [votre choix]
+  Identifiant de votre compte utilisateur -> [votre choix]
+  Mot de passe pour le nouvel utilisateur -> [votre choix]
+  Confirmation du mot de passe -> [votre choix]
+  N'installer aucun des serveurs proposés par l'installateur, nous le ferons plus tard.
+
+
+
+
+
+
+
+
+
+
+
+===== Configuration post installation =====
+- Activation du compte root
+  sudo passwd root
+
+<note warning> Activer le compte root est dangereux il est plus prudent d'utiliser "sudo" pour lancer les commandes root, si vous souhaiter activer le compte root pensez a lui interdire le login par ssh ( "sudo nano /etc/ssh/sshd_config"  et modifier la ligne "permitrootlogin yes" en "permitrootlogin no") comme ca vous pourrez vous connecter en root avec la commande "sudo login root" une fois que vous êtes connecté comme utilisateur </note>
+
+
+Editez le fichier "/etc/network/interfaces" section [eth0] (laisser la section loopback)
+  auto eth0
+  iface eth0 inet static
+  address 192.168.254.10
+  netmask 255.255.255.0
+  network 192.168.254.0
+  broadcast 192.168.254.255
+  gateway 192.168.254.2 
+
+
+Redémarrez la machine
+  sudo reboot
+
+<note tip>un sudo /etc/init.d/networking restart suffit</note>
+
+<note important>Après le redémarrage, utilisez toujours le compte root pour exécuter les différentes marches à suivre, sauf si cela est contre indiqué.</note>
+
+<note warning> Utiliser le compte root est dangereux préférez utiliser "sudo" pour lancer vos commandes root</note>
+
+Vérifier la connexion réseau
+  ifconfig
+  ping 192.168.254.10
+  ping www.google.com
+
+- Copie du fichier .bash_logout (Inutile si vous n'avez pas activer le compte root)
+  cp /home/[default user]/.bash_logout /root/
+
+- Modification du fichier sources.list (gardez juste la référence au cd-rom d'installation et placez la en commentaire, le reste, vous pouvez le supprimer)
+  deb http://archive.ubuntu.com/ubuntu/ gutsy main restricted
+  deb http://security.ubuntu.com/ubuntu/ gutsy-security main restricted
+  deb http://archive.ubuntu.com/ubuntu/ gutsy-updates main restricted
+  
+  deb http://archive.ubuntu.com/ubuntu/ gutsy universe multiverse
+  deb http://security.ubuntu.com/ubuntu/ gutsy-security universe multiverse
+  deb http://archive.ubuntu.com/ubuntu/ gutsy-updates universe multiverse
+
+- Upgrade de la distribution
+  apt-get update
+  apt-get dist-upgrade
+
+-  Installation de quelques applications supplémentaires pour l'administration
+  apt-get install sysvconfig mc build-essential linux-headers-$(uname -r)
+
+- Activation de la couleur dans le terminal
+  cd /root/
+  Editez le fichier /root/.bashrc, cherchez la ligne "PS1=....." et dé-commentez la.
+  Relancer le script ". .bashrc"
+
+- Configuration de GRUB
+  Editez le fichier /boot/grub/menu.lst
+  Cherchez la ligne "kernel" du premier module de démarrage et supprimez l'option "quiet"
+  Commentez la ligne hiddenmenu
+  Redémarrez la machine
+
+<note warning>Pour des raisons de stabilité, les pilotes framebuffer ont été black listé. Donc, n'ajoutez pas de ligne vga=xxx dans votre menu.lst car vous auriez un superbe écran noir au démarrage de votre serveur. Voir le fichier /etc/modprobe.d/blacklist-framebuffer</note>
+
+===== Installation des VMWARE tools =====
+Activez l'installation des vmware-tools dans le menu VM -> Install VMWARE tools du menu de VMWARE Server
+- Monter le cd-rom
+  mount /media/cdrom0
+
+- Créez un répertoire d'installation
+  mkdir /root/vmware-tools
+
+- Copiez le fichier tar.gz
+  cp /media/cdrom/VMwareTools*.tar.gz /root/vmware-tools
+
+- Installation des VMware tools
+  cd /root/vmware-tools
+  tar xvzf VMwareTools*.tar.gz
+  cd vmware-tools-distrib
+  ./vmware-install.pl
+  Répondez aux questions par la valeur par défaut entre []
+  reboot
+
+
+
+
+
+
+
+===== Installation du VSWITCH-1 =====
+  * Arrêtez le serveur et éditez sa configuration.
+  * Ajoutez une nouvelle carte réseau et connectez la sur VMNET2.
+  * Démarrez le serveur.
+
+Editez le fichier "/etc/network/interfaces" section [eth1]
+  auto eth1
+  iface eth1 inet static
+  address 192.168.2.1
+  netmask 255.255.255.0
+  network 192.168.2.0
+  broadcast 192.168.2.255
+  gateway 192.168.254.10
+
+Editez le fichier /etc/resolv.conf et ajustez son contenu si nécessaire
+  search yourdomain.local
+  nameserver 192.168.2.1
+  nameserver 192.168.254.2
+
+Relancez le service "networking"
+  service networking restart
+
+Vérifiez la connexion réseau
+  ifconfig
+  ping 192.168.254.10
+  ping www.google.be
+
+
+
+===== Transformez le primary server en routeur  ===== 
+
+Editez le fichier /etc/rc.local et ajoutez ces lignes afin d'activer le [[wpfr>Network_address_translation|NATing]]
+
+  echo 1 >/proc/sys/net/ipv4/ip_forward 
+  iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+
+Redémarrez le serveur et vérifiez la route
+
+  iptables -t nat -L
+
+  Chain PREROUTING (policy ACCEPT)
+  target     prot opt source             destination
+  
+  Chain POSTROUTING (policy ACCEPT)
+  target     prot opt source             destination
+  MASQUERADE  0    --  anywhere           anywhere
+  
+  Chain OUTPUT (policy ACCEPT)
+  target     prot opt source             destination
+
+
+
+===== Création d'un serveur DNS =====
+
+Une bonne documentation explicative sur Bind c'est par ici [[:bind9]]
+
+Installation de bind9
+
+  apt-get install bind9
+
+[[:tutoriel:comment_editer_un_fichier|Editez le fichier]] **/etc/bind/named.conf**.
+
+  zone "." {
+    type hint;
+    file "/etc/bind/db.root";
+  };
+    
+  zone "localhost" IN {
+    type master;
+    file "/etc/bind/db.local";
+    allow-update { none; };
+  };
+  
+  zone "127.in-addr.arpa" IN {
+    type master;
+    file "/etc/bind/db.127";
+    allow-update { none; };
+  };
+  
+  zone "0.in-addr.arpa" IN {
+    type master;
+    file "/etc/bind/db.0";
+    allow-update { none; };
+  };
+  
+  zone "255.in-addr.arpa" IN {
+    type master;
+    file "/etc/bind/db.255";
+    allow-update { none; };
+  };
+  
+  include "/etc/bind/named.conf.local";
+
+- Editez le fichier /etc/bind/named.conf.local
+
+  zone "yourdomain.local" IN {
+    type master;
+    file "/var/cache/bind/db.yourdomain.local";
+    allow-update { none; };
+  };
+  
+  zone "2.168.192.in-addr.arpa" IN {
+    type master;
+    file "/var/cache/bind/rev.yourdomain.local";
+    allow-update { none; };
+  };
+
+- Créez le fichier /var/cache/bind/db.yourdomain.local
+  $TTL 86400
+  @  IN  SOA primary.yourdomain.local.  root.yourdomain.local. (
+      2008012701
+      1w
+      1d
+      4w
+      1w )
+  @  IN  NS  primary.yourdomain.local.
+  primary  IN A 192.168.2.1
+
+
+- Créez le fichier /var/cache/bind/rev.yourdomain.local
+  $TTL 86400
+  @  IN  SOA primary.yourdomain.local.  root.yourdomain.local. (
+      2008012701
+      1w
+      1d
+      4w
+      1w )
+  @  IN  NS  primary.yourdomain.local.
+  1  IN  PTR primary.yourdomain.local.
+
+- Changez le group d'appartenance pour les fichiers
+  chgrp bind /var/cache/bind/*
+
+- Editez le fichier /etc/hosts
+  127.0.0.1 localhost
+  192.168.2.1 primary.yourdomain.local
+  
+  définition loopback IPV6 à garder
+  ...
+  ..
+  .
+
+- Modifiez le fichier /etc/resolv.conf
+  search yourdomain.local
+  nameserver 192.168.2.1
+  nameserver 192.168.254.10
+
+- Editez le fichier /etc/bind/named.conf.options
+  options {
+           directory "/var/cache/bind";
+           forward only;
+           forwarders { 192.168.254.2; };
+           auth-nxdomain no;
+           allow-recursion { localnets; };
+  };
+
+- Editez le fichier /etc/default/bind9
+  RESOLVCONF=yes
+
+- Reboot
+
+
+==== Vérification de la configuration ====
+- Vérifiez les fichiers de configuration
+  named-checkconf (si ok rien n'est retourné)
+  cd /var/cache/bind/
+  named-checkzone -d yourdomain.local db.yourdomain.local
+  named-checkzone -d 192.168.2.1 rev.yourdomain.local 
+ 
+
+- Démarrez une seconde console ALT+F2 et tapez
+  tail -f /var/log/syslog
+
+- Revenez sur la première console et redémarrez le service bind9
+  service bind9 restart
+
+- Passez sur la seconde console et analysez les messages d'erreur s'il y en a.
+
+- Si tout est OK passez sur la première console
+  ping primary.yourdomain.local
+  Cela devrait vous retourner l'adresse 192.168.2.1
+
+- Si il y a une erreur, re-vérifiez les log du système, les scripts, ...
+
+
+
+
+
+
+===== Création d'un serveur DHCP =====
+
+Une bonne documentation explicative sur [[:isc-dhcp-server]].
+
+
+==== Vérification de la configuration ====
+Vous pouvez connecter une machine virtuelle, un Windows 2000 par exemple (plus rapide que XP et moins gourmand). La carte réseau de cette machine virtuelle doit être connectée sur VMNET2. Configurez cette machine virtuelle pour accepter le DHCP et dans une console tapez "ipconfig". Normalement vous devriez recevoir une adresse IP entre 192.168.2.150 et 192.168.2.200
+
+Vérifiez le DNS par la même occasion en faisant un ping primary.yourdomain.local
+
+Vérifiez pour finir le routage pour l'extérieur avec un ping www.google.be
+
+
+===== Inscription DHCP et DNS dynamique =====
+- Editez le fichier /etc/bind/named.conf.local et remplacez les lignes:
+  allow-update { none; }; -> allow-update { 127.0.0.1; };
+
+- Editez le fichier /etc/dhcp3/dhcpd.conf et ajoutez ou modifiez ces quelques lignes au début du fichier.
+
+  ddns-update-style interim;
+  ddns-updates on;
+  ignore client-updates;
+  update-static-leases on;
+  allow-unknow-clients;
+
+- Ajoutez ces lignes à la fin du même fichier
+
+  zone yourdomain.local. { primary 127.0.0.1; }
+  zone 2.168.192.in-addr.arpa. { primary 127.0.0.1; }
+
+
+==== Vérification de la configuration ====
+- Redémarrez les services DHCP et DNS
+  service bind9 restart
+  service dhcp3-server restart
+
+- Sur le client Windows 2000
+  ipconfig /release
+  ipconfig /renew
+  
+  ping www.google.be
+
+- Sur primary serveur vérifiez la présence des fichiers:
+  /var/cache/bind/db.yourdomain.local.jnl
+  /var/cache/bind/rev.yourdomain.local.jnl
+
+
+
+
+
+
+
+
+==== Un client Linux ====
+- Editez le fichier du client linux /etc/dhcp3/dhclient.conf et ajoutez cette ligne.
+  send host-name "[client name]";
+
+<note tip>Il est bon de ne pas s'énerver si une résolution de nom avec ping sur primary ou www.google.be ne fonctionne pas. La première chose à faire est de connecter une console sur primary et d'utiliser la commande "tail -f /var/log/syslog" afin de voir les messages d'erreurs et les messages d'inscriptions. Il existe également des outils pour vérifier le bon fonctionnement d'un DNS et d'un DHCP "host -v primary.yourdomain.local" et "dig SOA yourdomain.local". Pour plus d'information sur ces commandes, Google est ton ami</note>
+
+<note important>Le nom du client doit être unique dans votre réseau, sinon vous aurez des conflits DNS</note>
+
+<note warning>A ce stade, vous devriez pouvoir accéder au monde extérieur au départ de n'importe quelle machine de votre réseau. Vous devriez pouvoir utiliser la dénomination unique de chacune de vos machine pour résoudre une adresse servie par DNS "ping primary, ping [client name], ..." Si tel n'est pas le cas, il y a probablement une explication dans les logs serveur ou client. Bon débugging</note>
+
+
+
+===== Limiter le champ d'action du DNS au réseau local =====
+Pour que votre DNS ne résolve que les adresses local à yourdomain.local vous devez encore réaliser ces quelques modifications
+
+Éditez le fichier /etc/resolv.conf et supprimez la ligne de référence à l'adresse menant à l'extérieur. Vous ne devriez plus avoir que deux lignes dans votre fichier.
+  search yourdomain.local
+  nameserver 192.168.2.1
+
+Editez le fichier /etc/bind/named.conf et commentez toutes les lignes de la zone « . » attention, les commentaires sont précédés de « %%//%% » et non de « # ».
+
+Editez le fichier /etc/bind/named.conf.options et adaptez le en fonction.
+
+  options {
+           directory "var/cache/bind";
+           forward only;
+           forwarders { 192.168.254.2; };
+           auth-nxdomain no;
+           allow-recursion { localnets; };
+  };
+
+Editez enfin le fichier /etc/default/bind9
+  RESOLVCONF = no
+
+
+===== Création d'un time serveur NTP =====
+Pour vérifiez l'heure UTC actuelle en Belgique, vous pouvez vous rendre à cette adresse [[http://www.pool.ntp.org/zone/be]] Redémarrez votre serveur et modifiez si nécessaire l'heure incluse dans le bios de votre vmware.
+
+- Editez le fichier /etc/default/rcS
+  UTC=yes
+
+- Installez les applications suivantes
+  apt-get install ntp
+
+
+==== Configuration du serveur NTP ====
+- Editez le fichier /etc/ntp.conf
+  
+  driftfile /var/lib/ntp/drift
+  
+  statsdir /var/log/ntpstats/
+  statistics loopstats peerstats clockstats
+  filegen loopstats file loopstats type day enable
+  filegen peerstats file peerstats type day enable
+  filegen clockstats file clockstats type day enable
+  
+  #Pour la Belgique
+  server be.pool.ntp.org
+  server 3.be.pool.ntp.org
+  server 3.europe.pool.ntp.org
+  server 0.europe.pool.ntp.org
+  server ntp.ubuntu.com
+  # Synchronize on local clock
+  server 127.127.1.0
+  fudge 127.127.0 stratum 10
+  
+  restrict -4 default kod notrap nomodify nopeer noquery
+  restrict -6 default kod notrap nomodify nopeer noquery
+  restrict 127.0.0.1
+  restrict ::1
+  
+  restrict 192.168.2.0 mask 255.255.255.0 nomodify notrap
+
+<note tip>Vous trouverez plus d'informations à cette adresse http://www.pool.ntp.org/zone/be</note>
+
+
+- Editer /etc/init.d/ntp et chercher la ligne
+  PIDFILE=/var/run/ntpd.pid
+- Ajouter à la suite la ligne
+  LOGFILE=/var/log/ntp.log
+- Chercher la ligne
+  start-stop-daemon --start --quiet --oknodo --pidfile $PIDFILE --startas $DAEMON -- -p $PIDFILE $NTPD_OPTS
+- Remplacer-la par
+  start-stop-daemon --start --quiet --oknodo --pidfile $PIDFILE --startas $DAEMON -- -p $PIDFILE -l $LOGFILE $NTPD_OPTS
+  
+
+- Stoppez le service
+  service ntp stop
+
+- Editez le fichier /etc/default/ntpdate et modifiez le
+  NTPSERVERS ="3.be.pool.ntp.org"
+
+- Pour vérifier une bonne synchronisation, vous pouvez exécuter cette commande.
+  ntpdate -dv 3.be.pool.ntp.org
+  La sortie est relativement longue
+
+- Relancez le serveur NTP
+  service ntp start
+
+==== Client linux ====
+- Editez le fichier /etc/default/ntpdate
+  NTPSERVERS="192.168.2.1"
+
+
+==== Client Windows ====
+- Pour WinXP la gestion de l'heure possède un onglet Temps Internet ou vous pouvez renseigner l'adresse 192.168.2.1
+
+- Pour Win2K, il a le service Windows Time.
+  Changez le mode de démarrage du service sur auto
+  
+  Dans une console:
+  net time /setsntp:192.168.2.1
+  net stop w32time
+  net start w32time
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+===== Création du serveur LDAP =====
+
+- Installation du serveur LDAP et de quelques outils
+  apt-get install slapd db4.2-util ldap-utils
+- Répondez aux questions ncursus avec le password de root
+- Reconfigurez slapd avec dpkg-reconfigure
+  dpkg-reconfigure slapd
+
+  Le nom du domaine : yourdomain.local 
+  Nom de votre organisation: yourdomain
+  Mot de passe de l'administrateur : [root password]
+  Module de base de données à utiliser : BDB
+  Faut-il supprimer la base de données à la purge du paquet ? NON
+  Faut-il déplacer l'ancienne base de données ? NON
+  Faut-il autoriser le protocole LDAPv2 ? NON 
+- Installez les schema LDAP inclus dans un paquet samba
+  aptitude install samba-doc
+- Décompression et copie dans la bonne directory
+  gunzip -c /usr/share/doc/samba-doc/examples/LDAP/samba.schema.gz > /etc/ldap/schema/samba.schema
+- Dans une seconde console, cryptez le password de l'administrateur avec la commande slappasswd
+  slappasswd
+  New password: 
+  Re-enter new password: 
+  {SSHA} ............
+- Éditez le fichier /etc/ldap/slapd.conf 
+  ajoutez cette ligne en dessous des autres include:
+  include         /etc/ldap/schema/samba.schema
+  
+  cherchez la ligne rootdn et supprimez le #
+  ajoutez juste en dessous de rootdn la ligne suivante
+  rootpw          {SSHA} ..........
+
+- Redémarrez le serveur LDAP. Normalement cela doit aller très rapidement:
+  invoke-rc.d slapd restart
+ Si vous trouvez une erreur vous pouvez en connaître les causes en utilisant la commande suivante.
+  slapd -d 16383
+
+=== Intrepid Ibex (8.04) et superieur ===
+
+d'après la doc : [[:slapd]] ça a un peu changé. on n'utilise plus de fichier /etc/ldap/slapd.conf
+En suivant le document [[https://help.ubuntu.com/8.10/serverguide/C/openldap-server.html]], je propose la methode suivante
+
+- Installation du serveur LDAP et de quelques outils
+  apt-get install slapd db4.2-util ldap-utils
+- Répondez aux questions ncursus avec le password de root
+- Reconfigurez slapd avec dpkg-reconfigure
+  dpkg-reconfigure slapd
+
+  Le nom du domaine : yourdomain.local 
+  Nom de votre organisation: yourdomain
+  Mot de passe de l'administrateur : [root password]
+  Module de base de données à utiliser : HDB
+  Faut-il supprimer la base de données à la purge du paquet ? NON
+  Faut-il déplacer l'ancienne base de données ? NON
+  Faut-il autoriser le protocole LDAPv2 ? NON 
+- Installez les schemas LDAP inclus dans un paquet samba
+  aptitude install samba-doc
+- Décompression et copie dans la bonne directory
+  gunzip -c /usr/share/doc/samba-doc/examples/LDAP/samba.schema.gz > /etc/ldap/schema/samba.schema
+- Dans une seconde console, cryptez le password de l'administrateur avec la commande slappasswd
+  slappasswd
+  New password: 
+  Re-enter new password: 
+  {SSHA} ............
+- créer le répertoire temporaire :
+  mkdir /tmp/ldif_output
+- On crèe un fichier de conversion schema_convert.conf avec les lignes :
+  include /etc/ldap/schema/core.schema
+  include /etc/ldap/schema/cosine.schema
+  include /etc/ldap/schema/inetorgperson.schema
+  include /etc/ldap/schema/nis.schema
+  include /etc/ldap/schema/samba.schema
+- On utilise la commande slaptest pour créer les fichiers LDIF :
+slaptest -f schema_convert.conf -F /tmp/ldif_output
+- On édit le fichier /tmp/ldif_output/cn\=config/cn\=schema/cn\=\{4\}samba.ldif et on modifie les lignes comme suit :
+  dn: cn={4}samba
+devient :
+  dn: cn=samba,cn=schema,cn=config
+Et :
+  cn: {4}samba
+devient : 
+  cn: samba
+- On supprime toute les dernières lignes à partir de et inclus structuralObjectClass
+  structuralObjectClass: olcSchemaConfig
+  entryUUID: 69111144-6367-102e-950a-c54deb20c32c
+  creatorsName: cn=config
+  createTimestamp: 20091111234059Z
+  entryCSN: 20091111234059.910631Z#000000#000#000000
+  modifiersName: cn=config
+  modifyTimestamp: 20091111234059Z
+
+- On copie le nouveau LDIF dans /etc/ldap/schema pour pouvoir l'avoir sous la main en cas de besoin
+  cp /tmp/ldif_output/cn\=config/cn\=schema/cn\=\{4\}samba.ldif /etc/ldap/schema/samba.ldif
+- On applique cette modification à la base LDAP
+  ldapadd -x -D cn=admin,cn=config -W -f /etc/ldap/schema/samba.ldif
+- On fait le nettoyage :
+  rm -rf /tmp/ldif_output
+- On Relance le serveur LDAP par acquis de conscience (normalement c'est dynamique) :
+  invoke-rc.d slapd restart
+
+
+
+
+
+
+
+
+
+
+
+
+
+===== Création du serveur SAMBA =====
+- Installation du serveur SAMBA
+  aptitude install samba smbclient smbfs
+- Éditez le fichier /etc/samba/smb.conf et supprimez l'intégralitée du contenu du fichier
+  #======================= Global Settings =======================
+  
+  [global]
+  
+  workgroup = <Your DOMAIN name>
+  netbios name = primary
+  server string = Samba-LDAP PDC Server
+  domain master = Yes
+  local master = Yes
+  domain logons = Yes
+  os level = 40
+  #passwd program = /usr/sbin/smbldap-passwd ?u %u
+  ldap passwd sync = Yes
+  passdb backend = ldapsam:ldap://127.0.0.1/
+  ldap admin dn = cn=admin,dc=yourdomain,dc=local
+  ldap suffix = dc=yourdomain,dc=local
+  ldap group suffix = ou=Groups
+  ldap user suffix = ou=Users
+  ldap machine suffix = ou=Machines
+  add user script = /usr/sbin/smbldap-useradd -m "%u"
+  ldap delete dn = Yes
+  delete user script = /usr/sbin/smbldap-userdel "%u"
+  add machine script = /usr/sbin/smbldap-useradd -w "%u"
+  add group script = /usr/sbin/smbldap-groupadd -p "%g"
+  #delete group script = /usr/sbin/smbldap-groupdel "%g"
+  add user to group script = /usr/sbin/smbldap-groupmod -m "%u" "%g"
+  delete user from group script = /usr/sbin/smbldap-groupmod -x "%u" "%g"
+  set primary group script = /usr/sbin/smbldap-usermod -g "%g" "%u"
+  logon path = \\%L\profile\%U
+  logon drive = H:
+  logon home = \\%L\%U
+  socket options = TCP_NODELAY SO_RCVBUF=8192 SO_SNDBUF=8192
+  case sensitive = No
+  default case = lower
+  preserve case = yes
+  short preserve case = Yes
+  #character set = iso8859-1
+  #domain admin group = @admin
+  dns proxy = No
+  wins support = Yes
+  hosts allow = 192.168.2. 127.
+  ### A changer 192.168.2  
+  winbind use default domain = Yes
+  nt acl support = Yes
+  msdfs root = Yes
+  hide files = /desktop.ini/ntuser.ini/NTUSER.*/
+  ### FIN DE LA PARTIE GLOBALE #####
+  
+  #======================= Share Settings =======================
+  [netlogon]
+  path = /home/netlogon
+  writable = No
+  browseable = No
+  write list = Administrateur
+  
+  [profile]
+  path = /home/export/profile
+  browseable = No
+  writeable = Yes
+  profile acls = yes
+  create mask = 0700
+  directory mask = 0700
+  
+  [homes]
+  comment = Repertoire Personnel
+  browseable = No
+  writeable = Yes
+  
+  [partage]
+  comment = Repertoire commun
+  browseable = Yes
+  writeable = Yes
+  public = No
+  path = /home/partage
+  
+<note 8.04> en Interpid Ibex (8.04) et supérieur, il faut rajouter la ligne ldap ssl = off dans la section global. C'est moins sécurisé mais plus simple a mettre en œuvre. Si on veux plus de sécurité il faut mettre en place TLS avec le paramètre ldap ssl = tls, générer des certificats et modifier le ldap (cf https://help.ubuntu.com/8.10/serverguide/C/openldap-server.html)</note>
+
+==== Création des partages SAMBA ====
+Le fichier smb.conf défini quelques share SAMBA
+  /home/netlogon 
+  Contient les éventuels scripts qui sont exécutés à chaque connexion d'un utilisateur (.bat)
+
+  /home/export/profile 
+  Contient les profils windows de chaque utilisateur, ils sont créés automatiquement pour les nouveaux
+
+  /home/partage 
+  Partage commun à tous les utilisateurs du domaine
+
+  /home/lenomdelutilisateur 
+  Les répertoires personnels linux sont aussi partagés
+
+- Créez les répertoires
+  mkdir -p /home/netlogon
+  mkdir -p /home/export/profile
+  mkdir -p /home/partage 
+
+- Installez les sécuritées
+  chmod a+w /home/export
+  chmod a+w /home/export/profile
+  chmod a+w /home/partage
+
+
+
+
+
+===== Liaison SAMBA et LDAP =====
+- Installez les smbldap-tools
+  apt-get install smbldap-tools
+
+- Créez le fichier /etc/smbldap-tools/smbldap_bind.conf et copiez / modifiez ces lignes
+  slaveDN="cn=admin,dc=yourdomain,dc=local"
+  slavePw=[votre mot de passe en clair]
+  masterDN="cn=admin,dc=yourdomain,dc=local"
+  masterPw=[votre mot de passe en clair]
+- Votre mot de passe étant en clair dans le fichier, il faut modifier la sécurité
+  chmod 600 /etc/smbldap-tools/smbldap_bind.conf
+- Créez le fichier /etc/smbldap-tools/smbldap.conf et copiez / modifiez ces lignes
+  slaveLDAP="127.0.0.1"
+  slavePort="389"
+  masterLDAP="127.0.0.1"
+  masterPort="389"
+  ldapTLS="0"
+  verify="require"
+  suffix="dc=youdomaine,dc=local" 
+  ### A changer : yourdomain
+  usersdn="ou=Users,${suffix}"
+  computersdn="ou=Machines,${suffix}"
+  groupsdn="ou=Groups,${suffix}"
+  idmapdn="ou=Idmap,${suffix}"
+  # sambaUnixIdPooldn="cn=NextFreeUnixId,${suffix}"
+  sambaUnixIdPooldn="sambaDomainName=YOUR_DOMAIN,${suffix}" 
+  ### A changer : yourdomain
+  scope="sub"
+  hash_encrypt="SSHA"
+  crypt_salt_format="%s"
+  
+  userLoginShell="/bin/bash"
+  userHome="/home/%U"
+  userHomeDirectoryMode="700"
+  #Nom d'affichage - utiliser smbldap-useradd -c
+  userGecos="User"
+  defaultUserGid="513"
+  defaultComputerGid="515"
+  skeletonDir="/etc/skel"
+  #Les mots de passe expirent dans 10ans
+  defaultMaxPasswordAge="3650"
+  
+  with_smbpasswd="0"
+  smbpasswd="/usr/bin/smbpasswd"
+  
+  with_slappasswd="0"
+  slappasswd="/usr/sbin/slappasswd"
+- Stopez le serveur SAMBA
+  service samba stop
+- Ajoutez dans SAMBA le mot de passe de l'administrateur [root]
+  smbpasswd -w votremotdepasseroot
+  
+  Setting stored password for "cn=admin,dc=olituks,dc=local" in secrets.tdb
+- Redémarrez le serveur SAMBA
+  service samba start
+
+
+
+
+==== Vérifiez l'installation ====
+- Avec la commade net getlocalsid vous allez obtenir le SID du PDC SAMBA
+  net getlocalsid
+  SID for domain PRIMARY is: S-1-5-21-.......
+
+==== Peuplez le directory LDAP ====
+  smbldap-populate
+
+  smbldap-populate
+  Populating LDAP directory for domain olituks (S-1-5-21-1103990800-3677365298-610989769)
+  (using builtin directory structure)
+  
+  entry dc=olituks,dc=local already exist. 
+  adding new entry: ou=Users,dc=yourdomain,dc=local
+  adding new entry: ou=Groups,dc=yourdomain,dc=local
+  adding new entry: ou=Machines,dc=yourdomain,dc=local
+  adding new entry: ou=Idmap,dc=yourdomain,dc=local
+  adding new entry: uid=root,ou=Users,dc=yourdomain,dc=local
+  adding new entry: uid=nobody,ou=Users,dc=yourdomain,dc=local
+  adding new entry: cn=Domain Admins,ou=Groups,dc=yourdomain,dc=local
+  adding new entry: cn=Domain Users,ou=Groups,dc=yourdomain,dc=local
+  adding new entry: cn=Domain Guests,ou=Groups,dc=yourdomain,dc=local
+  adding new entry: cn=Domain Computers,ou=Groups,dc=yourdomain,dc=local
+  adding new entry: cn=Administrators,ou=Groups,dc=yourdomain,dc=local
+  adding new entry: cn=Account Operators,ou=Groups,dc=yourdomain,dc=local
+  adding new entry: cn=Print Operators,ou=Groups,dc=yourdomain,dc=local
+  adding new entry: cn=Backup Operators,ou=Groups,dc=yourdomain,dc=local
+  adding new entry: cn=Replicators,ou=Groups,dc=yourdomain,dc=local
+  adding new entry: cn=NextFreeUnixId,dc=yourdomain,dc=local
+  
+  Please provide a password for the domain root: 
+  Changing UNIX and samba passwords for root
+  New password: 
+  Retype new password: 
+
+Cette commande crée:
+ Les différentes OU (Organisation Unit) qui contiendront vos Machines, Users et Groups
+ Deux UID : root et nobody qui seront dans OU = Users
+ Plusieurs CN (Common Name): Les groupes qui seront dans OU = Groups
+
+
+
+
+
+
+
+
+
+==== Test de LDAP ====
+- Création du premier utilisateur test de LDAP
+  smbldap-useradd -a -c "Test Test" -m -P test
+  Changing UNIX and samba passwords for test
+  New password: 
+  Retype new password:
+
+  *  -a : désigne un utilisateur
+  * -c : Information Gecos : Le nom entier
+  * -m : Créé le répertoire personnel
+  * -P : création du mot de passe
+  Pour plus d'aide smbldap-useradd -?
+
+- Vérifiez que les utilisateurs test et root sont bien dans LDAP
+  smbldap-usershow test
+  
+  dn: uid=test,ou=Users,dc=yourdomain,dc=local
+  objectClass: top,person,organizationalPerson,inetOrgPerson,posixAccount,shadowAccount,sambaSamAccount
+  cn: test
+  sn: test
+  givenName: test
+  uid: test
+  uidNumber: 1000
+  gidNumber: 513
+  homeDirectory: /home/test
+  loginShell: /bin/bash
+  gecos: Test Test
+  sambaLogonTime: 0
+  sambaLogoffTime: 2147483647
+  sambaKickoffTime: 2147483647
+  sambaPwdCanChange: 0
+  displayName: Test Test
+  sambaSID: S-1-5-21-573247406-3271121105-2462534053-3000
+  sambaPrimaryGroupSID: S-1-5-21-573247406-3271121105-2462534053-513
+  sambaLMPassword: 01FC5A6BE7BC6929AAD3B435B51404EE
+  sambaAcctFlags: [U]
+  sambaNTPassword: 0CB6948805F797BF2A82807973B89537
+  sambaPwdLastSet: 1203761173
+  sambaPwdMustChange: 1519121173
+  userPassword: {SSHA}4AxHgHKTY3axTAMx02Zu22k4jeJVbGN3
+
+  smbldap-usershow root
+  
+  dn: uid=root,ou=Users,dc=olituks,dc=local
+  cn: root
+  sn: root
+  objectClass: top,person,organizationalPerson,inetOrgPerson,sambaSamAccount,posixAccount,shadowAccount
+  gidNumber: 0
+  uid: root
+  uidNumber: 0
+  homeDirectory: /home/root
+  sambaLogonTime: 0
+  sambaLogoffTime: 2147483647
+  sambaKickoffTime: 2147483647
+  sambaPwdCanChange: 0
+  sambaPrimaryGroupSID: S-1-5-21-1103990800-3677365298-610989769-512
+  sambaSID: S-1-5-21-1103990800-3677365298-610989769-500
+  loginShell: /bin/false
+  gecos: Netbios Domain Administrator
+  sambaLMPassword: 69C840086777BE8372D82CC5E4DD778E
+  sambaAcctFlags: [U]
+  sambaNTPassword: 98748519A0FAAEC727B0A34CA66C3358
+  sambaPwdLastSet: 1202326380
+  sambaPwdMustChange: 1517686380
+  userPassword: {SSHA}..................
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+==== Modification du système d'authentification sur primary====
+
+
+- Installation des paquets nécessaires
+  apt-get install auth-client-config libpam-ldap libnss-ldap libpam-mount smbfs
+
+- Répondez aux questions qui vous sont posées comme suit.
+  Should debconf manage LDAP configuration?: Yes
+  LDAP server Uniform Resource Identifier: ldapi://192.168.2.1/
+  Distinguished name of the search base: dc=yourdomain,dc=local
+  LDAP version to use: 3
+  Make local root Database admin: Yes
+  Does the LDAP database require login? No
+  LDAP account for root: cn=admin,dc=yourdomain,dc=local
+  LDAP root account password: [root password]
+
+<note tip>Étant donné qu'il n'y a pas de mots de passe dans ce fichier nous   pouvons nous permettre de ne pas limiter l'accès uniquement à root et permettre ainsi à tous le monde de pouvoir voir l'annuaire</note> 
+
+- Editez le fichier /etc/ldap.conf et modifiez le
+  base dc=yourdomain,dc=local
+  uri ldap://192.168.2.1/
+  rootbinddn cn=admin,dc=yourdomain,dc=local
+  bind_policy soft
+  pam_password md5
+
+- Copiez ensuite le fichier /etc/ldap.conf dans /etc/ldap/ldap.conf
+  cp /etc/ldap.conf /etc/ldap/ldap.conf
+
+- Éditez le fichier /etc/nsswitch.conf et modifiez le comme suit.
+  passwd:         compat ldap
+  group:          compat ldap
+  shadow:         compat ldap
+
+<note warning>Il est préférable de garder une console en réserve avec un compte root activé car si ici il y a un problème, vous ne pourrez plus vous authentifier !!!!</note>
+
+- Éditez le fichier /etc/pam.d/common-pammount
+  auth 		optional pam_mount.so use_first_pass
+  session 	optional pam_mount.so use_first_pass
+
+- Créez un nouveau fichier /etc/auth-client-config/profile.d/open_ldap et copiez / collez la suite.
+  [open_ldap]
+  nss_passwd=passwd: compat ldap
+  nss_group=group: compat ldap
+  nss_shadow=shadow: compat ldap
+  nss_netgroup=netgroup: compat ldap
+  pam_auth=auth sufficient pam_unix.so
+   auth required pam_group.so use_first_pass
+   auth required pam_mount.so use_first_pass
+   auth required pam_ldap.so use_first_pass
+  pam_account=account sufficient pam_unix.so
+   account required pam_ldap.so use_first_pass
+   account required pam_mount.so use_first_pass
+  pam_password=password sufficient pam_unix.so nullok obscure min=4 max=8 md5
+   password required pam_mount.so use_first_pass
+   password required pam_ldap.so use_first_pass
+  pam_session=session sufficient pam_unix.so
+   session optional pam_mkhomedir.so skel=/etc/skel/
+   session optional pam_mount.so use_first_pass
+  
+<note warning>Il est important pour ce fichier de garder la même ventilation que celle introduite. Si tel n'est pas le cas, vous pourriez avoir des problèmes avec la commande qui activera l'authentification LDAP pour le client.</note>
+
+- Créez un backup du fichier nsswitch.conf
+  cp /etc/nsswitch.conf /etc/nsswitch.conf.bak
+
+- Créez un backup des fichiers de configuration de pam
+  cd /etc/pam.d/
+  mkdir pam.d.bak
+  cp * pam.d.bak/
+
+- Activez l'authentification LDAP pour votre client
+  auth-client-config -a -p open_ldap
+
+Si tout se passe bien avec cette commande, vous devriez pouvoir au prochain reboot vous connecter avec un login LDAP et ou local.
+
+
+==== Ajout du client Windows ====
+- Démarrez votre client Windows 2000
+  Ouvrez une session en local admin
+  Clickez droit sur My Computer -> Properties
+  Cochez la case DOMAIN NAME et insérer YOURDOMAIN
+  Introduisez le password pour root.
+  Attendez d'avoir le message de bien venue.
+  Redémarez.
+
+<note important>Il est possible que juste après le premier démarrage de votre Windows2000 il ne vous permettent pas de vous connecter au DOMAIN. Il faut dans ce cas attendre une ou deux minutes le temps que le client retrouve ses jeunes avec le domain controleur SAMBA. Le message qui vous est indiqué, est qu'il ne trouve pas l'utilisateur ROOT.</note>
+
+- Connectez vous au logon avec le compte test que vous aviez créé lors de la configuration validation de LDAP. Cet utilisateur n'est pas connu de linux. Il se trouve configuré uniquement dans l'annulaire LDAP. Si la connexion fonctionne, c'est la preuve par 9 que tout est fonctionnel.
+
+- Vérifiez les mapping automatique dans votre client Windows.
+  Vous devriez avoir un drive P:\
+
+- Faite un logoff du client windows et passez sur le serveur primary
+
+- Ouvrez la directory /home/export/profile/test vous devriez avoir des fichiers windows dans ce folder qui sont en réalité les fichiers du profil utilisateur test.
+
+- Vous trouverez également une directory test dans la root de home qui est en réalité le mapping sur la directory P:\ du windows client. Mais également la directory home d'un logon sur linux. De cette manière, vous pouvez partager vos fichiers privés (réservé à l'utilisateur test par exemple)
+
+
+
+
+
+
+
+
+
+
+
+
+
+=== Configuration du client linux ====
+
+<note tip>Le client linux à ce stade doit être capable de se connecter à la session et d'avoir une configuration réseau fournie par le DHCP / DNS. Il doit être à jour et avoir un accès au monde extérieur. Si ce n'est pas le cas, allez voir plus haut ce qu'il faut faire pour que cela fonctionne.</note>
+
+**Exécutez les même modifications du système d'authentification que celles exécutées sur le serveur PRIMARY avant d'ajouter celle-ci !**
+
+ - Éditez le fichier /etc/pam.d/gdm et remplacez son contenu
+  #%PAM-1.0
+  
+  auth required	pam_mount.so
+  auth required	pam_group.so use_first_pass
+  auth sufficient	pam_ldap.so use_first_pass
+  auth required	pam_unix.so use_first_pass
+  auth required	pam_env.so
+  
+  account sufficient pam_ldap.so
+  account sufficient pam_unix.so
+  
+  password required pam_unix.so nullok obscure min=4 max=8 md5
+  
+  session required pam_unix.so
+  session optional pam_mkhomedir.so skel=/etc/skel/
+  session optional pam_mount.so
+
+- Éditez le fichier /etc/pam.d/gdm-autologin et remplacez son contenu (le contenu est le même que pour le fichier précédent)
+  #%PAM-1.0
+  
+  auth required	pam_mount.so
+  auth required	pam_group.so use_first_pass
+  auth sufficient	pam_ldap.so use_first_pass
+  auth required	pam_unix.so use_first_pass
+  auth required	pam_env.so
+  
+  account sufficient pam_ldap.so
+  account sufficient pam_unix.so
+  
+  password required pam_unix.so nullok obscure min=4 max=8 md5
+  
+  session required pam_unix.so
+  session optional pam_mkhomedir.so skel=/etc/skel/
+  session optional pam_mount.so  
+===== Automount des répertoires partagés sur le client linux =====
+- Editez le fichier /etc/security/pam_mount.conf et à la ligne 173 ajoutez ces lignes.
+  volume * smbfs 192.168.2.1 & /media/&' sur primary' uid=&,gid=&,dmask=777,fmask=777 - -
+  volume * smbfs IP_MonServeur profscommun /media/profscommun' sur MonServeur' uid=&,gid=&,dmask=777,fmask=777 - -
+  volume * smbfs IP_MonServeur classes /media/classes' sur MonServeur' uid=&,gid=&,dmask=777,fmask=777 - -
+  volume * smbfs IP_MonServeur public /media/public' sur sur MonServeur' uid=&,gid=&,dmask=777,fmask=777 - -
+  volume * smbfs IP_MonServeur install /media/install' sur sur MonServeur' uid=&,gid=&,dmask=777,fmask=777 - -
+
+
+===== Utilisation de la carte son, USB, lecteur amovible, ... =====
+- Editez le fichier /etc/security/group.conf et ajoutez ces lignes
+<code>**;*;*;Al00002400;floppy,audio,cdrom,video,plugdev,scanner</code>
+
+==== Les test avant le grand saut ====
+- Utilisez la commande suivante pour lister le contenu de l'annuaire LDAP
+  getent passwd
+
+Si vous voyez l'utilisateur test créé précédemment et connu uniquement de LDAP c'est gagné. Vous devriez être en mesure de vous authentifier. Si non, il y a un problème. Le mieux comme toujours est de regarder les logs et de vérifier les fichier de customisation.
+- redémarrez la machine et connectez vous avec l'utilisateur test de l'annuaire LDAP.
+
+Cela devrait vous montrer dans GDM un petit panneau indiquant la création de la directory home pour votre nouvel utilisateur et vous donnez accès après quelques échanges réseau avec le serveur au bureau linux en tant que simple utilisateur.
+
+
+
+
+
+===== Problèmes rencontrés pendant la configuration du server et des clients =====
+<note important>Lors de mes tests en VMWARE Serveur j'ai constaté deux phénomènes très étranges.</note>
+ 
+  * Le premier étant sur le serveur primary, un blocage régulier au démarrage de bind oblige de redémarrer le serveur une ou deux fois avant de pouvoir l'utiliser.
+
+  * Le second c'est avec le client linux. (l'étape ou vous devriez être arrivé maintenant). UDEV m'a créé une mauvaise règle dans /etc/udev/rules.d/70-persistent-net.rules. La règle n'était pas bonne car l'adresse MAC de la carte réseau virtuel avait changé, sans doute, suite à l'installation des vmware tools. Donc, au démarrage de la machine client linux, le nom de l'interface était passé à eth2 plus tôt que eth0. J'ai modifié le fichier 70-persistent-net.rules en indiquant à eth0 que l'adresse mac avait changé et tout est rentré dans l'ordre. Ce problème-ci était important, car il m'empêchait de me connecter à LDAP serveur, de joindre les adresses extérieures tout en me permettant de me connecter dans mon subnet et donc de voir le client windows et primary via uniquement leur adresse IP ! de quoi y perdre son latin quoi ...
+
+Là aussi, si vous avez des idées, je suis preneur.
+
+
+
+
+
+===== Installation de Webmin sur primary =====
+
+[[:tutoriel:comment_modifier_sources_maj|Ajoutez le dépôt]] suivant à vos sources de mises à jour puis [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **webmin**.
+
+<file>
+deb http://download.webmin.com/download/repository sarge contrib
+Récuperer les cles 
+sudo wget http://www.webmin.com/jcameron-key.asc
+sudo apt-key add jcameron-key.asc
+
+faire un sudo update 
+aptitude install webmin
+</file>
+
+----
+
+//Contributeurs : [[:utilisateurs:olituks|olituks]].//

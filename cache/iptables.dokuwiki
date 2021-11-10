@@ -1,0 +1,370 @@
+
+{{tag>pare-feu sécurité réseau}}
+{{ /iptables.jpg?340nolink| Iptables}}
+----
+
+=====Iptables=====
+
+
+Iptables est une interface en ligne de commande permettant de configurer Netfilter. En plus de Iptables, depuis la version 8.04, Ubuntu est installé avec la surcouche [[:ufw|UFW]] qui permet de contrôler simplement Netfilter, [[:ufw|UFW]] est toutefois moins complet que iptables.
+
+Cette documentation est une introduction à Iptables, elle est destinée à ceux qui souhaitent mettre en place un [[:pare-feu]] et/ou un partage de connexion, sur une machine Linux, sans passer par une interface graphique. Seule la table par défaut (Filter) d'Iptables est présentée ici et seules les chaînes utilisées par Filter (Input, Forward et Output) y sont exposées.
+
+Les lecteurs désirant approfondir leur recherche et aborder l'utilisation des autres tables (Nat, Mangle, Row et Security) ainsi que des chaînes non utilisables par Filter (Prerouting et Postrouting) se tourneront vers les nombreuses documentations disponibles sur l'Internet. Ceux désirant configurer un [[:pare-feu]] par l'intermédiaire d'une interface graphique se tourneront vers Gufw ou encore vers Shorewall pour une utilisation sur serveur.
+
+iptables existe aussi pour ipv6, pour cela il suffit d'utiliser la commande ip6tables au lieu de iptables.
+
+Pour une bonne compréhension d'Iptables (et des pare-feux en général) il est conseillé d'avoir des notions en réseaux informatiques, au minima connaître le principe de fonctionnement des protocoles TCP et UDP.
+
+
+===== Configuration du pare-feu =====
+
+Nous allons configurer notre [[:pare-feu]] de la manière suivante :
+  * On bloque tout le trafic entrant par défaut.
+  * On autorise au cas par cas : le trafic appartenant ou lié à des connexions déjà établies et le trafic à destination des serveurs (web, ssh, etc.) que nous souhaitons mettre à disposition.
+
+Afin de ne pas avoir de problème au moment où on crée ces règles, nous allons d'abord créer les autorisations, puis nous enverrons le reste en enfer.
+
+En tapant « ''sudo iptables -L'' », une liste de vos règles actuelles est affichée. Si vous (ou un logiciel) n'avez encore jamais touché à //iptables//, les chaînes sont vides, et vous devriez voir :
+<code>
+Chain INPUT (policy ACCEPT)
+target     prot opt source               destination         
+
+Chain FORWARD (policy ACCEPT)
+target     prot opt source               destination         
+
+Chain OUTPUT (policy ACCEPT)
+target     prot opt source               destination
+</code>
+
+Pour l'instant, tout passe dans toutes les directions (//policy ACCEPT//).
+Pour cette configuration basique, seul le trafic entrant (chaine //input//) nous intéresse.
+
+Par défaut, « ''sudo iptables -L'' » n'affiche que la table "filter". Pour consulter les autres tables, vous devez ajouter l'option -t suivie de "nat", "mangle" ou "raw". Pour la configuration d'un [[:pare-feu]] la table "filter" est toutefois la seule nécessaire.
+
+<note warning>ATTENTION, si vous avez modifié la règle par défaut pour le blocage (iptables -P INPUT DROP  voir plus bas) et que vous tapez iptables -F vous bloquerez tous les accès ... y compris celui en cours. Ceci est particulièrement problématique  sur  une machine sur laquelle vous accédez à distance (serveur etc.).</note>
+
+Si vous avez déjà modifié la configuration et que vous voulez la réinitialiser, tapez :
+<code>
+sudo iptables -F
+sudo iptables -X
+</code>
+
+=== Autoriser le trafic entrant d'une connexion déjà établie ===
+
+Pour permettre à une connexion déjà ouverte de recevoir du trafic :
+<code>
+# iptables -A INPUT -m conntrack --ctstate ESTABLISHED -j ACCEPT
+</code>
+Cette commande ajoute une règle (''-A'') à la chaîne contrôlant le trafic entrant //INPUT//, pour autoriser le trafic (''-j ACCEPT''), aprés vérification que l'état de la connexion est établie (''-m conntrack --ctstate ESTABLISHED'').
+
+<note warning>
+Une ancienne configuration avec l'état "--state RELATED" est toujours sur internet, or cette option peut permettre l'ouverture de port non désirée sur votre machine par un attaquant. L'option "RELATED" est à utiliser avec prudence. Pour plus d'information :
+https://gist.github.com/azlux/6a70bd38bb7c525ab26efe7e3a7ea8ac
+</note>
+
+
+=== Permettre le trafic entrant sur un port spécifique ===
+
+Pour permettre le trafic entrant sur le port 22 (traditionnellement utilisé par SSH, vous devrez indiquer à iptables tout le trafic TCP sur le port 22 de votre adaptateur réseau.
+<code>
+# iptables -A INPUT -p tcp -i eth0 --dport ssh -j ACCEPT
+</code>
+Cette commande ajoute une règle (''-A'') à la chaîne contrôlant le trafic entrant //INPUT//, pour autoriser le trafic (''-j ACCEPT''), vers l'interface (''-i'') //eth0// et à destination du port (''<nowiki>--dport</nowiki>'') //SSH// (on aurait pu mettre 22).
+
+Maintenant vous pouvez vérifier vos règles iptables :
+<code>
+# iptables -L
+Chain INPUT (policy ACCEPT)
+target     prot opt source               destination        
+ACCEPT     all  --  anywhere             anywhere            ctstate ESTABLISHED
+ACCEPT     tcp  --  anywhere             anywhere            tcp dpt:ssh 
+</code>
+
+Maintenant, acceptons tout le trafic web (''www'') entrant :
+<code>
+# iptables -A INPUT -p tcp -i eth0 --dport 80 -j ACCEPT
+</code>
+
+En regardant nos règles, nous avons :
+<code>
+# iptables -L
+Chain INPUT (policy ACCEPT)
+target     prot opt source               destination        
+ACCEPT     all  --  anywhere             anywhere            ctstate ESTABLISHED
+ACCEPT     tcp  --  anywhere             anywhere            tcp dpt:ssh 
+ACCEPT     tcp  --  anywhere             anywhere            tcp dpt:www 
+</code>
+
+Nous avons exceptionnellement autorisé le trafic tcp pour ssh et les ports web, mais comme nous n'avons rien bloqué, tout le trafic passe quand même.
+
+=== Bloquer le trafic ===
+
+Maintenant que nous avons fini avec les autorisations, il faut maintenant bloquer le reste.
+Nous allons en fait modifier la « politique par défaut » (//policy//) de la chaîne //INPUT// : cette décision (//DROP//) s'applique lorsque aucune règle n'a été appliquée à un paquet. Donc, si la tentative de connexion n'est permise par aucune des règles précédentes, elle sera rejetée.
+
+<code>
+# iptables -P INPUT DROP #warning : a ne pas utiliser sur un serveur distant !
+# iptables -L
+Chain INPUT (policy DROP)
+target     prot opt source               destination        
+ACCEPT     all  --  anywhere             anywhere            ctstate ESTABLISHED
+ACCEPT     tcp  --  anywhere             anywhere            tcp dpt:ssh 
+ACCEPT     tcp  --  anywhere             anywhere            tcp dpt:www 
+</code>
+
+**Un autre moyen de procéder** est l'ajout en fin de chaîne d'une règle supprimant les paquets (les paquets autorisés par les règles précédentes n'atteindraient pas celle-ci), //via// ''iptables -A INPUT -j DROP'', mais il faudrait alors faire attention à la position des futures règles.
+
+=== Autoriser le trafic local ===
+
+Un p'tit problème de notre configuration est que même l'interface locale //(loopback)// est bloquée.
+Nous pourrions avoir écrit les règles de rejet seulement pour //eth0// en spécifiant ''-i eth0'', mais nous pouvons aussi ajouter une règle pour //loopback//. Par exemple, nous pourrions l'insérer en 2e position :
+
+<code>
+# iptables -I INPUT 2 -i lo -j ACCEPT
+</code>
+
+Pour lister les règles plus en détail.
+<code>
+# iptables -L -v -n
+</code>
+
+=== Autoriser les requêtes ICMP (ping) ===
+
+Il peut-être utile de valider les réponses aux requêtes "ping", ne serait-ce que pour s'assurer que le poste est toujours en activité.
+<code>
+# On autorise le PC a faire des pings sur des IP externes et à répondre aux requêtes "ping"
+iptables -A OUTPUT -p icmp -m conntrack --ctstate NEW,ESTABLISHED,RELATED -j ACCEPT
+
+# Si vous utilisez une ancienne version de iptables la commande ci-dessus peut ne pas fonctionner, dans ce cas entrez la commande suivante :
+iptables -A OUTPUT -p icmp -m conntrack --ctstate NEW,ESTABLISHED,RELATED -j ACCEPT
+
+# On autorise les pings 
+iptables -A INPUT -p icmp -j ACCEPT
+</code>
+
+=== Supprimer une règle ===
+
+Si vous vous êtes trompé dans la création d'une règle et que cela vous bloque une connexion, vous pouvez supprimer une seule entrée plutôt que de tout réinitialiser.
+
+Tout d'abord vous listez l'ensemble de vos règles avec l'affichage des lignes :
+<code>
+iptables -L --line-numbers
+</code>
+Ce qui personnellement me retourne :
+<code>
+Chain INPUT (policy DROP)
+num  target     prot opt source               destination
+1    DROP       icmp --  anywhere             anywhere
+2    ACCEPT     tcp  --  anywhere             anywhere            tcp dpt:ssh
+3    ACCEPT     tcp  --  anywhere             anywhere            tcp dpt:www
+4    ACCEPT     tcp  --  anywhere             anywhere            tcp dpt:webmin
+
+Chain FORWARD (policy ACCEPT)
+num  target     prot opt source               destination
+
+Chain OUTPUT (policy ACCEPT)
+num  target     prot opt source               destination
+1    ACCEPT     tcp  --  anywhere             anywhere            tcp spt:www
+2    ACCEPT     tcp  --  anywhere             anywhere            tcp spt:12345
+</code>
+
+Je souhaite supprimer la ligne 2 de la chaîne OUTPUT
+
+Syntaxe : iptables -D chaîne numéro_de_ligne
+
+<code>
+iptables -D OUTPUT 2
+</code>
+
+
+=== Sauvegarder vos règles ===
+
+Passer en mode superutilisateur
+
+<code>
+sudo -s iptables-save -c
+</code>
+
+===== Appliquer les règles au démarrage =====
+
+==== Via iptables-persistent ====
+
+Vous avez testé vos règles, ça marche au poil, alors il reste à les appliquer au démarrage.
+
+iptables-persistent propose de sauvegarder les règles dans le dossier **/etc/iptables**, fichier **rules.v4** pour les règles IPv4 et **rules.v6** pour les règles IPv6. Le script peut s’appeler via :
+
+  service iptables-persistent
+
+Il prend les arguments : **save** pour sauvegarder les règles, **flush** pour vider toutes les règles et **reload** pour les recharger depuis les fichiers précités.
+
+==== Via un fichier ====
+
+<note important>Depuis l'utilisation du daemon **systemd-networkd**, il n'est plus possible de lancer votre script iptables via l'emplacement **/etc/network/if-pre-up.d/** de votre Ubuntu. Pour vérifier si vous êtes concerné par cette note, veuillez ouvrir un [[:terminal]], avec pour contenu **pidof systemd-networkd**, si vous avez un retour, merci de vous référer au chapitre **3.2.1**.
+</note>
+
+Commencez par éditer un fichier en root, que vous enregistrerez sous **/etc/network/if-pre-up.d/**. 
+
+La première ligne de ce fichier doit être :
+
+  #!/bin/bash
+
+Cette ligne indique que le fichier doit être interprété par l'exécutable /bin/bash (c'est donc un [[:tutoriel:script_shell|script bash]]).
+
+Ajoutez ensuite à votre script ceci : 
+
+  iptables-restore < /etc/iptables.test.rules
+
+Le reste du fichier doit contenir les commandes //iptables// que vous avez générées.
+
+Déplacez le script iptables dans /etc/network/if-pre-up.d/ :
+
+  sudo mv /emplacement/du/script/iptables /etc/network/if-pre-up.d/
+
+Rendez ce script exécutable :
+
+  sudo chmod +x /etc/network/if-pre-up.d/iptables
+
+Cela devrait être bon. Au prochain redémarrage, vous pouvez vérifier que vos règles sont bien utilisées, en effectuant :
+
+  sudo iptables -L
+  
+=== Lancer votre script iptables au démarrage via Systemd ===
+
+Pour lancer votre script iptables au démarrage de votre Ubuntu, merci d'ouvrir un [[:terminal]], avec pour contenu :
+
+<code bash>sudo touch /lib/systemd/system/firewall.service</code>
+
+Veuillez éditer ensuite le fichier se trouvant dans **/lib/systemd/system/firewall.service**, avec votre [[:éditeur de texte]] favoris, et y coller :
+
+<file bash>
+[Unit]
+Description=Firewall
+Requires=network-online.target
+After=network-online.target
+
+[Service]
+User=root
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/etc/init.d/nom_de_votre_script_iptables(modifier_le_nom!) start
+ExecStop=/etc/init.d/nom_de_votre_script_iptables(modifier_le_nom!) stop
+
+[Install]
+WantedBy=multi-user.target
+</file>
+
+Il ne vous reste plus qu'à activer le service **firewall.service**, au démarrage de votre Ubuntu, via la commande :
+
+<code bash>sudo systemctl enable firewall.service</code>
+
+Au prochain redémarrage de votre Ubuntu, votre service **firewall.service** chargera votre script iptables se trouvant dans **/etc/init.d/**.
+
+Pour vérifier le statut de votre service **firewall.service**, veuillez saisir dans un [[:terminal]] :
+
+<code bash>systemctl status firewall</code>
+
+===== Script iptables =====
+
+<note>Ce script est un exemple, il est à adapter à vos besoins. Il peut toutefois être utilisé pour une utilisation courante, il offre une plutôt bonne "protection" pour un usage desktop.</note>
+
+<code bash iptables>
+
+#!/bin/bash
+
+iptables-restore < /etc/iptables.test.rules
+ 
+## Script iptables by BeAvEr.
+ 
+## Règles iptables.
+ 
+## On flush iptables.
+
+iptables -F
+iptables -X
+iptables -t nat -F
+iptables -t nat -X
+iptables -t mangle -F
+iptables -t mangle -X
+
+## On drop les requêtes ICMP (votre machine ne répondra plus aux requêtes ping sur votre réseau local).
+
+iptables -A INPUT -p icmp --icmp-type echo-request -j DROP
+iptables -A OUTPUT -p icmp --icmp-type echo-reply -j DROP
+
+## On accepte le Multicast.
+
+iptables -A INPUT -m pkttype --pkt-type multicast -j ACCEPT
+
+## On drop tout le trafic entrant.
+ 
+iptables -P INPUT DROP
+ 
+## On drop tout le trafic sortant.
+ 
+iptables -P OUTPUT DROP
+ 
+## On drop le forward.
+ 
+iptables -P FORWARD DROP
+ 
+## On drop les scans XMAS et NULL.
+ 
+iptables -A INPUT -m conntrack --ctstate INVALID -p tcp --tcp-flags FIN,URG,PSH FIN,URG,PSH -j DROP
+
+iptables -A INPUT -m conntrack --ctstate INVALID -p tcp --tcp-flags ALL ALL -j DROP
+ 
+iptables -A INPUT -m conntrack --ctstate INVALID -p tcp --tcp-flags ALL NONE -j DROP
+ 
+iptables -A INPUT -m conntrack --ctstate INVALID -p tcp --tcp-flags SYN,RST SYN,RST -j DROP
+
+## Dropper silencieusement tous les paquets broadcastés.
+
+iptables -A INPUT -m pkttype --pkt-type broadcast -j DROP
+  
+## Permettre à une connexion ouverte de recevoir du trafic en entrée.
+ 
+iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+ 
+## Permettre à une connexion ouverte de recevoir du trafic en sortie.
+ 
+iptables -A OUTPUT -m conntrack ! --ctstate INVALID -j ACCEPT
+ 
+## On accepte la boucle locale en entrée.
+ 
+iptables -I INPUT -i lo -j ACCEPT
+ 
+## On log les paquets en entrée.
+ 
+iptables -A INPUT -j LOG
+ 
+## On log les paquets forward.
+ 
+iptables -A FORWARD -j LOG 
+ 
+exit 0
+
+</code> 
+
+===== Documentations supplémentaires =====
+
+En anglais :
+  * [[http://www.netfilter.org/documentation/HOWTO/packet-filtering-HOWTO.html| How To Iptables]]
+  * [[http://www.netfilter.org/documentation/|Documentation Multilingue de Netfilter et Iptables]]
+  * [[http://people.netfilter.org/rusty/unreliable-guides/| Rusty's Remarkably Unreliable Guides]]
+
+En Français :
+  * [[http://olivieraj.free.fr/fr/linux/information/firewall/ |Bible française pour apprendre les bases de la sécurité et d'Iptables sous Linux]]
+  * [[http://irp.nain-t.net/doku.php |Bible française d'introduction aux réseaux et à Internet]] ou [[ http://stielec.ac-aix-marseille.fr/electron/cours.htm |ici]] (même auteur et contenu trés proche)
+  * [[https://memoire-grise-liberee.fr.eu.org|"Mémoire Grise Libérée" : IpTables HowTo]]
+  * [[http://www.inetdoc.net/guides/iptables-tutorial/|iptables-tutorial de Oskar Andreasson traducteur Marc Blanc et publié par Philippe Latu]]
+  * [[http://www.it-connect.fr/supprimer-une-regle-precise-dans-iptables/|Supprimer une règle précise sous Iptables]] sur IT-Connect.fr
+  * [[https://wiki.visionduweb.fr/index.php?title=Configurer_le_pare-feu_Iptables|Quelques notes avec des exemples ainsi que des liens valides vers des tutoriels pour utiliser Iptables]] depuis le wiki de Visionduweb.
+===== Sources =====
+
+  * Basé sur [[https://wiki.ubuntu.com/IptablesHowTo]]
+  * Merci à Rusty Russell et son How-To, il est la base de cette page. 
+  * Et merci surtout pour son travail au sein de l'équipe de développement de Netfilter. :-)
+
+
+//Contributeurs : [[utilisateurs:Kmeleon]], [[utilisateurs:eks]], [[utilisateurs:BeAvEr]] (Création du script iptables et modification majeure de la documentation), [[utilisateurs:maverick62]],  [[utilisateurs:mydjey]] (mise à jour et refonte).//

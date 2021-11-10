@@ -1,0 +1,204 @@
+
+{{tag>TV Satellite Décrypter}}
+
+----
+
+====== OSCam ======
+
+<note important>**Mentions légales :**
+
+ OSCam permet de se connecter à une (ou plusieurs) cartes d'abonnement afin de décrypter certaines chaines pour les diffuser sur un (ou plusieurs) écrans. 
+
+Le recours à un tel logiciel est prohibé par certains opérateurs qui imposent l'utilisation d'un matériel spécifique. Avant d'utiliser ce logiciel renseignez vous sur la législation en vigueur dans votre pays. 
+
+Ubuntu-fr.org ne pourra en aucun cas être tenu responsable d'une éventuelle utilisation frauduleuse des informations exposées ci-après.
+</note>
+
+----
+**OSCam** est l'acronyme de Open Source Conditional Access Modul et le fruit d'une collaboration non lucrative de développeurs de différents pays. Le développement est public. Les modifications et progrès basés sur les changements proposés ainsi que les "tickets"peuvent être consultés sur http://streamboard.de.vu:8001/timeline 
+Les résultats du développement sont stockés dans un dépôt [[subversion|svn]] par numérotation croissante et sont disponibles pour compilation (voir à ce sujet plate-formes)
+
+OSCam fut développé initialement afin de créer un **cardserver**, c'est-à-dire un serveur où sont connectées différentes cartes d'abonnement à des bouquets TV. OSCam est désormais capable de fonctionner en tant que **client**, c'est-à-dire d'effectuer le décryptage et l'affichage des chaines. 
+
+À utiliser exclusivement dans le cadre familial, OSCam vous permettra donc de passer une soirée cinéma avec votre conjoint-e tout en permettant à vos enfants de regarder leur chaine favorite dans leur chambre (service appelé **multi-écrans** par certains prestataires).
+
+En outre, et c'est l'aspect qui nous intéressera ici, OSCam apportera à votre PC de salon, équipé d'Ubuntu et de votre [[media_center|MediaCenter]] préféré, la capacité de diffuser les chaines auxquelles vous êtes abonnés. Fini l'interface austère de votre décodeur !
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Posséder un (ou plusieurs) lecteur de carte de type **smargo** ou [[http://www.infinityusb.com/default.asp?show=productsdetail&productID=12|Infinity Usb]].
+  * Avoir [[:tutoriel:comment_installer_un_paquet|installé le paquet]] **[[apt://subversion|subversion]]** ainsi que [[apt://patchutils,build-essential,openssl,libssl-dev,gcc,g++,pcscd,pcsc-tools,libpcsclite1,libpcsclite-dev,cmake,make,libpthread-stubs0,libpthread-stubs0-dev,libncurses5,libncurses5-dev,libusb-1.0-0,libusb-1.0-0-dev | les paquets nécessaires à la compilation]]
+  * Avoir [[:tutoriel:comment_supprimer_un_paquet|Supprimé le paquet]] **brltty** pour éviter des conflits avec **libusb**.
+
+===== Installation =====
+
+Pour installer ce logiciel, nous aurons le choix entre la dernière version stable 1.1 et la version en cours de développement 1.2 que nous allons compiler à partir des sources [[subversion|SVN]]. Dans chacun des cas, nous effectuons la compilation avec l'option **DVBAPI** qui sera nécessaire dans le cas de l'utilisation de [[vdr|VDR]].
+
+==== Version stable ====
+  * Commencer par télécharger les sources :
+<code>svn co http://streamboard.tv/svn/oscam/tags/1.10/ oscam-1.10</code>
+  * Les patcher pour qu'OSCam puisse communiquer avec [[VDR]] :
+<code>cd oscam-1.10
+wget https://raw.github.com/manio/vdr-plugin-dvbapi/22733ee/patches/oscam-vdr.diff
+patch < oscam-vdr.diff
+</code>
+   * Configurer, compiler et installer :
+<code>
+mkdir build
+cd build
+cmake -DWEBIF=1 -DHAVE_DVBAPI=1 ..
+make
+sudo make install
+</code>
+
+==== Version en développement ====
+La procédure d'installation est identique à la seule différence que la version de développement intègre déjà le patch pour [[VDR]].
+  * Télécharger les sources :
+<code>
+svn co http://streamboard.tv/svn/oscam/trunk/ oscam-1.2
+cd oscam-1.2
+mkdir build
+cd build
+cmake -DWEBIF=1 -DHAVE_DVBAPI=1 ..
+make
+sudo make install
+</code>
+
+
+===== Configuration =====
+Cette partie sera plus délicate et dépendra de l'abonnement dont vous disposez. Vous trouverez toutes les informations nécessaires dans la [[http://www.streamboard.tv/wiki/OSCam/fr|documentation officielle]]. Les fichiers de configuration à [[:tutoriel:comment_modifier_un_fichier|éditer]] se trouvent dans le répertoire **/usr/local/etc/**
+
+==== OSCAM.CONF ====
+
+Ce fichier permet de définir les paramètres généraux d'OSCam.
+
+  * Pour une utilisation avec [[VDR]], configurer la section [DVBAPI] du fichier **oscam.conf** de la manière suivante :
+
+  [dvbapi]
+  enabled = 1
+  au = 1
+  user = vdr
+  boxtype = pc
+  pmt_mode = 1
+
+  * Pour une utilisation avec [[TvHeadend]], créer une section [newcamd] dans le même fichier **oscam.conf** :
+
+  [newcamd] 
+  Key = 0123456791011121314     <== définissez la clé de protection que vous souhaitez
+  Port = PORT@CAID:IDENT        <== définissez le PORT (libre !) que vous voulez utiliser, CAID:IDENT varie selon votre carte d'abonnement. 
+
+  * L'administration s'effectue via une interface web dont les paramètres sont également définis dans le fichier **oscam.conf** :
+
+  [webif]
+  httpport      = 6666          <== définissez le port par lequel on se connecte à OSCam  
+  httpuser      = user          <== définissez votre login
+  httppwd       = pass          <== définissez votre mot de passe
+  httpallowed   = 127.0.0.1     <== définissez la/les adresses IP autorisées à se connecter à l'interface d'administration
+  
+==== OSCAM.SERVER ====
+Ce fichier regroupe les configurations de nos cartes d'abonnement selon la syntaxe suivante :
+
+  [reader]
+  Label           = phoenixUSBsmart      < ==  nom attribué à notre lecteur de carte
+  Device          = /dev/ttyUSB1         < ==  adresse sur laquelle est monté le lecteur
+  Protocol        = mouse                < ==  type de protocole utilisé (ici pour infinity usb smart)
+  Detect          = CD
+  mhz             = 600                  < ==  on utilise le lecteur overclocké à 6MHz avec une carte de 3,57MHz
+  cardmhz         = 357
+  CAID            = 0500                 < ==  protocole de décryptage de la carte : viaccess = 500
+  Group           = 1                    < == groupe auquel appartient la carte (on mettra le même dans le fichier oscam.user) 
+
+==== OSCAM.USER ====
+Ce fichier permet de définir différents comptes d'utilisateur sous la forme suivante :
+  [account]
+  user       = monlogin
+  pwd        = monmotdepasse
+  group      = 1
+
+Dans le cas d'une utilisation de [[VDR]], créer l'utilisateur suivant :
+  [account]
+  user       = vdr
+  pwd        =
+  group      = 1
+===== Utilisation=====
+
+==== Exécution temporaire ====
+L'application se lance via la [[:commande_shell|commande]] suivante :
+<code>/usr/local/bin/oscam</code>
+
+
+==== Exécution automatique au démarrage d'Ubuntu ====
+Nous allons maintenant créer un script de démarrage automatique :
+  * Créer le fichier : 
+<code>sudo gedit /etc/init.d/oscam</code>
+  * Contenant le code suivant : 
+<code>#!/bin/sh 
+DAEMON=/usr/local/bin/oscam 
+DEAMON_OPTS="-b" 
+PIDFILE=/var/run/oscam.pid test -x ${DAEMON} || exit 0 
+. /lib/lsb/init-functions 
+
+case "$1" in 
+start) 
+log_daemon_msg "Starting OSCam" 
+start-stop-daemon --start --quiet --background --pidfile ${PIDFILE} --make-pidfile --exec ${DAEMON} -- ${DAEMON_OPTS} 
+log_end_msg $? 
+;; 
+stop) 
+log_daemon_msg "Stopping OSCam" 
+start-stop-daemon --stop --exec ${DAEMON} 
+log_end_msg $? 
+;; 
+force-reload|restart) 
+$0 stop 
+$0 start 
+;; 
+*) 
+echo "Usage: /etc/init.d/oscam {start|stop|restart|force-reload}" 
+exit 1 
+;; 
+esac 
+exit 0</code>
+  * Lui attribuer les permissions d’exécution :
+<code>sudo chmod 755 /etc/init.d/oscam</code>
+  * On peut alors lancer et arrêter OSCam de la manière suivante :
+<code>sudo /etc/init.d/oscam start 
+sudo /etc/init.d/oscam stop 
+sudo /etc/init.d/oscam restart</code>
+  * Et demander à Ubuntu de le lancer automatiquement au démarrage :
+<code>sudo update-rc.d oscam defaults</code>
+
+
+====Utilisation avec VDR ====
+Pour utiliser OSCam avec [[VDR]], il nous faudra simplement installer le plugin **vdr-plugin-dvbapi**.
+
+Pour cela, nous allons l'installer à partir de ses codes sources que nous allons télécharger sur un dépôt [[git]].
+  * [[:tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt://git-core|git-core]]**
+  * Télécharger les sources :
+<code>git clone https://github.com/manio/vdr-plugin-dvbapi.git</code>
+  * Configurer les paramètres de compilation :
+<code>cd vdr-plugin-dvbapi
+sudo gedit Makefile</code>
+  * Modifier le fichier Makefile avec les valeurs suivantes :
+
+  VDRDIR = /usr/include/vdr
+  LIBDIR = /usr/lib/vdr/plugins
+
+   * Compiler et installer :
+<code>sudo make</code>
+
+
+===== Désinstallation =====
+
+Pour supprimer cette application, il suffit de supprimer le fichier binaire **/usr/local/bin/oscam**. Vous pouvez également supprimer les fichiers de configuration présents dans le  répertoire **/usr/local/etc/**.
+
+===== Voir aussi =====
+
+  * **(fr)** [[http://www.streamboard.tv/wiki/OSCam/fr|La documentation officielle]]
+  * **(fr, en, it)** [[http://www.oscam.cc/|Le forum officiel]] est désormais fermé pour une DURÉE ILLIMITÉE
+
+
+===== Contributeur ===== 
+- Dexter74: Remise en page

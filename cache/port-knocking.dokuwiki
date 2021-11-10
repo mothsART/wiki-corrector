@@ -1,0 +1,149 @@
+
+{{tag>sécurité réseau}}
+
+----
+
+====== Port Knocking : sécuriser l'accès à un port ======
+
+Le **port-knocking** est une méthode permettant de modifier le comportement d'un firewall en temps réel pour provoquer l'ouverture d'un port suite au lancement préalable d'une suite de connexions sur des ports distincts dans le bon ordre, à l'instar d'un code frappé à une porte.
+
+Cette technique est notamment utilisée pour protéger l'accès au port 22 dédié au Secure shell (SSH) ; elle ne nécessite pas beaucoup de ressources et reste facile à mettre en œuvre.
+
+En résumé, **le port knocking est donc une méthode simple pour autoriser un accès distant sur un port non constamment ouvert**. Cela permet d'éviter les scans de ports et certaines attaques.
+
+La méthode de port-knocking est considérée comme sécurisée étant donné qu'elle est située à un niveau bas des couches TCP/IP et qu'elle ne requière pas de port ouvert (le service knockd est lui aussi invisible). C'est donc une méthode, mais pas infaillible, permettant de masquer la présence d'un serveur derrière un port.
+
+===== Pré-requis =====
+
+Pour la suite des opérations, des pré-requis sont nécessaires : 
+  * Disposer des [[:sudo|droits d'administration]] ;
+  * Disposer d'une connexion à Internet configurée et activée pour télécharger le logiciel ;
+  * Avoir activé l'accès au [[:depots|dépôt APT]] « universe ».
+
+
+
+
+===== Paramétrage du serveur ====
+
+Le serveur doit donc avoir un pare-feu et exécuter le service //knockd//. Le service est donc en écoute d'une séquence spécifique (suite de ports associés a un protocole TCP ou UDP). Si la séquence est correcte, alors une commande est exécutée. Généralement, l'adresse ip source est autorisée à accéder au port d'une application à travers le pare-feu.
+
+La configuration du serveur est très simple puisqu'il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] [[apt://knockd|knockd]].
+
+Après avoir installé le paquet, [[:tutoriel:comment_editer_un_fichier|éditer son fichier de configuration]] **/etc/knockd.conf**. 
+
+Deux approches vont être présentées :
+  * la première est destinée aux connexions qui ne nécessitent pas d'être maintenues (comme HTTP) ;
+  * la seconde méthode à celles qui doivent l'être (comme SSH et IRC).
+
+
+
+
+
+==== Connexions non maintenues (no keep-alive) ====
+
+<file>
+[options]
+        logfile = /var/log/knockd.log
+
+[openHTTP]
+        sequence    = 7000,8000,9000
+        seq_timeout = 5
+        command     = /sbin/iptables -I INPUT -s %IP% -p tcp --dport 80 -j ACCEPT
+        tcpflags    = syn
+
+[closeHTTP]
+        sequence    = 9000,8000,7000
+        seq_timeout = 5
+        command     = /sbin/iptables -D INPUT -s %IP% -p tcp --dport 80 -j ACCEPT
+        tcpflags    = syn
+</file>
+
+Explications : 
+    * **sequence** : la combinaison à matcher pour effectuer la 'command'. Si aucun protocole n'est mentionné, le protocole par défaut est utilisé : TCP
+    * **seq_timeout** : le temps en secondes pendant lequel la combinaison doit être effectuée, après quoi elle est annulée, et il faut recommencer la séquence depuis le début.
+    * **command** : représente la règle iptables qui sera ajoutée au firewall afin de permettre l'ouverture/fermeture d'un port particulier.
+    * **tcpflags** : met en évidence les flags devant être positionnés dans les paquets reçus pour que le port soit pris en compte. Si une erreur survient, il faut recommencer le tout.
+
+Nous avons donc défini 2 séquences :
+  * **openHTTP** ouvre le port HTTP 80 si la séquence de ports 7000, 8000 et 9000 a été exécutée
+  * **closeHTTP** ferme le port HTTP 80 si la séquence de ports 9000, 8000 et 7000 a été exécutée
+
+Il est possible de préciser le protocole "frappé" en adaptant la ligne comme suit par exemple : 
+<file>sequence        = 7000:tcp,8000:udp,9000:tcp</file>
+
+
+
+==== Connexions maintenues (keep-alive) ====
+
+Ce deuxième exemple est un peu différent du précédent :
+
+<file>
+[options]
+      logfile = /var/log/knockd.log
+
+[SSH]
+      sequence    = 7000,8000,9000
+      seq_timeout = 5
+      command     = /sbin/iptables -I INPUT -s %IP% -p tcp --dport 22 -j ACCEPT
+      tcpflags    = syn
+      cmd_timeout   = 10
+      stop_command  = /sbin/iptables -D INPUT -s %IP% -p tcp --dport 22 -j ACCEPT
+</file>
+
+Il est recommandé de n'ouvrir le port qu'un court instant (10 secondes dans cet exemple). Pour que cela soit fonctionnel, le pare-feu doit être de type [[wpfr>Pare-feu#Pare-feu_.C3.A0_.C3.A9tats_.28stateful_firewall.29|stateful]]  (il doit exister une règle pour accepter les connexions avec //-m state --state RELATED,ESTABLISHED//)
+
+FIXME : Cette règle n'est pas présente par défaut ; il faudrait préciser comment la renseigner. (http://doc.ubuntu-fr.org/iptables#autoriser_le_trafic_entrant_d_une_connexion_deja_etablie)
+
+Si un utilisateurs « frappe » dans l'ordre les ports 7000, 8000 puis 9000, la comande sera exécutée (ouvrir le port 22). 10 secondes plus tard, la commande //stop_command// sera exécutée, fermant ainsi le port pour les nouvelles connexions (mais pas celle en cours !)
+
+
+==== Attention ====
+
+Le site officiel du projet knockd (et le fichier de configuration installé par défaut) fait référence à la règle iptables **-A**. Comme vous pouvez le voir, nous utiliserons à la place **-I** pour insérer la règle au début du pare-feu (sinon la règle avec -A ne produit aucun effet puisqu'elle est ajoutée après la règle DROP)
+
+FIXME : Tout dépend de la règle par defaut, si la décision est drop le -A fonctionnera, mais -I fonctionne dans tous les cas.
+
+Changez impérativement la séquence d'exemple de votre fichier de configuration, et bien entendu, pensez à communiquer la nouvelle en gardant à l'esprit qu'il est recommandé :
+  * d'utiliser au moins 3 ports  (si vous êtes paranoïaque, vous pouvez en ajoutant autant que nécessaire pour vous rassurer)
+  * de mélanger pour chaque port les protocoles TCP et UDP
+
+
+Vous devez également changer la configuration par défaut dans le fichier « /etc/default/knockd » :
+  * pour que le service démarre automatiquement, la valeur de la ligne //START_KNOCKD=// doit être à 1
+  * pour que le service écoute sur des interfaces, adapter et décommenter la ligne //KNOCKD_OPTS="-i eth0"// (en enlevant le '#')
+  * pour que les modifications soient prises en compte, redémarrer le service knockd avec la commande : ''sudo /etc/init.d/knockd restart''
+
+Pour en savoir plus, exécutez dans un terminal la commande ''man knockd''.
+
+C'est tout !
+
+
+
+===== Côté client =====
+
+Pour initier une séquence sur les différents ports, vous pouvez utiliser le client de votre choix, comme **telnet** ou le 'swiss army knife' **nc**...
+
+Ou bien utiliser un logiciel client spécifique au port-knocking comme //knock//, après avoir [[:tutoriel:comment_installer_un_paquet|installé le paquet]] **knockd** (sur le client cette fois-ci !).
+
+Pour l'utiliser, lancer simplement la commande (l'utilisation du protocole TCP est faite par défaut) :
+<code>knock my_server port1 port2 port3</code>
+
+Ou, si il est nécessaire de préciser dans la combinaison plusieurs protocoles :
+<code>knock my_server 7000:tcp 8000:udp 9000:tcp</code>
+
+Ou, si la combinaisons n'utilise que des ports udp :
+<code>knock -u my_server 7000 8000 9000</code>
+
+Pour en savoir plus, exécutez dans un terminal la commande //man knock//
+
+===== Liens =====
+
+  * [[http://portknocking.org/|Site officiel]]
+  * [[wpfr>Port_knocking|Page sur l'encyclopédie libre Wikipedia]]
+  * [[http://www-igm.univ-mlv.fr/~dr/XPOSE2004/killy/fonctionnement.html|Fonctionnement avec schémas explicatifs]]
+  * [[https://www.it-connect.fr/chapitres/configuration-du-port-knocking-ssh/|Mise en place d’un port-knocking SSH]]
+
+
+----
+
+//Contributeurs : [[:utilisateurs:sidney_v]].//

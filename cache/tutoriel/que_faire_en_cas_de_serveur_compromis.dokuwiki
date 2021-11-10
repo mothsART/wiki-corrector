@@ -1,0 +1,343 @@
+
+{{tag>serveur tutoriel sécurité}}
+
+----
+
+
+
+
+====== Que faire en cas de soupçons d'un serveur compromis ? ======
+
+
+Récemment, j'ai eu des doutes quant à l'intégrité d'un de nos serveurs car il redémarrait de manière aléatoire. J'ai alors cherché d'éventuelles traces de passage d'un pirate qui aurait pu compromettre ce serveur. Pour ce faire, j'ai fait beaucoup d'opérations et il m'a semblé judicieux d'en faire part à d'autres. Si vous pensez à d'autres vérifications qui peuvent être utiles, n'hésitez pas à les ajouter à ce document. Par chance, la machine n'était pas compromise, il s'agissait juste d'un problème d'alimentation.
+
+Rentrons dans le vif du sujet.
+
+
+===== Bloquer tous les accès instantanément =====
+
+La première chose à faire, c'est d'empêcher tous les accès (distants et locaux) à la machine, mais vous devez aussi pouvoir accéder au serveur en cas de déconnexion.\\
+
+==== Prévoyez un accès de secours ====
+
+=== Si vous avez accès au serveur et si celui ci peut être redémarré. ===
+Munissez vous d'un [[:live_cd]] ou [[:live_usb]], en cas de déconnexion involontaire, vous ne pourrez pas vous reconnecter.\\
+Il vous faudra donc booter sur le [[:live_cd]] ou [[:live_usb]] pour supprimer le fichier **nologin** qui va être créé ci-dessous.\\
+
+=== Si vous n'avez pas accès au serveur, si vous ne pouvez pas le redémarrer. ===
+Seul le compte **root** sera autorisé a se reconnecter, vous devez donc préparer cet accès de secours.
+
+<note warning>
+La connection en tant que **root** est fortement déconseillée, n'utilisez cette solution qu'en cas de déconnexion forcée.
+</note>
+
+S'il s'agit d'une connexion [[:SSH]], vérifiez que **root** soit autorisé a se connecter. La variable suivante du fichier **/etc/ssh/sshd_config** doit être égale à **yes**.\\
+<file>
+PermitRootLogin yes
+</file>
+
+Initialisez le mot de passe **root**
+<code>
+sudo passwd root
+</code>
+
+Dè que vous aurez de nouveau autorisé les connexions utilisateurs, veillez aussi a désactiver le mot de passe **root**
+<code>
+sudo passwd -l root
+</code>
+
+==== Bloquez toutes les connexions ====
+
+Pour bloquer toute connection locale ou distante, entrez la commande suivante :
+<code>
+sudo touch /etc/nologin
+</code>
+
+À partir de ce moment, toutes les connexions locales et distantes sont refusées.
+
+<note important>ATTENTION !!! Veillez à ne pas sortir de la session en cours, sinon vous devrez utiliser votre solution de secours.</note>
+
+Si vous êtes déconnecté d'une session [[:SSH]], voyez le résultat : 
+<code>
+user@serveur:~$ sudo touch /etc/nologin
+[sudo] password for user: 
+user@serveur:~$ exit
+déconnexion
+Connection to serveur.lan closed.
+user@client:~$ ssh user@serveur.lan
+Ubuntu 12.04 LTS
+
+Connection closed by serveur.lan
+user@client:~$ 
+</code>
+
+Quand vous le jugerez opportun, vous autoriserez de nouveau les connexions en supprimant le fichier **nologin**:
+<code>
+sudo rm /etc/nologin
+</code>
+
+Blocage alternatif pour connexion entrante et sortant ( moins dangereuse ) avec le firewall intégré [[ufw]] :
+<code>
+sudo ufw disable
+sudo ufw default deny incoming
+sudo ufw default deny outgoing
+sudo ufw enable
+sudo ufw status verbose
+</code>
+
+===== Examen des logs d'authentification =====
+
+La première source d'information qui peut vous aider sont les logs du système. Si vous avez bien lu ce qu'à écrit [[utilisateurs:Ju]] à propos du [[:sudo]], vous n'avez pas donné de mot de passe au ''root'' et toutes les actions des administrateurs du système passent par la commande ''sudo''.
+
+Si c'est le cas, toutes les actions sont logguées dans le fichier ''/var/log/auth.log''. Ces logs vous permettront de savoir si un utilisateur a fait une erreur de manipulation ou si quelqu'un a utilisé son mot de passe à de mauvaises fins.
+
+Évidemment, si vous avez un vrai pirate qui est entré dans votre système, il aura pris soin de supprimer les fichiers logs d'authentification ou au moins d'effacer les lignes qui le mettent en cause.
+
+
+===== Examen des historiques des utilisateurs =====
+
+Ensuite, vous pouvez examiner les commandes introduites par les utilisateurs dans l'historique du bash (le système qui permet de retrouver les anciennes lignes tapées avec la flèche HAUT du clavier).
+
+Ces historiques sont beaucoup moins précis que les logs d'authentification mais elles permettront de mettre en cause ou non un utilisateur. Les pirates ne pensent pas toujours à supprimer ces historiques, ce qui peut aider à déterminer si le système est corrompu et prendre des mesures.
+
+Les historiques se trouvent dans les répertoires des utilisateurs (''/root'', ''/home/jf'', ''/home/ju'',...) et porte le nom ''.bash_history''.
+
+
+
+===== Bloquer un utilisateur et politique des mots de passe =====
+
+Si vous avez vu quelque chose de suspect par rapport à un utilisateur, la première chose à faire est de lui bloquer ses accès et supprimer les processus qui lui sont attachés.
+
+Pour ce faire, il vous suffit de remplacer le shell par défaut de l'utilisateur en ''/bin/false'' par la commande :
+<code>
+sudo chsh -s /bin/false user
+</code>
+Ensuite, vous supprimez tous les processus attachés à cet utilisateur (par exemple, pour l'utilisateur ''jf'') :
+<code>
+sudo killall -u jf
+</code>
+
+Vous pouvez, a priori, réouvrir les connexions entrantes (surtout si la machine est une machine de production) :
+<code>
+sudo rm /etc/nologin
+</code>
+
+Concernant les mots de passe, qui sont souvent une faille de sécurité, il est intéressant de les changer régulièrement (tous les 3 mois par exemple ou mieux, tous les mois) et d'utiliser des mots de passe un peu complexe.
+
+Vous trouverez des informations pour la génération des mots de passe sur [[:securite|cette page]].
+
+===== Arrêt de tous les services =====
+
+Ensuite, il est intéressant d'arrêter tous les services tournant sur la machine pour examiner les portes dérobées. Pour ce faire, il vous suffit de parcourir vos notes d'exploitations (que vous avez rédigées au préalable...) et d'utiliser les commandes du type :
+
+<code>
+sudo /etc/init.d/<service> stop
+</code>
+
+Pensez également à arrêter le ''portmap'', l' ''inetd'' et l' ''xinetd''.
+Sans oublier les services //spéciaux// ou propriétaires.
+
+
+
+
+
+
+===== Scan des ports ouverts sur la machine =====
+
+À partir d'une autre machine et sur chacune des interfaces réseaux du serveur suspect, lancer un ''nmap''.
+
+L'application ''nmap'' est un scanneur de ports qui s'installe très facilement via la commande suivante :
+
+<code>
+sudo apt-get install nmap
+</code>
+
+Ensuite, vous l'utilisez de la manière suivante (''192.168.0.1'' étant l'adresse IP du serveur suspect) :
+
+<code>
+sudo nmap 192.168.0.1 -p 1-65535
+</code>
+
+Le résultat indique quels sont les ports ouverts sur la machine. Ne paniquez pas tout de suite si vous avez des ports ouverts : il s'agit peut être d'un service que vous avez oublié d'arrêter. 
+
+Si vous n'avez aucun port ouvert, c'est un bon signe. S'il reste des services ouverts, arrêtez-les et relancez le scan.
+
+Si vous ne trouvez rien cela ne veut pas dire que vous n'avez pas été compromis… car il est possible que vous ayez des connexions inversées ! C'est à dire des connexions créées dans le sens inverse : le pirate a ouvert les ports sur sa propre machine et votre machine s'y connecte. Il y a deux façons de voir les connexions : ''netstat -antp'' et ''wireshark''. Le programme ''netstat'' peut avoir été modifié par l'intrus aussi il est conseillé de faire tourner ''wireshark'' ou tout autre analyseur de paquets pour détecter les connexions suspectes.
+
+
+
+===== Vérification des rootkits =====
+
+Après cela, il est intéressant de vérifier qu'aucun rootkit n'a été installé. Dans les grandes lignes, un rootkit est un cheval de Troie ( qui permet à un intrus de reprendre le contrôle de la machine ultérieurement en laissant un petit programme lui ouvrant la porte) mettant en œuvre des techniques furtives lui permettant de ne pas apparaître à première vue lors de l'examen d'une machine. Les fichiers d'un rootkit n'apparaissent pas avec la commande ''ls'' par exemple, le processus n'apparaît pas non plus avec la commande ''ps'', etc…
+
+Il existe deux applications permettant d'identifier les rootkits les plus courants : il s'agit de ''rkhunter'' et ''chkrootkit''. Pour les installer, utilisez la commande suivante :
+
+<code>
+sudo apt-get install chkrootkit rkhunter
+</code>
+
+Exécutez-les par les commandes suivantes :
+
+<code>
+sudo chkrootkit
+</code>
+
+et 
+
+<code>
+sudo rkhunter --propupdate
+sudo rkhunter --checkall
+</code>
+
+la commande **sudo rkhunter --propupdate** sert a la mise a jour des hash de fichiers pour limiter les faux positifs
+
+Rkhunter affiche ensuite les test effectués et affiche les fichiers annalysés : 
+<code>
+sudo rkhunter --checkall
+[sudo] password for user: 
+[ Rootkit Hunter version 1.3.8 ]
+
+Checking system commands...
+
+  Performing 'strings' command checks
+    Checking 'strings' command                               [ OK ]
+
+  Performing 'shared libraries' checks
+    Checking for preloading variables                        [ None found ]
+    Checking for preloaded libraries                         [ None found ]
+    Checking LD_LIBRARY_PATH variable                        [ Not found ]
+
+  Performing file properties checks
+    Checking for prerequisites                               [ OK ]
+    /usr/sbin/adduser                                        [ OK ]
+    /usr/sbin/chroot                                         [ OK ]
+...............
+</code>
+Un exemple d'avertissement, ce fichier est un faux positif, affiché pour l'exemple, il fait partie du paquet RkHunter. le fichier de configuration **/etc/rkhunter.conf** contient des exemples utilisables pour ignorer les faux positifs.
+<code>
+/usr/bin/unhide.rb                                       [ Warning ]
+</code>
+Suite des tests
+<code>
+Checking for rootkits...
+
+  Performing check of known rootkit files and directories
+    55808 Trojan - Variant A                                 [ Not found ]
+    ADM Worm                                                 [ Not found ]
+...............   
+
+Performing additional rootkit checks
+    Suckit Rookit additional checks                          [ OK ]
+    Checking for possible rootkit files and directories      [ None found ]
+    Checking for possible rootkit strings                    [ None found ]
+
+  Performing malware checks
+    Checking running processes for suspicious files          [ None found ]
+    Checking for login backdoors                             [ None found ]
+    Checking for suspicious directories                      [ None found ]
+    Checking for sniffer log files                           [ None found ]
+    Checking for Apache backdoor                             [ Not found ]
+
+  Performing Linux specific checks
+    Checking loaded kernel modules                           [ OK ]
+    Checking kernel module names                             [ OK ]
+...............
+</code>
+Encore des tests
+<code>
+Checking the network...
+
+  Performing checks on the network ports
+    Checking for backdoor ports                              [ None found ]
+    Checking for hidden ports                                [ Skipped ]
+
+  Performing checks on the network interfaces
+    Checking for promiscuous interfaces                      [ None found ]
+
+Checking the local host...
+
+  Performing system boot checks
+    Checking for local host name                             [ Found ]
+    Checking for system startup files                        [ Found ]
+    Checking system startup files for malware                [ None found ]
+
+  Performing group and account checks
+    Checking for passwd file                                 [ Found ]
+    Checking for root equivalent (UID 0) accounts            [ None found ]
+    Checking for passwordless accounts                       [ None found ]
+    Checking for passwd file changes                         [ None found ]
+    Checking for group file changes                          [ None found ]
+    Checking root account shell history files                [ OK ]
+
+  Performing system configuration file checks
+    Checking for SSH configuration file                      [ Found ]
+    Checking if SSH root access is allowed                   [ Not allowed ]
+    Checking if SSH protocol v1 is allowed                   [ Not allowed ]
+    Checking for running syslog daemon                       [ Found ]
+    Checking for syslog configuration file                   [ Found ]
+    Checking if syslog remote logging is allowed             [ Not allowed ]
+
+  Performing filesystem checks
+    Checking /dev for suspicious file types                  [ None found ]
+</code>
+L'avertissement ci-dessous est relatif(entre autres) au répertoire /etc/.udev, il s'agit d'un autre faux positif non ignoré. Le détail est disponible dans le fichier **/var/log/rkhunter.log**.
+<code>
+    Checking for hidden files and directories                [ Warning ]
+</code>
+Puis vient le récapitulatif.
+<code>
+System checks summary
+=====================
+
+File properties checks...
+    Files checked: 135
+    Suspect files: 1
+
+Rootkit checks...
+    Rootkits checked : 248
+    Possible rootkits: 0
+
+Applications checks...
+    All checks skipped
+
+The system checks took: 2 minutes and 1 second
+
+All results have been written to the log file (/var/log/rkhunter.log)
+
+One or more warnings have been found while checking the system.
+Please check the log file (/var/log/rkhunter.log)
+</code>
+
+Vous retrouvez un fichier suspect dans les propriétés de fichiers, en fait 1 faux positif identifié.\\
+Après avoir consulté le fichier de log,si rien ne vous semble suspect comme ci-dessus,redémarrez la machine et procédez à nouveau à la vérification.\\
+
+Si quelque chose est détecté comme suspect, l'application indiquera le nombre de rootkits possibles et quels sont les ports suspectés.
+FIXME A quoi ça ressemble quelque chose de suspect ? 
+
+Pour déterminer quelle application a ouvert ce port (éventuellement non détecté par le scanner ''nmap''), vous pouvez utiliser la commande suivante (exemple, pour le port 600) :
+
+<code>
+sudo lsof -i:600
+</code>
+
+Après, à vous de voir si c'est vraiment une intrusion ou si c'est un service qui tourne en arrière-plan…
+
+===== Vérification des virus et vers =====
+
+La dernière vérification indispensable à faire est le scan complet du disque dur avec un antivirus (**à jour !!!**).
+Sur la page wiki traitant de la [[:sécurité]], vous trouverez différents antivirus.
+
+
+
+
+===== Après tout… =====
+
+Une fois la batterie de tests effectuée, si rien n'a été trouvé, relancez tous les tests mais après un redémarrage de la machine (au cas où un système d'intrusion s'activerait au démarrage suivant).
+
+Si tout va bien, il n'y a **a priori** rien d'anormal sur votre serveur. « A priori »  car à moins de couler un système informatique dans du béton sans aucune connexion vers l'extérieur, la sécurité totale n'existe jamais.
+
+Je ne prétends pas répondre à tous les problèmes de sécurité dans ce court document, cependant, les intrusions fréquentes sont effectuées par des [[http://fr.wikipedia.org/wiki/Script_kiddie|script-kiddies]] : des pirates amateurs qui utilisent des failles de sécurité connues et des outils les exploitant créés par d'autres. Fondamentalement, 95% des attaques sont toujours faites avec une poignée de [[http://fr.wikipedia.org/wiki/Rootkit|rootkits]] connus. Dès lors, si vous avez été piraté par un pirate amateur, cela devrait être détecté avec les quelques outils présentés ici.
+
+----
+
+// Contributeurs : [[utilisateurs:SunWukong]], [[utilisateurs:xavier4811|Xavier4811]]//

@@ -1,0 +1,150 @@
+
+{{tag>réseau sécurité proxy}}
+
+====== ubuproxy : Proxy TCP/IP Générique ======
+
+===== Présentation =====
+
+Ubuproxy permet de rediriger n'importe quel type de connexion TCP/IP, et de loguer tout le trafic qui passe au travers du proxy.
+Les seules informations nécessaires à la création d'un proxy sont donc :
+
+  * Le port sur lequel se mettre en écoute
+  * L'interface réseau sur laquelle se mettre en écoute (l'ip local de la machine)
+  * le nom et le port de la machine cible
+
+==== Compatibilité ====
+
+La compilation du binaire a été réalisée sur Ubuntu dapper, mais devrait parfaitement fonctionner sur toutes les versions plus récentes.
+
+
+
+===== Origine =====
+
+Ubuproxy est un simple script shell qui permet de simplifier et "d'encapsuler" l'utilisation de "tcpproxy", écrit par Wolfgang Zekoll, dont les sources sont distribués sous GPL v2 et disponibles à cette adresse :
+
+http://www.quietsche-entchen.de/cgi-bin/wiki.cgi/-wiki/proxies/TcpProxy
+
+Attention, plusieurs bugs importants ont été corrigées dans la version déployée par ubuproxy. (nous tentons de contacter l'auteur pour lui soumettre les différents patchs...) Les sources ainsi modifiées sont disponibles ici :
+
+http://hoper78.free.fr/ubuntu/tcpproxy.tar.gz
+
+Les seuls fichiers qui ont étés modifiés normalement sont le config.c et tcpproxy.c. Je vous laisse le soin de faire un diff entre les 2 sources pour connaître les modifications apportées...
+
+
+
+===== Installation =====
+
+Télécharger et [[:tutoriel:comment_installer_un_paquet|installez le paquet]] ubuproxy, disponible ici : 
+http://hoper78.free.fr/ubuntu/ubuproxy.deb
+
+===== Configuration =====
+
+La première chose à faire est de créer un proxy :
+
+<code>
+sudo ubuproxy proxy1 make
+</code>
+
+Le nom du proxy (ici "proxy1") n'a pas d'importance. Supposons que je sois sur une machine avec pour adresse IP : 10.0.0.1 et que je veuille créer un proxy qui écoute sur le port 1000, puis qui redirige toutes les demandes sur le port 80 (serveur http) d'une autre machine, ayant pour IP : 10.0.0.2
+
+<file>
+ Listening port : 1000
+ Interface [10.0.0.1] :
+ Forward to (server:port) : 10.0.0.2:80
+ Keep logs for X days [20] :
+
+ ------------------------------------
+
+ Add this configuration to proxy1 :
+ Listening port : 1000
+ Listening on 10.0.0.1
+ forwarding connections to : 10.0.0.2:80
+ and keep logs for 20 days.
+
+ Is this ok ? [N/y]: y
+
+ Configuration done in /etc/tcpproxy/proxy1.conf
+ Making the /var/log/tcpproxy/proxy1 directory
+ Adding the /etc/cron.daily/purge-logs-proxy1-1000 file...
+</file>
+
+==== Notes ====
+
+  * si on relance cette commande en choisissant des paramétrés différents,  cela n'effacera rien mais ajoutera un nouveau port en écoute pour ce même proxy
+  * Le nom d'un proxy ne dois pas contenir d'espace, de "." etc.
+  * L'adresse IP prise par défaut est celle d'eth0, modifiez la au besoin
+  * Par défaut, toutes les communications des 5 derniers jours sont loguées
+  * Le fait d'indiquer 0 désactivera la fonction de logs (totalement inutile si le protocol qui transite est crypté, comme avec ssh)
+  * Il n'y a pas de limite au nombre de proxy que l'on peut créer
+  * Il n'est bien sur pas possible d'écouter plusieurs fois sur le même port !
+
+
+===== Lancement du proxy =====
+
+Il reste a lancer le processus :
+
+<code>
+sudo ubuproxy proxy1 start
+</code>
+
+On peut également vérifier que le proxy est bien actif (online) :
+
+<code>
+sudo ubuproxy all status
+</code>
+
+Il reste à vérifier que tout fonctionne. (en lançant un navigateur et en essayant de se connecter sur "http://10.0.0.1:1000" par exemple, on arrivera en fait sur la machine 2 (10.0.0.2:80).
+
+===== Arrêt/Suppression =====
+
+Il est possible de stopper un proxy avec la commande suivante :
+
+<code>
+sudo ubuproxy proxy1 stop
+</code>
+
+Ou de supprimer totalement sa configuration ainsi que tous les fichiers de log qu'il a pu générer :
+
+<code>
+sudo ubuproxy proxy1 remove
+</code>
+
+===== Configuration évoluée =====
+==== Fichiers de configurations ====
+
+Ils se trouvent dans /etc/tcpproxy/ (un par proxy) et contiennent par défaut 
+les informations suivantes :
+
+<file>
+port 1000
+  interface 10.0.0.1
+    timeout 600
+    extended-info yes
+    user 1000.0
+    server 10.0.0.2:80
+    writefile /var/log/tcpproxy/proxy1/1000
+</file>
+
+On retrouve donc :
+
+  * Le port en écoute
+  * L'interface à utiliser
+  * Au bout de 600 secondes, et sans activité, la connexion est stoppée par le proxy. Mettre zéro désactive ce mécanisme.
+  * En plus du trafic, le proxy indique qui s'adresse à qui dans le fichier de log (mettre "no" désactive cette fonctionnalité)
+  * L'utilisateur qui sera utilisé par le processus (uid.gid)
+  * Le serveur cible et le port
+  * La racine des fichiers de logs
+
+==== À propos des logs ====
+
+Chaque connexion génère un fichier de logs dont le nom est composé du port et du pid du process qui à généré la connexion. Les fichiers sont ensuite automatiquement archivés (une archive par jour et par port) puis compressés.
+
+==== tcpproxy ====
+
+Pour plus d'informations sur les possibilités de tcpproxy, <code>man tcpproxy</code> 8-)
+
+
+
+----
+
+Contributeurs : [[utilisateurs:Hoper]]

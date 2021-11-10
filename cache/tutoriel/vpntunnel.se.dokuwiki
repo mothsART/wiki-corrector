@@ -1,0 +1,132 @@
+
+{{tag>réseau internet vpn openvpn tutoriel}}
+====== VPNtunnel.se ======
+
+Ce tutoriel décrit comment utiliser [[:network-manager|Network-Manager]] pour paramétrer correctement une connexion VPN, de type OpenVPN, en utilisant un service payant (environ 3€/mois, si abonnement 12 mois) : VPNTunnel (ex vpntunnel.se).
+
+<note>Je n'ai pas d'action dans cette boîte, mais j'ai testé de nombreux VPN et c'est, me semble-t-il,  le plus rapide et le plus stable dans cette gamme de prix.</note>
+
+Les différents serveurs VPN sur lesquels vous pourrez vous connecter sont situés : 
+  * En Europe (16 serveurs) : 
+    * Russie
+    * France
+    * Suisse
+    * Pays-Bas
+    * Norvège
+    * Islande
+    * Allemagne
+    * Turquie
+    * Italie (2 serveurs)
+    * Luxembourg
+    * Suède
+    * Finlande
+    * Irlande
+    * Espagne
+    * Grande-Bretagne
+  * Sur le continent américain (11 serveurs) :
+    * USA (6 serveurs)
+    * Canada (3 serveurs)
+    * Panama
+    * Argentine
+  * En Asie/Pacifique (3 serveurs) :
+    * Japon
+    * Singapour
+    * Australie
+
+
+===== Pré-requis =====
+==== Paquets nécessaires ====
+Vous devez [[:tutoriel:comment_installer_un_paquet|installer les paquets]] **[[apt>network-manager-gnome,openvpn,network-manager-openvpn]]**, disponibles dans les dépôts officiels.
+==== Inscription sur VPNtunnel.com ====
+Prenez l'habitude, pour d'évidentes raisons de sécurité, d'accéder aux sites sensibles (requérant un identifiant et un mot de passe) par le protocole sécurisé HTTPS. VPNtunnel.se est l'un de ces sites, donc pour vous y rendre : **[[https://vpntunnel.com/refer/jcdhxmhy0iyesbmzkkbf8b5kpqy0qq4c?locale=fr|https://www.vpntunnel.com/fr/]]**.
+
+<note important>VPNTunnel.se est devenu VPNTunnel.com. Le site est désormais également en Français.</note>
+
+==== Téléchargement des fichiers de configuration et des certificats ====
+Créez d'abord la structure, dans votre **Dossier Personnel**, permettant d'accueillir ces données : <code>mkdir -p ~/VPN/{cert,conf}
+chmod -R 750 ~/VPN</code>
+
+Une fois inscrit et connecté sur vpntunnel.se, allez dans Software et téléchargez d'une part les certificats, d'autre part les config Linux, que vous enregistrez dans le dossier VPN créé précédemment.
+
+Rendez-vous dans le dossier VPN, [[:zip|dézippez]] les certificats, et faites un peu de ménage : <code>cd ~/VPN
+unzip cert.zip
+rm -rf cert/.DS_Store __MACOSX cert.zip
+</code>
+
+
+Décompressez les fichiers de configuration, placez-les dans le dossier **conf**, et faites un peu de ménage : <code>tar xzf Linux-confs.tar.gz
+mv Linux\ confs/* conf/
+rm -rf Linux*
+</code>
+Vérifiez que le dossier **cert** contient 3 certificats : **ca.crt**, **ca-uk.crt** et **ca-us.crt** ; et que le dossier **conf** contient autant de fichiers que de connexions possibles.
+
+==== Création du fichier auth.conf ====
+Créez dans ~/VPN un fichier auth.conf ne contenant que deux lignes ; la première ne comporte que votre **identifiant**, la seconde ne comporte que votre **mot de passe**. Rendez ce fichier strictement personnel :<code>chmod 600 ~/VPN/auth.conf</code>
+
+==== Adaptation des fichiers de configuration ====
+Exemple pour ~/VPN/conf/Blackhole.conf.
+
+Ne modifiez que les lignes : <file>
+  ca /home/votreidentifiant/VPN/cert/ca.crt
+  auth-user-pass /home/votreidentifiant/VPN/auth.conf
+  comp-lzo yes
+  auth-nocache
+  script-security 2</file>
+
+(Ajoutez les deux dernières lignes si elles n'existent pas.)
+
+==== Ouverture du pare-feu ====
+
+Vous devrez pour les tests :
+  *  soit désactiver complètement votre pare-feu (dangereux !),
+  *  soit autoriser tout ce qui passe par la connexion VPN ; vous pourrez affiner cela plus tard.
+
+Si vous utilisez FireStarter pour gérer votre pare-feu, il vous faut alors inscrire les lignes suivantes dans le fichier ''/etc/firestarter/user-pre'':
+<file>
+## Autoriser tout trafic sur l'interface OpenVPN
+# interfaces de type tun (pour la connexion US)
+$IPT -A INPUT -i tun+ -j ACCEPT
+$IPT -A OUTPUT -o tun+ -j ACCEPT
+# interfaces de type tap (pour les connexions SW, DK, DE et NL)
+$IPT -A INPUT -i tap+ -j ACCEPT
+$IPT -A OUTPUT -o tap+ -j ACCEPT
+</file>
+
+==== Redirection (NATage) de port sur votre routeur (ou votre Box) ====
+
+Pour le service VPNtunnel.se, vous devrez rediriger certains ports et protocoles (UDP ou TCP) vers votre ordinateur. Ceux-ci dépendent du ou des serveurs auxquels vous voudrez vous connecter.
+
+Consultez la documentation de votre routeur ou de votre Box.
+
+===== Test des connexions VPN =====
+Sans aucune connexion VPN active, rendez-vous sur [[http://www.hostip.fr/]] pour vérifier où l'on vous localise, ou bien si connaître votre IP publique vous suffit : <code>wget -qO- ifconfig.me/ip</code>
+puis faite un : <code>sudo route</code>
+pour voir par quelle(s) interface(s) sortent vos paquets.
+
+Test de BlackHole : <code>sudo openvpn --config /home/votreidentifiant/VPN/conf/Blackhole.conf</code>
+Aucune erreur ne doit être signalée. Dans un autre terminal un ''ifconfig'' doit vous signaler l'existence d'une interface **tap0**, et un ''sudo route'' doit vous montrer que vos paquets sortent vers le net par cette interface.
+
+Rendez-vous de nouveau sur [[http://www.hostip.fr/]] pour vérifier où l'on vous localise. Vous voici Suédois(e) !
+
+Terminez cette connexion par un Ctrl-C dans le terminal où vous avez entré la commande ''openvpn''.
+
+===== Paramétrage des connexions VPN =====
+
+Lancer dans un [[:terminal]] : <code>nm-connection-editor --type=vpn</code>
+
+==== BlackHole ====
+**Import**ez le fichier Blackhole.conf.
+
+Renseignez votre nom d'utilisateur et votre mot de passe. Ne rendez pas "Disponible pour tous les utilisateurs" (ce n'est pas possible car les données sont dans votre HOME).
+
+Dans l'onglet Paramètres IPv4, sélectionnez **Adresses automatiques uniquement (VPN)** et indiquez comme DNS : **208.67.222.222,208.67.220.220**
+
+Enregistrez. Fermez la fenêtre des connexions réseau. 
+
+===== Connexion via Network-Manager =====
+
+Assurez-vous de ne pas être connecté à votre VPN (fermez votre terminal de test).
+
+En cliquant sur l'icône Network-Manager de votre tableau de bord, vous voyez apparaître le menu Connexions VPN. Sélectionnez votre connexion. L'icône de connexion s'anime ; lorsqu'un cadenas fixe (non-animé) y est apposé, cela signifie que votre connexion VPN est active.
+
+Vous pouvez également vous déconnecter par Network-Manager : Connexions VPN / Déconnecter le VPN.

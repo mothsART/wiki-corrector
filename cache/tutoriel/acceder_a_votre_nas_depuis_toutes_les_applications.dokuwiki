@@ -1,0 +1,87 @@
+
+{{tag> tutoriel nfs réseau nas }}
+----
+====== Accéder à votre NAS depuis toutes les applications======
+
+===== Introduction =====
+
+De plus en plus, nous trouvons sur le marché des petites unités de stockage pour les particuliers se connectant au réseau dénommé [[wpfr>Network_attached_storage|N.A.S]].\\
+Ces unités offrent de multiples avantages par rapport aux unités connectées en %%USB%%: rapidité de transfert, grosses capacités de stockage, accès depuis n'importe quel poste du réseau voire depuis internet,... et le prix a rendu maintenant ces dernières accessibles.
+Bien qu'Ubuntu permette de se connecter à un dossier partagé de votre %%NAS%% de manière très simple, en utilisant le lien "explorer le réseau", cela ne résout pas tous les problèmes. En effet, certaines applications, telles que par exemple [[:libreoffice]] ou [[:firefox]], ne savent pas utiliser ces connexions réseaux pour ouvrir ou enregistrer les fichiers.\\
+Pour que les liens et signets vers les dossiers de votre %%NAS%% apparaissent et soient accessibles dans tous les menus des applications, [[:gestionnaire_de_fichiers|gestionnaire de fichiers]] compris, il est alors nécessaire de [[:mount_fstab|monter]] automatiquement la partition de l'unité NAS **__avant__** le démarrage complet d'Ubuntu.
+
+===== Pré-requis =====
+  * Disposer des [[:sudo|droits d'administration]].
+  * Avoir fait une [[:tutoriel:comment_sauver_et_restaurer_un_fichier|sauvegarde]] du fichier **/etc/fstab**
+  * Avoir [[:tutoriel:comment_installer_un_paquet|installé les paquets]] **[[apt>samba]]** et **[[apt>cifs-utils]]**.
+  * Vérifier si le NAS est configuré pour Windows®.
+===== Création d'un point de montage =====
+Dans le dossier **/media** prévu à cet effet, créez avec les droits d'administration un dossier (nommé pour l'exemple **documents**) en saisissant dans un [[:terminal]] la [[:commande_shell|commande]] suivante:
+<code>sudo mkdir /media/documents</code>
+Vous pouvez choisir un autre nom pour ce dossier mais pour éviter tous problèmes, n'utilisez pas d'espaces ni de caractères spéciaux.
+
+===== Modification du fichier fstab =====
+ Il n'est pas nécessaire de monter le dossier racine du NAS mais plutôt le dossier partagé avec les autres ordinateurs du réseau. Dans l'exemple ci-dessous, il s'agira du dossier partagé par défaut : **share** présent sur beaucoup de ces unités. (Dans le cas où le nom du dossier partagé du NAS contiendrait des espaces, remplacez les espaces par '' \040 '') \\
+Pour repérer l'unité NAS sur le réseau, il est possible d'utiliser son nom ou bien son adresse IP si celle-ci est fixe. Pour l'exemple ci dessous, l'adresse IP sera **192.168.0.10**.
+la ligne à ajouter sera de la forme:\\
+<file>//192.168.0.10/share	/media/documents	cifs	guest,iocharset=utf8,gid=100,uid=1000,_netdev	0	0</file>
+où :
+	* **uid=1000** indique l'id du user local et règle les conflits de propriété sur les fichiers et dossiers entre le user local et le user du NAS on peut le connaître en exécutant ''id -u "IDENTIFIANT"''.
+	* **_netdev** fait attendre le montage que la partie réseau soit démarrée.
+	* //L'option **rw** (écriture) n'est plus nécessaire, elle est maintenant "par défaut" dans la version actuelle de **cifs**//
+              
+
+==== L'accès à votre NAS ne nécessite pas de mot de passe ====
+ [[:tutoriel:comment_modifier_un_fichier|Éditez avec les droits d'administration]] le fichier **/etc/fstab** pour y ajouter les lignes suivantes à la suite des autres lignes présentes :
+<file># Monter NAS
+//192.168.0.10/share	/media/documents	cifs	guest,iocharset=utf8,gid=100,uid=1000,_netdev	0	0</file>
+
+==== L'accès à votre NAS nécessite un mot de passe ====
+  - [[:tutoriel:comment_modifier_un_fichier|Créer avec les droits d'administration]] un fichier **/root/.smbcredentials** contenant  ces 2 lignes <file bash /root/.smbcredentials >
+username=IDENTIFIANT
+password=MOT_DE_PASSE</file> Remplacer //IDENTIFIANT// et //MOT_DE_PASSE// par votre identifiant et mot de passe vous permettant d'accéder à votre NAS. Il peut contenir éventuellement une 3ème ligne si un nom de domaine est nécessaire pour accéder à votre NAS mais rien d'autre.<file>domain=NOM_DE_DOMAINE</file> 
+  - [[:tutoriel:comment_modifier_un_fichier|Éditer avec les droits d'administration]] le fichier **/etc/fstab** pour y ajouter les lignes suivantes à la suite des autres lignes présentes :<file># Monter NAS
+//192.168.0.10/share	/media/documents	cifs	credentials=/root/.smbcredentials,iocharset=utf8,gid=1000,uid=1000,_netdev	0	0</file>
+(les valeurs uid et gid sont à adapter en fonction des valeurs que retournent la commande id qui est à entrer dans un terminal)
+
+<note>**Depuis La version [[:bionic|18.04]] d'Ubuntu**, il faut ajouter l'option ''vers=1.0'' dans les options pour que ça fonctionne. Par exemple après ''_netdev''</note>
+
+<note tip>Vous pouvez si ce n'est déjà fait, créer les liens et signets vers les dossiers de votre NAS.\\ 
+Et seulement après un redémarrage d'Ubuntu, ils apparaîtront dans toutes vos applications, [[:gestionnaire_de_fichiers|gestionnaire de fichiers]] compris.</note>
+
+
+====Tester le fichier fstab====
+Vous pouvez tester votre fichier **fstab** en saisissant dans un [[:terminal]] la [[:commande_shell|commande]] suivante :
+<code>sudo mount -a</code> 
+Si le message suivant apparaît : 
+<code>mount error(13): Permission denied</code>
+vous devez rajouter dans le fstab à la fin des options de la ligne rajoutée la mention // ,sec=ntlmv2. // Ce qui donnerait dans notre exemple :
+<file># Monter NAS
+//192.168.0.10/share	/media/documents	cifs	credentials=/root/.smbcredentials,guest,iocharset=utf8,gid=100,uid=1000,sec=ntlmv2	0	0 </file>
+
+===== Connexion WIFI=====
+
+La méthode décrite ci-dessus est proposée pour une connexion filaire (par réseau câblé ou CPL). 
+
+ Elle fonctionne aussi avec une connexion Wi-Fi. Le démarrage d'Ubuntu prendra alors quelques secondes en plus pour laisser le temps à la connexion Wi-Fi de s'établir __**avant**__ l'exécution du fichier **/etc/fstab**.
+
+===== Aller plus loin=====
+====Options de montage====
+Pour en savoir plus sur les options de **cifs**, saisir dans un [[:terminal]] la [[:commande_shell|commande]] suivante :
+<code>man mount.cifs</code>
+
+====Protocole GNU/Linux NFS====
+[[:Samba]] permet de partager et d'accéder aux ressources du NAS en réseau avec des clients aux systèmes d'exploitation différents. C'est pourquoi dans le but de simplifier et généraliser les procédures pour tous, ce tutoriel est basé sur le protocole **samba/cifs**. \\
+\\
+Certains NAS sont aussi compatibles %%GNU/Linux%% et peuvent alors utiliser le protocole [[:NFS]].  Si vous n'avez que des ordinateurs %%GNU/linux%% sur le réseau, vous pouvez bien sûr utiliser ce protocole pour monter votre NAS avant le démarrage complet d'Ubuntu. La procédure à suivre est à peu près la même. 
+  * Création d'un point de montage;
+  * Modification du fichier **/etc/fstab**.
+Pour en savoir plus, voir [[:nfs#client_nfs|le paragraphe de la page NFS consacré au montage NFS]]
+
+===== Voir aussi =====
+  * [[:nas|La page consacrée aux N.A.S.]]
+  * [[:nfs#client_nfs|Le paragraphe de la page NFS consacré au montage NFS]]
+
+----
+
+// Contributeurs: //

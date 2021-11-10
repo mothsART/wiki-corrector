@@ -1,0 +1,618 @@
+
+{{tag>p2p À_RECYCLER}}
+ 
+----
+
+
+====== Créer et gérer un serveur dédié au téléchargement sous Ubuntu ======
+
+<note warning>**Attention :** Nous vous rappelons qu'il est interdit d'utiliser ce type de logiciel à des fins illégales (piratage, contrefaçon ou toute autre activité étant considérée hors-la-loi par les lois en vigueur dans votre pays de résidence). </note>
+
+Si vous êtes plusieurs à télécharger les mêmes fichiers à votre domicile, vous gâchez probablement de la bande passante. Afin de remédier à cela, il est possible de confier tous vos téléchargements à la même machine, sur laquelle n'importe qui pourra récupérer ses fichiers par la suite.
+
+L'objet de ce document est de vous permettre de configurer un serveur de téléchargement qui répondra à ces critères :
+  *multi OS (n'importe quel système doit pouvoir s'y connecter, lui ordonner de commencer un téléchargement et récupérer ensuite ses données);
+  *capable de se connecter à (presque) tous les réseaux peer to peer;
+  *commandable à distance (par exemple du boulot, vous pouvez lancer un téléchargement);
+  *stable, léger;
+  *sécurisé.
+
+====Préalables====
+
+  *Un PC (avec des ventilos et une bonne alimentation, pour éviter la surchauffe et le bruit) muni d'au minimum 64 Mo de RAM (pas beaucoup plus, ça serait inutile);
+  *Un disque dur conséquent  pour stocker tous vos téléchargements ;-) ;
+  *Une connexion internet :-);
+  *Un cd ubuntu server
+
+Et lors de la configuration seulement :
+  *Un clavier et un écran branché à votre futur serveur;
+  *Si vous ne voulez pas vous embêter, un quelconque support amovible (disquette, clé usb, cdrom) accepté par les deux machines (celle que vous utilisez pour consulter cette page actuellement et votre futur serveur).
+
+  *Vous devez aussi avoir accès à votre routeur et être à même de faire des redirections de port (en anglais "port forwarding" si vous êtes amené à bidouiller les propriétés)
+
+=====Étape 1 - Installation du système=====
+Allumez votre futur serveur, Bootez sur le CD. (Si vous n'êtes pas trop sûr de savoir ce qu'est booter sur le cd, allez voir [[installation:bios_boot_order|cette page]])\\
+Répondez logiquement à toutes les questions du début, elles ne sont pas bien dures. Vous allez arriver à l'étape du partitionnement des disques. Deux possibilités :
+  *Ou bien vous êtes parano vous voulez tout contrôler :
+Choisissez "modifier manuellement la table des partitions" et partitionnez votre disque comme suit :
+
+^taille ^entrée ^type partition ^format partition ^indicateur d'amorçage ^
+| 1 Go  | /     |primaire       | ext3            | présent             |
+| 2*taille_de_la_RAM | swap | _  | linux swap     | _                   |
+| reste_de_l_espace | /home | secondaire | ext3   | absent              |
+
+Ceci vous permet de séparer la partie système des données et vous pourrez plus facilement récupérer celles-ci en cas de plantage définitif du système. Les tailles que je donne pour les partitions sont tout à fait suffisantes. (Petit rappel : 500 Mo d'espace disque et 64 Mo de RAM suffisent pour faire tourner ubuntu serveur)
+
+  *Ou bien vous vous sentez normal :
+laissez tout simplement le gestionnaire de partitionnement s'occuper lui-même de tout votre disque : il le fait très bien.
+
+Continuez l'installation.
+A l'étape "ensembles prédéfinis", vous aurez la possibilité d'installer des logiciels supplémentaires pour faire de votre machine un serveur DNS ou un serveur LAMP. N'installez rien. (pressez deux fois la touche tab pour aller au bouton qui vous permet de continuer)
+
+Terminez normalement votre installation et rebootez. Loggez vous.
+
+
+
+=====Étape 2 - Installation et configuration de Samba=====
+(Si vous ne comptez pas partager vos données avec des ordinateurs sous windows, vous pouvez [[serveur_de_telechargement_mldonkey#etape_3_-_installation_et_configuration_de_mldonkey|sauter cette étape]].)
+
+Samba est un outil permettant le partage de ressources avec des ordinateurs qui tournent sous windows. C'est très utile si vous avez des amis/copains/colocs/parents qui ne tournent pas sous linux. Vous pouvez aussi vous en servir pour le partage d'imprimantes et autres périphériques, mais ça n'est pas l'objet de ce wiki.
+Commencez par installer Samba : tapez
+  sudo apt-get update && sudo apt-get install samba
+
+  *Si vous souhaitez comprendre comment ça marche et configurer vous même Samba : vous trouverez un [[:samba|wiki entièrement consacré à samba sur cette page]].
+  *Sinon, si vous n'avez pas envie de réfléchir, suivez ces quelques étapes :
+Je vous donne le fichier de configuration smb.conf que j'ai chez moi. C'est un fichier dont j'ai traduit à la va-vite les commentaires pour m'en faciliter l'utilisation. Je donne deux solutions, la première est celle que j'utilisais à l'époque où j'ai écrit ce tuto : c'est quasi le fichier originel du paquet samba mis à part le fait que j'ai traduit à la va-vite tous les commentaires et modifié quelques trucs. Copiez le code ci-dessous et collez-le dans un fichier que vous nommerez 'smb.conf', ou bien prenez le fichier d'après, qui est celui que j'utilise actuellement, mais qui est un peu différent car ne nécessitant aucune identification.
+<file>
+# 
+# fichier de configuration Samba smb.conf
+#
+## traduit par Christophe-Marie Duquesne
+##
+## Vous pouvez sans soucis remplacer le votre par celui-ci,
+## je n'ai rien enlevé, j'ai juste traduit. Au pire j'ai 
+## ajouté et c'est précisé dans les commentaires, de même
+## pour toute option modifiée.
+## mes commentaires à moi sont précédés de deux '#'
+#
+# Toute les lignes commençant par ';' ou '#' sont des commentaires et 
+# seront ignorées. (Convention implicite : on met un ';' devant
+# une ligne de commande activable et un '#' devant un véritable commentaire)
+#
+# NOTE: Après toute modification de ce fichier, il est conseillé
+# d'exécuter la commande "testparm" afin de vérifier que vous
+# n'avez pas commis une erreur de syntaxe basique. 
+#
+
+#======================= Global Settings =======================
+
+[global]
+
+## Browsing/Identification ###
+
+# permet de définir le "groupe de travail" dans lequel apparaitra
+# votre machine.
+## Note du traducteur : Par défaut, samba mettait MSHOME.
+## La plupart du temps, sous Windows XP, c'est plutôt WORKGROUP. 
+## (modifié en WORKGROUP)
+   workgroup = workgroup
+
+## Note du traducteur : Ceci est une option que j'ai rajoutée au fichier.
+## le nom netbios est le nom sous lequel apparait votre machine
+## sur le réseau.
+   netbios name = %h
+
+# server string est l'équivalent du champ NT Description
+   server string = %h server (Samba, Ubuntu)
+
+# Section support de "Windows Internet Name Serving":
+# Support de WINS - dit au composant NMBD de Samba d'activer son serveur WINS
+;   wins support = no
+
+# Serveur WINS - dit au composant NMBD de Samba d'être un client WINS
+# Note: Samba peut être soit un serveur WINS, soit un client WINS, mais
+# PAS les deux.
+;   wins server = w.x.y.z
+
+# Ceci empêchera nmbd de chercher des noms netbios par le biais du DNS
+   dns proxy = no
+
+# Précise le service de nommage et l'ordre que nous utiliserons afin de
+# traduire les noms d'hôtes en adresses IP. 
+;   name resolve order = lmhosts host wins bcast
+
+#### Networking ####
+
+# Précise l'ensemble spécifié d'interfaces/réseaux auxquels s'associer.
+# Ceci peut être soit un nom d'interface, soit une adresse IP/un masque de 
+# sous réseau;
+# on préfèrera les noms d'interface.
+;   interfaces = 127.0.0.0/8 eth0
+
+# Pour s'associer uniquement avec les interfaces et/ou réseaux spécifiés;
+# vous devez avoir activé l'option 'interfaces' ci-dessus pour utiliser
+# ceci.
+# Il est recommandé d'activer cette option si votre machine Samba
+# n'est pas protégée par un pare-feu ou bien si elle joue elle-même le rôle
+# de pare-feu; cependant, cette option ne manipule pas correctement les
+# interfaces dynamiques ou non-diffusées. 
+;   bind interfaces only = true
+
+
+
+#### Debugging/Accounting ####
+
+# Ceci indique à Samba qu'il doit utiliser un fichier de log séparé pour
+# chaque machine qui se connecte.
+   log file = /var/log/samba/log.%m
+
+# Fixe une limite à la taille des fichiers de log (en Kb).
+   max log size = 1000
+
+# Si vous souhaitez que Samba fasse uniquement ses log par le biais
+# du syslog, mettez le paramètre suivant à 'yes'.
+;   syslog only = no
+
+# Nous voulons que Samba mette le minimum d'information dans le syslog.
+# A la place, tout ira dans /var/log/samba/log.{smbd,nmbd}
+# Si vous souhaitez utiliser le syslog vous devez choisir une plus grande
+# valeur pour ce paramètre.
+   syslog = 0
+
+# Lors des crashs, une action logique : l'envoi par mail d'une backtrace
+# à l'admin.
+   panic action = /usr/share/samba/panic-action %d
+
+
+####### Authentication #######
+
+# Mettre "security = user" n'est jamais une mauvaise idée. Ceci
+# requiert toutefois que tout utilisateur accédant à ce serveur y ait
+# un compte. Jetez un oeil à
+# /usr/share/doc/samba-doc/htmldocs/Samba-HOWTO-Collection/ServerType.html
+# dans le package samba-doc pour plus de détails.
+## Note du traducteur : option non active à l'origine
+  security = user
+
+# Pour le cas où vous souhaiteriez utiliser le cryptage des mots de passe.
+# Regardez la section 'encrypt passwords' (page de manuel de smb.conf(5))
+# avant d'activer cette option.
+   encrypt passwords = true
+
+## Note du traducteur : Ceci est une option que j'ai rajouté au fichier.
+## précise le chemin du fichier de mots de passe.
+  smb passwd file = /etc/samba/smbpasswd
+
+# Si vous utilisez le cryptage des mots de passe, Samba a besoin de
+# savoir de quel type de base de données de mots de passe vous vous servez.
+   passdb backend = tdbsam
+
+   obey pam restrictions = yes
+
+;   guest account = nobody
+   invalid users = root
+
+# Ceci indique si lors d'une modification dans passdb du mot de passe 
+# crypté SMB, Samba doit tenter de synchroniser le mot de passe Unix
+# avec le mot de passe SMB.
+;   unix password sync = no
+
+# Pour la synchronisation des mots de passe Unix sur un système Debian
+# GNU/Linux, le paramètre suivant doit être ajouté (merci à Ian Kahan
+# <<kahan@informatik.tu-muenchen.de> d'avoir fourni le bon script
+# de discussion pour le programme des mots de passe de Debian Sarge)
+   passwd program = /usr/bin/passwd %u
+   passwd chat = *Enter\snew\sUNIX\spassword:* %n\n *Retype\snew\sUNIX\spassword:* %n\n *password\supdated\ssuccessfully* .
+
+# Ce paramètre contrôle si le PAM sera utilisé pour les changements
+# de mots de passe lorsque ce sera demandé par un client SMB et non
+# par le programme listé dans 'passwd program'.
+# Par défaut, c'est non.
+;   pam password change = no
+
+########## Domains ###########
+# Cette machine est-elle capable d'authentifier des utilisateurs?
+# le PDC et BDC nécessitent tous deux que cette option active.
+# Si vous êtes le BDC vous devez changer l'option 'domain master' en no.
+## Note du traducteur : un PDC est un contrôleur principal de domaine
+## un BDC est un contrôleur secondaire de domaine.
+## vous devez intaller un BDC avant n'importe quelle autre serveur de domaine.
+## le PDC contient la base de donnée des répertoires, des utilisateurs,
+## des partages de ressources, etc... et valide les utilisateurs.
+## le BDC contient une copie de tout ceci et peut valider les utilisateurs.
+## (Source : http://ntfaqfr.com/ntfaq/domaine5.htm)
+## (décommenté)
+   domain logons = yes
+#
+# Cette option ne prend effet que si l'option 'domain logons' est active.
+# Elle précise le chemin du répertoire du profil de l'utilisateur.
+# (du point de vue du client)
+# Ce qui suit requiert qu'un [profiles] de partage soit dressé sur le 
+# serveur samba (voir en dessous)
+#
+;   logon path = \\%N\profiles\%U
+# Un autre choix commun est de stocker le profil dans le home de l'utilisateur
+## (décommenté)
+   logon path = \\%N\%U\profile
+
+# L'option suivante ne prend effet que si 'domain logons' est active.
+# Elle spécifie le chemin du répertoire home d'un utilisateur
+# (du point de vue du client)
+   logon drive = H:
+   logon home = \\%N\%U
+
+# L'option suivante ne prend effet que si 'domain logons' est active.
+# Elle spécifie le script à utiliser pendant le "logon".
+# le script doit être stocké dans le partage [netlogon]
+# NOTE: Doit être stocké dans un fichier respectant la convention du format
+# 'DOS'
+;   logon script = logon.cmd
+
+# Ceci permet aux utilisateurs Unix d'être créés sur le contrôleur du 
+# domaine via tuyau SAMR RPC. La commande donnée en exemple crée un
+# compte utilisateur avec un mot de passe Unix désactivé.
+# Veillez à l'adapter à vos besoins.
+; add user script = /usr/sbin/adduser --quiet --disabled-password --gecos "" %u
+
+########## Printing ##########
+
+# Si vous souhaitez charger automatiquement la liste de vos imprimantes
+# plutôt que de les activer individuellement.
+;   load printers = yes
+
+# Impression lpr(ng). Vous pouvez éventuellement modifier le chemin d'accès
+# au fichier printcap.
+;   printing = bsd
+;   printcap name = /etc/printcap
+
+# Impression CUPS. Jetez aussi un oeil à la page de manuel cupsaddsmb(8)
+# dans le package cupsys-client.
+;   printing = cups
+;   printcap name = cups
+
+# Lors de l'utilisation de [print$], l'utilisateur root est implicitement
+# un administrateur des imprimantes, mais vous pouvez aussi donner ce 
+# droit à d'autres utilisateurs pour ajouter des pilotes et modifier 
+# les propriétés de l'imprimante
+;   printer admin = @lpadmin
+
+
+############ Misc ############
+# L'utilisation de la ligne suivante vous donne la possibilité de
+# customiser votre configuration sur la base de celle d'une machine paire.
+# Le %m remplace le nom netbios de la machine qui se connecte.
+;   include = /home/samba/etc/smb.conf.%m
+
+# La plupart des gens trouvent que cette option améliore la performance.
+# Regardez smb.conf(5) et /usr/share/doc/samba-doc/htmldocs/speed.html
+# pour plus de détails.
+# Vous avez si vous le voulez la possibilité d'ajouter ce qui suit pour
+# un système Linux:
+#         SO_RCVBUF=8192 SO_SNDBUF=8192
+   socket options = TCP_NODELAY
+
+# Le paramètre suivant n'est utile que si vous avez installé le package
+# linpopup. Le samba maintainer et le linpopup maintainer
+# servent à faciliter l'installation et la configuration de linpopup et samba.
+;   message command = /bin/sh -c '/usr/bin/linpopup "%f" "%m" %s; rm %s' &
+
+# Le 'Domain Master' spécifie à Samba qu'il est 'Domain Master Browser'.
+# Si cette machine doit être configurée en tant que BDC 
+# (serveur secondaire de logon),
+# vous devez mettre l'option à 'no'. Autrement, le comportement par défaut 
+# est recommandé.
+;   domain master = auto
+
+# Quelques options par défaut pour winbind (assurez-vous que vous n'utilisez
+# pas ces intervalles pour autre chose)
+;   idmap uid = 10000-20000
+;   idmap gid = 10000-20000
+;   template shell = /bin/bash
+
+#======================= Share Definitions =======================
+
+# Décommentez ce qui suit (et modifiez les autres paramètres comme il convient)
+# pour activer les partages du répertoire home par défaut.
+# Ceci va partager chaque répertoire d'utilisateur de la manière suivante:
+# \\serveur\utilisateur
+;[homes]
+;   comment = Home Directories
+;   browseable = yes
+
+# Par défaut, les partages \\serveur\utilisateur peuvent
+# être atteints par n'importe qui ayant accès au serveur samba.
+# Décommentez la ligne suivante si vous voulez vous assurer
+# que seul "utilisateur" puisse se connecter à \\serveur\utilisateur.
+;   valid users = %S
+
+# Par défaut, les répertoires home sont exportés en lecture seule.
+# changez le paramètre suivant en 'yes' si vous voulez pouvoir
+# écrire dessus.
+## Note du traducteur : J'ai modifié ce paramètre car je voulais en 
+## effet pouvoir acceder en écriture à mon serveur. A l'origine
+## cette ligne était commentée et était à 'no'
+;   writable = yes
+
+# Pour des raisons de sécurité, le masque de création de fichier est
+# 0600. Si vous voulez créer vos fichiers avec les droits group=rw,
+# mettez le paramètre suivant à 0644.
+## Note du traducteur : j'ai changé en 0644.
+;   create mask = 0644
+
+# Pour des raisons de sécurité, le masque de création des répertoires est
+# 0700. Si vous voulez créer les répertoires avec les droits group=rw,
+# mettez ce paramètre à 0775.
+## Note du traducteur : j'ai changé en 0755
+;   directory mask = 0755
+
+# Décommentez ce qui suit et créez le répertoire netlogon pour
+# les logons de domaine.
+# (vous devrez configurer Samba pour agir aussi comme un contrôleur
+# de domaine)
+;[netlogon]
+;   comment = Network Logon Service
+;   path = /home/samba/netlogon
+;   guest ok = yes
+;   writable = no
+;   share modes = no
+
+# Décommentez ce qui suit et créez le répertoire profiles pour stocker
+# les profils des utilisateurs. (voir l'option "logon path" ci-dessus)
+# (vous avez besoin cette fois encore que Samba soit configuré pour agir
+# en tant que contrôleur de domaine)
+# Le chemin qui suit devrait être accessible en écriture par tous les
+# utilisateurs de manière à ce que leur répertoire de profil
+# puisse être créé lors de leur premier logon.
+;[profiles]
+;   comment = Users profiles
+;   path = /home/samba/profiles
+;   guest ok = no
+;   browseable = no
+;   create mask = 0600
+;   directory mask = 0700
+
+[printers]
+   comment = All Printers
+   browseable = no
+   path = /tmp
+   printable = yes
+   public = no
+   writable = no
+   create mode = 0700
+
+# Les clients Windows chercheront ce nom de partage comme source
+# de pilotes d'impression téléchargeables
+[print$]
+   comment = Printer Drivers
+   path = /var/lib/samba/printers
+   browseable = yes
+   read only = yes
+   guest ok = no
+# Décommentez pour autoriser l'administration à distance des pilotes
+# d'impression Windows. Remplacez 'ntadmin' par le nom du groupe
+# dont sont membres vos utilisateurs-administrateurs.
+;   write list = root, @ntadmin
+
+# Un partage simple pour votre lecteur CD-ROM.
+;[cdrom]
+;   comment = Samba server's CD-ROM
+;   writable = no
+;   locking = no
+;   path = /cdrom
+;   public = yes
+
+# Les deux prochains paramètres montrent comment réaliser l'auto-montage
+# du CD-ROM lorsque le partage cdrom est actif. Pour que ceci
+# fonctionne, /etc/fstab doit contenir une entrée telle que celle-ci:
+#
+#       /dev/scd0   /cdrom  iso9660 defaults,noauto,ro,user   0 0
+#
+# Le CD-ROM est démonté automatiquement après la connection à [...]
+#
+# Si vous ne voulez pas utiliser l'auto-montage/démontage
+# assurez-vous que le CD est monté sur /cdrom
+#
+;   preexec = /bin/mount /cdrom
+;   postexec = /bin/umount /cdrom
+
+## Note du traducteur :
+## rajouté par mes soins pour un partage à la windows
+## sur les PC sous Windows on devra taper \\nom-du-serveur-linux\home
+## dans "connecter lecteur reseau"
+[home]
+  comment = home
+  path = /home
+  read only = no
+  writable = yes
+</file>
+Fichier que j'utilise maintenant (inutile d'executer smbpasswd si vous optez pour cette solution) :
+<file>
+#produit par Christophe-Marie Duquesne
+#remplacez "oogachakka" par le nom de l'utilisateur qui héberge les dossiers
+#tapez whoami pour connaître ce nom d'utilisateur si vous n'êtes pas sûr
+#Ces dossiers sont en lecture seule mais cela peut être modifié grâce 
+#à l'option "read only" 
+[global]
+    workgroup = workgroup
+    netbios name = %h
+    server string = serveur %h (Samba %v, Ubuntu)
+    security = share
+    hide dot files = yes
+    socket options = TCP_NODELAY
+ 
+[Musique]
+    comment = Musique
+    path = /home/oogachakka/Musique
+    force user = oogachakka
+    force group = oogachakka
+    guest ok = yes
+    read only = yes
+    browseable = yes
+
+[Videos]
+    comment = Videos
+    path = /home/oogachakka/Videos
+    force user = oogachakka
+    force group = oogachakka
+    guest ok = yes
+    read only = yes
+    browseable = yes
+
+[Upload et Sauvegardes]
+    comment = Upload
+    path = /home/oogachakka/Upload
+    force user = oogachakka
+    force group = oogachakka
+    guest ok = yes
+    read only = no
+    browseable = yes
+</file>
+Mettez ce fichier sur clé usb, disquette ou autre support amovible. Nous allons télécharger 'ivman', un petit utilitaire qui permet le montage automatique des supports amovibles afin de vous permettre de le transférer facilement dans votre serveur.\\
+Pour cela, vous devez auparavant modifier votre fichier /etc/apt/sources.list pour y activer les dépôts universe : utilisez vim((Pour ceux qui ne savent pas utiliser vim, je met ici les commandes qu'il est strictement nécessaire de connaître :\\
+  *Pour éditer votre fichier : "vi chemin_fichier"
+Deux modes sont possibles : insertion (taper des caractères, en effacer, etc...) et commande (qui peut faire plein plein de choses utiles). Lorsque vous venez d'éditez le fichier, vous êtes en mode commande.
+  *"i" pour entrer dans le mode insertion ;
+  *"echap" pour entrer en mode commande;
+  *":q!" en mode commande pour quitter sans sauvegarder; 
+  *"ZZ" en mode commande pour sauver en quittant. (prenez garde au fait qu'il faut que ça soit des Z majuscule)
+Vim est un outil extrêmement puissant, allez  [[http://www.linux-france.org/article/appli/vi/vim/|jeter un coup d'oeil]] dès que vous aurez le temps...)) ou bien nano
+  sudo vim /etc/apt/sources.list
+pour enlever les '#' qui amorcent les lignes
+<file>
+# deb http://fr.archive.ubuntu.com/ubuntu/ edgy universe
+# deb-src http://fr.archive.ubuntu.com/ubuntu/ edgy universe
+</file>
+Ensuite, téléchargez et installez ivman :
+  sudo apt-get update && sudo apt-get install ivman
+Par précaution, sauvegardez auparavant votre ancien smb.conf :
+  sudo cp /etc/samba/smb.conf /etc/samba/smb.conf.sauvegarde
+Ainsi il vous sera toujours possible de restaurer celui-ci en faisant
+  sudo cp /etc/samba/smb.conf.sauvegarde /etc/samba/smb.conf
+Vous pouvez maintenant connecter votre support amovible pour transférer 'smb.conf' au bon endroit. Il va normalement apparaître dans '/media' (c'est en tout cas le cas pour une clé usb). Faîtes 
+  ls /media
+pour savoir exactement son chemin d'accès. Ensuite
+  sudo cp /media/nom_du_support_amovible/smb.conf /etc/samba/smb.conf
+puis redémarrez samba afin que ces modifications soient prises en compte:
+  sudo /etc/init.d/samba restart
+Enregistrez l'utilisateur samba : \\
+**Attention**, avec le fichier que j'ai fourni, vous devez bien utiliser votre login ubuntu pour cette commande.
+  sudo smbpasswd -a votre_login_ubuntu
+et redémarrez samba à nouveau :
+  sudo /etc/init.d/samba restart
+Désormais, les ordinateurs sous windows qui sont sur le réseau voient apparaître votre serveur. Les login et mot de passe pour s'y connecter sont ceux de l'utilisateur samba défini par la commande précédente. Sur les PC Windows on ira dans "Poste de Travail" "Outil">"connecter un lecteur réseau" et on devra taper \\nom-du-serveur-linux\home.
+=====Etape 3 - Installation et configuration de MLDonkey=====
+téléchargez et installez mldonkey:
+  sudo apt-get install mldonkey-server
+L'install va vous demander si vous voulez que mldonkey démarre avec l'ordinateur. Choisissez "no" (l'option yes m'avait posé des problèmes). Démarrez mldonkey pour qu'il crée ses fichiers de configuration :
+  mlnet
+[[serveur_de_telechargement_mldonkey#problemes_connus|Si par malheur, vous avez un message d'erreur bizarre, lisez d'abord ceci, ça n'est peut-être rien]]\\
+Arrêtez-le en faisant Ctrl+C.
+
+Vous pouvez maintenant éditer sous vim((voir la note du dessus)) le fichier /var/lib/mldonkey/downloads.ini pour régler les préférences de celui-ci. J'ai pour ma part activé tous les réseaux de la section "network". Ne touchez pas à la section allowed_ips, laissez-y uniquement "127.0.0.1" (Sinon vous allez rendre inutile la prochaine étape et perdre en sécurité)
+
+<note important>Si le fichier downloads.ini ne colle pas avec ce qui est noté, il suffit d'aller /root/.mldonkey/downloads.ini</note>
+
+Allez consulter le fichier donkey.ini
+  more /var/lib/mldonkey/donkey.ini
+et référez vous à ce tableau (tiré de [[http://mldonkey.sourceforge.net/WhatFirewallPortsToOpen|cette page de la faq officielle de mldonkey]]) pour savoir quels ports de votre routeur vous devrez ouvrir.
+
+^Réseau          ^Type    ^numéro de port   ^fichier où le modifier       ^
+| eDonkey2000    | TCP   | port aléatoire   |donkey.ini                   |
+| eDonkey2000    | UDP   | port TCP + 4     |donkey.ini                   |
+| Kad            | TCP   | port aléatoire   |donkey.ini, section Kademlia |
+| Kad1           | UDP   | même que TCP     |donkey.ini, section Kademlia |
+| Overnet        | TCP   | port aléatoire   |donkey.ini, section Overnet  |
+| Overnet        | UDP   | même que TCP     |donkey.ini, section Overnet  |
+| Gnutella       | TCP   | 6346             |gnutella.ini                    |
+| Gnutella       | UDP   | 6346             |gnutella.ini                    |
+| Gnutella2      | TCP   | 6347             |gnutella2.ini                   |
+| Gnutella2      | UDP   | 6347             |gnutella2.ini                   |
+| BitTorrent     | TCP   | 6882             |bittorrent.ini                  |
+| FastTrack      | TCP   | 1214             |fasttrack.ini                   |
+| OpenNapster    | TCP   | 9999             |opennap.ini                     |
+| Direct Connect | TCP   | 4444             |directconnect.ini               |
+| Direct Connect | UDP   | 4444             |directconnect.ini               |
+| Soulseek       | TCP   | 2234             |soulseek.ini                    |
+
+Ouvrez ces ports sur le routeur et redirigez les vers les même ports de votre serveur. Faîtes de même pour le port 22 TCP (c'est le port ssh, vous le fermerez si jamais la création de domaine échoue pour vous et que vous ne parvenez pas à accéder à mldonkey de l'extérieur).
+
+
+=====Etape 4 - Configuration de l'accès à MLDonkey via les ordinateurs distants=====
+
+Outre sa compatibilité avec presque tous les réseaux P2P, MLDonkey possède l'immense avantage d'être contrôlable à distance par n'importe quel ordinateur, puisqu'il sait générer une page web qui lui sert d'interface. Le tout est de bien sécuriser l'accès à cette page. Nous allons donc installer un serveur ssh pour chiffrer les accès distants. Ainsi, d'où que vous soyez et du moment que vous disposez d'un accès internet, vous pourrez lancer à distance un téléchargement qui arrivera chez vous.
+
+Il va falloir au préalable que vous vous munissiez d'un nom de domaine (si vous n'en avez pas déjà un déjà fourni par votre FAI). Pour cela, rien de plus facile, vous pouvez l'avoir gratuitement :
+Allez par exemple sur www.dyndns.com et créez un compte chez eux. Suivez les étapes pour qu'ils attribuent à votre adresse ip un nom de domaine que vous aurez choisi.\\
+Une fois que c'est fait, vous pouvez vérifier que cela a marché :\\
+Allez sur [[http://www.adresseip.com/]] ou [[https://mon-ip-addresse.com/mon-adresse-ip/mon-ip.php|https://mon-ip-addresse.com/]] et regardez quelle est votre ip.
+Tapez ensuite dans un terminal
+  host votre_nom_de_domaine_chez_dyndns
+Si le résultat de cette commande donne la même ip que celle obtenue sur adresseip.com, alors vous avez bon.\\
+Sinon, si votre création de domaine échoue systématiquement, rassurez-vous : les [[serveur_de_telechargement_mldonkey#manips_en_local|manips en local]] seront toujours valables pour vous.\\
+
+Occupons-nous maintenant de sécuriser tout cela en installant ssh-server afin que votre pc puisse écouter accepter les communication chiffrées:
+  sudo apt-get install openssh-server
+Vous pouvez vous autoriser un petit redémarrage avant de relancer mldonkey de manière définitive :
+  mlnet&
+pour tuer le processus, vous n'aurez qu'à faire 
+  killall mlnet
+Vous pouvez débrancher l'écran et le clavier de votre serveur, tout va désormais  se passer de l'extérieur, maintenant.
+
+=====Epilogue=====
+Placez vous maintenant sur un AUTRE ordinateur. Nous allons créer un tunnel ssh entre cet ordinateur et le serveur.
+
+
+
+====manips en local====
+  *Si cet ordinateur est sous Linux ou MacOS, tapez dans un terminal :
+  ssh -L4080:127.0.0.1:4080 votre_login_sur_le_serveur@ip_locale_du_serveur
+
+  *Sous windows, il vous faut télécharger [[http://the.earth.li/~sgtatham/putty/latest/x86/putty.exe|putty]], un programme très très léger qui ne demande aucune installation, le lancer et remplir les champs comme suit:
+{{serveur:putty1.png|}}
+{{serveur:putty2.png|}}\\
+Dans tous les cas, le mot de passe à rentrer est celui de 'votre_login_sur_le_serveur'.
+
+Maintenant, ouvrez un navigateur web et tapez dans la barre de navigation : http://localhost:4080. Normalement, vous devriez tomber sur l'interface web de mldonkey.
+
+__Explication__ : par le biais de cette manipulation, tout se passe comme si le port 4080 du serveur (c'est le port de l'interface web) était transféré sur celui votre ordinateur. Ce qui explique que vous accediez à cette interface par le localhost. (et ce en crypté, c'est ça qui est beau!)
+
+====manips à l'extérieur du réseau====
+pas besoin de "sortir" réellement du réseau pour voir si ça marche, essayez ceci du même ordinateur. Si ça marche de chez vous, ça marchera de n'importe quel endroit
+
+Ce sont exactement les mêmes manipulations.
+Il suffit de remplacer 'ip_locale_du_serveur' par 'votre_nom_de_domaine_chez_dyndns'. Cela devrait fonctionner exactement de la même manière.
+====Pour plus de confort====
+Si vous ne vous sentez pas à l'aise avec l'interface web, vous pouvez utiliser [[http://sancho-gui.sourceforge.net/|Sancho]], une interface graphique disponible sous tous les OS et qui s'installe sur l'ordinateur distant. Celui-ci fonctionne sur le port 4001. Il vous faudra donc remplacer 4080 par 4001 dans toutes les manipulations que je viens juste d'expliquer.
+
+
+
+
+====Quelques liens====
+
+  *Evidemment, la prochaine étape est de mettre un antivirus sur votre serveur afin d'éviter d'infecter vos pc qui tournent sous windows. Installez clamav sans interface graphique, il est parfaitement adapté à un tel type de serveur : [[:clamav]]
+  *vous pouvez aller consulter le site officiel de mldonkey (en) : [[http://mldonkey.org/]]\\
+  *à lire si vous voulez mieux exploiter le fait que votre ordinateur soit devenu un serveur ssh (fr) : [[:ssh]]\\
+  *des explications supplémentaires sur mldonkey (fr) : [[http://supinfo-projects.com/fr/2006/install_mldonkey_fr/introduction/]]
+
+
+====Museek====
+Pour les afficionados de soulseek qui auraient été décus par l'abandon du support de ce réseau par le projet mldonkey , sachez qu'un Logiciel : __museek__ qui fonctionne comme le daemon mldonkey est disponible et que grâce à __murmur__
+Une interface graphique en Gtk , on peut le controler à distance de la même manière que mldonkey.
+
+
+
+====Problèmes connus====
+lorsque vous lancez mlnet, il est possible que celui-ci vous dise:
+<code>
+DNS resolution does not work! Looking up www.mldonkey.net failed with Not_found.
+The core therefore is unable to get eDonkey serverlists and loading
+.torrent files via dllink from websites is also impossible.
+If you are using MLDonkey in a chroot environment you should
+consider reading this article to get DNS support back:
+http://mldonkey.sourceforge.net/Chroot
+</code>
+Dans ce cas, pas la peine de s'inquiéter. Il n'y a aucun risque de dysfonctionnement du programme. En fait, le nom de domaine www.mldonkey.net a expiré récemment. Le problème, c'est que pour vérifier si le DNS marche bien, mlnet essaye de contacter www.mldonkey.net lorsqu'il démarre (évidemment ça foire puisque le nom n'existe plus). Croyant que le DNS ne fonctionne pas, le logiciel vous avertit donc qu'il ne va pas fonctionner correctement. En fait, il n'en est rien, ça marche très bien. Il parait que ça sera corrigé dans la prochaine version, mais on m'a assuré que c'était juste un problème d'esthétique.
+
+----
+
+//Contributeurs : [[utilisateurs:Zetotof,Scrat066]].//

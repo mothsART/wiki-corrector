@@ -1,0 +1,385 @@
+
+{{tag>Xenial matériel énergie personnalisation}}
+
+-------------
+
+====== Gestion du rétro-éclairage  ======
+
+La plupart des ordinateurs portables utilisent des écrans à dalle rétro-éclairante que l'on peut le plus souvent gérer avec des touches prévues à cet effet ou via une interface tel que l'Applet de luminosité de gnome.
+Malheureusement il arrive que cette fonctionnalité bien que présente reste inutilisable, voici donc des pistes pour régler ce petit désagrément.
+
+
+===== Xbacklight =====
+**Xbacklight** est un ensemble de commandes permettant la gestion de la luminosité. 
+
+[[:tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt>xbacklight]]**.
+
+==== Utilisation ====
+<code>
+xbacklight =50    #règle la luminosité à 50 %.
+xbacklight +10    #augmente la luminosité de 10 %.
+xbacklight -10    #diminue la luminosité de 10 %.
+</code>
+Pour gérer finement et facilement l'éclairage, vous pouvez créer **2 raccourcis-clavier**, par exemple : **Ctrl ◄** pour diminuer la luminosité et** Ctrl ►** pour l'augmenter : \\
+si vous utilisez l'environnement XFCE (Xubuntu), c'est le menu Paramètres > Clavier > Raccourcis d'applications > Ajouter : \\
+- dans le champ "Commande", pour augmenter légèrement la luminosité, saisissez : **xbacklight +1** \\
+- ensuite les touches de raccourcis : **Ctrl ►** \\
+
+Idem pour diminuer la luminosité : **xbacklight -1** associé à **Ctrl ◄** \\
+
+(NB : les symboles ◄ et ► représentent les touches "déplacement vers la gauche" et "déplacement vers la droite" de votre clavier) \\
+==== Exemple de script ====
+Souvent on peut éteindre l'écran grâce au contrôle (en passant à 0) ce qui n'est pas agréable. De plus la différence entre ''xbacklight =30'' et ''xbacklight =80'' est souvent beaucoup plus petite que dans les valeurs extrêmes. Ce script permet de contrôler de manière plus agréable la luminosité :
+  * [[:tutoriel:comment_modifier_un_fichier|Créez le fichier]] **retroeclairage** dans le dossier **/usr/local/bin** avec les [[:sudo|droits superutilisateur]] dont le contenu est ci-dessous. Pour déplacer un fichier vous pouvez utiliser la commande [[:tutoriel:console_commandes_de_base#mv]].
+<file bash /usr/local/bin/retroeclairage>
+#!/bin/bash
+
+error="Usage: $0 up | $0 down"
+xbl=`xbacklight`
+limite1=2
+limite2=10
+limite3=40
+limite4=100
+
+if [ "$#" -eq 1 ]
+	then
+	if [ $1 = "up" ]
+		then
+		# Augmenter le rétroéclairage
+		if [ $(echo "$xbl == $limite4"|bc) -eq 1 ]
+				then
+				echo "Rétroéclairage au maximum !"
+				xbacklight = 100
+			else
+			if [ $(echo "$xbl < $limite2"|bc) -eq 1 ]
+					then
+					xbacklight +1
+				else
+				if [ $(echo "$xbl < $limite3"|bc) -eq 1 ]
+						then
+						xbacklight +10
+					else
+					xbacklight +20
+				fi
+			fi
+		fi
+	elif [ $1 = "down" ]
+		then
+		# Diminuer le rétroéclairage
+		if [ $(echo "$xbl < $limite1"|bc) -eq 1 ]
+				then
+				echo "Rétroéclairage au minimum !"
+				xbacklight =1
+			else
+			if [ $(echo "$xbl < $limite2"|bc) -eq 1 ]
+					then
+					xbacklight -1
+				else  
+				if [ $(echo "$xbl < $limite3"|bc) -eq 1 ]
+						then
+						xbacklight -10
+					else
+					xbacklight -20
+				fi
+			fi
+		fi
+		else
+		echo $error
+	fi
+	else
+	echo $error
+fi
+exit</file>
+  * Rendez-le [[:tutoriel:script_shell#executer_un_script|éxécutable]].
+
+Pour l'utiliser, il suffit alors d'entrer l'une des deux commandes suivantes dans un [[:terminal]], ou de les assigner à une combinaison de touche: <code>retroeclairage up
+retroeclairage down</code>
+
+vous pouvez également émettre un son pour symboliser le maximum (ou le minimum) en ajoutant la ligne :
+<file bash>aplay "/Chemin_vers_mon_fichier/mon_fichier.wav"</file>
+juste après :
+<file bash>echo "Rétroéclairage au maximum/minimum !"</file>
+
+
+==== Réglage de la luminosité au démarrage ====
+Au démarrage, en particulier sur un portable on peut effectuer le réglage de la luminosité en insérant la [[#Utilisation|commande précédente]] dans les [[:tutoriel:application_demarrage|applications au démarrage]]. En fixant par exemple la luminosité à 10 on aura un écran très peu éclairé.
+
+
+===== Conserver la luminosité au redémarrage =====
+
+L'environnement Gnome ou Unity ne conserve pas la luminosité de la dernière session au redémarrage. Voici une solution pour contourner cette limite. Elle est à construire en suivant les différentes étapes ci-dessous (nécessite des connaissances en script shell).
+  * Déterminer l'interface qui contrôle la luminosité en copiant/collant le code suivant dans un [[:terminal]], et le lancer une fois : <code>for vendor in $(ls /sys/class/backlight/); do
+  printf "$vendor : "
+  cat /sys/class/backlight/$vendor/brightness
+done
+</code>
+    * Modifier la luminosité (au clavier ou via le réglage de luminosité du système)
+    * Rappeler le code précédent, et noter alors le nom de la ligne dont la valeur a changé. Cette valeur contrôle la luminosité de l'écran.
+  - [[:tutoriel:comment_modifier_un_fichier|Créer]] les différents scripts qui vont sauvegarder et restaurer la luminosité avec les [[:sudo|droits super-utilisateur]] :
+    * **/etc/save_br_level.sh**, en remplaçant acpi_video0 par le nom que vous avez trouvé à l'étape précédente <file bash /etc/save_br_level.sh>
+#!/bin/bash 
+cat /sys/class/backlight/acpi_video0/brightness > /etc/brightness.save
+exit 0
+</file>
+    * **/etc/restore_br_level.sh**, en remplaçant acpi_video0 par le nom que vous avez trouvé à l'étape précédente <file bash /etc/restore_br_level.sh>
+#!/bin/bash 
+cat /etc/brightness.save > /sys/class/backlight/acpi_video0/brightness
+exit 0
+</file>
+    * Positionner les droits d'exécution : <code>sudo chmod +x /etc/save_br_level.sh /etc/restore_br_level.sh</code>
+  - Créer les différents fichiers qui vont appeler les scripts précédents au démarrage/arrêt/mise en veille de l'ordinateur :
+    * liens symboliques pour l'arrêt / redémarrage <code>
+sudo ln -s /etc/save_br_level.sh /etc/rc0.d/S10brightness
+sudo ln -s /etc/restore_br_level.sh /etc/rc6.d/S10brightness
+</code>
+    * **/etc/init/brightness.conf** pour la prise en compte au démarrage de la session graphique  : <file bash /etc/init/brightness.conf>
+# Restore backlight after restart
+#
+
+description	"Restore backlight after restart"
+author		"Id2ndR"
+
+start on ((filesystem
+           and runlevel [!06]
+           and started dbus
+           and login-session-start)
+          or runlevel PREVLEVEL=S)
+
+stop on runlevel [016]
+
+script
+    exec /etc/restore_br_level.sh
+end script
+</file>
+
+Méthode basée sur [[http://www.ercoppa.org/Linux-Restore-brightness-after-rebootwakeup-under-Ubuntu-nvidiabl-module.htm|cette source]].
+
+Si la méthode précédente ne fonctionne pas, cela peut venir du fichier **/etc/init/brightness.conf**. Voici donc une version plus simple de ce fichier qui peut résoudre le problème ([[http://santanuchatterjee.blogspot.fr/2014/05/using-upstart-in-ubuntu-1204-to-set.html|inspiré par cette source]]): <file bash>
+# Restore backlight after restart
+#
+
+description	"Restore backlight after restart"
+author		"Zarek"
+
+start on runlevel [2]
+
+script
+    exec /etc/restore_br_level.sh
+end script
+</file>
+
+===== Modification de Grub =====
+
+[[:tutoriel:comment_modifier_un_fichier|Éditez le fichier]] **/etc/default/grub** et modifiez la ligne : <file>GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"</file>
+en : <file>GRUB_CMDLINE_LINUX_DEFAULT="quiet splash acpi_osi=Linux acpi_backlight=vendor"</file>
+Dans certains cas il suffit d'ajouter uniquement ''acpi_osi=Linux'', comme pour les EeePC 1005, EeePC 1001px
+
+Pour d'autres portables Asus avec igp intel il est possible de tester:
+<file>GRUB_CMDLINE_LINUX_DEFAULT="quiet splash acpi_osi= acpi_backlight=intel"</file>
+(//Fonctionne pour le ux310ua sous ubuntu 16.04 à l'heure actuelle//).
+
+Puis exécuter la commande :
+<code>sudo update-grub</code>
+Redémarrer la machine et tester.
+
+===== Outils graphiques =====
+Sous Unity installez [[:indicator-applications|indicator-brightness]] qui permet de réglet la luminosité depuis la barre d'état.\\
+Sous [[:gnome-shell|Gnome 3.8+]] installez l'extension [[https://extensions.gnome.org/extension/231/brightness-control/|"Brightness Control"]]. Cliquer sur l'icône dans la barre des tâches et régler la luminosité comme vous le souhaitez. Au prochain redémarrage, la préférence de luminosité sera mémorisée !
+
+===== Sony Vaio =====
+
+==== Solution 1 ====
+
+Un petit cas particulier, il semblerait que pour les ordinateurs de la marque Sony Vaio il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>spicctrl]]**[lien mort] pour activer la gestion de la luminosité.
+
+==== Solution 2 ====
+
+Pour la gamme de portable VPC. Informations prises du forum ubuntufourm.org [[http://ubuntuforums.org/archive/index.php/t-1541417.html|ici]]. Suivez cette procédure:
+  - Configurez le pilote nvidia, dans le fichier **/etc/X11/xorg.conf** comme suit : <file>
+	Section "Device"
+		Identifier	"Default Device"
+		Option	"NoLogo"	"True"
+		Option "RegistryDwords" "EnableBrightnessControl=1"
+	EndSection
+</file>
+  - Cherchez le code "vendor" utilisé par hal (à installer si nécessaire): <code>lshal | grep system.hardware.vendor
+(E.g.: system.hardware.vendor = 'Sony Corporation )</code>
+  - Cherchez le code "Product": <code>lshal | grep system.hardware.product
+(E.g.: system.hardware.product = 'VPCF113FX' )</code>
+  - [[:tutoriel:comment_modifier_un_fichier|Éditez le fichier]] **/usr/share/hal/fdi/information/10freedesktop/10-laptop-panel-hardware.fdi** avec [[:sudo|droits super-utilisateur]] pour y ajouter cette ligne : <file>
+<match key="/org/freedesktop/Hal/devices/computer:system.hardware.vendor" string="Sony Corporation">
+<match key="/org/freedesktop/Hal/devices/computer:system.hardware.product" contains_outof="VPCF113FX">
+<!-- needed since the acpi video module reports it handle the events, but it don't work on this machines-->
+<merge key="laptop_panel.brightness_in_hardware" type="bool">false</merge>
+</match>
+</match>
+</file>
+  - Redémarrez votre ordinateur.
+
+===== Samsung ======
+Concernant les touche Fn, logiquement cette installation devrait les activer. \\
+
+==== Modèles récents ====
+Sur la gamme récente ATIV série 9, les touches de réglage de luminosité ont certes pour effet de déplacer un curseur virtuel de luminosité, mais pas de modifier réellement celle-ci.\\ 
+Ce ne sont donc pas les touches de fonction qui posent problème mais bien leur prise en compte par le noyau ou le driver générique ATI. \\
+Il en est de même pour le module **xbacklight** décrit ci-dessus: il est inopérant. \\
+La solution à ce problème consiste à installer les drivers propriétaires [[:amd-ati|Radeon]] et à utiliser [[:Catalyst]] pour régler la luminosité.\\
+La procédure est décrite ici pour un [[:installation-samsung-portable-ativ-lite-serie9#graphisme|Samsung ATIV série 9]], modèle NP905S3G.
+
+==== Spécificité aux modèles Samsung N150/N210/N220 ====
+<note important>La méthode "voria" ne fonctionne que pour les machines dotées d'un BIOS, elle semble incompatible avec les machines récentes dotées d'un [[:uefi|UEFI]] en remplacement du BIOS.</note>
+<note important>Le projet "voria" est à l'arrêt depuis 2014, la dernière version supportée est la version 14.04LTS. Pour 16.04 utiliser le dépôt trusty.</note>
+La raison de ce problème est connue, les modèles Samsung N150/N210/N220 n'ont pas été intégrés aux règles udev. Pour résoudre cela :
+  * [[:ppa#ajout_d_un_ppa_a_vos_sources_logicielles|Ajoutez le PPA]] **ppa:voria/ppa**((https://launchpad.net/~voria/+archive/ppa)) dans vos sources de logiciels,
+  * Puis [[:tutoriel:comment_modifier_sources_maj#recharger_la_liste_des_paquets|rechargez la liste des paquets]],
+  * [[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>samsung-tools, samsung-backlight]]**,
+  * Redémarrez votre ordinateur.
+
+Si cela ne fonctionne toujours pas :
+  * [[:tutoriel:comment_modifier_un_fichier|Éditez]] avec les [[:sudo|droits super-utilisateur]] le fichier **/lib/udev/rules.d/95-keyboard-force-release.rules**
+  * Recherchez la ligne avec ceci :<file>[sS][aA][mM][sS][uU][nN][gG]</file> Elle représente la liste des modèles Samsung pris en compte,
+  * En ajoutant "|*N150/N210/N220*" (ou le modèle de votre ordinateur) à la partie "produit" des règles pour Samsung dans le fichier on active les touches Fn (pensez à relancer udev ou à redémarrer le pc pour que les changements soient pris en compte). La nouvelle section Product ressemble alors à ceci :
+<file>
+ENV{DMI_VENDOR}=="[sS][aA][mM][sS][uU][nN][gG]*", ATTR{[dmi/id]product_name}=="*NC10*|*NC20*|*N130*|*SP55S*|*SQ45S70S*|*SX60P*|*SX22S*|*SX30S*|*R59P/R60P/R61P*|*SR70S/SR71S*|*Q210*|*Q310*|*X05*|*P560*|*R560*|*N150/N210/N220*"
+</file>
+Faites la même opération pour le fichier **/lib/udev/rules.d/95-keymap.rules**.
+
+Votre rétro-éclairage est maintenant gérable.\\
+
+**Ces deux fichiers n'existent pas sous Ubuntu 16.04, voici ce qui fonctionne :**
+
+[[:tutoriel:comment_modifier_un_fichier|Créer le fichier]] ** /usr/share/X11/xorg.conf.d/20-intel.conf** [[:sudo|avec les droits d'administration]] et coller le texte qui suit :
+<file>
+   Section "Device"
+        Driver "intel"
+        Option "Backlight" "intel_backlight"
+        Identifier "card0"
+   EndSection
+</file>
+
+Cette seule modification fonctionne parfaitement sur un **modèle NP-X420** avec Ubuntu 16.04 LTS. Elle ne fonctionne pas en 18.04 LTS.
+
+Dans certains cas, les touches fonction font planter l'ordinateur. Dans ce cas, utilisez [[:indicator-applications#Indicateurs additionnels|l'applet]] de luminosité pour régler le rétro-éclairage.
+=====Asus=====
+==== Asus Eee PC 1101 et consorts ====
+
+Si les touches Fn n'influencent pas la luminosité, suivez ces indications:\\
+Le fichier /sys/class/backlight/*/brightness contient un nombre compris entre 1 et 100 qui règle la luminosité. La commande suivante propose par exemple une luminosité à 18% : 
+
+<code> echo "18" | sudo tee  </code>
+
+<note tip>Cette procédure est aussi valable sur d'autres portables ASUS, mais le nombre à entrer peut être alors entre 0 et 10 inclus, les autres valeurs donnant l'erreur "Argument invalide".</note>
+
+==== Pour portable Asus =====
+
+  *  En mode root création d'un code visudo créer le fichier **set_brightness** dans /etc/sudoers.d/
+
+ou ID est votre id et MACHINE le nom de votre PC 
+ceci vous autorisera  sur votre machine à utiliser la commande dans les scripts ci-dessous qui ont besoin de "sudo" sans mot de passe
+<code>ID MACHINE = NOPASSWD:  /usr/bin/tee /sys/class/backlight/intel_backlight/brightness</code>
+
+
+  *  Création d'un fichier script qui va modifier la valeur dans /sys/class/backlight/*/brightness avec comme paramètres **inc** ou **dec**
+
+
+source **/opt/asus-brightness-master/bin/asus-brightness ** \\
+
+à adapter ici c'est intel_backlight valeur comprise entre 500 et 5000
+
+
+<file bash>
+#!/bin/sh
+if [ "$1" = "inc" ]; then
+  cd /sys/class/backlight/intel_backlight/
+  CURRENT=`cat /sys/class/backlight/intel_backlight/actual_brightness`
+  TO=`expr ${CURRENT} + 500`
+  echo "${CURRENT} + 500 = ${TO}"
+  echo "${TO}" | sudo /usr/bin/tee /sys/class/backlight/intel_backlight/brightne
+ss
+elif [ "$1" = "dec" ]; then
+  echo dec
+  cd /sys/class/backlight/intel_backlight/
+  CURRENT=`cat /sys/class/backlight/intel_backlight/actual_brightness`
+  TO=`expr ${CURRENT} - 500`
+  echo "${CURRENT} - 500 = ${TO}"
+  echo "${TO}" | sudo /usr/bin/tee /sys/class/backlight/intel_backlight/brightne
+ss
+elif [ "${1}" = "set" ]; then
+  echo "set ${2}"
+  cd /sys/class/backlight/intel_backlight/
+  CURRENT=`cat /sys/class/backlight/intel_backlight/actual_brightness`
+  echo "${CURRENT} -> ${2}"
+  echo "${2}" | sudo /usr/bin/tee /sys/class/backlight/intel_backlight/brightnes
+s
+else
+  echo 'give me inc or dec'
+fi
+</file>
+
+  *  Donner les droit d'exécution  
+chmod +x /opt/asus-brightness-master/bin/asus-brightness 
+
+
+  *  raccourcis clavier
+<note tip>création de raccourci clavier en remplacement de fn+f5 fn+f6</note>
+alt+f5 /opt/asus-brightness-master/bin/asus-brightness dec \\
+alt+f6 /opt/asus-brightness-master/bin/asus-brightness inc \\
+
+  *  Gestion de branchement alimentation et sur batterie
+ dans /etc/pm/power.d création du fichier **00-brightness** LES VALEUR MIN ET MAX en fonction de configuration
+
+<file bash>
+#!/bin/bash
+
+case $1 in
+    true)
+        echo "Enable screen power saving"
+
+        echo  "VALEUR MIN" | sudo /usr/bin/tee /sys/class/backlight/intel_backlight/brightness
+    ;;
+    false)
+
+        echo "Disable screen power saving"
+        echo "VALEUR MAX" | sudo /usr/bin/tee /sys/class/backlight/intel_backlight/brightness
+    ;;
+
+esac
+</file>
+FIXME pour ce qui suit sur le version récentes d'Ubuntu (info qui date d'Ubuntu 9.10)\\
+
+Ou encore, si vous avez l'impression bizarre que l'écran de votre pc portable est sombre, pas aussi lumineux que sous MS Windows™, la cause est simple, elle est due à la sonde de luminosité mal gérée. Le capteur se situe à gauche des diodes lumineuses. Sous Windows, ce capteur se désactive par "Fn + a ou q" suivant le clavier. :
+* [[:tutoriel:comment_editer_un_fichier|Créer le fichier]] **''/etc/init.d/brightness''** avec les droits root, et le sauvegarder avec le contenu suivant : <file>
+#!/bin/sh
+echo 0 > /sys/devices/platform/asus-laptop/ls_switch</file>
+  * Rendre le script exécutable : <code>sudo chmod +x /etc/init.d/brightness</code>
+  * Permettre le lancement du script au démarrage : <code>sudo update-rc.d brightness defaults 90</code>
+  * Redémarrer votre ordinateur, si vous n'avez pas envie tout de suite, entrer la commande suivante : 
+<code>sudo -s
+echo 0 > /sys/devices/platform/asus-laptop/ls_switch</code>
+  * Voilà, l'écran devrait retrouver une luminosité normale. 
+
+
+ =====Configuration spécifique à Mate =====
+Il est possible sous mate de définir la valeur du rétro éclairage (en %) sur secteur et sous batterie. C'est peut-être adapatable à d'autres environnements.
+Par exemple si on veut qu'il soit par défaut éteint et ne l'allumer que lorsqu'on on le souhaite via les touches du clavier:
+<code>gsettings set org.mate.power-manager kdb-brightness-dim-by-on-battery 100
+</code>
+ce qui configure mate pour qu'il réduise de 100% le rétroéclairage quand il est sur batterie (donc le met à 0)
+<code>gsettings set org.mate.power-manager kdb-brightness-on-ac 0 </code>
+ ce qui dit à mate de mettre le rétroéclairage à 0% quand il est sur secteur.
+
+Ces valeurs sont à affiner selon les envies.
+
+ =====Voir aussi =====
+[[:Redshift]], logiciel permettant de de diminuer la luminosité avec des tons de couleurs qui s'adapte à votre position géographique.
+
+xrandr permet aussi de diminuer la luminosité si xbacklight ne marche pas (avec l'option -- brightness).
+
+ =====Sources =====
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?pid=3560760|ce post du forum]],
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?pid=985007#p985007|et celui-ci]].
+
+-------------------
+Contributeurs :
+[[:utilisateurs:l_africain|L'Africain]]
+hfarner

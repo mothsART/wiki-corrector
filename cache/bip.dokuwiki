@@ -1,0 +1,223 @@
+
+{{tag>Xenial internet}}
+----
+
+====== BIP : Proxy IRC multi-utilisateurs ======
+
+Bip est un proxy IRC. Ce logiciel est un serveur qui se connecte à IRC, a priori en permanence (installé sur un serveur dédié, par exemple). Un ou plusieurs clients IRC peuvent se connecter au proxy pour atteindre IRC, le proxy offrant des fonctionnalités de persistances très pratiques. Ainsi, en votre absence (client IRC déconnecté), les discussions sont sauvegardées (log) et pourront être lues (historique) à la reconnexion ; les messages privés non lus seront délivrés à la reconnexion également ; etc.
+
+Bip est multi-utilisateurs, et très configurable. La plupart de ses paramètres peuvent être changés directement grâce à des commandes IRC spéciales, depuis le client IRC.
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] [[apt>bip]].
+
+===== Configuration =====
+
+Il est possible de lancer bip de deux manières différentes : 
+  * en mode manuel, avec de simples droits utilisateur ;
+  * automatiquement en tant que service (ou « démon ») au démarrage d'Ubuntu.
+
+Afin de faciliter la configuration initiale et le test de paramètres, il est conseillé de commencer par générer le fichier de configuration et de tester Bip en mode utilisateur, puis une fois la configuration terminée, de basculer en mode démon. Ce tutoriel est bâti sur cette logique.
+
+==== Générer automatiquement un fichier de configuration basique ====
+
+Ouvrez un [[:terminal]] et tapez la commande :
+<code>bipgenconfig</code>
+
+Malheureusement cet outil de configuration est encore intégralement en anglais, mais est assez simple. Configurez en suivant l'ordre affiché et tout se passera bien.
+
+Commencez par les points 1, 2 et 3. Le point 7 est également nécessaire dans le cas où vous souhaitez activer la connexion chiffrée entre bip et le client.
+|1. Set global options| Définir les options globales |
+|2. Add a new network | Ajouter un réseau IRC |
+|3. Add a new user    | Ajouter un utilisateur |
+^ ^ ^
+|4. View global options                    | Voir les options globales |
+|5. View/Edit/Delete networks              | Voir/Éditer/Effacer réseau |
+|6. View/Edit/Delete users                 | Voir/Éditer/Effacer utilisateurs |
+|7. Generate a server certificate/key pair | Générer une clé certificat/client |
+|8. Switch to normal mode                  | Passer en mode expert (ou normal) |
+^ ^ ^ 
+|10. Exit: store, write configuration and exit | Enregistrer la configuration et Quitter |
+|11. Exit without saving                       | Quitter  sans enregistrer |
+|12. Store configuration for later use         | Enregistrer pour plus tard |
+^ ^ ^
+|20. Reset config options                | Effacer configuration |
+|21. Load stored config                  | Charger ancienne configuration |
+|22. Parse and load current config (todo)| (non fonctionnel) |
+
+Une fois enregistré et quitté (point 10), il vous faut encore copier le fichier créé avec cette commande:
+<code>cp ~/.bip/bip.conf.autogen ~/.bip/bip.conf</code>
+
+Vous pourrez à partir de là [[:tutoriel:comment_modifier_un_fichier|modifier le fichier]] **~/.bip/bip.conf** pour changer votre configuration.
+
+Si vous voulez réutiliser l'outil de configuration (qui ne modifie que le fichier ~/.bip/bip.conf.autogen ) n'oubliez pas de le recharger (point 21).
+
+==== Exemple de fichier de configuration ====
+Voici un exemple de configuration pouvant être utilisée par bip, l'ensemble des 3 parties présentées devant être contenue dans le fichier **~/.bip/bip.conf**.
+
+Pour éviter toute confusion dans les termes utilisés, un petit rappel  :
+  * client = logiciel (client irc) qui se connecte au serveur bip ;
+  * bip = proxy acceptant les connexions de la part des clients (logique serveur) et se connectant lui-même aux serveurs irc (logique client) ;
+  * serveur irc = machines hébergeant les canaux irc...
+
+=== Section 1 : paramètres généraux ===
+Cette partie concerne le fonctionnement général de bip.
+  ### Global options
+  ## Activation de l'enregistrement des évènements système (true/false) et du degré de verbosité.
+  log_system = true;
+  log_level = 3;
+  
+  ## Activation du chiffrement ssl (true/false) entre bip et le client et l'emplacement du certificat à utiliser (indiquez l'emplacement où vous avez placé le certificat généré).
+  client_side_ssl = true;
+  client_side_ssl_pem = "/home/nom_du_user/.bip/bip.pem";
+  
+  ## Port d'écoute sur lequel le client se connecte à bip (veillez à configurer votre firewall / box en conséquence).
+  port = 8001;
+  
+  ## Emplacement du fichier de pid de bip.
+  pid_file = "/var/run/bip/bip.pid";
+  
+  ## Activation de l'enregistrement des conversations des canaux irc connectés (true/false), de l'intervalle (seconde), du format et de l'emplacement d'enregistrement.
+  log = true;
+  log_sync_interval = 180;
+  log_format = "%n/%Y-%m/%c.%d.log";
+  log_root = "/var/log/bip/";
+
+
+=== Section 2 : réseaux ===  
+Il est possible de configurer plusieurs réseaux, pour cela il suffit de dupliquer cette partie en renseignant pour chacun les paramètres adéquats.
+  ### Networks
+	network {
+		name = "freenode";				## nom d'affichage à associer au réseau irc (arbitraire).
+		ssl = true;					## activation du chiffrement ssl entre le serveur irc et bip (true/false).
+		server {
+			host = "chat.freenode.net";		## adresse du serveur irc.
+			port = 7000;				## port de connexion au serveur irc.
+    	};
+	};
+
+=== Section 3 : utilisateurs ===	
+Il est possible de configurer plusieurs utilisateurs, pour cela il suffit de dupliquer cette partie en renseignant pour chacun les paramètres adéquats.
+  ### Users
+	user {
+		name = "nom_de_connexion_à_bip";	## nom d'utilisateur à utiliser par le client pour se connecter à bip.
+		password = "hash_généré_issu_du_mdp";	## s'effectue via la partie 3 ou 6 du menu d'auto-configuration de bip.
+		admin = true;				## si vrai : défini si l'utilisateur comme administrateur de bip (permet de le commander par envoi de commandes spécifiques dans le client irc).
+		ssl_check_mode = "ca";			## type de certificat ssl (voir chapitre suivant).
+		ssl_check_store = "/etc/ssl/certs";	## emplacement du certificat ssl (voir chapitre suivant).
+		default_nick = "nick_irc_à_utiliser";	## pseudonyme irc à afficher.
+		default_user = "nom_du_user";		## nom d'utilisateur irc à afficher.
+		default_realname = "nom_réel_du_user";	## nom réel d'utilisateur irc à afficher.
+		backlog = true;				## si vrai : affichage les messages journalisés à la reconnexion du client à bip (nécessite "log = true;" dans la section Paramètres généraux).
+		backlog_lines = 0;			## nombre de lignes de journalisation à afficher, si à 0 et 'backlog_always = false;' affiche uniquement et intégralement les messages postés depuis la déconnexion.
+		backlog_no_timestamp = false;		## si vrai : désactive l'horodatage dans l'affichage des messages journalisés.
+		backlog_msg_only = true;		## si vrai : limite l'affichage de la journalisation aux conversations (ignore les connexions/déconnexion).
+		backlog_always = false;			## si vrai : affiche systématiquement le contenu du fichier journalisé (limité au nombre de lignes défini dans backlog_lines), même si aucun nouveau message n'a été posté depuis la dernière déconnexion.
+		connection {
+			name = "freenode";			## nom du serveur à afficher dans le client.
+			network = "freenode";			## nom du serveur auquel l'utilisateur doit se connecter (défini dans le champ 'name' de la partie network).
+			password = "mot_de_passe_serveur"	## à renseigner si la connexion au serveur irc nécessite un mot de passe /!\ il est stocké en clair.
+			follow_nick = false;			## en rapport avec le changement de pseudo dans le client, mais oublié son fonctionnement.
+			ignore_first_nick = true;		## si vrai : si le pseudo défini dans le client est différent de celui défini dans bip, le pseudo bip (celui visible sur irc) ne sera pas automatiquement remplacé par celui du client lors de sa connexion.
+			no_client_away_msg = "pas là";		## message à afficher automatiquement lors de la réception d'un message privé alors qu'aucun client n'est connecté.
+			on_connect_send = "PRIVMSG NickServ :IDENTIFY mot_de_passe_utilisateur";	## type de commande utilisable pour l'authentification de l'utilisateur bip lors de sa connexion au serveur IRC /!\ il est stocké en clair.
+			## liste de canaux à rejoindre :
+			channel {
+				name = "##tdct";
+			};
+  
+			channel {
+				name = "#ubuntu-fr";
+			};
+    	};
+	};
+
+
+
+==== Connexion à un serveur IRC en SSL ====
+
+Bip peut se connecter à un réseau IRC soit en clair, soit avec une connexion chiffrée en TLS/SSL si le serveur IRC à rejoindre permet ce type de connexion. Toutefois, dans votre fichier de configuration, et pour un réseau donné, vous ne devez pas mélanger les connexions en clair et les connexions TLS/SSL.
+
+Pour vous connecter enSSL, c'est simple : [[:tutoriel:comment_modifier_un_fichier|modifiez le fichier]] **~/.bip/bip.conf** et dans la section //network// passez cette option
+<code>  ssl = false;</code>
+à
+<code>  ssl = true;</code>
+
+De plus, dans la section //user//, vous pouvez modifier
+<code>  ssl_check_mode="none";</code>
+pour le passer à **ca**, afin qu'il vérifie le certificat du serveur à l'aide des autorité de certification, ou à **basic**, pour qu'il vérifie dans ses dépôts uniquement. Sinon, il ne vérifiera pas la validité du certificat.
+
+Vous avez également cette option:
+<code>  ssl_check_store="";</code>
+pour indiquer l'emplacement des certificats (indiquez lui /etc/ssl/certs si ça ne marche pas).
+
+==== Connexion à bip depuis un client IRC en SSL ====
+Vous devez tout d'abord avoir généré le certificat SSL, si vous ne l'avez pas fait, retournez dans le menu de configuration [[bip#generer_automatiquement_un_fichier_de_configuration_basique|bipgenconfig]] et sélectionnez l'entrée n°7 du menu.
+Modifiez ensuite votre fichier de configuration bip afin de le rendre cohérent avec la [[bip#exemple_de_fichier_de_configuration|section 1 : paramètres généraux]] de la présente documentation.
+
+===== Utilisation =====
+
+==== Lancement manuel ====
+Pour tester, je vous recommande de lancer bip au premier plan dans un [[terminal]] avec la commande:
+<code>bip -n</code>
+
+Par la suite, afin de lancer bip en arrière plan, dans un [[terminal]] lancez la commande :
+
+<code>bip</code>
+
+De cette manière bip ne se relancera pas automatiquement en cas de redémarrage. Pour cela il faut l'utiliser en mode démon (cf. ci-dessous).
+
+==== Lancement automatique au démarrage ====
+Afin de lancer bip en tant que service, si vous avez suivi le tutoriel depuis le début, deux manipulations sont à effectuer :
+
+Déplacer le fichier de configuration de  **~/.bip/bip.conf** à  **/etc/bip.conf**
+
+  sudo mv ~/.bip/bip.conf /etc/
+
+Éditez le fichier permettant de démarrer bip en tant que service :
+
+  sudo nano /etc/default/bip
+
+Modifiez la ligne afin d'activer le script de démarrage :
+
+  # Set ENABLED to 1 if you want the init script to start bip.
+  ENABLED=1
+
+Vous pouvez également protéger le fichier de configuration afin d'empêcher qu'un utilisateur ne puisse l'ouvrir et consulter les mots de passe en clair qui peuvent s'y trouver.
+
+  sudo chmod 600 /etc/bip.conf
+  
+rendre le fichier lisible par bip
+
+  sudo chown bip:bip  /etc/bip.conf
+  
+lancer le service par
+
+  sudo service bip start
+  
+
+  
+===== Se connecter à Bip =====
+
+Tous les [[:messagerie_instantanee#pour_irc|clients IRC]] peuvent facilement se connecter à Bip.
+
+Rien de plus facile, il suffit de vous connecter à votre serveur en précisant comme mot de passe de connexion au serveur : **user:password:connection**
+
+==== Pidgin ====
+[[:Pidgin]] nécessite d'[[:pidgin#utilisation_d_irc|ajouter les salons de discussions]] en favori et d'activer la connexion automatique ainsi que le mode persistant. Sans cela, à chaque fois que vous fermerez une fenêtre de discussion, pidgin vous fait sortir du salon.
+
+
+===== Désinstallation =====
+
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. La configuration de l'application sera conservée ou supprimée selon la méthode de désinstallation que vous choisirez.
+
+===== Liens =====
+
+* [[http://bip.milkypond.org/|Site officiel]] (en)
+
+----
+ //[[:utilisateurs:YoBoY|YoBoY]], [[:utilisateurs:spineaker|spineaker]] Le 02/12/2010, 19:40//

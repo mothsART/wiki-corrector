@@ -1,0 +1,493 @@
+
+====== Installation de Postfix avec TLS, SASL, MySQL/MariaDb, Clamav, SpamAssassin Avec Ubuntu 14.04======
+
+Ce tutoriel s'inspire grandement du tutoriel réalisé publié ici : http://doc.ubuntu-fr.org/postfix_mysql_tls_sasl
+
+J'utilise actuellement 3 serveurs : 
+  * Un serveur sous Ubuntu 14.04 qui me servira de serveur email
+  * Un serveur sous Ubuntu 14.04 de base de donnée qui va héberger le contenu
+  * Un serveur sous Ubuntu 14.04 qui heberge le serveur web (notamment phpmyadmin)
+
+La mise en place d'une telle solution demande du temps ainsi qu'un certain niveau pour savoir étudier les logs s'il y a une erreur.
+
+Niveau confirmé.
+Temps d'application : une bonne demi-heure.
+
+[[http://www.postfix.org/|Postfix]] est un mta (Mail Transfer Agent, simple d'utilisation contrairement à Sendmail ou bien qmail. Postfix est utilisé par défaut chez Mac OS X, disponible sur GNU/Linux, la famille BSD et d'autres unix encore. 
+
+Ce tuto vous permettra de mettre en place une solution multi-domaine basée sur des utilisateurs et domaines virtuels, couplée avec MySQL/MariaDb. A noter que Postfix peut être également couplé à LDAP et ProgresSQL.
+
+===== Installation des paquets =====
+
+==== Serveur email ====
+
+Pour le serveur web nous devons installer les paquets liés à postif et aux différents services web, ainsi que les paquets liés à la connection avec le serveur de base de donnée. A noter que j'ai choisis MariaDb comme base de donnée :
+**sudo apt-get install postfix mariadb-client courier-authdaemon courier-authlib-mysql courier-pop courier-pop-ssl courier-imap courier-imap-ssl libsasl2-2 libsasl2-modules libsasl2-modules-sql sasl2-bin libpam-mysql openssl**
+
+Vous pouvez faire de même pour mysql :
+**sudo apt-get install postfix mysql-client courier-authdaemon courier-authlib-mysq
+l courier-pop courier-pop-ssl courier-imap courier-imap-ssl libsasl2-2 libsasl2-modules libsasl2-modules-sql sasl2-bin libpam-mysql openssl**
+
+Le prompt suivant doit s'afficher pour demander l'option la plus pertinente pour votre serveur. J'ai choisis la première : No configuration
+<code>
+Please select the mail server configuration type that best meets your needs.
+
+No configuration:
+  Should be chosen to leave the current configuration unchanged.
+ Internet site:
+  Mail is sent and received directly using SMTP.
+ Internet with smarthost:
+  Mail is received directly using SMTP or by running a utility such
+  as fetchmail. Outgoing mail is sent using a smarthost.
+ Satellite system:
+  All mail is sent to another machine, called a 'smarthost', for delivery.
+ Local only:
+  The only delivered mail is the mail for local users. There is no network.
+
+  1. No configuration  2. Internet Site  3. Internet with smarthost  4. Satellite system  5. Local only
+General type of mail configuration:'
+</code>
+
+
+==== Serveur de base de donnée ====
+
+**Avec MariaDb :**
+**sudo apt-get install mariadb-server**
+
+**Avec Mysql**
+**sudo apt-get install  mysql-server**
+
+Si c'est la 1ère fois que vous installez MySQL, définissez un mot de passe pour le root
+
+  mysqladmin -u root password 'motdepasse'
+
+Si jamais le mot de passe root ne peut être changé voici une petite procédure pour pouvoir le faire:\\
+
+<code>
+/etc/init.d/mysql stop
+rm -Rf /var/lib/mysql/*
+mysql_install_db
+/etc/init.d/mysql start
+mysqladmin -u root password 'xxxxxxxx'
+</code>
+
+==== Postfix ====
+
+Création de la base de donnée nommée postfix
+
+  mysqladmin -u root --password='motdepasse' create postfix
+
+Création de l'utilisateur postfix
+  
+  $ mysql -u root -p
+  Enter password:
+  GRANT ALL PRIVILEGES ON postfix.* TO "postfix"@"localhost" IDENTIFIED BY 'motdepasse';
+
+Insertion des tables dans la base de données 
+
+  USE postfix;
+  CREATE TABLE `alias` (
+  `address` varchar(255) NOT NULL default '',
+  `goto` text NOT NULL,
+  `domain` varchar(255) NOT NULL default '',
+  `created` datetime NOT NULL default '0000-00-00 00:00:00',
+  `modified` datetime NOT NULL default '0000-00-00 00:00:00',
+  `active` tinyint(1) NOT NULL default '1',
+  PRIMARY KEY  (address)
+  ) ENGINE=MyISAM COMMENT='Postfix Admin - Virtual Aliases';
+
+  USE postfix;
+  CREATE TABLE `domain` (
+  `domain` varchar(255) NOT NULL default '',
+  `description` varchar(255) NOT NULL default '',
+  `aliases` int(10) NOT NULL default '0',
+  `mailboxes` int(10) NOT NULL default '0',
+  `maxquota` int(10) NOT NULL default '0',
+  `transport` varchar(255) default NULL,
+  `backupmx` tinyint(1) NOT NULL default '0',
+  `created` datetime NOT NULL default '0000-00-00 00:00:00',
+  `modified` datetime NOT NULL default '0000-00-00 00:00:00',
+  `active` tinyint(1) NOT NULL default '1',
+  PRIMARY KEY  (domain)
+  ) ENGINE=MyISAM COMMENT='Postfix Admin - Virtual Domains';
+
+  USE postfix;
+  CREATE TABLE `mailbox` (
+  `username` varchar(255) NOT NULL default '',
+  `password` varchar(255) NOT NULL default '',
+  `name` varchar(255) NOT NULL default '',
+  `maildir` varchar(255) NOT NULL default '',
+  `quota` int(10) NOT NULL default '0',
+  `domain` varchar(255) NOT NULL default '',
+  `created` datetime NOT NULL default '0000-00-00 00:00:00',
+  `modified` datetime NOT NULL default '0000-00-00 00:00:00',
+  `active` tinyint(1) NOT NULL default '1',
+  PRIMARY KEY  (username)
+  ) ENGINE=MyISAM COMMENT='Postfix Admin - Virtual Mailboxes';
+
+  quit;
+
+On crée un dossier nommé vmail. Ce dossier regroupera les boîtes mail des utilisateurs. 
+
+   $ groupadd -g 5000 vmail
+   $ useradd -g vmail -u 5000 vmail -d /home/vmail -m
+
+On ajoute dans /etc/postfix/main.cf en fin de fichier
+
+  # Support Mysql
+  virtual_alias_maps = mysql:/etc/postfix/mysql_virtual_alias_maps.cf
+  virtual_gid_maps = static:5000
+  virtual_mailbox_base = /home/vmail
+  virtual_mailbox_domains = mysql:/etc/postfix/mysql_virtual_domains_maps.cf
+  virtual_mailbox_limit = 51200000
+  virtual_mailbox_maps = mysql:/etc/postfix/mysql_virtual_mailbox_maps.cf
+  virtual_minimum_uid = 5000
+  virtual_transport = virtual
+  virtual_uid_maps = static:5000
+  # Support du quota
+  virtual_create_maildirsize = yes
+  virtual_mailbox_extended = yes
+  virtual_mailbox_limit_maps = mysql:/etc/postfix/mysql_virtual_mailbox_limit_maps.cf
+  virtual_mailbox_limit_override = yes
+  virtual_maildir_limit_message = Desole, la boite email de l'utilisateur est pleine, essayez plus tard.
+  virtual_overquota_bounce = yes
+  # Suport du relay
+  #relay_domains = mysql:/etc/postfix/mysql_relay_domains_maps.cf
+
+Le smtp de postfix est chrooter, il faut donc le retirer afin d'assurer son bon fonctionnement. On retire le chroot dans /etc/postfix/master.cf et modifier comme dessous.
+
+  #
+  # Postfix master process configuration file.  For details on the format
+  # of the file, see the Postfix master(5) manual page.
+  #
+  # ==========================================================================
+  # service type  private unpriv  chroot  wakeup  maxproc command + args
+  #               (yes)   (yes)   (yes)   (never) (100)
+  # ==========================================================================
+  smtp      inet  n       -       n       -       -       smtpd
+  cleanup   unix  n       -       n       -       0       cleanup
+  rewrite   unix  -       -       n       -       -       trivial-rewrite
+
+On va désormais créer les fichiers de configuration de postfix pour MySQL. Dans /etc/postfix, créer les fichiers suivants, tout en modifiant le mot de passe.
+
+<note tip>Pour aller plus vite, ne modifiez pas le mot de passe et copier-coller tels quels les fichiers. Une fois terminé, lancez la ligne de commande suivante en prenant soin de remplacer VOTREMOTDEPASSE par le bon. Tous les fichiers seront alors modifié en même temps, vous limiterez ainsi les erreurs ;-) :
+
+$ ''sed -i 's/motdepasse/VOTREMOTDEPASSE/' /etc/postfix/mysql_*.cf''
+
+Cela peut également vous servir le jour où vous désirez modifier le mot de passe...</note>
+
+mysql_virtual_alias_maps.cf
+
+  user = postfix
+  password = motdepasse
+  hosts = 127.0.0.1
+  dbname = postfix
+  query = SELECT goto FROM alias WHERE address='%s' AND active = 1
+
+mysql_virtual_domains_maps.cf
+
+  user = postfix
+  password = motdepasse
+  hosts = 127.0.0.1
+  dbname = postfix
+  query = SELECT domain FROM domain WHERE domain='%s'
+  #optional query to use when relaying for backup MX
+  #query = SELECT domain FROM domain WHERE domain='%s' and backupmx = '0' and active = '1'
+
+mysql_virtual_mailbox_maps.cf
+
+  user = postfix
+  password = motdepasse
+  hosts = 127.0.0.1
+  dbname = postfix
+  query = SELECT maildir FROM mailbox WHERE username='%s' AND active = 1
+
+mysql_virtual_mailbox_limit_maps.cf
+
+  user = postfix
+  password = motdepasse
+  hosts = 127.0.0.1
+  dbname = postfix
+  query = SELECT quota FROM mailbox WHERE username='%s'
+
+mysql_relay_domains_maps.cf
+
+  user = postfix
+  password = motdepasse
+  hosts = 127.0.0.1
+  dbname = postfix
+  query = SELECT domain FROM domain WHERE domain='%s' and backupmx = '1'
+
+Pour le bon fonctionnement et la sécurité il faut exécuter ces deux lignes de commandes
+
+    chmod 640 mysql_*
+    chgrp postfix mysql_*
+
+On crée des liens pour le bon fonctionnement de l'ensemble
+
+   mkdir -p /var/spool/postfix/var/run/mysqld
+   chown mysql /var/spool/postfix/var/run/mysqld
+   ln -s /var/run/mysqld/mysqld.sock /var/spool/postfix/var/run/mysqld/mysqld.sock
+
+   mkdir -p /var/spool/postfix/var/run/courier/authdaemon
+   ln -s /var/run/courier/authdaemon/socket /var/spool/postfix/var/run/courier/authdaemon/socket
+   chown -R daemon:daemon /var/spool/postfix/var/run/courier
+   chmod 755 /var/spool/postfix/var/run/courier/authdaemon
+   
+==== Postfix ====
+
+Création de la base de donnée nommée postfix
+
+  mysqladmin -u root --password='motdepasse' create postfix
+
+Création de l'utilisateur postfix
+  
+  $ mysql -u root -p
+  Enter password:
+  GRANT ALL PRIVILEGES ON postfix.* TO "postfix"@"localhost" IDENTIFIED BY 'motdepasse';
+
+Insertion des tables dans la base de données 
+
+  USE postfix;
+  CREATE TABLE `alias` (
+  `address` varchar(255) NOT NULL default '',
+  `goto` text NOT NULL,
+  `domain` varchar(255) NOT NULL default '',
+  `created` datetime NOT NULL default '0000-00-00 00:00:00',
+  `modified` datetime NOT NULL default '0000-00-00 00:00:00',
+  `active` tinyint(1) NOT NULL default '1',
+  PRIMARY KEY  (address)
+  ) ENGINE=MyISAM COMMENT='Postfix Admin - Virtual Aliases';
+
+  USE postfix;
+  CREATE TABLE `domain` (
+  `domain` varchar(255) NOT NULL default '',
+  `description` varchar(255) NOT NULL default '',
+  `aliases` int(10) NOT NULL default '0',
+  `mailboxes` int(10) NOT NULL default '0',
+  `maxquota` int(10) NOT NULL default '0',
+  `transport` varchar(255) default NULL,
+  `backupmx` tinyint(1) NOT NULL default '0',
+  `created` datetime NOT NULL default '0000-00-00 00:00:00',
+  `modified` datetime NOT NULL default '0000-00-00 00:00:00',
+  `active` tinyint(1) NOT NULL default '1',
+  PRIMARY KEY  (domain)
+  ) ENGINE=MyISAM COMMENT='Postfix Admin - Virtual Domains';
+
+  USE postfix;
+  CREATE TABLE `mailbox` (
+  `username` varchar(255) NOT NULL default '',
+  `password` varchar(255) NOT NULL default '',
+  `name` varchar(255) NOT NULL default '',
+  `maildir` varchar(255) NOT NULL default '',
+  `quota` int(10) NOT NULL default '0',
+  `domain` varchar(255) NOT NULL default '',
+  `created` datetime NOT NULL default '0000-00-00 00:00:00',
+  `modified` datetime NOT NULL default '0000-00-00 00:00:00',
+  `active` tinyint(1) NOT NULL default '1',
+  PRIMARY KEY  (username)
+  ) ENGINE=MyISAM COMMENT='Postfix Admin - Virtual Mailboxes';
+
+  quit;
+
+On crée un dossier nommé vmail. Ce dossier regroupera les boîtes mail des utilisateurs. 
+
+   $ groupadd -g 5000 vmail
+   $ useradd -g vmail -u 5000 vmail -d /home/vmail -m
+
+On ajoute dans /etc/postfix/main.cf en fin de fichier
+
+  # Support Mysql
+  virtual_alias_maps = mysql:/etc/postfix/mysql_virtual_alias_maps.cf
+  virtual_gid_maps = static:5000
+  virtual_mailbox_base = /home/vmail
+  virtual_mailbox_domains = mysql:/etc/postfix/mysql_virtual_domains_maps.cf
+  virtual_mailbox_limit = 51200000
+  virtual_mailbox_maps = mysql:/etc/postfix/mysql_virtual_mailbox_maps.cf
+  virtual_minimum_uid = 5000
+  virtual_transport = virtual
+  virtual_uid_maps = static:5000
+  # Suport du relay
+  #relay_domains = mysql:/etc/postfix/mysql_relay_domains_maps.cf
+
+Le smtp de postfix est chrooter, il faut donc le retirer afin d'assurer son bon fonctionnement. On retire le chroot dans /etc/postfix/master.cf et modifier comme dessous.
+
+  #
+  # Postfix master process configuration file.  For details on the format
+  # of the file, see the Postfix master(5) manual page.
+  #
+  # ==========================================================================
+  # service type  private unpriv  chroot  wakeup  maxproc command + args
+  #               (yes)   (yes)   (yes)   (never) (100)
+  # ==========================================================================
+  smtp      inet  n       -       n       -       -       smtpd
+  cleanup   unix  n       -       n       -       0       cleanup
+  rewrite   unix  -       -       n       -       -       trivial-rewrite
+
+On va désormais créer les fichiers de configuration de postfix pour MySQL. Dans /etc/postfix, créer les fichiers suivants, tout en modifiant le mot de passe.
+
+<note tip>Pour aller plus vite, ne modifiez pas le mot de passe et copier-coller tels quels les fichiers. Une fois terminé, lancez la ligne de commande suivante en prenant soin de remplacer VOTREMOTDEPASSE par le bon. Tous les fichiers seront alors modifié en même temps, vous limiterez ainsi les erreurs ;-) :
+
+$ ''sed -i 's/motdepasse/VOTREMOTDEPASSE/' /etc/postfix/mysql_*.cf''
+
+Cela peut également vous servir le jour où vous désirez modifier le mot de passe...</note>
+
+mysql_virtual_alias_maps.cf
+
+  user = postfix
+  password = motdepasse
+  hosts = 127.0.0.1
+  dbname = postfix
+  query = SELECT goto FROM alias WHERE address='%s' AND active = 1
+
+mysql_virtual_domains_maps.cf
+
+  user = postfix
+  password = motdepasse
+  hosts = 127.0.0.1
+  dbname = postfix
+  query = SELECT domain FROM domain WHERE domain='%s'
+  #optional query to use when relaying for backup MX
+  #query = SELECT domain FROM domain WHERE domain='%s' and backupmx = '0' and active = '1'
+
+mysql_virtual_mailbox_maps.cf
+
+  user = postfix
+  password = motdepasse
+  hosts = 127.0.0.1
+  dbname = postfix
+  query = SELECT maildir FROM mailbox WHERE username='%s' AND active = 1
+
+mysql_virtual_mailbox_limit_maps.cf
+
+  user = postfix
+  password = motdepasse
+  hosts = 127.0.0.1
+  dbname = postfix
+  query = SELECT quota FROM mailbox WHERE username='%s'
+
+mysql_relay_domains_maps.cf
+
+  user = postfix
+  password = motdepasse
+  hosts = 127.0.0.1
+  dbname = postfix
+  query = SELECT domain FROM domain WHERE domain='%s' and backupmx = '1'
+
+Pour le bon fonctionnement et la sécurité il faut exécuter ces deux lignes de commandes
+
+    chmod 640 mysql_*
+    chgrp postfix mysql_*
+
+On crée des liens pour le bon fonctionnement de l'ensemble
+
+   mkdir -p /var/spool/postfix/var/run/mysqld
+   chown mysql /var/spool/postfix/var/run/mysqld
+   ln -s /var/run/mysqld/mysqld.sock /var/spool/postfix/var/run/mysqld/mysqld.sock
+
+   mkdir -p /var/spool/postfix/var/run/courier/authdaemon
+   ln -s /var/run/courier/authdaemon/socket /var/spool/postfix/var/run/courier/authdaemon/socket
+   chown -R daemon:daemon /var/spool/postfix/var/run/courier
+   chmod 755 /var/spool/postfix/var/run/courier/authdaemon
+
+==== TLS (Imap TLS)====
+
+Pour le support du TLS il faut créer une clef SSL toujours dans le répertoire /etc/postfix/
+
+   $ openssl req -new -outform PEM -out smtpd.cert -newkey rsa:2048 -nodes -keyout smtpd.key -keyform PEM -days 365 -x509
+
+  <-- Enter your Country Name (e.g., "FR").
+  <-- Enter your State or Province Name.
+  <-- Enter your City.
+  <-- Enter your Organization Name (e.g., the name of your company).
+  <-- Enter your Organizational Unit Name (e.g. "IT Department").
+  <-- Enter the Fully Qualified Domain Name of the system (e.g. "server.domain.tld").
+  <-- Enter your Email Address.
+
+   $ chmod o= /etc/postfix/smtpd.key
+
+Ajoutez dans /etc/postfix/main.cf
+
+  # Support TLS
+  smtpd_tls_cert_file = /etc/postfix/smtpd.cert
+  smtpd_tls_key_file = /etc/postfix/smtpd.key
+  
+==== SASL ====
+
+Pour l'ajout du sasl mettez en fin de fichier de /etc/postfix/main.cf
+
+  # Support SASL
+  broken_sasl_auth_clients = yes
+  smtpd_recipient_restrictions = 
+    permit_mynetworks,
+    permit_sasl_authenticated,
+    reject_non_fqdn_hostname,
+    reject_non_fqdn_sender,
+    reject_non_fqdn_recipient,  
+    reject_unauth_destination,
+    reject_unauth_pipelining,   
+    reject_invalid_hostname,
+    reject_rbl_client bl.spamcop.net,
+    reject_rbl_client sbl-xbl.spamhaus.org
+  smtpd_sasl_auth_enable = yes
+  smtpd_sasl_local_domain = $myhostname
+  smtpd_sasl_security_options = noanonymous
+  broken_sasl_auth_clients = yes
+  smtpd_sasl_type = cyrus
+  cyrus_sasl_config_path = /etc/postfix/sasl
+
+On peut supprimer reject_rbl_client opm.blitzed.org, le projet étant abandonné depuis mai 2006 : [[http://wiki.blitzed.org/OPM_status]].
+
+Créez le fichier /etc/postfix/sasl/smtpd.conf et ajoutez :
+
+  pwcheck_method: saslauthd
+  mech_list: login plain
+  saslauthd_path: /var/spool/postfix/var/run/saslauthd/mux
+
+Editez le fichier /etc/default/saslauthd de façon à ce qu'il ait la configuration suivante
+
+  START=yes
+  MECHANISMS="pam"
+  OPTIONS="-c -r -m /var/spool/postfix/var/run/saslauthd"
+
+  
+Créez les répertoires et attribuez les droits.
+
+  mkdir -p /var/spool/postfix/var/run/saslauthd
+  chown -R root:sasl /var/spool/postfix/var/run/saslauthd
+  chmod 710 /var/spool/postfix/var/run/saslauthd
+
+
+Créez un  lien symbolique pour que cela fonctionne lorsque postfix est chrooter [sionib] :
+
+   ln -s /var/spool/postfix/var/run/saslauthd /var/run/saslauthd
+
+<note warning> Depuis au moins Ubuntu 14.04, le lien symbolique disparaît à chaque reboot. Comme workaround, éditez /etc/init.d/rc.local : 
+
+   sudo vi /etc/init.d/rc.local
+
+
+Et ajoutez ces lignes tout à la fin du fichier : 
+ 
+   /bin/sleep 5
+   ln -s /var/spool/postfix/var/run/saslauthd /var/run/saslauthd
+   /etc/init.d/saslauthd restart
+
+Ainsi le lien sera recréé à chaque reboot et sasl fonctionnera correctement.
+
+</note>
+
+Créez le fichier /etc/pam.d/smtp en prenant soin le cas échéant de remettre votre mot de passe. (chez moi il a fallu nommer ce fichier smtpd [jblanche])
+
+  auth       required     pam_mysql.so user=postfix passwd=motdepasse host=127.0.0.1 db=postfix table=mailbox usercolumn=username passwdcolumn=password crypt=1
+  account    sufficient   pam_mysql.so user=postfix passwd=motdepasse host=127.0.0.1 db=postfix table=mailbox usercolumn=username passwdcolumn=password crypt=1
+
+Redémarrez sasl
+
+   /etc/init.d/saslauthd restart
+
+Rajouter l'utilisateur postfix au groupe sasl :
+
+   adduser postfix sasl
+
+

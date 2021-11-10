@@ -1,0 +1,142 @@
+
+{{tag>systeme BROUILLON}}
+<note tip>Ceci est une ébauche d'une traduction de la page https://wiki.ubuntu.com/Bugs/HowToFix</note><note important>
+
+Attention la traduction est aussi sous une licence définie par ces termes :
+
+The website HTML, text, images audio, video, software or other content that is made available on this website are the property of someone - the author in the case of content produced elsewhere and reproduced here with permission, or Canonical or its content suppliers. Before you use this content in some way please take care to ensure that you have the relevant rights and permissions from the copyright holder.
+
+You are welcome to display on your computer, download and print pages from this website provided the content is only used for personal, educational and non-commercial use. You must retain copyright and other notices on any copies or printouts you make. Certain of the materials available on this site are "open source" materials subject to the GNU General Public License ("GPL") or other open source license and are so marked - use of those materials is governed by the individual applicable license.</note> 
+
+====== Bugs / Comment corriger un paquet ======
+
+Chaque paquet installé sur le système Ubuntu a été construit à partir de sources. Chaque source a une page dédiée pour rapporter des bugs touchant le paquets fils ( paquet issu de la compilation des sources ).
+
+Prenons pour exemple, la page des bugs du paquet "hello" à l'adresse suivante : https://launchpad.net/ubuntu/+source/hello/+bugs.
+
+Vous ne savez pas comment corriger un problème ( bug ) reporter mais ça aide !
+Il y a certaines choses que n'importe qui peut faire. Pour commencer, beaucoup de bugs touchent la typographie ou la documentation et ils peuvent facilement être corrigés par tous. Si vous connaissez une autre langue, vous pouvez surement corriger les erreurs de traduction. Pour le fonctionnement, vous pouvez essayer d'améliorer les rapports de bugs reportés pour les auteurs du paquet concerné. Ou trouver une solution qui sera incluse dans une autre distribution ( pas clair cette phrase ).
+===== Replicating bugs ( Rapport de bugs dupliqué ) =====
+
+Avant de corriger un bug, assurez-vous que le bug peut être reproduit sur votre machine. Sinon, essayer de corriger un bug que vous ne constatez pas n'est pas prioritaire pour une résolution. Si vous avez besoin d'information pour reproduite le bug, demandez plus d'informations de la part de l'auteur du rapport de bug dans un commentaire de bug.
+
+===== Installer les outils nécessaires =====
+
+De nombreux scripts ont été développés pour aider tout en travaillant avec les outils debian et des patchs. Installer ces paquets :
+
+sudo apt-get install devscripts ubuntu-dev-tools
+
+Générer un patch :
+
+Ici le simple exemple pour voir comment créer un patch :
+
+  - Imaginons que vous avez un rapport de bug disant que la description du paquet xicc contient une erreur orthographique touchant le mot "color " et que nous voulons corriger. (Très mauvais exemples je vous l'accorde) Premièrement vérifier que le rapport dit vrai:
+
+      $ apt-cache show xicc
+      Package: xicc
+      Priority: optional
+      Section: universe/x11
+      Installed-Size: 72
+      Maintainer: Ross Burton <ross@debian.org>
+      Architecture: amd64
+      Version: 0.2-2
+      Depends: libc6 (>= 2.3.4-1), libglib2.0-0 (>= 2.8.0), libice6, libsm6, libx11-6
+      Filename: pool/universe/x/xicc/xicc_0.2-2_amd64.deb
+      Size: 8224
+      MD5sum: a266d60cd721ef91fcb1d3d47ecd6a40
+      SHA1: b8da21b8dfba7ed9c7ac6fa5c9c3e70b438d7124
+      SHA256: 635c287a1c43df31670a20194e774561479d70d981bf24c143c3711799bd839a
+      Description: set the ICC **colour** profile for an X display
+       This utility lets you set an ICC colour profile for an X display, so that
+       applications can use it to display colour calibrated images.  Applications have
+       to specifically look for this atom but several applications such as Gimp and
+       Eye Of Gnome already do.
+      Bugs: mailto:ubuntu-users@lists.ubuntu.com
+      Origin: Ubuntu
+
+  - L'erreur constatée, le rapport de bug est confirmé, c'est le moment d'agir commençons à rapatrier les sources de ce paquet :
+
+<code>dget -xu http://people.ubuntu.com/~dholbach/motu/xicc_0.2-2.dsc</code>
+
+  - Éditez le fichier debian/control qui contient l'erreur et corrigeons ce mot :
+
+      cd xicc-0.2
+      sed -i 's/colour/color/g' debian/control
+
+Bien entendu le patch n'est pas toujours si facile et pourrait nécessiter un patch bien plus important touchant beaucoup de parties dans le paquet originel. Reportez-vous à la partie Patch guidelines.
+  - Adhérer à DebianMaintainerField: Éditez le fichier debian/control et remplacer :
+
+      Maintainer: Ross Burton <ross@debian.org>
+
+par
+
+      Maintainer: Ubuntu MOTU Developers <ubuntu-motu@lists.ubuntu.com>
+      XSBC-Original-Maintainer: Ross Burton <ross@debian.org>
+
+Pour cette action, vous pouvez utiliser l'outil update-maintainer ( dans le paquet ubuntu-dev-tools ).
+  - Mettre à jour le fichier debian/changelog :
+
+      dch -i
+
+et décrire les changements que vous avez effectués.
+  - Générer le nouveau paquet :
+
+      debuild -S
+
+Ou si vous créez un paquet non signé :
+
+      debuild -S -us -uc
+
+  - Regardez avez debdiff :
+
+      cd ..
+      debdiff xicc_0.2-2.dsc xicc_0.2-2ubuntu1.dsc | less
+
+  - Pour créer un fichier patch, vous devez envoyer le résultat de debdiff dans un autre fichier :
+
+      debdiff xicc_0.2-2.dsc xicc_0.2-2ubuntu1.dsc > xicc_0.2.2ubuntu1.debdiff
+
+  - C'est fait. Vous pouvez maintenant joindre le patch debdiff à un rapport de bug ou l'envoyer à une personne s'y connaissant ( FIXME à revoir ). SponsorshipProcess explique comment envoyer un paquet à Ubuntu. ( FIXME ) 
+
+    * Vérifier SponsorshipProcess pour voir comment inclure ce patch à Ubuntu.
+    * (PackagingGuide contient plus d'informations pour construire un paquet, le patcher et le tester.)
+    * UbuntuDevelopment/Patches à un guide pour générer de bons patchs. 
+
+===== Tester les corrections =====
+
+Une fois que votre patch est généré entrer à nouveau dans le dossier des sources et construire le paquet.
+<code>
+cd hello-2.2
+sudo apt-get build-dep hello
+debuild -us -uc
+</code>
+Si la construction du paquet échoue, revenez sur vos changements et vérifiez qu'il n'y a pas d'erreurs. Vous pouvez générer votre patch à partir des sources via les commandes suivantes :
+
+rm -rf hello-2.2
+dpkg-source -x hello_2.2-1.dsc
+patch -p0 < hello.patch
+
+Si la construction du paquet réussit, installer le paquet et soyez sûr que vous ne pouvez plus reproduire le bug en question. Le paquet local peu être installé avec la commande suivante :
+
+sudo dpkg -i hello_2.2-1_*.deb
+
+Si votre patch ne corrige pas le problème, ou que vous ne pouvez pas corriger le paquet, mettez à jour le rapport,  assigné le par "Nobody" et changer le status à "Confirmed". Vous pouvez aussi ajouter un commentaire descriptif de votre expérience pour aidez d'autres personnes à corriger ce bug.
+
+===== Charger le patch =====
+
+Si votre patch corrige le bug, ajouter s'il vous plait un commentaire au bug, et joignez le patch. Soyez sûr que avez coché la case patch pour télécharger le patch.
+
+Assignez le bug à "Nobody", et le status à "Confirmed". A ce point, recherchez le développeur pour jeter un œil à votre patch pour l'inclure dans la prochaine version du paquet. Voir SponsorshipProcess. Si vous avez d'autres questions, demandez sur #ubuntu-motu sur InternetRelayChat.
+
+N.B. Si vous connaissez le packaging debian, et voulez préparer une version candidate en incluant le correctif pour corriger le bug, voir MOTU/Contributing pour quelques conseils sur la création d'une nouvelle version. Vérifier sur MOTU/GettingStarted pour voir comment être plus impliqué dans le packagind et l'équipe.
+
+===== Corriger le bug dans une version stable =====
+
+La majorité des changements et des corrections de bugs se font sur la version de développement de Ubuntu. Une fois nous produisons la version stable de Ubuntu, des millions d'utilisateurs travaillent dessus et dépendent de sa stabilité, donc nous limitons les changements entre la sortie des versions, pour ces deux raisons
+
+    * Une régression dans une version stable est une catastrophe. Il est préférable de garder une version stable avec des bugs connus dont les utilisateurs apprennent à contourner tout en travaillant, que de briser les fonctionnalités existantes.
+    * Même certaines des corrections de bugs pouvant causer des confusions, s'ils perturbent la manière dont les utilisateurs ont déjà travaillé avec le logiciel. Cela affecte en particulier l'interface utilisateur et les changements de chaîne ( ??? FIXME ), de l'API / ABI des erreurs ( FIXME ), etc.
+
+Néanmoins nous voulons offrir des corrections de bugs critiques/données pertent/securités , et dans la plupart des cas des bugs triviaux qui ont des conséquences de régressions presque null. Tous les développeurs sont les bienvenus et sont invités à fournir ces mises à jour. La procédure est détaillée dans les pages SecurityUpdateProcedures et StableReleaseUpdates.
+
+D'un autre côté beaucoup d'utilisateurs ont besoin d'une nouvelle version d'une partie d'un logiciel, sans forcément mettre à jour la distribution complète. Pour ceux là, nous fournissons un dépôt "backports" qui n'est pas activé par défault et permet d'introduire des changements plus importants. La procédure est documenté à https://help.ubuntu.com/community/UbuntuBackports. 

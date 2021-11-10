@@ -1,0 +1,128 @@
+
+{{tag>Xenial réseau internet courriel tutoriel BROUILLON}}
+
+----
+
+====== Comment envoyer l'IP de sa box automatiquement par courriel ======
+===== Pré-requis : savoir envoyer un courriel par SMTP en ligne de commande =====
+  * Voir le tuto : [[tutoriel:comment_envoyer_un_mail_par_smtp_en_ligne_de_commande]]
+
+===== Envoyer l'IP externe de sa box par courriel dans un script =====
+==== Récupérer l'IP externe de sa box ====
+<file>GET bot.whatismyipaddress.com</file>
+  * Cette commande renvoie des erreurs une fois sur deux, donc on va la lancer 2 ou 3 fois dans un script et récupérer l'IP dans un fichier.
+<code>nano ~/getip</code>
+
+  GET bot.whatismyipaddress.com > .myip
+  echo "" >> .myip
+  sleep 1
+  GET bot.whatismyipaddress.com >> .myip
+  echo "" >> .myip
+  sleep 1
+  GET bot.whatismyipaddress.com >> .myip
+  echo "" >> .myip
+<file>sh ~/getip</file>
+<file>cat ~/.myip</file>
+  92.122.18.135
+  92.122.18.135
+  92.122.18.135
+
+==== Envoyer son IP de box à son courriel au bureau ====
+
+  * Voir le tuto : [[tutoriel:comment_envoyer_un_mail_par_smtp_en_ligne_de_commande]]
+== par msmtp ==
+
+<code bash>cat ~/.myip | msmtp johnny@whitehouse.gov</code>
+== par ssmtp ==
+<code bash>cat ~/.myip | mail johnny@whitehouse.gov</code>
+<note tip>Sans préciser Subject://DeQuoiOnParle// le message n'aura pas de sujet.
+Il faut donc prévoir de le rajouter en tête du fichier ~/.myip</note>
+
+==== Compléter le script : récupérer l'IP ET l'envoyer ====
+<note warning>Attention, seule la première ligne ne contient qu'un signe > (//ce qui crée ou écrase le fichier//). Toutes les autres lignes contiennent 2 signes >> (//ce qui complète un fichier existant, ou le crée sinon//).</note>
+
+<note warning>Le format de sortie du site qui vous renvoie votre IP pouvant être modifié, je suggère d'utiliser plusieurs sources, et d'en retravailler la sortie.
+Je compte obtenir l'adresse sous la forme des 4 octets, séparés par 3 points.</note>
+
+  * [[:tutoriel:comment_modifier_un_fichier|Modifier le fichier]] ~/getip pour qu'il intègre la commande msmtp (ou mail) à la dernière ligne:
+<code bash>nano ~/getip</code>
+<file bash>
+echo Subject:MaBoxMeParle > .myip
+GET http://www.formyip.com/ | grep "Your IP is" |awk '{print $6}'|sed 's/</ /g'|awk '{print $1}' >> .myip
+echo "" >> .myip
+sleep 1
+GET http://bot.whatismyipaddress.com >> .myip
+echo "" >> .myip
+cat .myip | msmtp johnny@whitehouse.gov</file>
+
+  * Rendre le script exécutable :
+<code bash>chmod 700 ~/getip</code>
+
+=== Utilisation ===
+
+  * Lancer le script
+<code bash>sh ~/getip</code>
+
+=== Vérification ===
+
+  * Depuis votre client de messagerie, vérifiez que vous avez bien reçu le message attendu, soit 3 lignes avec l'adresse IP de la maison blanche ... si c'est là que votre box est branchée.
+
+=== Contenu de .myip ===
+<code bash>cat .myip</code>
+<code>Subject:MaBoxMeParle
+86.178.64.39
+
+86.178.64.39</code>
+
+
+===== Automatisation de l'envoi =====
+
+==== Par la crontab ====
+
+Le système [[..\cron|crontab]] intégré à unix/linux permet une programmation simple de l'exécution de commandes et scripts.
+
+=== Modification de la crontab ===
+
+  * Si la crontab de l'utilisateur existe, on la redirige vers un fichier
+<code bash>crontab -l > cron</code>
+<note important>On évite systématiquement l'édition par la commande crontab -e, parce que la perte de 50 lignes de programmation sur un serveur de production, ça fait toujours chaud aux oreilles !</note>
+  * Puis on [[:tutoriel:comment_editer_un_fichier|modifie/crée le fichier]] cron en y ajoutant notre ligne de programmation :
+<code bash>nano cron</code>
+  23 8,12,15,18 1-5 * * sh /home/johnny/getip
+  # à 08:23 12:23 15:23 et 18:23, du 1er au 5ème jour de la semaine
+  # parce que les soirs et week-end je suis à la maison
+  # et que c'est encore plus simple de récupérer mon IP
+
+=== Injection des modifications de la crontab ===
+
+  * Créer le fichier cron ne suffit pas, il faut encore l'injecter dans le système crontab :
+<file>crontab ~/cron</file>
+
+== Vérification de la crontab ==
+
+<code bash>crontab -l</code>
+  ...
+  23 8,12,15,18 1-5 * * sh /home/johnny/getip
+  ...
+FIXME (23 8,12,15,18 1-5 * *) donne bien les jours 1 à 5 dans la semaine alors que (23 8,12,15,18 * * 1-5) donne les jours 1 à 5 du mois
+== Nettoyage ==
+
+  * Pas de raison de laisser traîner son cron derrière soi, puisqu'on sait le recréer à volonté
+<code bash>rm ~/cron</code>
+==== Par autre chose que la crontab… ====
+<note tip>Partie à compléter</note>
+<note>
+**Remarques :**
+  * Si l'envoi répété de l'IP sature votre boîte de courriel, à vous de modifier la programmation.
+
+  * Il est possible de créer un fichier .ini dans lequel on stocke l'ip connue, une comparaison avec l'ip courante décidera si il est nécessaire d'envoyer le mail ou pas en cas de changement.
+</note>
+
+===== Références =====
+
+  * [[:cron|Crontab]]
+
+
+-----------
+
+Contributeurs : [[utilisateurs:kerkael]] création de la page le 23/08/2009

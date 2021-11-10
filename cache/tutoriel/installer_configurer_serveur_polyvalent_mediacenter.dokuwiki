@@ -1,0 +1,652 @@
+
+====== Configurer un serveur local polyvalent (Nas, VPN, etc...) Multimédia (XBMC, Jeux...) ======
+
+{{http://vavar60.online.fr/images/tutoriaux/serveur_polyvalent/7aa9d17d34cc62c11e45f483b354ce70.media.jpg|Cliquez pour agrandir}}
+
+===== Objectifs : =====
+
+L'objectif est de pouvoir configurer simplement un serveur local polyvalent (Partage de fichiers et accès à distance sécurisé et chiffré), et un centre multimédia à brancher à un écran pour écouter de la musique, regarder des films, tout en profitant d'un stockage conséquent, de la compatibilité des processeurs X86_64 (et la multitude de programmes qui vont avec), de la standardisation de ces derniers, le tout dans un environnement passif (sans ventilateur ni bruit), avec un accès à distance pour pouvoir profiter d'un explorateur de fichiers et de téléchargements depuis une autre source, sans se prendre la tête. 
+De même, le serveur devra permettre d'accéder aisément au réseau local, depuis une connexion distante par internet !
+
+===== Configuration actuelle : =====
+
+__**Carte-mère - Asus C60M1-I avec APU AMD C-60:**__
+
+Carte mère relativement évolutive, équipée d'un APU AMD C60; processeur dual core 1Ghz (overclock sans erreurs jusqu'à 1,2ghz), 6 ports SATA III, un port PCI Express 16X 2.0, partie GPU (Radeon HD 6290) très faible pour les jeux mais toujours pris en charge par les derniers drivers Catalyst, propose le décodage UVD 3, et donc la possibilité  de profiter d'une accélération vidéo pour la partie media center, 8 Go de ram maximum (largement suffisant pour une utilisation serveur), 12 ports USB 2.0, chipset audio VIA proposant la gestion du 5.1, connectique VGA & DVI, pas de HDMI. (Un simple adaptateur DVI => HDMI fera l'affaire si nécessaire).
+
+Un problème que j'avais toutefois à l'époque de l'acquisition de cette carte mère, ce n'est un secret pour personne, mais les pilotes propriétaire AMD Catalyst pour Linux sont de bien moindre qualité que ceux sous Windows et les pilotes libre ne donnent rien de bon avec XBMC (très très lent) et alors que AMD aurait libéré la partie UVD pour l'accélération des vidéos, rien n'aurait été intégré aux pilotes libres...
+Concernant les pilotes propriétaires ce n'est plus un problème désormais, avec la nouvelle version bêta 14.1 des pilotes Catalyst. (Il reste toutefois quelques bugs, notamment sur la synchronisation verticale, et le terminal via un TTY)
+De fait, j'avais du me tourner vers l'achat d'une carte graphique Nvidia GT210.
+
+__**Carte graphique - Asus Nvidia GeForce 210 :**__
+
+Carte graphique peu puissante, mais bien plus potable que le chipset graphique intégré à l'APU, on profite d'une carte passive (pas de ventilateur), peu gourmande en énergie, apportant une bonne accélération 3D (l'on pourra sans douter gouter aux joies de l'émulation), et vidéo (h264, etc...), sans compter la présence d'un port HDMI.
+Les pilotes propriétaires de Nvidia à partir de la version 304 fonctionnent sans soucis, les pilotes libres "nouveau" eux, ne donnent rien de bien bon, accélération 3D/composite médiocre (Xbmc rame presque autant qu'avec le chipset AMD et les drivers libres), et aucune accélération vidéo matérielle (Donc h264 & cie très lent).
+Le principal défaut, c'est qu'on occupe l'unique port PCI Express, et que ce dernier est sous exploité, du coup pour une carte son de bonne qualité (si nécessaire), il faudra se tourner vers un des nombreux ports USB.
+
+__**Mémoire vive - Kit Dual Channel DDR3 Gskill Ares, 2 x 4 Go, PC3-10666, CAS 9 - Low Profile **__
+
+Le maximum de mémoire vive pouvant être installée sur la carte mère, bien suffisant, même avec un environnement de bureau/travail/multimédia/jeu complet.
+
+__**Disques dur et SSD**__
+
+Concrètement, j'y ai adjoint 4 disques durs faisant respectivement 1, 2, 3, 4To (acquis au fil du temps et formatés en Ext4), et un SSD de 32Go pour le système (amplement suffisant).
+
+__**Boitier -  Bitfenix Prodigy :**__
+
+Bonnes finition, format relativement petit avec 6 emplacements pour disques durs + 1 lecteur optique, filtres, accueil des cartes mères Mini ITX, style correct, poignées de transport.
+
+__**Alimentation -  Antec Neo Eco 400C 80Plus :**__
+
+Bonne efficience (Label "80Plus"), bon rapport qualité prix, 400w amplement suffisants, protection contre les surcharges, courts circuits, surtensions.
+
+__**Routeur - Netgear WNR3500L Edition Gigabit**__
+
+Ce routeur est très accessible côté prix par rapport à ses capacités, tout d'abord Netgear supporte officiellement la possibilité d'y adjoindre un firmware alternatif, ouvrant la porte à de nombreuses possibilités (services sur routeur, plus autonome, etc...), et du côté matériel, c'est au niveau de ce qu'on retrouve pour des routeurs habituellement bien plus onéreux. on pourra se plaindre qu'à cause de son chipset Broadcom (BCM5357), ce dernier n'a pas de pilotes libres, mais le processeur est cadencé à 500mhz, et il dispose de 128Mo de nand flash, et 128Mo de ram, bien plus que la plupart des routeurs du marché, sans parler de son port USB disponible, du port série accessible une fois démonté, et de la possibilité d'y adjoindre facilement une antenne Wifi (Mod).
+Concrètement il offre du wifi N, et 4 ports gigabit.
+Il est configuré pour permettre au serveur un accès direct à internet (option IP DMZ), et attribue par défaut l'IP locale 192.168.0.1 au serveur, de fait, pas besoin de fixer cette dernière directement sur le serveur, ce dernier peut conserver une configuration DHCP par défaut sans soucis.
+
+===== Système =====
+
+Ce tutoriel devrait s'appliquer indifféremment sur toutes les versions d'ubuntu à partir de la 12.04 LTS, toutefois, j'applique moi même les manipulation suivantes sur une version alpha 14.04 LTS, que je ne conseille pas d'installer tant qu'elle ne sera pas sortie en avril 2014, ayant moi même eu toutes les peines du monde à résoudre un bug bien gênant avec le gestionnaire de démarrage grub sur la version minimal (grub qui échoue à s'installer et configurer le système et les outils tels que boot-repair qui n'arrangent rien), bien que j'ai finit par m'en sortir en débranchant tous mes disque sauf le disque système.
+
+Il convient donc tout d'abord d'installer une version d'ubuntu minimal qui ne contient que le strict nécessaire du système, quelques services, pas d'environnement graphique, pour cela rendez vous sur la page http://doc.ubuntu-fr.org/tutoriel/installer_ubuntu_par_internet et récupérez la version qui vous intéresse, pour ma part lors de l'installation j'ai simplement sélectionné les services pour serveurs et l'installation d'openSSH par défaut pour accéder à la machine à distance, et n'ai pas attribué de mot de passe superutilisateur (root) par sécurité. (sudo a donc été installé et configuré pour l'utilisateur créé)
+
+=====[Service] Partage de fichiers avec NFSv4 =====
+
+Faute de tutoriel clair et concis, j'ai très longtemps utilisé une configuration en version 3 de NFS, c'est ce qui m'a convaincu de le transcrire en un tutoriel simple et compréhensible pour tous. Il offre globalement de meilleures performances que SAMBA, et s'intègre très bien sous les postes Linux, BSD, et MacOS, au prix de quelques configurations supplémentaires, hélas.
+
+==== Côté serveur ====
+
+Tout d'abord, sur le serveur (ou par SSH pour l'accès à distance) on installe le service NFS
+<code>sudo apt-get install nfs-kernel-server</code>
+
+Ensuite il faut savoir que contrairement à la version 3 de NFS, il faut lier tous les dossier à partager dans un dossier spécifique. (Ici nous utiliserons le dossier "/export")
+
+On crée donc tous les dossiers nécessaires :
+<code>
+sudo mkdir /export
+sudo mkdir /export/Perso-1To
+sudo mkdir /export/Perso-2To
+sudo mkdir /export/Perso-3To
+sudo mkdir /export/Perso-4To
+</code>
+
+Puis l'on monte chaque dossier de chaque disque existant monté dans un autre, correspondant aux partages souhaités (ici on utilise l'option "--bind")
+<code>
+sudo mount --bind /media/Perso-1To /export/Perso-1To
+sudo mount --bind /media/Perso-2To /export/Perso-2To
+sudo mount --bind /media/Perso-3To /export/Perso-3To
+sudo mount --bind /media/Perso-4To /export/Perso-4To
+</code>
+
+Ensuite on passe à l'édition des fichiers de configuration.
+<code>sudo nano /etc/default/nfs-kernel-server</code>
+Modifier la valeur telle que présentée ici afin de désactiver la gestion de la sécurité par NFS :
+<code>NEED_SVCGSSD=no</code>
+C'est un choix particulier, mais j'estime que ce que je ferais par la suite devrait s'avérer suffisant pour protéger mon réseau local, de plus je n'ai pas encore trouvé de tutoriel clair et en Français à ce sujet.
+
+Ensuite on édite deux paramètres dans un autre fichier de configuration, l'un pour activer la conversion des ID vers des noms, et l'autre pour désactiver GSSD (l'authentification).
+<code>sudo nano /etc/default/nfs-common</code>
+Modifier les valeurs telles que présentées ici :
+<code>NEED_IDMAPD=yes</code>
+<code>NEED_GSSD=no</code>
+
+Ensuite on va enfin pouvoir passer à la configuration des partages.
+On édite tout d'abord le fichier de configuration suivant :
+<code>sudo nano /etc/exports</code>
+<code>
+/export                   *(rw,fsid=0,insecure,no_subtree_check,async)
+/export/Perso-1To *(rw,fsid=1,insecure,no_subtree_check,async)
+/export/Perso-2To *(rw,fsid=2,insecure,no_subtree_check,async)
+/export/Perso-3To *(rw,fsid=3,insecure,no_subtree_check,async)
+/export/Perso-4To *(rw,fsid=4,insecure,no_subtree_check,async)
+</code>
+-Dans ce cas précis, remplacez /export/X par le dossier que vous souhaitez monter.
+
+-L'étoile * signifie que vous autorisez tout client à se connecter à ce partage, vous pouvez toutefois le remplacer par l'adresse IP d'un ordinateur client sous la forme 192.168.0.2 par exemple, ou attribuer toute une plage d'adresse autorisées avec 192.168.0.2/255 par exemple !
+
+-L'option rw signifie que les ordinateurs clients ayants accès à ce dossier via NFS, pourront lire et écrire sur les fichiers, si vous souhaitez juste autoriser un accès en lecture, remplacez la par ro
+
+-fsid=x est à attribuer en fonction du nombre de partage, il faut y attribuer un ID différent pour chacun, ainsi dans mon cas j'ai donné la valeur 0 pour le premier, et 1 pour le second, et ainsi de suite.
+
+-L'option insecure permet l'accès aux clients dont l'implémentation NFS n'utilise pas un port réservé.
+
+-no_subtree_check : cette option neutralise la vérification de sous-répertoires, ce qui a des subtiles implications au niveau de la sécurité, mais peut améliorer la fiabilité dans certains cas. Si un sous-répertoire dans un système de fichiers est partagé, mais que le système de fichiers ne l'est pas, alors chaque fois qu'une requête NFS arrive, le serveur doit non seulement vérifier que le fichier accédé est dans le système de fichiers approprié (ce qui est facile), mais aussi qu'il est dans l'arborescence partagée (ce qui est plus compliqué). Cette vérification s'appelle subtree_check.
+
+-L'option "async" permet quand à elle d'améliorer les performances.
+
+À partir de là, il est bon de savoir que tout ceci n'est pas très sécurisé, les machines distantes, même par internet, avec la configuration d'un accès direct au serveur d'internet via l'option IP DMZ du routeur, rend vulnérable ce dernier, n'importe qui peut y accéder du moment que le service est ouvert.
+C'est pour ceci qu'on va restreindre l'accès des services concernés aux machines connectées au réseau local.
+
+Mon routeur est configuré pour attribuer à toutes les machines du réseau une plage IP comprise entre 192.168.0.1 et 192.168.0.20, toutefois dans la partie suivante du tutoriel, qui concernera un accès par VPN (réseau privé virtuel) distant au réseau local, le serveur attribuera aux machines connectées une plage ip comprise entre 192.168.1.234 et 192.168.1.238, pour cette raison, au lieu d'indiquer le paramètre 192.168.0. j'indique 192.168. , sinon via le VPN, je ne pourrais pas accéder aux partages NFS.
+
+On édite donc d'abord le fichier de configuration hosts.allow :
+<code>sudo nano /etc/hosts.allow</code>
+Et on rajoute ceci :
+<code>
+portmap: 192.168.
+lockd: 192.168.
+nfsd: 192.168.
+mountd: 192.168.
+rquotad: 192.168.
+statd: 192.168.
+</code>
+
+Puis on édite le fichier hosts.deny :
+<code>sudo nano /etc/hosts.deny</code>
+Et on y rajoute ceci :
+<code>
+portmap:ALL
+nfsd:ALL
+mountd:ALL
+</code>
+Vous pouvez remplacer la valeur ALL par l'IP ou la plage IP de votre choix.
+
+La configuration du serveur NFS est terminée, on peut redémarrer le service pour prendre en compte la nouvelle configuration.
+<code>sudo service nfs-kernel-server restart</code>
+
+
+==== Côté client ====
+
+<note important>Bon à savoir, cette manipulation, à quelques petites choses près, fonctionne indifféremment sous toutes les distributions Linux récentes,  toutefois bien que le sujet ne sera pas abordé ici, je tiens à clarifier une chose concernant le système d'exploitation Windows, ce dernier propose la gestion des services pour Unix sous Windows XP pro, Vista Pro, 7 Pro, mais concernant Windows 8 et 8.1 il y a eu régression, un choix volontaire de Microsoft afin sans doute de ne pas promouvoir un service concurrent au sien, ainsi le service NFS n'y est accessible que dans les versions entreprise et ultimate, rien pour le grand public donc concernant la version Core & Pro, même en installant manuellement les logiciels concernés issus des versions supportant NFS.</note>
+
+Selon la distribution utilisée, on installe le service nfs-common.
+<code>sudo apt-get install nfs-common</code>
+
+Maintenant, il faut créer le dossier dans lequel sera monté le dossier partagé par le serveur, dans mon cas, j'en créerais donc quatres, que j'ai voulu placer au même endroit, dans le dossier /media, proprement.
+
+<code>sudo mkdir /media/Perso-1To && sudo mkdir /media/Perso-2To && sudo mkdir /media/Perso-3To && sudo mkdir /media/Perso-4To</code>
+
+Ensuite pour monter manuellement les partages distants :
+
+<code>
+sudo mount -t nfs4 -o proto=tcp,port=2049 192.168.0.1:/Perso-1To /media/Perso-1To
+sudo mount -t nfs4 -o proto=tcp,port=2049 192.168.0.1:/Perso-2To /media/Perso-2To
+sudo mount -t nfs4 -o proto=tcp,port=2049 192.168.0.1:/Perso-3To /media/Perso-3To
+sudo mount -t nfs4 -o proto=tcp,port=2049 192.168.0.1:/Perso-4To /media/Perso-4To
+</code>
+
+Vous noterez que contrairement à NFSv3 il ne faut pas spécifier le chemin complet du partage après l'IP du serveur, seul compte le nom du partage situé dans le dossier /export sur le serveur.
+
+Si vous souhaitez rajouter le montage automatique des partages distant via NFS, j'ai deux solutions à vous proposer, une pour les accès sans fil par wifi, l'autre par le réseau filaire (Ethernet), le problème étant que par wifi, laisser le système gérer seul le démontage des partages, peut provoquer un problème lors de l'extinction (sans doute parce que la connexion wifi est coupée lors de l'extinction, avant que les partages ne soient démontés.)
+
+Éditer le montage des partages et partitions via le fichier de configuration fstab : 
+
+<code>sudo nano /etc/fstab</code>
+
+__Par réseau filaire rajouter ainsi :__ 
+<code>
+192.168.0.1:/Perso-1To                    /media/Perso-1To       nfs4              rw,rsize=8192,wsize=8192,user        0        0
+192.168.0.1:/Perso-2To                    /media/Perso-2To       nfs4              rw,rsize=8192,wsize=8192,user        0        0
+192.168.0.1:/Perso-3To                    /media/Perso-3To       nfs4              rw,rsize=8192,wsize=8192,user        0        0
+192.168.0.1:/Perso-4To                    /media/Perso-4To       nfs4              rw,rsize=8192,wsize=8192,user        0        0
+</code>
+
+"rw,rsize=8192,wsize=8192" vous permettra d'exploiter au mieux une connexion gigabit afin de disposer d'un meilleur débit, ces paramètres sont toutefois inutiles sur une connexion 100Mb.
+La variable "user" elle permet de spécifier qu'un utilisateur peut monter/démonter le partage réseau sans devoir acquérir des droits superutilisateur (root). 
+
+__Par réseau sans fil, rajouter ainsi :__
+<code>
+192.168.0.1:/Perso-1To                    /media/Perso-1To       nfs4              user,noauto        0        0
+192.168.0.1:/Perso-2To                    /media/Perso-2To       nfs4              user,noauto        0        0
+192.168.0.1:/Perso-3To                    /media/Perso-3To       nfs4              user,noauto        0        0
+192.168.0.1:/Perso-4To                    /media/Perso-4To       nfs4              user,noauto        0        0
+</code>
+Ici l'utilisation de la variable "noauto" est utilisé pour prévenir le montage automatique au démarrage de la machine, combiné à la variable "user", elle laisse le choix à l'utilisateur de monter ou non les partages, dans son gestionnaire de fichiers habituel.
+Cette solution a été proposé car certaines distributions posent problème, parfois le système tente de monter les partages avant qu'une connexion wifi ne soit établie, ce qui bloque ou ralenti considérablement le démarrage du système parfois.
+
+Enfin, pour prendre en compte les nouveaux paramètres sans devoir redémarrer, exécuter cette commande.
+<code>sudo mount -a</code>
+
+Et voilà le travail :
+
+{{http://vavar60.online.fr/images/tutoriaux/serveur_polyvalent/42fd2200e9ea216d62e9261942f76919.media.png?600}}
+
+
+=====[Service] Partage de fichiers avec SAMBA =====
+
+Ici, l'on va configurer très simplement un partage, sans gestion des droits si ce n'est que je n'autorise qu'un accès en lecture seule, hormis les dossiers temporaires, plus loin je vous expliquerais comment configurer un accès avec mot de passe.
+
+==== Côté serveur ====
+
+Tout d'abord, on installe le paquet samba sur le serveur :
+<code>sudo apt-get install samba</code>
+
+Puis on édite le fichier de configuration smb.conf afin de paramétrer les différents dossiers à partager.
+
+<code>sudo nano /etc/samba/smb.conf</code>
+
+On supprime tout le contenu, et on rajoute au propre ceci, à adapter selon vos valeurs, en commençant pas la section [global]
+
+<code>
+[global]
+workgroup = WORKGROUP #Nom du groupe de travail
+server string = SHINOBI #Nom du serveur
+hosts allow = 192.168. 127. #Plages IP autorisées à se connecter, ici 192.168.X.X et 127.X.X.X
+socket options = TCP_NODELAY
+local master = yes
+os level = 33
+domain master = yes
+preferred master = yes
+domain logons = yes
+logon script = demar.bat
+logon home = \\serveur\profil\%U
+name resolve order = host wins lmhosts bcast
+wins support = yes
+dns proxy = yes
+</code>
+
+À la suite, on peut rajouter les sections nécessaires au dossier temporaire et aux disques, ici présentés à travers des exemples concrets.
+
+<code>
+[Temp]
+path = /media/Perso-1To/Temp #Chemin du dossier à partager
+comment = Dossier temporaire #Commentaire
+public = yes  #S'affiche en partage sur le réseau.
+writable = yes #Accès en écriture
+
+[Perso 1To]
+path = /media/Perso-1To
+comment = Disque dur 1To
+public = yes
+writable = no #Pas d'accès en écriture
+
+[Perso 2To]
+path = /media/Perso-2To
+comment = Disque dur 2To
+public = yes
+writable = no
+
+[Perso 3To]
+path = /media/Perso-3To
+comment = Disque dur 3To
+public = yes
+writable = no
+
+[Perso 4To]
+path = /media/Perso-4To
+comment = Disque dur 4To
+public = yes
+writable = no
+</code>
+
+Enfin, il ne reste plus qu'à recharger le service samba, avec la fonction "reload", ce qui permet d'éviter de couper le service plutôt que redémarrer avec "restart".
+<code>sudo service smbd reload</code>
+
+Enfin, par sécurité, j'édite le fichier /etc/hosts.allow pour définir que seule une plage IP particulière n'a le droit de se connecter au service SAMBA.
+
+<code>sudo nano /etc/hosts.allow</code>
+
+ Et on rajoute ceci à la suite du reste si on a déjà configuré le service NFS  : 
+
+<code>smbd: 192.168.</code>
+==== Côté client ====
+
+Les distributions Ubuntu ou basées dessus avec différents environnements de bureau, intègrent généralement tout le nécessaire pour se connecter à un réseau samba, et Windows intègre nativement sa prise en charge.
+
+ll suffit généralement d'aller dans la partie réseau d'un explorateur de fichiers, pour faire apparaitre les serveurs samba sur le réseau, et se connecter sur celui auquel vous avez donné le nom souhaité.
+=====[Service] Serveur VPN =====
+
+Parce qu'il peut parfois être utilise de se connecter à un serveur depuis un autre endroit que chez soit, j'ai choisit d'y installer un serveur VPN aisément accessible, n'ayant pas vocation à être anonyme, j'ai préféré la simplicité du protocole PPTP, néanmoins, ce dernier a un défaut majeur, par rapport à l'openVPN, pas moyen (à ma connaissance) de faire en sorte qu'il utilise le port 443, du coup, difficile de s'y connecter sur les bornes publiques wifi d'accès à internet, il ne sera pas rare de ne pas pouvoir s'y connecter via ces points d'accès, une solution basée sur OpenVPN serait alors plus appropriée.
+Néanmoins le protocole pptp pourrait suffire si vous souhaitez accéder à votre réseau depuis la connexion 3/4G de votre mobile, ou chez un ami.
+
+==== Protocole PPTP ====
+
+Tout d'abord, il faut installer le service nécessaire sur le serveur : 
+<code>sudo apt-get install pptpd</code>
+
+Ensuite il faut configurer le fichier de configuration pptpd.conf
+<code>sudo nano /etc/pptpd.conf</code>
+
+Et rajouter en fin de fichier ceci :
+<code>
+localip 192.168.0.1
+remoteip 192.168.1.234-238,192.168.1.245
+</code>
+192.168.0.1 correspond à l'ip locale du serveur.
+192.168.1.234-238 correspond à la plage d'adresses ip attribuées par le serveur privé virtuel, en choisissant 234 jusqu'à 238, on n'autorise ainsi que 4 connexions simultanées au serveur VPN.
+192.168.1.245 correspond à l'IP du serveur privé virtuel (de la même façon qu'un routeur a sa propre adresse IP)
+
+Éditer les options du serveur privé virtuel PPTP :
+<code>sudo nano /etc/ppp/options</code>
+
+Éditer tel que définit ici :
+<code>
+refuse-pap  #refuser le protocole de connexion pap
+refuse-chap  #refuser le protocole de connexion chap
+refuse-mschap  #refuser le protocole de connexion mschap v1
+require-mschap-v2 #nécessite le protocole de connexion mschap v2
+require-mppe-128 #nécessite l'utilisation du protocole de chiffrement 128bits mppe
+proxyarp #répondre aux requêtes ARP
+lock #verouillage de la connexion avec respect du standard UUCP (Unix)
+nobsdcomp  #pas de compression de la connexion
+</code>
+
+Ensuite on va rajouter les identifiants de connexion au serveur privé virtuel.
+<code>sudo nano /etc/ppp/chap-secrets</code>
+Rajouter ainsi en modifiant selon vos valeurs :
+<code>billou * blabla *</code>
+Ci dessus il vous faudra remplacer billou par le pseudo de votre choix, et blabla par le mot de passe de votre choix, vous pourrez rajouter d'autres utilisateurs simplement en sautant une ligne.
+
+Après tout ceci, il va falloir activer le partage de connexion si vous souhaitez pouvoir bénéficier de la connexion à internet de votre serveur, à distance.
+<code>sudo nano /proc/sys/net/ipv4/ip_forward</code>
+Modifiez la valeur 0 par 1 et enregistrez.
+
+Enfin, on configure iptables pour laisser transiter tout ce qu'on veut.
+<code>
+sudo iptables -A INPUT -p gre -j ACCEPT
+sudo iptables -t nat -A POSTROUTING -o eth0 -s 192.168.1.234/238 -j SNAT --to 192.168.0.1
+sudo iptables -t nat -A POSTROUTING -s 192.168.1.234/238 -j MASQUERADE
+</code>
+Puis on redémarre le service pptpd pour prendre en compte le changement de configuration.
+
+<code>sudo service pptpd restart</code>
+
+
+
+__**Côté client, il ne reste plus qu'à configurer tout ça :**__
+
+On rajoute une connexion PPTP
+
+{{http://pix.toile-libre.org/upload/original/1392215232.png?300}}
+
+
+Après avoir ajouté adresse IP du serveur (locale si par réseau local, internet si connexion hors réseau local) et renseigné utilisateur et mot de passe, on configure les options comme il suit :
+
+{{http://pix.toile-libre.org/upload/original/1392215269.png?300}}
+
+
+Et enfin, signe de victoire, on peut faire un triomphe face à ce petit cadenas, qui nous indique que l'on est bien connecté, ouf !
+
+{{http://pix.toile-libre.org/upload/original/1392215296.png?100}}
+
+Enfin on peut vérifier que tout se passe bien côté connexion dans un terminal :
+<code>ifconfig</code>
+
+L'on devrait obtenir quelque chose comme ceci :
+
+<code>
+ppp0: flags=4305<UP,POINTOPOINT,RUNNING,NOARP,MULTICAST>  mtu 1400
+inet 192.168.1.234  netmask 255.255.255.255  destination 192.168.0.1
+ppp  txqueuelen 3  (Point-to-Point Protocol)
+RX packets 7  bytes 82 (82.0 B)
+RX errors 0  dropped 0  overruns 0  frame 0
+TX packets 37  bytes 5508 (5.3 KiB)
+TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+</code>
+
+
+===== [Service] Accès à distance à une session de bureau  =====
+
+Les raisons d'accéder au bureau à distance peuvent êtres nombreuses, peut être que comme moi, vous aimez bien vous lancer dans quelques manipulations avec des lignes de commandes pour accélérer vos tâches, mais qu'utiliser le terminal au quotidien, pour des tâches aussi basiques que le téléchargement, lister le contenu des dossier, ou les ranger, vous semble rébarbatif.
+Quoi qu'il en soit, accéder à une session à distance peut considérablement faciliter l'administration ou l'utilisation de votre serveur au quotidien, aussi bien que lancer un explorateur de fichiers afin de ranger tout ce que vous souhaitez, qu'utiliser votre serveur comme seedbox par ce moyen, et pas mal d'autres choses encore.
+
+Pour ce faire, nous allons profiter de X2Go qui est assez simple d'usage.
+
+==== Manipulations sur le serveur ====
+
+On rajoute d'abord le dépôt officiel pour disposer au téléchargement de la dernière version à jour.
+<code>sudo apt-add-repository ppa:x2go/stable</code>
+
+Puis on met à jour la base de donnée d'apt, le gestionnaire de paquets.
+<code>sudo apt-get update</code>
+
+Enfin, on installe le service x2go sur le serveur.
+<code>sudo apt-get install x2goserver</code>
+
+
+Enfin, il va falloir se pencher sur l'environnement de bureau, les plus connus sont généralement Gnome, KDE, XFCE, et LXDE.
+
+Ici j'aurais tendance à conseiller un environnement qui permet de profiter de ce dernier sans accélération graphique d'activée (composite), vu que de toute façon on ne pourra pas en profiter avec ce type d'accès, j'aurais donc davantage tendance à vous conseiller XFCE ou LXDE qui sont par ailleurs assez légers, mais vous pourriez aussi bien vous tourner vers d'autres environnements moins lourds, et moins connus.
+Une note concernant Gnome, sur la version 14.04, ce n'est peut être pas définitif, mais ce dernier dépend de GDM, une dépendance qui pourrait poser problème pour la suite du tutoriel concernant XBMC d'autant que tout le monde n'a pas forcément envie qu'il s'impose en se lançant par défaut au démarrage du serveur, nous ne sommes pas sur une machine de bureau, c'est pourquoi je l’exclurait des manipulation suivant.
+Même topo pour KDE, qui ne semble même plus proposer de version core ou minimale.
+
+**XFCE** - Pour installer l'environnement minimal, installez les paquets tel que mentionné ci dessous :
+<code>sudo apt-get install xfce4 xfonts-base xserver-xorg</code>
+
+**LXDE** -  Pour installer l'environnement, installez les paquets tel que mentionné ci dessous :
+<code>sudo apt-get install lxde-core xfonts-base xserver-xorg x2golxdebindings</code>
+
+
+Libre à vous ensuite d'installer votre gestionnaire de fichiers favori (nemo, thunar, pcmanfm...), ainsi que la panoplie de logiciels auxquels vous souhaitez accéder à distance (gnome-disk-utility peut être très pratique pour vérifier l'état SMART de vos disques durs.)
+
+
+==== Manipulation sur la machine cliente ====
+
+Là aussi, il va nous falloir installer le dépôt x2go pour profiter de sa dernière version.
+<code>sudo apt-add-repository ppa:x2go/stable</code>
+
+Ensuite, on met à jour la base de donnée apt pour recharger la liste des paquets logiciels disponibles.
+<code>sudo apt-get update</code>
+
+Et enfin on installe x2go mais en version client uniquement.
+<code>sudo apt-get install x2goclient</code>
+
+
+Puis on lance le logiciel :
+
+{{http://pix.toile-libre.org/upload/original/1392293072.png?300}}
+
+Dans le menu on clique sur "Session" => "Nouvelle session" et on indique les paramètres correspondants tels que dans l'exemple ci dessous :
+
+{{http://pix.toile-libre.org/upload/original/1392293162.png?300}}
+
+On configure sa connexion tel que proposé en fonction du type d'accès :
+
+{{http://pix.toile-libre.org/?img=1392293194.png?300}}
+
+Enfin, une fois la session créée :
+
+{{http://pix.toile-libre.org/upload/original/1392293250.png?300}}
+
+Il ne reste plus qu'à cliquer dessus et se connecter :
+
+{{http://pix.toile-libre.org/upload/original/1392293297.png?300}}
+
+Et voilà le travail pour l'exemple :
+
+{{http://pix.toile-libre.org/upload/original/1392293357.png?300}}
+
+Vous pourrez également profiter de cette solution à travers l'utilisation du réseau privé virtuel (VPN) ! =)
+=====[Multimedia] XBMC =====
+
+XBMC est une excellente plateforme multimedia, capable de se passer de tout environnement de bureau, je l'ai découvert sur la première Xbox dont il est issu (sous le nom de Xbox Media Center), projet libre, développé à l'origine pour tourner sur cette console sous condition qu'elle ait chargée en mémoire vive un bios hacké autorisant l’exécution d’exécutables qui ne soient pas signés par Microsoft.
+Depuis le projet a beaucoup évolué et été porté sur pas mal de plateformes, du PC jusqu'aux terminaux sous Android, et même sur Raspberry PI.
+
+{{http://vavar60.online.fr/images/tutoriaux/serveur_polyvalent/screenshot000.png?500}}
+
+Le logiciel en question permet de profiter de la lecture audio, vidéo, en profitant des API VAAPI, XVBA, VDPAU pour lire ces dernières et donc exploiter nos GPU à ces fins, sans être limité par le processeur, mais ce n'est pas sa seule fonction, il affiche météo, image, et propose des tonnes de plugins en téléchargement pour y rajouter des fonctionnalités (Émulateur, Arte, Youtube, Radios, Skins, Navigateur internet, etc...).
+De même, il vous sera possible d'y adjoindre télécommande infrarouge ou bluetooth (moyennant bidouille), manettes de jeu (y compris wiimote), et le combo habituel clavier+souris.
+
+Quitte à laisser tourner un serveur toute la journée, autant pouvoir en profiter à tout moment sur un écran de salon, non ? =)
+D'autant que personnellement, ça fait belle lurette que je n'ai plus accès aux chaines de télévision, pas de tuner TNT, pas de télévision par ADSL. (Et pas de redevance donc LOL)
+
+
+
+
+=== Rajout des dépôts nécessaires ====
+
+D'abord, on rajoute le dépôt officiel pour obtenir la dernière version et tous les paquets optionnels (Thèmes, etc...)
+<code>sudo add-apt-repository ppa:team-xbmc/ppa</code>
+
+Puis on y adjoint le dépôt xorg-edgers afin de profiter des derniers pilotes vidéos en date.
+<code>sudo add-apt-repository ppa:xorg-edgers/ppa</code>
+
+Enfin on met à jour la liste des paquets disponibles dans les dépôts pour accéder aux nouveaux paquets.
+<code>sudo apt-get update</code>
+
+==== Installation ====
+
+On installe simplement XBMC et les composants nécessaires à la gestion du son, pas besoin de pulseaudio ici, alsa suffit amplement.
+<code>sudo apt-get install xbmc linux-sound-base alsa-base alsa-utils</code>
+
+==== Configuration du niveau sonore ====
+
+Paramétrer le niveau sonore maximal du son
+<code>sudo alsamixer</code>
+
+Enregistrer la configuration du son
+<code>sudo alsactl store 0</code>
+
+
+==== (optionnel) Installation des derniers pilotes vidéos bêta d'AMD disponibles hors dépôt. ====
+
+Préparer la construction des paquets depuis le binaire officiel :
+<code>sudo apt-get install dkms debhelper dh-modaliases execstack build-essential xinit</code>
+
+Télécharger le fichier binaire compressé d'AMD.
+<code>wget http://www2.ati.com/drivers/beta/amd-catalyst-14.1-betav1.3-linux-x86.x86_64.zip</code>
+
+Extraire le fichier binaire du fichier zip
+<code>unzip -x amd-catalyst-14.1-betav1.3-linux-x86.x86_64.zip</code>
+
+Autoriser l’exécution et la lecture du binaire d'AMD.
+<code>sudo u+x amd-driver-installer-13.35.1005-x86.x86_64.run</code>
+
+Lancer la génération des paquets d'installation DEB et leur installation
+<code>sudo sh ./amd-driver-installer-13.35.1005-x86.x86_64.run --buildandinstallpkg</code>
+
+Installer le support de l'accélération vidéo matérielle via XVBA/VAAPI.
+<code>sudo apt-get install xvba-va-driver</code>
+
+==== Installation des pilotes vidéo AMD ====
+On installe tout d'abord le pilote vidéo issu du PPA xorg-edgers ainsi que le support de l'accélération vidéo matérielle via XVBA/VAAPI.
+<code>sudo apt-get install fglrx-installer xvba-va-drivers</code>
+
+==== Installer les pilotes vidéos Nvidia ====
+On installe le dernier driver stable proposé par ubuntu, ceux ci sont généralement assez performants, si vous souhaitez exploiter une carte récente, remplacez "nvidia-current" par "nvidia-graphics-drivers-331", le paquet vdpau-va-driver lui permet d'exploiter l'accélération vidéo des GPU de Nvidia sous XBMC (et de façon plus large, Mplayer et VLC également).
+<code>sudo apt-get install nvidia-current vdpau-va-driver</code>
+
+==== Installer l'écran de chargement ====
+Installer plymouth (écran de chargement au démarrage du système) :
+<code>sudo apt-get install plymouth-label</code>
+
+Télécharger un écran de chargement système XBMC pour le démarrage du serveur.
+<code>wget http://excyle.nl/plymouth-theme-xbmc-logo.deb</code>
+
+L'installer :
+<code>sudo dpkg -i plymouth-theme-xbmc-logo.deb</code>
+
+==== Support des clés/disques durs USB ====
+Montage automatique des médias branchés via l'USB.
+<code>sudo apt-get install v86d udisks usbmount ntfs-3g</code>
+
+Rajouter le montage auto et le support du système de fichiers NTFS
+<code>sudo nano /etc/usbmount/usbmount.conf</code>
+
+Modifier comme il suit en rajoutant la valeur ntfs :
+<code>FILESYSTEMS="ntfs vfat ext2 ext3 ext4 hfsplus"</code>
+
+
+==== Forcer la définition 1080P sur Grub ====
+Configurer grub (le gestionnaire de démarrage) pour qu'il se lance en 1080P quoi qu'il arrive :
+<code>sudo nano /etc/default/grub</code>
+
+Remplacer
+<code>GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"</code>
+Par :
+<code>GRUB_CMDLINE_LINUX_DEFAULT="quiet splash video=uvesafb:mode_option=1920x1080-24,mtrr=3,scroll=ywrap"</code>
+
+Modifier le fichier
+<code>sudo nano /etc/initramfs-tools/modules</code>
+
+Y rajouter en bas de page :
+<code>uvesafb mode_option=1920x1080-24 mtrr=3 scroll=ywrap</code>
+
+Éditez le fichier de configuration splash
+<code>sudo nano /etc/initramfs-tools/conf.d/splash</code>
+
+Modifier tel qu'indiqué :
+<code>FRAMEBUFFER=y</code>
+
+Ensuite on fait en sorte que grub prenne en compte les nouveaux paramètres
+<code>sudo update-grub</code>
+<code>sudo update-initramfs -u</code>
+
+==== Ajout de l'utilisateur xbmc sans droits superutilisateur ====
+
+Rajouter l'utilisateur xbmc, qui n'aura pas les droits administrateur (pas de risques de faire des bêtises ou que quelqu'un mette à mal le système).
+<code>sudo adduser xbmc --gecos XBMC</code>
+
+Rajouter l'utilisateur xbmc aux groupes nécessaires
+<code>sudo usermod --group adm,sudo,cdrom,floppy,audio,video,plugdev,netdev,powerdev,fuse,polkituser xbmc</code>
+
+Éditer la configuration du TTY1 (Shell apparaissant avec la combinaison CTRL+ALT+F1) pour que l'utilisateur "xbmc" s'y connecte automatiquement.
+<code>sudo nano /etc/init/tty1.conf</code>
+
+Remplacer 
+<code>exec /sbin/getty -8 38400 tty1</code>
+
+par
+
+<code>exec /bin/login -f xbmc </dev/tty1 > /dev/tty1 2>&1</code>
+
+Autoriser l'utilisateur xbmc à accéder à la gestion des disques et de la mise en veille :
+<code>sudo nano /var/lib/polkit-1/localauthority/50-local.d/custom-actions.pkla</code>
+
+Ajouter :
+
+<code>
+[Actions for xbmc user]
+Identity=unix-user:xbmc
+Action=org.freedesktop.upower.*;org.freedesktop.consolekit.system.*;org.freedesktop.udisks.*
+ResultAny=yes
+ResultInactive=no
+ResultActive=yes
+</code>
+
+Dans la manipulation suivante, il faut savoir que dans les versions récentes d'ubuntu, ces paquets ont disparu des versions récentes d'ubuntu, du coup, plus de commande polkit-auth, on va donc récupérer tout ça.
+<code>
+wget http://ftp.kaist.ac.kr/ubuntu/pool/universe/p/policykit/libpolkit2_0.9-4ubuntu2_amd64.deb
+wget http://ftp.kaist.ac.kr/ubuntu/pool/universe/p/policykit/libpolkit-dbus2_0.9-4ubuntu2_amd64.deb
+wget http://ftp.kaist.ac.kr/ubuntu/pool/universe/p/policykit/libpolkit-grant2_0.9-4ubuntu2_amd64.deb
+wget http://ftp.kaist.ac.kr/ubuntu/pool/universe/p/policykit/policykit_0.9-4ubuntu2_amd64.deb
+</code>
+
+On installe tous les paquets en question d'un coup :
+<code>sudo dpkg -i *.deb</code>
+
+Puis on nettoie :
+<code>rm *.deb</code>
+
+Enfin, on peut utiliser polkit-auth pour attribuer simplement les droits aux utilisateurs.
+Autoriser l'utilisateur xbmc à passer la machine en veille :
+<code>sudo polkit-auth --user xbmc --grant org.freedesktop.hal.power-management.suspend</code>
+
+Éviter tout problème de blocage de l'éjection d'un lecteur cdrom/dvdrom :
+<code>sudo sysctl dev.cdrom.lock=0</code>
+
+
+==== Démarrage automatique de la session XBMC ====
+
+A partir de ce moment là, il faudra vous connecter sur la session de l'utilisateur xbmc et exécuter ces commandes :
+
+Éditons tout d'abord le .bash_profile de l'utilisateur xbmc
+<code>nano .bash_profile</code>
+
+Y indiquer tel qui suit :
+<code>
+case "`tty`" in
+/dev/tty1) clear && startx &>/dev/null;;
+esac
+</code>
+
+Éditez le fichier de configuration .xsession de l'utilisateur xbmc
+<code>nano .xsession</code>
+
+Et y indiquer tel qui suit :
+<code>exec xbmc --standalone</code>
+
+Si vous ne souhaitez pas redémarrer, vous pouvez lancer dès à présent dans la session de l'utilisateur "xbmc" la commande suivante :
+<code>exec xbmc --standalone</code>
+
+Votre configuration est terminée, au prochain redémarrage, une session avec l'utilisateur xbmc sera lancée automatiquement, ainsi que XBMC. :)
+
+==== Quelques captures d'écran ====
+
+{{http://vavar60.online.fr/images/tutoriaux/serveur_polyvalent/screenshot000.png?300}}|{{http://vavar60.online.fr/images/tutoriaux/serveur_polyvalent/screenshot003.png?300}}|{{http://vavar60.online.fr/images/tutoriaux/serveur_polyvalent/screenshot004.png?300}}|{{http://vavar60.online.fr/images/tutoriaux/serveur_polyvalent/screenshot006.png?300}}
+
+{{http://vavar60.online.fr/images/tutoriaux/serveur_polyvalent/screenshot007.png?300}}|{{http://vavar60.online.fr/images/tutoriaux/serveur_polyvalent/screenshot009.png?300}}|{{http://vavar60.online.fr/images/tutoriaux/serveur_polyvalent/screenshot012.png?300}}|{{http://vavar60.online.fr/images/tutoriaux/serveur_polyvalent/screenshot018.png?300}}
+
+{{http://vavar60.online.fr/images/tutoriaux/serveur_polyvalent/screenshot024.png?300}}|{{http://vavar60.online.fr/images/tutoriaux/serveur_polyvalent/screenshot029.png?300}}|{{http://vavar60.online.fr/images/tutoriaux/serveur_polyvalent/screenshot030.png?300}}

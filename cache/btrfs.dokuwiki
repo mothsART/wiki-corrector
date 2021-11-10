@@ -1,0 +1,188 @@
+
+{{tag>système partitions}}
+----
+
+====== Le système de fichiers BTRFS ======
+
+Btrfs ([[https://fr.wikipedia.org/wiki/Arbre_B|B-tree]] File System, souvent prononcé "ButterFS") est un système de fichiers développé par Oracle et placé sous licence GPL. Au contraire d'ext4 qui est une évolution des systèmes de fichiers ext2/3, btrfs se veut conçu différemment, et apporte certaines fonctionnalités inédites.
+Officiellement, ce système de fichiers est [[https://btrfs.wiki.kernel.org/index.php/Main_Page#Stability_status | stable]].
+
+Les fonctionnalités principales sont les suivantes :
+  * Capacité maximale de 2^64 octets == 16 Eo. max.
+  * Meilleure gestion de l'espace occupé par les petits fichiers
+  * Possibilité de créer des snapshots en lecture seule ou en lecture-écriture (cf. plus bas)
+  * Possibilité de créer des sous-volumes
+  * Sommes de contrôle des données et des méta-données
+  * Compression (gzip / LZO)
+  * Sauvegarde incrémentale intégrée au système de fichiers
+  * Défragmentation à chaud
+  * conscient des SSD (stockage flash) (TRIM / Élimination de la notification blocs libres pour réutilisation) et optimisations (par exemple en évitant des optimisations de recherche inutiles, l'envoi d'écritures en cluster, même si elles proviennent de fichiers indépendants. Cela se traduit par des opérations d'écriture plus grandes et plus rapide en débit d'écriture)
+    
+
+===== Installation =====
+Il est conseillé de faire un essai sur une partition de test ! Vous pouvez par exemple formater une clé USB vide et vous familiariser avec les commandes de BTRFS avant de l'utiliser pour vos données...
+
+Si vous choisissez de déplacer des données sur votre partition BTRFS, faites une sauvegarde que vous êtes prêt à restaurer !
+Pour pouvoir formater une partition en BTRFS [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>btrfs-tools]]**.
+
+Si c'est trop virtuel, essayer en ligne de commande
+<code bash>sudo apt install btrfs-progs</code>
+
+=====Utilisation=====
+==== Créer une nouvelle partition ou formater une partition existante ====
+Utilisez simplement le [[gnome-disk-utility|gestionnaire de disque d'Ubuntu]] ou [[gparted]], ou bien en ligne de commande:
+<code>mkfs.btrfs /dev/sdaX</code>
+//où sdaX est la partition que vous souhaitez formater.//
+
+==== Convertir une partition ext4 vers BTRFS ====
+Utiliser la commande :
+<code>btrfs-convert /dev/<device></code>
+<note important>Il est possible, voire probable que le système de fichiers ainsi créé se corrompe et se retrouve accessible uniquement en lecture. Donc, à utiliser avec énormément de prudence et avec une sauvegarde. Voir [[http://www.overclock.net/t/1373950/solved-btrfs-root-booting-read-only|ici]].</note>
+===== Utilisation des fonctions avancées =====
+
+Nous allons maintenant voir quelques unes des fonctions de BTRFS qui le rendent intéressant par rapport à des systèmes de fichiers comme EXT4.
+
+==== Les sous-volumes ====
+Un sous-volume est une branche du système de fichiers qui se comporte comme un sous-système de fichiers. il apparaît comme un répertoire.
+
+=== Créer un sous-volume ===
+<code>btrfs subvolume create test</code>
+pour créer un sous-volume intitulé //test// (en supposant que vous êtes quelque part dans votre système de fichiers BTRFS)
+
+=== Supprimer un sous-volume ===
+<code>btrfs subvolume delete test</code>
+
+
+==== Les snapshots ====
+Un snapshot, ou [[points_de_restauration_pour_un_systeme_linux|point de restauration]], est une image du système de fichiers ou d'un de ses sous-volumes que vous sauvegardez à un instant précis, dans le but de pouvoir y accéder ou la restaurer plus tard. L'objectif principal est de restaurer un système devenu instable. 
+
+Une fois créé, un snapshot se comporte comme un dossier ordinaire de votre système de fichiers : vous pouvez le copier, le déplacer vers un support externe, le renommer...
+
+=== Prendre un snapshot ===
+
+Pour créer un snapshot du système de fichiers entier en ligne de commande :
+<code>btrfs subvolume snapshot test test_v1</code>
+Cette commande va prendre un snaphsot du sous-volume (répertoire) test. Cette version figée de votre répertoire sera accessible à travers le répertoire "test_v1". Les modifications faites dans chacun des deux répertoires sont indépendantes. Le système de fichiers gère les modifications pour qu'elles soient transparentes aux yeux de l'utilisateur (avec ext4, il aurait fallu créer une copie du répertoire, ce qui aurait occupé le double d'espace disque. Un snapshot ne consomme pas d'espace disque supplémentaire).
+
+Le logiciel [[timeshift|timeshift]] permet aussi de prendre un **point de restauration** (//snapshot//) btrfs en mode graphique.
+
+===Restaurer un snapshot ===
+Utilisez simplement la commande "mv". Notez que vous pouvez faire la même chose à travers votre gestionnaire de fichiers en mode graphique. Les snapshots apparaissent comme des répertoires que vous pouvez manipuler à votre guise.
+
+====La compression====
+Ceci permet de compresser les données lorsqu'elles seront écrites sur le disque. Deux algorithmes de compression sont disponibles :
+  * zlib (par défaut)
+  * lzo : plus rapide et prend moins de charge CPU, mais compresse moins
+
+Pour ceci, il faut [[:tutoriel:comment_modifier_un_fichier|éditer]] le fichier **/etc/fstab** :
+<file bash># <file system>                      <mount point>    <type>  <options>          <dump>  <pass>
+proc                                        /proc  proc    nodev,noexec,nosuid   0  0
+# / was on /dev/sda2 during installation
+UUID=07e198ed-18a3-41ed-9e48-bde82ead65fc   /      btrfs   defaults,compress     0  1
+# /boot was on /dev/sda1 during installation
+UUID=90983817-83f8-464f-a50c-39cd02317447   /boot  ext2    defaults              0  2
+# swap was on /dev/sda5 during installation
+UUID=a3da3212-876f-4350-94b3-4b5b5040c871   none   swap    sw                    0  0
+</file>
+C'est le compress ligne 4 qui agit.
+Pour compresser en lzo, tapez <code>compress=lzo</code>
+
+====Le RAID de disques====
+=== Voir le type de raid actuel ===
+Commande pour visualiser le raid en cours
+<code>btrfs fi df /home
+Data, RAID5: total=168.00GiB, used=165.12GiB
+System, RAID5: total=64.00MiB, used=16.00KiB
+Metadata, RAID5: total=2.00GiB, used=319.66MiB
+GlobalReserve, single: total=190.94MiB, used=0.00B</code>
+
+=== Créer le raid de disques ===
+Création d'un raid 1 avec un disque de spare
+<code>mkfs.btrfs -m raid1 -d raid1 /dev/sdb /dev/sdc /dev/sdd</code>
+
+=== Vérifier le raid de disques ===
+Voir la synthèse de système RAID BTRFS :
+<code bash>sudo btrfs filesystem usage /home
+Overall:
+    Device size:                   1.36TiB
+    Device allocated:            300.02GiB
+    Device unallocated:            1.07TiB
+
+</code> ou <code bash>btrfs fi usage volume_btrfs</code>
+
+Pour vérifier l'état du système BTRFS passez par la commande :
+<code bash>sudo btrfs device stats /home
+[/dev/sdb].write_io_errs    0
+[/dev/sdb].generation_errs  0
+[/dev/sdc].write_io_errs    12897745
+[/dev/sdc].read_io_errs     6026751
+[/dev/sdc].flush_io_errs    700547
+
+</code> ou <code bash>btrfs device stats volume_btrfs</code>
+
+Pour voir l'état des disques de votre RAID BTRFS passez par la commande :
+<code bash>sudo btrfs filesystem show
+Label: none  uuid: c5f42f5d-7802-4f4f-bee6-3c8e0994bbe8
+        Total devices 3 FS bytes used 146.43GiB
+        devid    1 size 465.76GiB used 100.00GiB path /dev/sdb
+        devid    3 size 465.76GiB used 100.01GiB path /dev/sdd
+        *** Some devices missing
+</code> ou <code bash>btrfs fi show</code>
+
+Pour voir le détail des disques de votre RAID BTRFS passez la commande :
+<code bash>sudo btrfs device usage /home
+/dev/sdb, ID: 1
+   Device size:           465.76GiB
+   Device slack:              0.00B
+   Data,RAID1:             99.00GiB
+   Metadata,RAID1:          1.00GiB
+   Unallocated:           365.76GiB
+
+/dev/sdc, ID: 2
+   Device size:               0.00B
+   Device slack:              0.00B
+...
+</code>
+
+=== Augmenter/Diminuer le système de fichier du raid de disques ===
+Visualiser l'espace libre disponible, puis augmenter la taille du système de fichiers sur le raid :
+<code bash>sudo btrfs filesystem resize +10G /home
+Resize '/home' of '+10G'</code>
+
+Diminuer la taille du système de fichier sur le raid
+<code bash>sudo btrfs filesystem resize -10G /home
+Resize '/home' of '-10G'</code>
+
+
+=== Réparer le raid de disques ===
+Voir l'état des disques :
+<code bash>sudo btrfs device stats /home
+[/dev/sdb].write_io_errs    0
+[/dev/sdb].read_io_errs     0
+[/dev/sdb].flush_io_errs    0
+[/dev/sdb].corruption_errs  0
+[/dev/sdb].generation_errs  0
+[/dev/sdc].write_io_errs    204890173
+[/dev/sdc].read_io_errs     19080823
+[/dev/sdc].flush_io_errs    10027539
+[/dev/sdd].generation_errs  0</code>
+
+<code bash>
+sudo btrfs balance start -v -mconvert=dup -dconvert=single /home
+sudo btrfs device remove /dev/sdc
+</code>
+
+<code bash>
+sudo btrfs device usage /home
+sudo btrfs fi show
+sudo btrfs fi usage
+</code>
+
+<code bash>
+sudo btrfs device add /dev/sdc /home
+sudo btrfs balance start -dconvert=raid1 -mconvert=raid1 /home
+</code>
+===== Liens =====
+
+  * Le [[https://btrfs.wiki.kernel.org/index.php/Main_Page|wiki officiel du projet]]
+  * **ANGLAIS** [[https://askubuntu.com/questions/967172/grub2-does-not-detect-btrfs-partition|Faire détecter une installation de UBUNTU  par un autre Ubuntu]]

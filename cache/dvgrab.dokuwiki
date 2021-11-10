@@ -1,0 +1,128 @@
+
+{{tag>vidéo}}
+----
+
+====== Comment capturer une vidéo avec dvgrab ? ======
+
+===== Capturer une vidéo DV =====
+Voici en quelques lignes, comment configurer un système i386 sous Ubuntu pour piloter un caméscope branché via une liaison [[wpfr>FireWire]] afin de capturer, en ligne de commande, une séquence vidéo [[wpfr>Digital_Video|DV]].
+Si vous préférez une interface graphique, tournez vous vers  [[Kino|Kino]] ou dvdgrabgui sur [[http://dvgrabgui.sourceforge.net/fr/ref_video_norm.html|sourceforge]].
+
+
+==== Matériel requis ====
+
+  * RAM : minimum 192 Mo
+  * Disque : compter 1 Go de libre pour 4 minutes de film
+  * Firewire : carte IEEE1394 et cable DV (testé avec une carte PCMCIA avec 1 port DV)
+  * Caméscope : Numérique mini-dv (avec un port DV en sortie)
+
+==== Pré-requis ====
+  * Avoir [[:tutoriel:comment_installer_un_paquet|installé le paquet]]  **[[apt>dvgrab]]**. 
+
+==== Préparation du système ====
+Vérifiez que votre carte est bien reconnu. La commande suivante vous donnera une ligne indiquant le nom de la carte trouvée :
+<code>lspci | grep 1394
+07:01.0 FireWire (IEEE 1394): VIA Technologies, Inc. VT6306/7/8 [Fire II(M)] IEEE 1394 OHCI Controller (rev 46)</code>
+Vérifiez dans le journal de votre PC que le module a bien été chargé à l'aide de la commande :
+<code>dmesg | grep fire
+[    2.987060] firewire_ohci 0000:07:01.0: added OHCI v1.10 device as card 0, 8 IR + 8 IT contexts, quirks 0x41</code>
+Vous pouvez aussi vérifier le chargement des modules avec la commande :
+<code>sudo lsmod | grep firewire
+firewire_ohci          40960  0
+firewire_core          65536  1 firewire_ohci
+crc_itu_t              16384  1 firewire_core</code>
+<note important>
+Les manipulations suivantes ne sont pas nécessaires depuis Ubuntu 14.04.
+
+Il se peut qu'un problème de [[:droits]] d'écriture/lecture se pose et empêche l'utilisation correcte de l'interface IEEE1394. Il suffira alors de modifier les droits en entrant : 
+<code>sudo chmod 777 /dev/raw1394</code> //Vu sur [[http://fr.lprod.org/wiki/doku.php/video:dvgrab|Lprod.org]].//
+
+Depuis Ubuntu 11.04 le module raw n'étant plus chargé, il faut faire 
+<code>sudo chmod 777 /dev/fwX</code> en changeant //X// par le numéro donné par la commande ''dmesg''.\\
+Autre méthode : faire partir du [[:users-admin|groupe]] video. Vous pouvez par exemple saisir
+<code>sudo usermod -aG video</code>
+
+Depuis un [[:terminal]], charger dans le noyau les [[:tutoriel:tout_savoir_sur_les_modules_linux|modules]] nécessaires en saisissant ces [[:commande_shell|commandes]]:
+<code>
+sudo modprobe raw1394
+sudo modprobe dv1394
+sudo modprobe ohci1394
+sudo modprobe ieee1394
+</code>
+
+Pour une utilisation pérenne après redémarage, entrer ceci à la fin du fichier /etc/modules:
+<code>
+raw1394
+</code>
+Cf [[https://doc.ubuntu-fr.org/kino#problemes_avec_le_dv|la doc de Kino]]
+
+Peuvent être utiles aussi :
+<code>
+video1394
+dv1394
+</code>
+
+Vérifier que les modules sont correctement chargés en saisissant :
+<code>lsmod | grep 1394</code>
+qui doit vous donner une réponse semblable à :
+<code>
+dv1394                 18764  0
+ohci1394               30644  1 dv1394
+raw1394                26348  0
+ieee1394               90936  3 dv1394,ohci1394,raw1394
+</code>
+</note>
+==== Capture ====
+Connecter le camescope à l'interface IEEE1394, et lancer la commande dvgrab en mode interactif
+<code>
+sudo dvgrab -i
+</code>
+qui devrait vous répondre:
+<code>
+Going interactive. Press '?' for help.
+q=quit, p=play, c=capture, Esc=stop, h=reverse, j=backward scan, k=pause        
+l=forward scan, a=rewind, z=fast forward, 0-9=trickplay, space=play/pause
+"Playing Paused" ff :ff :ff :ff ""          sec
+</code>
+
+=== Commandes utiles ===
+
+  * //a// : pour rembobiner la bande. Cette commande peut ne pas fonctionner correctement. Dans ce cas rembobiner la bande depuis le caméscope.
+  * //p// :  (play) pour avancer la bande sans capturer
+  * //c// : (capture) pour lancer la capture. La bande est lue par le caméscope et est "téléchargée" en même temps sur le disque dur.
+  * //Playing Paused = ff:ff:ff:ff// lorsque la bande est au début.
+
+Le fichier généré est nommé par défaut **dvgrab-001.avi**
+
+==== Exemple d'utilisation ====
+<code>
+dvgrab --autosplit --timestamp --format dv2 monfichier-
+</code>
+
+Cette commande génère pour chaque séquence un fichier au format dv2 avec pour nom 'monfichier-' et la date et '.avi':
+<code>
+"monfichier-2006.05.07_15-37-00.avi":   115.92 MB 815 frames timecode 00:14:01.15 date 2006.05.07 15:37:38
+"monfichier-2006.05.07_15-37-38.avi":    19.20 MB 135 frames timecode 00:00:00.02 date 2006.03.22 13:55:44
+"monfichier-2006.03.22_13-55-44.avi":    79.79 MB 561 frames timecode 00:00:23.19 date 2006.03.22 13:56:08
+</code>
+
+Pour tout copier au format dv2 en un seul fichier avec l'heure système dont le nom est 'dvgrab-YYYY.MM.DD_HH-MM-SS.avi :
+<code>
+dvgrab -format dv2 -timesys -size 0
+</code>
+Pour plus d'infos reportez vous au [[:man|manuel]] de dvgrab
+
+===== Capturer une vidéo HDV =====
+Les dernières versions de dvgrab permettent de capturer un flux vidéo en provenance d'une camera [[wpfr>High Definition Video|HDV]]. Il faut simplement préciser à dvgrab le format hdv de la source.
+<code>
+sudo dvgrab -format hdv fichierhdv-
+</code>
+
+===== Problème de capture DV =====
+Si vous rencontrez des problèmes d'accès au DV ou de Capture, utilisez la commande suivante :
+<code>sudo adduser $USER disk</code>
+
+Fermer votre session et rouvrez-la.
+
+----
+//Contributeurs: FIXME//

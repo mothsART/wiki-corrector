@@ -1,0 +1,426 @@
+
+{{tag>matériel réseau modem À_RECYCLER}}
+
+----
+
+====== Modem Bewan ADSL USB/PCI ST (version gris et plat) ======
+
+{{materiel:materiel:bewan_adsl_usb_st_gris_thumb.jpg|}}\\
+
+
+Permet d'installer et d'utiliser le modem et d'avoir d'info sur son état (bitrate, synchro, ...).\\ 
+<note important>Bien que fonctionnel, le modem a de pauvres performances sous linux (avec le pilote unicorn_0.9.3\\ Préférez un modem ethernet ou un routeur (avec firewall intégré) qui ne nécessitent pratiquement aucune manipulation.</note>
+<note help>En cas de problème voir [[#si_le_modem_ne_fonctionne_pas]], ne pas hésiter à parcourir [[http://forum.ubuntu-fr.org/viewtopic.php?id=43150|Forum Infos sur modem Bewan Adsl USB]] et à poster sur le forum pour se faire aider (Décrivez précisement ou plus en détail le problème s'il vous plait).</note>
+
+**Pour le modem __bleu/vert__, voir [[#note(s)]]**\\
+
+<note>Une autre méthode d'installation existe, voir [[http://who.is.free.fr/wiki/?Modem.fr|tuto de rzr.online.fr]] avec paquets Debian et module-assistant.</note>
+
+
+
+===== Pré-requis =====
+
+  - Fonction “sudo” activée (si non voir ajout [[:sudo#ajout_des_privileges_super-utilisateur_a_un_utilisateur|sudo]] utilisateur),
+  - Compilateur gcc, les linux-headers via synaptic ou par <code bash>sudo apt-get install linux-headers-$(uname -r)
+sudo apt-get install build-essential </code>
+  - usbutils (via synaptic),
+  - ppp (installé par défaut) (via synaptic)
+  - Essayer de récupérer, par quelque moyen que ce soit (retourner à Windows(r), par un autre ordi, par un pote, ...) le dernier pilote [[http://www.bewan.com/bewan/drivers/A1012-A1006-A904-A888-A983-0.9.3.tgz|pilote unicorn 0.9.3]] (ou [[http://launchpadlibrarian.net/5689579/A1012-A1006-A904-A888-A983-0.9.3.tgz|ici]]) au moment où ces lignes sont écrites ce tutoriel se base uniquement sur cette version **0.9.3** du pilote. 
+  - Du temps pour lire et effectuer les manipulations décrites ci dessous, et une bonne dose de self-control 8-)
+
+**remarque**: les paquets gcc et linux headers sont copiés de base sur le disque dur, pour les installer, il suffit donc de les sélectionner dans synaptic et de les installer. Il n'y a donc pas besoin de les télécharger. 
+Pour les autres, vous les trouverez sur le site  [[http://packages.ubuntu.com|packages.ubuntu.com]]. Pour éviter d'avoir à gérer les dépendances, vous pouvez également les sélectionner dans synaptic et lancer Fichier>Générer script de téléchargement, ce qui vous fournira la liste des liens vers les paquets à télécharger, avec leurs dépendances. Une fois ceci effectué, copiez les paquets dans /var/cache/archives en tant que root (gksudo nautilus) et effectuez l'installation avec synaptic.
+
+Pour être plus à l'aise aves la ligne de commande, vous pouvez lire [[console:learn_unix_in_10_minutes]]
+
+===== Installation des composants nécessaires =====
+
+==== Décompactage, configuration (plutôt adaptation) et compilation du pilote ====
+=== Décompactage ===
+
+Après avoir téléchargé le pilote Unicorn (lien ci-dessus), en ligne de commande, ,__**décompactez**__ le fichier et placez-vous dans le répertoire unicorn. Pour cela, ouvrez une console, et recopiez la commande :
+<code bash>
+tar xzvf A1012-A1006-A904-A888-A983-0.9.3.tgz && cd unicorn
+</code>
+
+=== Adaptation du pilote pour Ubuntu ===
+//Les fichiers Makefile ne sont pas adaptés pour Ubuntu Dapper, pas de panique, il y juste quelques lignes à modifier.//8-)
+== Adaptation du Makefile dans unicorn_usb ==
+
+Allez __dans le dossier unicorn_usb__ (unicorn_pci si vous utiliser le modèle PCI) par : 
+<code bash>
+cd unicorn_usb
+</code>
+et [[:tutoriel:comment_editer_un_fichier|modifiez]] le __Makefile__ (de unicorn/unicorn_usb)
+
+^ Remplacez la ligne ^ par ^
+| KERNEL_SOURCES=/usr/src/linux | KERNEL_SOURCES=/usr/src/linux-headers-`uname -r`/ |
+//NB : ce sont des ` (AltGr+è, puis espace) et non des ' (apostrophe touche 4) //
+
+== Adaptation du Makefile dans unicorn ==
+
+__Revenez dans le répertoire unicorn__ (répertoire parent) par :
+<code bash>
+cd ..
+</code>
+<note tip>le '..' signifie répertoire parent (=hiérarchiquement supérieur)</note>
+et [[:tutoriel:comment_editer_un_fichier|adaptez]] le Makefile (de unicorn),
+^ Remplacez les lignes ^ par ^
+|# path to kernel sources and headers (must correspond to running kernel) \\ KERNEL_SOURCES=/usr/src/linux | # path to kernel sources and headers (must correspond to running kernel) \\ KERNEL_SOURCES=/usr/src/linux-headers-`uname -r`/ |
+
+//NB : ce sont des ` (AltGr+è, puis espace) et non des ' (apostrophe touche 4) //
+
+=== Compilation du pilote unicorn pour Ubuntu ===
+Ensuite, passez en [[:sudo#une_console_superutilisateur|root]] (ou superutilisateur) par :
+<code>
+$ sudo -s
+password: (entrer le mot de passe superutilisateur)
+</code>
+<note important> Le root (ou superutilisateur) a tous les droits et peut corrompre le système. A utiliser avec prudence.</note>
+
+et __**compilez**__ (en étant root) les modules du pilote (unicorn_usb_atm, unicorn_usb_eth, unicorn_pci_atm, unicorn_pci_eth) par : 
+
+<code bash>
+make modules
+</code>
+----
+
+Si la compilation se passe bien, les modules ont été créés dans les répertoires du pilote, copiez le module correspondant au type de modem dans le kernel, par exemple : 
+<code bash>
+cp ./unicorn_usb/unicorn_usb_atm.ko /lib/modules/`uname -r`/
+</code>
+
+./unicorn_usb/unicorn_usb_atm.ko étant pour le modèle USB.
+./unicorn_pci/unicorn_pci_atm.ko pour le modèle PCI.
+
+----
+
+Mettez à jour les dépendances entre modules : 
+<code bash>
+depmod -ae
+</code>
+
+
+==== Ajout des modules à la Blacklist ====
+Les modules doivent être ajoutés à la Blacklist (liste des modules qui ne se chargent pas au démarrage) afin d'éviter une mauvaise synchronisation du modem au démarrage.
+[[:tutoriel:comment_editer_un_fichier|Éditez]] le fichier /etc/modprobe.d/blacklist
+
+
+Ajoutez les lignes 
+<file># unicorn (bewan adsl st) makes ANSI modulation
+blacklist unicorn_usb_atm
+blacklist unicorn_usb_eth
+</file>
+//Enlevez le mot blacklist pour la version Breezy//
+
+
+
+==== Configuration de la connexion internet (ppp) ====
+=== chap-secrets et pap-secrets ===
+
+Afin de prendre en compte les identifiants de connexion, [[:tutoriel:comment_editer_un_fichier|modifiez]] les fichiers **/etc/ppp/chap-secrets** et **/etc/ppp/pap-secrets** 
+et ajoutez, à la fin, les identifiants de la forme : 
+<file>'tonlogin' * 'password' * </file> 
+avec le login (du type euxxxxxxx@tele2.fr) et le password donnés par le fournisseur d'accès à internet (FAI).
+
+=== options ppp (/etc/ppp/options) ===
+Ajoutez à la fin de ** /etc/ppp/options ** les lignes suivantes :
+
+<file>
+lock
+ipparam ppp0
+noipdefault
+noauth
+default-asyncmap
+defaultroute
+hide-password
+noaccomp
+noccp
+nobsdcomp
+nodeflate
+nopcomp
+novj
+novjccomp
+lcp-echo-interval 20
+lcp-echo-failure 3
+#mtu 1500
+#mru 1500
+sync
+persist
+maxfail 0
+#plugin /usr/lib/pppd/2.4.3/pppoatm.so 8.35
+user tonlogin
+usepeerdns
+</file>
+en remplaçant **tonlogin** par celui correspondant (du type euxxxxxxx@tele2.fr)
+
+=== DNS server FAI (/etc/resolv.conf) ===
+[[:tutoriel:comment_editer_un_fichier|Éditez]] **/etc/resolv.conf** par :
+
+Ajoutez, à la fin, les DNS primaire et secondaire du FAI, du style : 
+<file>
+nameserver xxx.xxx.xxx.xxx
+nameserver yyy.yyy.yyy.yyy
+search wanadoo.fr
+</file>
+Ces donnée doivent être données avec les identifiants de connexion.
+
+=== script unicorn-pppotam ===
+Dans le pilote, un script **unicorn-pppoatm** existe déjà mais ne convient pas pour Ubuntu. Donc, nous allons [[:tutoriel:comment_editer_un_fichier|créer]] /usr/bin/unicorn-pppoatm.
+
+Je vous mets mon script ici, vous pouvez faire un copier-coller (:!: Attention aux "end-of-line" (fin de ligne) elles doivent être du type UNIX), il inclut des modifications dont nous verrons l'utilité par la suite.
+<code bash>
+#!/bin/sh
+# Attention : script modifié pour ubuntu
+# 18/08/06
+
+# Source function library.
+#. /etc/rc.d/init.d/functions
+. /usr/share/initramfs-tools/scripts/functions
+
+# set to correct product (USB or PCI)
+#UNICORN="unicorn_pci_atm"
+UNICORN="unicorn_usb_atm"
+
+# default VPI, VCI and encapsulation
+VPI=8
+VCI=35
+
+# ANSI=1,G.lite=2,MULTI=3,G.dmt=4,
+MODULATION=4
+
+# pppd version actuelle
+PPPD="/usr/sbin/pppd"
+# Mettre ci dessous ce que renvoie la commande : slocate pppoatm|grep pppd
+PLUGIN="/usr/lib/pppd/2.4.4b1/pppoatm.so"
+
+RETVAL=0
+
+stop() {
+    echo demande arret PPPD
+    killall pppd >/dev/null 2>&1
+    echo demande decharge module unicorn_usb_atm
+    /sbin/modprobe -fr $UNICORN >/dev/null 2>&1
+}
+
+start() {
+    echo charge module pppoatm
+    /sbin/modprobe pppoatm
+    [ ! "$?" = 0 ] && return $?
+    echo charge unicorn_usb_atm
+    /sbin/modprobe -v $UNICORN ActivationMode=$MODULATION >/dev/null 2>&1
+    [ ! "$?" = 0 ] && return $?
+    echo debut pause
+    sleep 10
+    echo fin pause
+}
+
+connect() {
+    echo Lancement ou Relancement de la connexion
+    killall pppd >/dev/null 2>&1
+    $PPPD plugin $PLUGIN $VPI.$VCI
+    [ ! "$?" = 0 ] && return $?
+    return 0
+}
+
+echo -n "$1 $UNICORN $PROTOCOL $VPI.$VCI $ENCAPS"
+
+case "$1" in
+    stop)
+        stop
+        ;;
+
+    start)
+        start
+        connect
+        ;;
+
+    restart)
+        stop
+        sleep 10
+        start
+        connect
+        ;;
+
+    connect)
+        connect
+        ;;
+
+    *)
+        echo $"Usage: $0 {start|stop|restart|connect}"
+        exit 1
+esac
+
+RETVAL=$?
+if [ $RETVAL = 0 ]; then
+    echo success
+else
+    echo failure
+fi
+echo
+exit $RETVAL
+</code>
+
+Adaptez-le en fonction :
+  * du modem : USB ou PCI,
+  * des VPI.VCI : 8.35 en général pour la France, se renseigner auprès du FAI ou [[http://faq.eagle-usb.org/wakka.php?wiki=ListConfigADSL|ici]]
+  * de la modulation : 4 (G.dmt) en général pour la France,
+  * de la version (du répertoire plus exatcement) du plugin pppd qui change souvent à chaque mise à jour du noyau. Pour le savoir (c'est écrit dans le script), tapez la commande : **slocate pppoatm|grep pppd** (d'après une base de données) ou **find /usr/lib/pppd/ -name pppoatm.so** (qui effectue une recherche "directe")
+//NB : Ces paramètre se trouvent vers le haut du script unicorn-pppoatm//
+
+Il faut le rendre exécutable, tapez dans une console, toujours en root : 
+<code>
+chmod u+x /usr/bin/unicorn-pppoatm
+</code>
+
+:-P Ubuntu est maintenant préparé à recevoir le modem. Félicitations 8-)\\
+Le modem ne s'allume pas ? Rassurez-vous, jusque là c'est normal. À l'[[#utilisation|utilisation]], il s'allumera.
+
+===== Utilisation =====
+
+Le script **unicorn-pppoatm** ci-dessus (modifié, personnalisé) permet de :
+^ **__lancer__** la connexion | dans une console, en root, tapez <code>unicorn-pppoatm start</code> \\ > Les modules propres au modem se charge, le modem doit s'allumer //Led verte "pwr" allumée// , et se synchroniser //Led rouge "sync" clignote, puis s'éteint et Led verte "link" s'allume//. \\ > Une dizaine de secondes après, avec le pppd, la connexion s'établit. Tapez **ifconfig** dans une console si vous voulez vous assurer que la connexion est établie. Vous devez avoir une réponse du genre \\ <code>ppp0      Lien encap:Protocole Point-à-Point
+           ...
+</code>|
+^ **__arrêter__** la connexion | en root, tapez <code>unicorn-pppoatm stop</code>|
+^ **__relancer__** la connexion | <del>en root, tapez <code>unicorn-pppoatm restart</code> Pour des raisons encore inconnues, cette commande ne marche pas comme il le faut</del>. Préférez <code>unicorn-pppoatm stop</code> puis <code>unicorn-pppoatm start</code>|
+^ **__reconnecter__** | en root, tapez <code>unicorn-pppoatm connect</code> \\ Ce qui permet l'identification avec le FAI dans le cas où le modem n'a pas eu le temps de se synchroniser. Symptômes : pas de surf et **ifconfig** ne donne pas ppp0.|
+
+Admirer internet, ubuntu, ses documentations et sa communauté. ^_^
+
+ --- 
+//NB : Les paragraphes ci dessous ne sont pas indispensables au fonctionnement du modem//
+
+===== Connexion internet au lancement de Ubuntu =====
+:!: Etape expérimentale pour le moment
+
+Si vous souhaitez que le modem se connecte au démarrage de Ubuntu (ou si comme moi, vous en avez assez de taper **sudo unicorn-pppoatm start** dans une console, à chaque démarrage), tapez, en root, les commandes : 
+<code>
+ln -s /usr/bin/unicorn-pppoatm /etc/init.d/adsl
+update-rc.d adsl defaults
+</code>
+// (Merci Bugage) ;-) //
+
+//Note : Après cette manipulation, le démarrage de Ubuntu est un peu plus long.//
+
+==== Changement de noyau ====
+Après une mise à jour 
+=== D'une version 2.6.15.25 à 2.6.15.26 ===
+D'après les dernières mis-à-jour du noyau, je pense qu'il suffit de recopier le module par la commande (en root), en supposant qu'on est resté dans le répertoire unicorn (là où vous avez compilé le pilote((en suivant ce tuto, le chemin du pilote doit être **~/unicorn**, donc au préalable une commande //cd ~/unicorn// le ~ indique le répertoire home de l'utilisateur actuel (par ex. /home/utilisateur)) ) : 
+<code bash>
+sudo cp ./unicorn_usb/unicorn_usb_atm.ko /lib/modules/`uname -r`/
+</code>
+
+./unicorn_usb/unicorn_usb_atm.ko étant pour le modèle USB.
+./unicorn_pci/unicorn_pci_atm.ko pour le modèle PCI.((Pour la culture, le ./ dans le chemin signifie 'répertoire actuel' et le ../ signifie 'répertoire parent'))
+
+et de mettre à jour les dépendances entre modules : 
+<code bash>
+sudo depmod -ae
+</code>
+
+
+===== Installation des composants optionnels =====
+Le modem peut fonctionner ainsi, mais si vous voulez ajouter des applications supplémentaires pour être informé de l'état du modem.
+Le plus simple est d'installer le paquet **unicorn** de ubuntu.
+
+Pour cela, activez les dépôts **__multiverse__** (référez-vous à [[../depots#universe_et_multiverse]] ),
+installez le paquet **unicorn** par synaptic ou par la commande, en root : <code>apt-get install unicorn</code>
+
+Ce paquet **unicorn** installe : 
+  * **bewan_adsl_status** : interface graphique comme sous windows(c), pour les opérations préférez la ligne de commande (voir Utilisation ci dessous)
+  * **unicorntest** : Permet de tester les commandes envoyées au modem
+  * **unicorn_status** : dans une console, affiche des informations en mode texte sur le modem (débits, marge de bruits, rapport signal/bruit, puissances, temps écoulé, modulation, ...)
+  * **oam_ping** : permet de tester des paramètres VPI VCI
+
+
+
+
+===== Si le modem ne fonctionne pas =====
+
+Identifier le problème : 
+  - Erreurs lors de la compilation (make modules) : les "pointeurs" (ou includes  du même style que KERNEL_SOURCE dans les makefile ou autres) sont peut-être incorrects ou autres problèmes (edgy par ex). Venez en parler sur le forum (bien sûr par un autre moyen :-)).
+  - Le modem __**ne s'allume pas**__ (panne la plus facile à résoudre :-) )
+    - à quel moment, à quel commande des erreurs sont générées ?
+      - message du genre **''/usr/bin/unicorn-pppoatm:/bin/sh^M:bad interprter:No such file or directory''**, vérifiez que le srcipt est au format **unix** (pour avoir les "fins de ligne" (End of Line) appropriés ((/bin/sh^M:bad interprter http://forum.ubuntu-fr.org/viewtopic.php?id=63766)).
+    - la console me renvoit des caractères bizzares ? Problème de config ppp
+  - Le modem __s'allume, mais **ne synchronise pas**__ ? Début du miracle :-)
+    - Pas branché sur la ligne adsl, ou l'adsl pas encore activé par le FAI.
+    - Mauvaise configuration dans **unicorn-pppoatm** : Récupérez les bonnes valeurs de VPI VCI, modulation, ...
+    - la console me renvoit des caractères bizzares ? Problème de config ppp
+  - Le modem __s'allume, se synchronise, mais **pas de connexion**__ ? Déjà Bravo :-) pour la synchro et encore un **petit** effort :
+    - La connexion est-elle établie ? pour vérifier cela, tapez <code>ifconfig</code> vous devez avoir ppp0, sinon le modem n'a sûrement pas eu le temps de se synchroniser avant l'identification sur le DSLAM, donc un <code>sudo unicorn-pppoatm connect</code> devrait établir la connexion.
+    - La __connexion est bien établie, mais **toujours pas de surf**__ ? Grrrrr ! 
+      - essayer **http://193.252.96.3** : site de FranceTelecom pour vérifier si la connexion est vraiment établie. Ça marche aussi et exclusivement avec comme identifiant 'adsl@adsl' et motdepasse 'test' ou 'adsl' ((source : doc du modem bewan adsl usb st sous Windows(r))).
+      - Peut-être mauvais MTU et/ou MRU, essayez avec MTU 1500 et/ou MTU 1500 dans /etc/ppp/options
+      - Peut-être que la résolution des noms de domaine DNS n'est pas opérationnelle
+  - Le __problème peut venir d'ailleurs__ : par ex http://forum.ubuntu-fr.org/viewtopic.php?pid=423064#p423064 pour un soucis de périphérique USB
+
+En tous cas, faites un **dmesg**, **unicorn_status** (si composant installé), **ifconfig**, **lsmod** et envoyez aussi les erreurs qui vous paraissent suspectes dans le forum.
+
+<note important> :!: **__Ne divulguez pas__** vos identifiants, mot de passe, adresse ip (si ip fixe), numéro de carte bleu, ... :!:</note>
+
+===== Note(s) =====
+
+==== Type de modem ====
+Il existe 2 types de modem bewan adsl usb : 
+  * le bleu/vert assez design, qui normalement pose moins de problème. Je donne un lien http://forum.ubuntu-fr.org/viewtopic.php?id=2037
+  * le gris et plat (et moche :-D), qui fonctionne presque, après avoir fait le parcours du combattant, mais il fonctionne!
+
+
+==== Compatibilité Gutsy ====
+
+Une piste en cours : 
+
+http://rzr.online.fr/q/unicorn-modules
+
+==== Remarques ====
+Ce modem fonctionne, mais n'est pas encore à la perfection.
+Comme le disent certains dans les forums : 
+> Le mieux, c'est de changer de modem. Prendre un ethernet si possible.
+
+En effet, le upload (chemin montant) de ce modem n'est pas encore au point. Des erreurs FEC (Farward Error Correction) sont trop nombreuses, ce qui aboutit à une déconnexion de la part du DSLAM (modem distant) au bout d'un certain temps (de 30 min à 8h). Problème non réglé pour l'instant. Le surf est possible, les téléchargements sont assez correctes, et le partage, le webmail... sont fortement dégradés.
+Pour relancer la connexion : dans une console, en root, tapez <code>unicorn-pppoatm stop</code>, attendez 5 à 15 minutes, et <code>unicorn-pppoatm start</code>
+
+=== Confort d'utilisation 1 ===
+Pour éviter de devoir taper u n i c o r n - p p p o a t m (très irritant à la longue), je vous suggère de créer un lien vers ce fichier par, en root : 
+<code>
+cd /usr/bin
+ln -s ./unicorn-pppoatm adsl
+</code>
+Ainsi, pour se connecter, taper, en root : <code>adsl start</code>.
+//Le lien est plus pratique que l'alias pour pouvoir éditer ce script// 
+<code>gksudo gedit /usr/bin/adsl</code>
+Sinon, si vous voulez que le modem se connecte au démarrage de Ubuntu, allez à [[#Connexion internet au lancement de Ubuntu|ici]].
+
+
+A voir aussi la possibilité de faire fonctionner ce modem par le pilote windows grâce à vmplayer ((l'usb semble contraignant dans ce cas de machine virtuel)).
+
+
+===== Liens qui ont contribué à construire cette page =====
+  * http://forum.ubuntu-fr.org/viewtopic.php?id=43150 ;-) 
+  * http://forum.ubuntu-fr.org/viewtopic.php?id=8539 
+  * http://rzr.online.fr/q/unicorn merci à rzr
+  * http://home.tele2.fr/slo/ : Est mentionné le modem bleu/vert 
+  * http://www.lea-linux.org/cached/index/Hardware-hard_net-modem_bewan_usb_st.html pour une mandrake 
+  * http://linuxfr.org/~beagf/14821.html 
+  * http://www.andesi.org/index.php?node=93 
+  * http://wiki.ubuntu-it.org/FastrateUSB100 en italien, plus complet pour le moment, qui ressemble beaucoup à cette page, je m'en suis aperçu qu'après avoir rédigé cette page grâce au forum (Nous avons eu pratiquement la même démarche).
+  * http://forum.ubuntu-fr.org/viewtopic.php?id=1092&p=1 le modem a fini par fonctionner.
+  * http://forum.ubuntu-fr.org/viewtopic.php?pid=589513#p589513
+
+==== Sources supplémentaires ====
+  * http://www.delafond.org/traducmanfr/man/man8/pppd.8.html en français, explique les options du ppp **/etc/ppp/options**
+  * http://abcdrfc.free.fr/ RFC traduites en français
+  * http://abcdrfc.free.fr/rfc-vf/rfc2364.html pppoatm
+  * http://us.st.com/stonline/press/magazine/challeng/2ndedi01/chal02.htm infos sur le chipset st unicorn
+  * http://perso.orange.fr/wallu/pag-codage.htm infos détaillées sur le principe xDSL
+  * http://www.vmware.com/community/thread.jspa?messageID=378239 : forum installation d'un modem USB sous vmware/vmplayer (en anglais)
+
+==== Chez qui le modem fonctionne ou a fonctionné ====
+Voilà des ubunteros qui ont gravé leur pseudos dans l'histoire et qui mérite une médaille :-D (Par ordre alphabétique): **Azkato, Bugage, FestinMWM, rzr.online.fr, Superkaloab, The_mon, ... **
+Si chez vous, le modem fonctionne, laissez un petit mot sur http://forum.ubuntu-fr.org/viewtopic.php?id=43150 :-)
+
+----
+
+//Contributeurs : [[utilisateurs:FestinMWM]]//

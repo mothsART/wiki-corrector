@@ -1,0 +1,657 @@
+
+{{tag>Xenial console shell BROUILLON}}
+
+----
+
+====== Elasticsearch ======
+
+**[[wpfr>Elasticsearch]]** est une base de données documentaire libre se basant sur le serveur Apache [[wpfr>Lucene]].\\
+Les requêtes se font via le protocole [[wpfr>Hypertext_Transfer_Protocol|HTTP]] et l'interface [[wpfr>Representational_state_transfer|REST]].La requête PUT permet d'ajouter/modifier une entrée tandis que GET permet de la récupérer. L'échange de données se faisant via le format [[wpfr>JavaScript_Object_Notation|JSON]].
+
+Ce tutoriel a pour but de montrer comment installer basiquement le service Elasticsearch et réaliser des requêtes simples.
+Les paramètres techniques détaillées et les concepts d'architecture ou de modèle documentaire ne seront pas abordés ici.\\
+Pour obtenir des informations plus poussées, veuillez vous référer aux [[#Voir aussi|liens en fin de page]] ou chercher des sites plus spécialisés.
+
+<note important>La version d'Ubuntu utilisée pour l'exemple est la [[:16.04]]. Selon votre [[:versions|version]], peut-être faudra-t-il adapter certaines commandes ou scripts.</note>
+
+===== Pré-requis =====
+
+Pour réaliser ce tutoriel, mieux veut connaitre les bases de :
+  * L'[[:tutoriel:comment_installer_un_paquet|installation de paquets]]
+  * La [[:tutoriel:comment_modifier_un_fichier|modification de fichiers]] de paramètres ainsi que les [[:sudo|droits d'administration]] qui peuvent être nécessaire.
+  * L'utilisation des [[:services]]
+  * Le requêtage HTTP : [[http://www.zem.fr/curl-15-commandes-pratiques-avec-curl/|Tutoriel FR]] ou  [[http://www.slashroot.in/curl-command-tutorial-linux-example-usage/|Tutoriel EN]]
+
+=====Installation=====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>elasticsearch|elasticsearch]]**.
+
+Vérifier que le service est installé en saisissant depuis un [[:terminal]] la [[:commande_shell|commande]] suivante:
+<code bash>service --status-all</code>
+Vous devriez voir une ligne **elasticsearch** :
+<code bash> [ - ]  elasticsearch</code>
+
+===== Utilisation du service =====
+
+Si vous êtes sur Ubuntu [[:16.04|Xenial]] vous devez avant tout corriger le [[#problème du script de lancement du service]] pour pouvoir utiliser ce dernier comme expliqué [[#Utilisation|plus loin]]. 
+
+FIXME Après 16.04 c'est réglé ou c'est 16.04 et Supérieur qu'il faut indiquer? Lien vers un bug?
+
+==== Problème du script de lancement du service ====
+
+Sur la version [[:16.04]] d'Ubuntu, le script de lancement par défaut est **bogué**. Il faut donc le corriger.
+
+En effet, si vous saisissez cette commande :
+<code bash>sudo service elasticsearch status</code>
+Alors vous devriez voir un **active (exited)** qui indique que la commande de lancement a été exécutée mais qu'on n'est pas sûr de l'état du service : 
+<code bash>● elasticsearch.service - LSB: Starts elasticsearch
+   Loaded: loaded (/etc/init.d/elasticsearch; bad; vendor preset: enabled)
+   Active: active (exited) since dim. 2016-09-18 12:57:38 CEST; 15s ago
+     Docs: man:systemd-sysv-generator(8)
+
+sept. 18 12:57:38 lubuntu-DEV systemd[1]: Starting LSB: Starts elasticsearch...
+sept. 18 12:57:38 lubuntu-DEV systemd[1]: Started LSB: Starts elasticsearch</code>
+
+Pour remédier à cela, avec les [[:sudo|droits d'adminisration]] il faut [[:tutoriel:comment_modifier_un_fichier|modifier]] le script **/etc/init.d/elasticsearch**\\
+
+D'abord, trouver la ligne :
+<file bash>test "$START_DAEMON" = true || exit 0</file>
+et la commenter en ajoutant # au début de la ligne:
+<file bash>#test "$START_DAEMON" = true || exit 0</file>
+
+Puis rechercher cette ligne :
+<file bash>start-stop-daemon --start -b --user "$ES_USER" -c "$ES_USER" --pidfile "$PID_FILE" --exec $DAEMON -- $DAEMON_OPTS</file>
+et la modifier :
+<file bash>start-stop-daemon --start -b --user "$ES_USER" --pidfile "$PID_FILE" --exec $DAEMON -- $DAEMON_OPTS</file>
+
+Vous devriez pouvoir désormais [[#Utilisation|utiliser le service]] normalement.
+
+<note help> FIXME A quoi servent réellement ces commandes ?
+  * D'un côté la variable //START_DAEMON// n'est pas utilisée dans la suite du script. Donc pourquoi forcer l'arrêt du script si elle n'existe pas ?
+  * Ensuite, le groupe défini par la variable //ES_USER// ne semble pas avoir le droit de lancer le démon alors que l'utilisateur référencé par la même variable lui le peut. 
+Bizarre.</note>
+
+==== Utilisation ====
+
+Pour vérifier Maintenant le service doit pouvoir se lancer correctement.
+Pour le vérifier, exécutez dans un [[:terminal]] les commandes suivantes:
+<code bash>sudo systemctl daemon-reload
+sudo service elasticsearch restart
+service elasticsearch status</code>
+FIXME pourquoi dans le bug il y a ''sudo service elasticsearch status'' et là pas de sudo?
+
+Ce qui doit donner un **active (running)** qui indique que la commande de lancement a été exécutée et qu'on a eu un retour positif :
+<code bash>● elasticsearch.service - LSB: Starts elasticsearch
+   Loaded: loaded (/etc/init.d/elasticsearch; bad; vendor preset: enabled)
+   Active: active (running) since dim. 2016-09-18 13:42:40 CEST; 18ms ago
+     Docs: man:systemd-sysv-generator(8)
+  Process: 7340 ExecStop=/etc/init.d/elasticsearch stop (code=exited, status=0/SUCCESS)
+  Process: 7376 ExecStart=/etc/init.d/elasticsearch start (code=exited, status=0/SUCCESS)
+   CGroup: /system.slice/elasticsearch.service
+           ├─7151 /usr/lib/jvm/java-8-openjdk-i386/bin/java -Xms256m -Xmx1g -Djava.awt.headless=true -XX:+UseParNewGC -XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=75 -XX:+UseCMSInitiatingOccupa
+           └─7417 start-stop-daemon --start -b --user elasticsearch --pidfile /var/run/elasticsearch.pid --exec /usr/share/elasticsearch/bin/elasticsearch -- -d -p /var/run/elasticsearch.pid -Des.default.con
+
+sept. 18 13:42:40 lubuntu-DEV systemd[1]: Starting LSB: Starts elasticsearch...
+sept. 18 13:42:40 lubuntu-DEV elasticsearch[7376]:  * Starting Elasticsearch Server
+sept. 18 13:42:40 lubuntu-DEV elasticsearch[7376]:    ...done.
+sept. 18 13:42:40 lubuntu-DEV systemd[1]: Started LSB: Starts elasticsearch.</code>
+
+====Vérification====
+
+Il est maintenant possible d'interroger le serveur via la requête HTTP GET :
+<code bash>curl -X GET 'http://localhost:9200'</code>
+Qui va renvoyer un JSON :
+<code bash>{
+  "status" : 200,
+  "name" : "Stature",
+  "cluster_name" : "elasticsearch",
+  "version" : {
+    "number" : "1.7.3",
+    "build_hash" : "NA",
+    "build_timestamp" : "NA",
+    "build_snapshot" : false,
+    "lucene_version" : "4.10.4"
+  },
+  "tagline" : "You Know, for Search"
+}</code>
+<note tip>Le port par défaut d'Elasticsearch est 9200</note>
+
+=====Configuration=====
+
+Il reste à créer la configuration minimale pour avoir un service opérationnel.\\
+Pour cela, avec les [[:sudo|droits d'adminisration]] [[:tutoriel:comment_modifier_un_fichier|ouvrez]] le fichier de configuration **/etc/elasticsearch/elasticsearch.yml**
+
+Dans la section **Cluster**, choisissez un nom pour le groupe. Par exemple :
+<file bash>cluster.name: elasticsearch</file>
+
+Dans la section **Node**, choisissez un nom pour le nœud. Par exemple :
+<file bash>node.name: "development"</file>
+
+Dans la section **Index**, paramétrez la répartition des données. Par exemple :
+<file bash>index.number_of_shards: 1
+index.number_of_replicas: 0</file>
+
+Dans la section **Network And HTTP**, indiquez quelle plage du réseau est à écouter. Par exemple, pour tout écouter sans aucune restriction :
+<file bash>network.host: 0.0.0.0</file>
+
+Il ne reste plus qu'à relancer le service :
+<code bash>sudo service elasticsearch restart</code>
+
+=====Requêtage=====
+
+====Opérations de base====
+
+Dans un base de données, il existe 4 opérations de base. Elles sont synthétisées sous l'acronyme [[wpfr>CRUD|CRUD]] :
+  - **C**reate : création d'une donnée
+  - **D**elete : supression d'une donnée
+  - **R**ead : lecture d'une donnée
+  - **U**pdate : mise-à-jour d'une donnée
+
+De même, le protocole [[wpfr>Hypertext_Transfer_Protocol#M.C3.A9thodes|HTTP]] possède, entre autres, 4 méthodes :
+  - **G**ET : accession à une ressource
+  - **P**OST : publication d'une nouvelle ressource
+  - **P**UT : mise-à-jour d'une ressource existante (création si elle n'existe pas)
+  - **D**ELETE : suppression d'une donnée
+
+Dans le cadre d'Elasticsearch, on peut donc faire le rapprochement :
+  - Create ↔ POST
+  - Delete ↔ DELETE
+  - Read ↔ GET
+  - Update ↔ PUT
+
+===Indexation===
+
+<note tip>Elastic ne fait pas de différence fondamental entre "Create ↔ POST" et "Update ↔ PUT". Ces 2 opérations se confondent en une seule : l'indexation.</note>
+
+Pour ajouter un enregistrement dans Elasticsearch, on peut prendre comme exemple un méthode PUT :
+<code bash>curl -XPUT "http://localhost:9200/movies/movie/1" -d'
+{
+    "title": "The Godfather",
+    "director": "Francis Ford Coppola",
+    "year": 1972
+}'</code>
+Avec :
+  * L'index ''movies'' : Espace ou notre enregistrement sera stocké dans lequel sera  (obligatoire)
+  * Le type ''movie'' : Pour affiner l'index (obligatoire). On pourra par exemple ajouter des réalisateurs à notre base de films
+  * L'identifiant (ID) ''1'' : une étiquette unique associée à l'enregistrement (optionnel)
+  * Les données à stocker : au format JSON, entre les balises ''{}''
+On aura alors une réponse, elle aussi au format JSON, du type :
+<code bash>{"_index":"movies","_type":"movie","_id":"1","_version":1,"created":true}</code>
+Avec :
+  * Un rappel de l'index
+  * Un rappel du type
+  * Un rappel de l'ID (si vous en avez donné un, sinon généré aléatoirement)
+  * Le numéro de version (toujours 1 pour une création)
+  * Le type ''créé'' à VRAI (évident pour une création)
+
+Avec la méthode POST, on peut faire l'opération similaire avec l'index 2 :
+<code bash>curl -XPOST "http://localhost:9200/movies/movie/2" -d'
+{
+    "title": "Terminator",
+    "director": "James Cameron",
+    "year": 1984
+}'</code>
+Pour avoir en retour :
+<code bash>{"_index":"movies","_type":"movie","_id":"2","_version":1,"created":true}</code>
+
+On peut créer un enregistrement avec la méthode POST sans spécifier d'ID :
+<code bash>curl -XPOST "http://localhost:9200/movies/movie" -d'
+{
+    "title": "Star Wars",
+    "director": "George Lucas",
+    "year": 1977
+}'</code>
+On reçoit donc un ID aléatoire (ici ''AVc-Cf49qZYpQV_XCKMq'') :
+<code bash>{"_index":"movies","_type":"movie","_id":"AVc-Cf49qZYpQV_XCKMq","_version":1,"created":true}</code>
+
+<note important>La méthode ''PUT'' doit **obligatoirement** avoir un ID. En effet, cette requête :
+<code bash>curl -XPUT "http://localhost:9200/movies/movie/" -d'
+{
+    "title": "Alien",
+    "director": " Ridley Scott",
+    "year": 1979
+}'</code>
+Va donner une erreur :
+<code bash>No handler found for uri [/movies/movie/] and method [PUT]</code></note>
+
+Il est possible de mettre à jour un enregistrement existant. Il faut alors refaire le même type de requête que pour une création, mais en utilisant un ID existant.\\
+Par exemple avec PUT, on peut ajouter les genres à un film :
+<code bash>curl -XPUT "http://localhost:9200/movies/movie/1" -d'
+{
+    "title": "The Godfather",
+    "director": "Francis Ford Coppola",
+    "year": 1972,
+    "genres": ["Crime", "Drama"]
+}'</code>
+On reçoit en réponse quelque chose de similaire à la création, mais :
+  * Le numéro de version a été incrémenté d'un cran (donc passe à 2)
+  * Le type ''créé'' à FAUX (l'enregistrement existé déjà)
+<code bash>{"_index":"movies","_type":"movie","_id":"1","_version":2,"created":false}</code>
+
+Et avec POST :
+<code bash>curl -XPOST "http://localhost:9200/movies/movie/AVc-Cf49qZYpQV_XCKMq" -d'
+{
+    "title": "Star Wars",
+    "director": "George Lucas",
+    "year": 1977,
+    "genres": ["Action", "Adventure", "Fantasy", "Sci-Fi"]
+}'</code>
+On reçoit en réponse qui suit le même principe :
+<code bash>{"_index":"movies","_type":"movie","_id":"AVc-Cf49qZYpQV_XCKMq","_version":2,"created":false}</code>
+
+===Lecture sur un index===
+
+Maintenant que nous avons créé et modifié des enregistrements, il est facilement possible de les récupérer via la méthode ''GET'' en utilisant uniquement les IDs. Par exemple, pour récupérer notre premier film :
+<code bash>curl -XGET "http://localhost:9200/movies/movie/1"</code>
+On reçoit en réponse quelque chose de similaire à l'indexation, mais :
+  * Le dernier numéro de version
+  * Le type ''found'' à VRAI (l'enregistrement existe)
+  * Les donnée sources indexées en JSON sont retournées telles qu'elles
+<code bash>{"_index":"movies","_type":"movie","_id":"1","_version":2,"found":true,"_source":
+{
+    "title": "The Godfather",
+    "director": "Francis Ford Coppola",
+    "year": 1972,
+    "genres": ["Crime", "Drama"]
+}}</code>
+
+Si l'on demande à récupérer un enregistrement inexistant :
+<code bash>curl -XGET "http://localhost:9200/movies/movie/19"</code>
+On reçoit en réponse quelque chose de similaire à l'indexation, mais :
+  * Le type ''found'' à FAUX (l'enregistrement n'existe pas)
+  * Aucune données source JSON n'est renvoyée
+<code bash>{"_index":"movies","_type":"movie","_id":"19","found":false}</code>
+
+===Supression===
+
+Pour effacer un enregistrement, il suffit de connaitre son ID et d'utiliser la méthode DELETE. On a donc une commande assez proche de la lecture:
+<code bash>curl -XDELETE "http://localhost:9200/movies/movie/2"</code>
+On reçoit en réponse quelque chose de similaire à l'indexation, mais :
+  * Le type ''found'' à VRAI (l'enregistrement existe)
+<code bash>{"found":true,"_index":"movies","_type":"movie","_id":"2","_version":2}</code>
+
+Du coup, si l'on refait une lecture de l'enregistrement :
+<code bash>curl -XGET "http://localhost:9200/movies/movie/2"</code>
+On remarque qu'il ne peut plus être trouvé :
+<code bash>{"_index":"movies","_type":"movie","_id":"2","found":false}</code>
+
+Donc, si on redemande à supprimer cette enregistrement une 2nd foix:
+<code bash>curl -XDELETE "http://localhost:9200/movies/movie/2"</code>
+On reçoit en réponse quelque chose de similaire à la 1ère suppression, mais :
+  * Le type ''found'' à FAUX (l'enregistrement n'existe pas)
+<code bash>{"found":false,"_index":"movies","_type":"movie","_id":"2","_version":3}</code>
+
+<note tip>On remarque que pour chaque suppression, la version est incrémentée, même si l'enregistrement n'existe plus.</note>
+
+====Recherches avancées====
+
+Avant d'aller plus loin, il est nécessaire d'alimenter la base de données :
+<code bash>curl -XPUT "http://localhost:9200/movies/movie/1" -d'
+{
+    "title": "The Godfather",
+    "director": "Francis Ford Coppola",
+    "year": 1972,
+    "genres": ["Crime", "Drama"]
+}'
+curl -XPUT "http://localhost:9200/movies/movie/2" -d'
+{
+    "title": "Lawrence of Arabia",
+    "director": "David Lean",
+    "year": 1962,
+    "genres": ["Adventure", "Biography", "Drama"]
+}'
+curl -XPUT "http://localhost:9200/movies/movie/3" -d'
+{
+    "title": "To Kill a Mockingbird",
+    "director": "Robert Mulligan",
+    "year": 1962,
+    "genres": ["Crime", "Drama", "Mystery"]
+}'
+curl -XPUT "http://localhost:9200/movies/movie/4" -d'
+{
+    "title": "Apocalypse Now",
+    "director": "Francis Ford Coppola",
+    "year": 1979,
+    "genres": ["Drama", "War"]
+}'
+curl -XPUT "http://localhost:9200/movies/movie/5" -d'
+{
+    "title": "Kill Bill: Vol. 1",
+    "director": "Quentin Tarantino",
+    "year": 2003,
+    "genres": ["Action", "Crime", "Thriller"]
+}'
+curl -XPUT "http://localhost:9200/movies/movie/6" -d'
+{
+    "title": "The Assassination of Jesse James by the Coward Robert Ford",
+    "director": "Andrew Dominik",
+    "year": 2007,
+    "genres": ["Biography", "Crime", "Drama"]
+}'</code>
+On peut vérifier que tout est bien intégré :
+<code bash>{"_index":"movies","_type":"movie","_id":"1","_version":3,"created":false}
+{"_index":"movies","_type":"movie","_id":"2","_version":1,"created":true}
+{"_index":"movies","_type":"movie","_id":"3","_version":1,"created":true}
+{"_index":"movies","_type":"movie","_id":"4","_version":1,"created":true}
+{"_index":"movies","_type":"movie","_id":"5","_version":1,"created":true}
+{"_index":"movies","_type":"movie","_id":"6","_version":1,"created":true}</code>
+
+===Recherche globale===
+
+Le mot clé **_search** se place à la fin d'un chemin pour rechercher tous les enregistrements au niveau du chemin.
+Il est possible de rechercher respectivement dans tous :
+  * Les indexes et types confondus : <code bash>curl -XGET "http://localhost:9200/_search"</code>
+  * Les types d'un index précis : <code bash>curl -XGET "http://localhost:9200/movies/_search"</code>
+  * Les ID liés à un coupleindexe/type précis : <code bash>curl -XGET "http://localhost:9200/movies/movie/_search"</code>
+Comme nous n'avons qu'un seuls type et un seul index, le résultat sera sensiblement le même :
+<code bash>{"took":43,"timed_out":false,"_shards":{"total":1,"successful":1,"failed":0},"hits":{"total":7,"max_score":1.0,"hits":[{"_index":"movies","_type":"movie","_id":"AVc-Cf49qZYpQV_XCKMq","_score":1.0,"_source":
+{
+    "title": "Star Wars",
+    "director": "George Lucas",
+    "year": 1977,
+    "genres": ["Action", "Adventure", "Fantasy", "Sci-Fi"]
+}},{"_index":"movies","_type":"movie","_id":"1","_score":1.0,"_source":
+{
+    "title": "The Godfather",
+    "director": "Francis Ford Coppola",
+    "year": 1972,
+    "genres": ["Crime", "Drama"]
+}},{"_index":"movies","_type":"movie","_id":"2","_score":1.0,"_source":
+{
+    "title": "Lawrence of Arabia",
+    "director": "David Lean",
+    "year": 1962,
+    "genres": ["Adventure", "Biography", "Drama"]
+}},{"_index":"movies","_type":"movie","_id":"3","_score":1.0,"_source":
+{
+    "title": "To Kill a Mockingbird",
+    "director": "Robert Mulligan",
+    "year": 1962,
+    "genres": ["Crime", "Drama", "Mystery"]
+}},{"_index":"movies","_type":"movie","_id":"4","_score":1.0,"_source":
+{
+    "title": "Apocalypse Now",
+    "director": "Francis Ford Coppola",
+    "year": 1979,
+    "genres": ["Drama", "War"]
+}},{"_index":"movies","_type":"movie","_id":"5","_score":1.0,"_source":
+{
+    "title": "Kill Bill: Vol. 1",
+    "director": "Quentin Tarantino",
+    "year": 2003,
+    "genres": ["Action", "Crime", "Thriller"]
+}},{"_index":"movies","_type":"movie","_id":"6","_score":1.0,"_source":
+{
+    "title": "The Assassination of Jesse James by the Coward Robert Ford",
+    "director": "Andrew Dominik",
+    "year": 2007,
+    "genres": ["Biography", "Crime", "Drama"]
+}}]}}</code>
+
+===Recherche textuelle libre===
+
+Il est possible d'adjoindre une requète au format JSON après le mot-clé _search pour affiner les résultats. Il faut placer dans la requète les mots clés :
+  * ''query'' pour indiquer que l'on passe une requète
+  * ''query_string'' pour indiquer que l'on recherche du texte
+  * ''query : <MOTS CLES>'' pour indiquer que l'on recherche tout les textes contenant les mots clés
+
+Par exemple, pour rechercher tous les films contenant le mot "kill", il faut faire :
+<code bash>curl -XPOST "http://localhost:9200/_search" -d'
+{
+    "query": {
+        "query_string": {
+            "query": "kill"
+        }
+    }
+}'</code>
+Ce qui va donner :
+<code bash>{"took":49,"timed_out":false,"_shards":{"total":1,"successful":1,"failed":0},"hits":{"total":2,"max_score":0.5772806,"hits":[{"_index":"movies","_type":"movie","_id":"3","_score":0.5772806,"_source":
+{
+    "title": "To Kill a Mockingbird",
+    "director": "Robert Mulligan",
+    "year": 1962,
+    "genres": ["Crime", "Drama", "Mystery"]
+}},{"_index":"movies","_type":"movie","_id":"5","_score":0.5772806,"_source":
+{
+    "title": "Kill Bill: Vol. 1",
+    "director": "Quentin Tarantino",
+    "year": 2003,
+    "genres": ["Action", "Crime", "Thriller"]
+}}]}}</code>
+
+Le résultat peut-être décomposé en 3 parties :
+  - Les informations sur l'exécution de la requête. <code bash>"_shards":{"total":1,"successful":1,"failed":0}</code>
+  - Les informations générales sur les résultats. <code bash>"hits":{"total":2,"max_score":0.5772806,"hits":[...]</code>
+  - Les résultats à la suite, dans la balise ''hits''. Ici, le 1er résultat : <code bash>{"_index":"movies","_type":"movie","_id":"3","_score":0.5772806,"_source":
+{
+    "title": "To Kill a Mockingbird",
+    "director": "Robert Mulligan",
+    "year": 1962,
+    "genres": ["Crime", "Drama", "Mystery"]
+}}</code>
+
+===Recherche dans un champ spécifique===
+
+En ajoutant la balise ''fields : <NOM DU CHAMP>'', il est possible d'avoir tout le texte mais venant d'un champ précis.
+
+Ainsi, pour avoir tous les titres contenant le mot "ford" :
+<code bash>curl -XPOST "http://localhost:9200/_search" -d'
+{
+    "query": {
+        "query_string": {
+            "query": "ford",
+            "fields": ["title"]
+        }
+    }
+}'</code>
+Ce qui donne :
+<code bash>{"took":3,"timed_out":false,"_shards":{"total":1,"successful":1,"failed":0},"hits":{"total":1,"max_score":0.70398843,"hits":[{"_index":"movies","_type":"movie","_id":"6","_score":0.70398843,"_source":
+{
+    "title": "The Assassination of Jesse James by the Coward Robert Ford",
+    "director": "Andrew Dominik",
+    "year": 2007,
+    "genres": ["Biography", "Crime", "Drama"]
+}}]}</code>
+
+===Filtrage===
+
+Le filtrage permet de restreindre une recherche à certaines conditions. Seuls les résultats respectant ces contraintes seront remontés. Pour cela, il faut ajouter à la fin de la requête les mots clés :
+  * ''filter'' pour indiquer un filtre
+  * ''term'' pour indiquer les termes des conditions
+  * Au moins un couple ''"<CHAMP>" : <VALEUR>'' pour indiquer les valeurs des champs à filtrer
+
+Ainsi, pour avoir tous les film marqués comme des drames sortis en 1962, on aura :
+<code bash>curl -XPOST "http://localhost:9200/_search" -d'
+{
+    "query": {
+        "filtered": {
+            "query": {
+                "query_string": {
+                    "query": "drama"
+                }
+            },
+            "filter": {
+                "term": { "year": 1962 }
+            }
+        }
+    }
+}'</code>
+Ce qui va renvoyer 2 résultats au format déjà connu :
+<code bash>{"took":5,"timed_out":false,"_shards":{"total":1,"successful":1,"failed":0},"hits":{"total":2,"max_score":0.36067212,"hits":[{"_index":"movies","_type":"movie","_id":"2","_score":0.36067212,"_source":
+{
+    "title": "Lawrence of Arabia",
+    "director": "David Lean",
+    "year": 1962,
+    "genres": ["Adventure", "Biography", "Drama"]
+}},{"_index":"movies","_type":"movie","_id":"3","_score":0.36067212,"_source":
+{
+    "title": "To Kill a Mockingbird",
+    "director": "Robert Mulligan",
+    "year": 1962,
+    "genres": ["Crime", "Drama", "Mystery"]
+}}]}}</code>
+
+Il est possible d'avoir un filtre sans requête explicite. Par exemple, on peut ressortir l'ensemble des films datés de 1962 :
+<code bash>curl -XPOST "http://localhost:9200/_search" -d'
+{
+    "query": {
+        "constant_score": {
+            "filter": {
+                "term": { "year": 1962 }
+            }
+        }
+    }
+}'</code>
+Ce qui donne :
+<code bash>{"took":3,"timed_out":false,"_shards":{"total":1,"successful":1,"failed":0},"hits":{"total":2,"max_score":1.0,"hits":[{"_index":"movies","_type":"movie","_id":"2","_score":1.0,"_source":
+{
+    "title": "Lawrence of Arabia",
+    "director": "David Lean",
+    "year": 1962,
+    "genres": ["Adventure", "Biography", "Drama"]
+}},{"_index":"movies","_type":"movie","_id":"3","_score":1.0,"_source":
+{
+    "title": "To Kill a Mockingbird",
+    "director": "Robert Mulligan",
+    "year": 1962,
+    "genres": ["Crime", "Drama", "Mystery"]
+}}]}}</code>
+
+<note tip>Cette dernière requête aurait aussi pu être écrite sans filtre :
+<code bash>curl -XPOST "http://localhost:9200/_search" -d'
+{
+    "query": {
+        "query_string": {
+            "query": "1962",
+            "fields": ["year"]
+        }
+    }
+}'</code></note>
+
+<note>La différence entre query et filter est assez subtile :
+  * **query** fait une recherche élargie : tout enregistrement correspondant partiellement à la requête sera retourné. Ce genre de recherche est donc plus lent. Il est utile pour faire les recherches à partir de champs saisis par un utilisateurs.
+  * **filter** fait une recherche stricte : un document ne ressortira que s'il correspond rigoureusement à tous les critères. Ce genre de recherche est donc plus rapide. Il est utile pour rajouter des contraintes qui seront fixés par le système plus que par l'utilisateur.
+Il faut donc bien réfléchir à la façon dont seront faites les recherches et concevoir les requêtes les plus adaptés au contexte.
+
+Pour plus de détails : [[http://grokbase.com/t/gg/elasticsearch-fr/132jtwtn71/faire-un-or-diff%C3%A9rence-entre-queries-et-filter|Discussion FR]] et [[https://stackoverflow.com/questions/14595988/queries-vs-filters#14600680|Discussion EN]]</note>
+
+===Mapping===
+
+Si l'on tente de rechercher tous les films de Francis Ford Coppola :
+<code bash>curl -XPOST "http://localhost:9200/_search" -d'
+{
+    "query": {
+        "constant_score": {
+            "filter": {
+                "term": { "director": "Francis Ford Coppola" }
+            }
+        }
+    }
+}'</code>
+Aucun résultat ne sera retourné :
+<code bash>{"took":2,"timed_out":false,"_shards":{"total":1,"successful":1,"failed":0},"hits":{"total":0,"max_score":null,"hits":[]}}</code>
+
+En effet, Elasticsearch indexe les champs en utilisant le service Apache Lucene. Lucene décompose le champ en une série de mots. Ici, on a les 3 mots "francis", "ford" et "coppola". Le champ original "Francis Ford Coppola" est conservée sous la forme d'une ''_source'' mais qui n'est pas indexée. Or, comme seules les données indexée sont recherchée par Elasticsearch, il faudrait avoir la requête :
+<code bash>curl -XPOST "http://localhost:9200/_search" -d'
+{
+    "query": {
+        "constant_score": {
+            "filter": {
+                "term": { "director": ["francis", "ford", "coppola"] }
+            }
+        }
+    }
+}'</code>
+Pour obtenir :
+<code bash>{"took":1,"timed_out":false,"_shards":{"total":1,"successful":1,"failed":0},"hits":{"total":2,"max_score":1.0,"hits":[{"_index":"movies","_type":"movie","_id":"1","_score":1.0,"_source":
+{
+    "title": "The Godfather",
+    "director": "Francis Ford Coppola",
+    "year": 1972,
+    "genres": ["Crime", "Drama"]
+}},{"_index":"movies","_type":"movie","_id":"4","_score":1.0,"_source":
+{
+    "title": "Apocalypse Now",
+    "director": "Francis Ford Coppola",
+    "year": 1979,
+    "genres": ["Drama", "War"]
+}}]}}</code>
+
+<note important>Il est possible de modifier un index existant via l'utilisation jointe de :
+  * La méthode ''POST''
+  * Le mot clé''_mapping'' une nouvelle forme d'indexation
+  * Le champ à réindexer
+  * Le pararamètre ''not_analyzed'' : pour indiquer une champ source
+
+Ainsi, pour les directeurs de film, on aura :
+<code bash>curl -XPUT "http://localhost:9200/movies/movie/_mapping" -d'
+{
+   "movie": {
+      "properties": {
+         "director": {
+            "type": "string",
+            "index": "not_analyzed"
+        }
+      }
+   }
+}'</code>
+Toutefois, Elasticsearch supporte mal la modification des indexes créés par défaut :
+<code bash>{"error":"MergeMappingException[Merge failed with failures {[mapper [director] has different index values, mapper [director] has different tokenize values, mapper [director] has different index_analyzer]}]","status":400}
+# new mapping creation</code></note>
+
+Il vaut mieux étendre l'index existant. Pour cela, on va utiliser :
+  * Un ''type'' d'extension (ici multi-field)
+  * Une extension de nom pour l'index (ici ''original'')
+Ce qui donne la commande :
+<code bash>curl -XPOST "http://localhost:9200/movies/movie/_mapping" -d'
+{
+   "movie": {
+      "properties": {
+         "director": {
+            "type": "multi_field",
+            "fields": {
+                "director": {"type": "string"},
+                "original": {"type" : "string", "index" : "not_analyzed"}
+            }
+         }
+      }
+   }
+}'
+</code>
+On peut vérifier que l'exécution est faite sans erreur :
+<code bash>{"acknowledged":true}</code>
+
+Ce qui permet de réécrire finalement la requête voulue :
+<code bash>curl -XPOST "http://localhost:9200/_search" -d'
+{
+    "query": {
+        "constant_score": {
+            "filter": {
+                "term": { "director.original": "Francis Ford Coppola" }
+            }
+        }
+    }
+}'</code>
+Qui va renvoyer le bon résultat :
+<code bash>{"took":1,"timed_out":false,"_shards":{"total":1,"successful":1,"failed":0},"hits":{"total":2,"max_score":1.0,"hits":[{"_index":"movies","_type":"movie","_id":"1","_score":1.0,"_source":
+{
+    "title": "The Godfather",
+    "director": "Francis Ford Coppola",
+    "year": 1972,
+    "genres": ["Crime", "Drama"]
+}},{"_index":"movies","_type":"movie","_id":"4","_score":1.0,"_source":
+{
+    "title": "Apocalypse Now",
+    "director": "Francis Ford Coppola",
+    "year": 1979,
+    "genres": ["Drama", "War"]
+}}]}}</code>
+
+=====Voir aussi=====
+
+  * [[https://www.elastic.co/fr/products/elasticsearch|Site du projet]] sur [[https://www.elastic.co/fr|Elastic.co]]
+  * [[https://www.digitalocean.com/community/tutorials/how-to-install-and-configure-elasticsearch-on-ubuntu-16-04|How to install Elasticsearch on Ubuntu 16.04]]<sup>(en)</sup>
+  * [[http://joelabrahamsson.com/elasticsearch-101/|How to install Elasticsearch]]<sup>(en)</sup>
+
+----
+//Contributeurs:// FIXME

@@ -1,0 +1,565 @@
+
+{{tag>Hardy serveur haute_disponibilité réseau samba RAID tutoriel}}
+
+----
+
+====== Mirroring sur deux serveurs ======
+
+<note importante>
+Ce tutoriel est destiné à un **public averti**, certains détails //triviaux// ne sont pas détaillés…
+
+Toutes les commandes sont lancées avec l'utilisateur « **root** ».
+</note>
+
+À l'heure où les serveurs d'entreprises doivent stocker un volume croissant de données et assurer une haute disponibilité, il est nécessaire d'imaginer des   systèmes de //mirroring// (miroir) autres que simplement sur des disques durs.
+
+La redondance de disques durs (RAID-1, RAID-5) permet déjà d'avoir une bonne résistance aux pannes d'un disque (ou plusieurs si on est en RAID-5). Cependant, si c'est la machine qui //tombe// (le processeur, l'alimentation, le contrôleur de disque, etc.), on n'a aucun moyen pour relancer le tout rapidement sans perte de données.
+
+''drbd'' permet de mettre en œuvre une solution de RAID-1 au travers du réseau. C'est-à-dire que sur deux serveurs, on a une partition((qui peut être sur un ''lvm'' ou sur un raid physique ou logiciel)) par serveur qui est à tout moment une copie exacte d'une partition de l'autre serveur. C'est un //mirroring// (miroir) de partitions à travers une interface réseau.
+
+C'est une solution qui permet également d'utiliser deux PC au lieu d'un serveur afin de **faire des économies**, aussi bien pour l'achat initial que pour l'achat de disques supplémentaires (en remplacement ou en ajout) par la suite. Dans la mesure où ce //cluster// est utilisé pour un partage ''samba'', ce type de matériel est tout à fait convenable et peut supporter jusqu'à une vingtaine de clients.
+
+===== Présentation des outils utilisés =====
+Ce tutoriel met en œuvre certains outils qu'il faut rapidement présenter. Des termes importants sont utilisés :
+  * serveur
+  * service
+  * haute disponibilité
+  * client
+Ces termes ne sont pas détaillés dans ce tutoriel, je fais appel à votre curiosité pour trouver leur définition.
+
+==== Samba ====
+
+Samba est l'outil qui permet à un ordinateur sur lequel une distribution GNU/Linux ou Unix est installée //d'apparaître// sur le réseau et de partager des fichiers et des imprimantes comme le ferait un ordinateur avec Windows©.\\
+C'est LA solution logicielle pour faire d'un serveur GNU/Linux un serveur de fichiers (et d'imprimantes) pour des clients sous Windows©, puisqu'elle est simple d'utilisation pour les clients.
+
+==== Heartbeat ====
+
+Heartbeat gère la haute disponibilité de services qui peuvent être fournis par plusieurs serveurs (2 au minimum). Pour ce faire, chacun des serveurs est surveillé //via// un //battement de cœur// (heartbeat) diffusé sur le réseau. Au départ les services sont démarrés sur l'un des serveurs, et si celui-ci n'émet plus de battement de cœur((c'est qu'il est mort !)), un autre serveur prend la relève.
+
+Le cas qui est certainement le plus répandu est la mise en place de Heartbeat sur deux serveurs, ce qui est le cas dans ce tutoriel.
+
+==== DrBD ====
+
+DrBD permet de synchroniser //en temps réel//((allez voir les [[http://www.drbd.org/users-guide-emb/users-guide.html|détails sur le site]])) des données entre deux ordinateurs.
+
+DrBD est constitué d'un module du noyau et d'outils de gestion.
+
+===== Postulat de départ =====
+
+  * Les deux serveurs :
+    * ''serv1'' avec adresse IP 192.168.214.10 : serveur primaire
+    * ''serv2'' avec adresse IP 192.168.214.11 : serveur secondaire
+  * sur chacun des deux serveurs, la partition **/dev/sda6** est celle que ''drbd'' duplique. Il s'agit d'une partition **non-formatée**((si vous ne pouvez pas faire autrement que de réutiliser une partition ayant été formatée et ayant contenu des données, il faudra utiliser la commande __''shred -zvf -n 1 /dev/sda6''__ afin de //vider// (remplir avec des zéros) la partition. Attention, l'opération peut prendre du temps, mais elle peut être stoppée après les 10 premiers pourcents ([CTRL]+[C]).)). Toutes les données de cette partition seront perdues.
+  * l'adresse mail de l'administrateur à contacter((en supposant que les deux serveurs sachent envoyer un mail (avec ''ssmtp'' par exemple) )) est ''admin@domain.fr''((à personnaliser)).
+
+Pour que la reprise de service soit //transparente// pour les clients, nous utiliserons une fonctionnalité de ''heartbeat'', celle de la gestion d'une adresse flottante. Cette adresse est définie à 192.168.214.20.\\
+De plus ''samba'' sera configuré pour //passer// par cette adresse flottante et pour donner un nom NetBios indépendant du nom du serveur sur lequel il est exécuté. Ce nom est "serveur".
+
+===== Installation =====
+
+L'ordre d'installation à respecter concerne surtout DrBD qui doit être installé après Heartbeat.
+
+==== Samba ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt://samba|samba]]**.
+
+Dans l'optique d'une gestion de Samba avec Heartbeat, il faut laisser le soin à ce dernier de démarrer Samba, il faut donc faire en sorte que Samba ne soit pas lancé au démarrage :
+
+  update-rc.d -f samba remove
+
+Il faut ensuite arrêter le service ''samba'' :
+
+  /etc/init.d/smb stop
+
+==== Heartbeat ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt://heartbeat|heartbeat]]**.
+
+==== DrBD ====
+
+<note>Le module ''drbd'' est disponible avec le noyau ''server'' « de base » depuis au moins Hardy Heron((à vrai dire, je ne sais pas si c'était déjà le cas pour les versions précédentes)). Cependant, afin d'avoir un système récent avec un minimum de bug et de faille de sécurité, on passera au noyau ''server'' le plus récent.</note>
+
+Mise à jour du système :
+  * [[:apt-get#mise_a_jour_depots|Mise à jour des dépôts]]
+  * [[:apt-get#mise_a_jour_paquets|Mise à jour des paquets]] (dist-upgrade)
+Passer à la version du noyau la plus récente. Redémarrer.
+
+Vérification de la présence du module ''drbd'' :
+<code>cat /proc/drbd</code>
+<file>cat: /proc/drbd: Aucun fichier ou répertoire de ce type</file>
+<code>modprobe drbd
+cat /proc/drbd</code>
+<file>version: 8.2.6 (api:88/proto:86-88)
+GIT-hash: 3e69822d3bb4920a8c1bfdf7d647169eba7d2eb4 build by phil@fat-tyre, 2008-05-30 12:59:17</file>
+Sous Hardy Heron, la version du module et des outils est la 8.0.11.
+
+[[:tutoriel:comment_installer_un_paquet|Installation]] de ''drbd8-utils'' version **idem à la version du module** sans quoi le fonctionnement correct n'est pas garanti.\\
+Un paquet suggéré : ''heartbeat'' : tout le monde est sur la même longueur d'onde... 
+
+<note important>Il faut que le service ''drbd'' démarre, sinon le script de démarrage de ''drbd'' lancé par ''heartbeat'' ne fonctionne pas. Il faut donc lancer la commande :
+<code>update-rc.d drbd defaults 70</code>
+ou simplement copier le lien qui se trouve dans **/etc/rc3.d** vers **/etc/rc2.d** si ça ne fonctionne pas.</note>
+
+Finalisation pour faire en sorte que les outils ''heartbeat'' fonctionnent :
+<code>chgrp haclient /sbin/drbdsetup
+chmod o-x /sbin/drbdsetup
+chmod u+s /sbin/drbdsetup
+
+chgrp haclient /sbin/drbdmeta
+chmod o-x /sbin/drbdmeta
+chmod u+s /sbin/drbdmeta</code>
+
+===== Configuration et mise en place de drbd =====
+[[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/drbd.conf** :
+<file>global {
+  usage-count no;
+}
+
+common {
+  protocol C;
+  
+  syncer {
+    rate 3M;
+    verify-alg sha1;
+  }
+  
+  handlers {
+    pri-lost-after-sb "reboot -f";
+    pri-lost "echo Déconnexion des serveurs, vérifier les logs | mail -s 'SERVEUR: Alerte DRBD' admin@domain.fr";
+    out-of-sync "echo Désynchronisation des serveurs, vérifier les logs | mail -s 'SERVEUR: Alerte DRBD' admin@domain.fr";
+    pri-on-incon-degr "reboot -f";
+    outdate-peer "/usr/lib/heartbeat/drbd-peer-outdater -t 5";
+    local-io-error "echo o > /proc/sysrq-trigger ; halt -f";
+  }
+}
+
+resource r0 {
+  device    /dev/drbd0;
+  disk      /dev/sda6;
+  meta-disk internal;
+  
+  disk {
+    on-io-error   detach;
+  }
+  
+  startup {
+    wfc-timeout  60;
+    degr-wfc-timeout 30;
+    become-primary-on serv1;
+  }
+  
+  net {
+    after-sb-0pri discard-older-primary;
+    after-sb-1pri call-pri-lost-after-sb;
+    after-sb-2pri call-pri-lost-after-sb;
+  }
+  on serv1 {
+    address   192.168.214.10:7788;
+  }
+  on serv2 {
+    address   192.168.214.11:7788;
+  }
+}</file>
+<note>Ce fichier de configuration doit être scrupuleusement identique sur les deux serveurs.\\
+Lire le chapitre [[#au_sujet_de_la_gestion_de_la_bande_passante|Au sujet de la gestion de la bande passante]].</note>
+
+==== À faire sur chaque serveur en même temps ====
+<note tip>Si vous vous êtes dit que vous alliez tout installer sur un serveur puis [[:tutoriel:comment_sauvegarder_partition_avec_partimage|cloner]] le premier serveur pour en obtenir un second identique (ce qui peut engendrer [[#fichiers_a_personnaliser_apres_un_clonage|d'autres problèmes]]), c'est là qu'il faut que vous sachiez que les instructions qui suivent doivent être lancées sur chacun des 2 serveurs, à moins de n'utiliser ''dd'' pour l'ensemble du/des disque(s) dur(s). Ce qui peut prendre //pas mal de temps//...\\
+**Sinon, il faut répéter tout ce qui vient d'être fait sur le second serveur avant d'aller plus loin.**</note>
+
+<note>//En même temps// signifie simplement que la commande doit être lancée sur les 2 serveurs et que la suivante ne peut être lancée sur quelque serveur que ce soit que si la précédente a terminé sans erreur sur les 2 serveurs.</note>
+
+Lancer :
+<code>drbdadm create-md r0</code>
+<file>v08 Magic number not found
+md_offset 1093922816
+al_offset 1093890048
+bm_offset 1093853184
+
+Found some data
+ ==> This might destroy existing data! <==
+
+Do you want to proceed?
+[need to type 'yes' to confirm] </file>
+Taper ''yes''. Il est possible qu'une autre question demandant confirmation de destruction des données de la partition soit posée, répondez ''yes'' si vous êtes sûr de ce que vous faites.
+<file>v07 Magic number not found
+v07 Magic number not found
+v08 Magic number not found
+Writing meta data...
+initialising activity log
+NOT initialized bitmap
+New drbd meta data block sucessfully created.
+success</file>
+<note>Il se peut qu'un message disant que cette partition contient des données vous empêche de continuer, il faut alors lancer la commande
+<code>shred -zvf -n 1 /dev/sda6</code>
+afin de remplir la partition avec des zéros, puis de relancer la commande.</note>
+
+Si le module ''drbd'' n'est pas chargé :
+<code>modprobe drbd</code>
+Puis :
+<code>drbdadm up r0</code>
+La commande suivante doit donner quelque chose du genre :
+<code># cat /proc/drbd</code>
+<file>version: 8.2.6 (api:88/proto:86-88)
+GIT-hash: 3e69822d3bb4920a8c1bfdf7d647169eba7d2eb4 build by phil@fat-tyre, 2008-05-30 12:59:17
+ 0: cs:Connected st:Secondary/Secondary ds:Inconsistent/Inconsistent C r---
+    ns:0 nr:0 dw:0 dr:0 al:0 bm:0 lo:0 pe:0 ua:0 ap:0 oos:149134808</file>
+Puisque ''drbd'' est lancé mais aucun serveur //primaire// n'est déclaré. On le voit car après ''st:'', il est indiqué ''Secondary/Secondary'' ce qui signifie que le nœud sur lequel la commande est exécuté est //secondaire// (le premier avant le ''/'') et que l'autre l'est aussi (le second après le ''/'').\\
+Pour ne connaître que l'état de la grappe ''drbd'', la commande suivante suffit :
+<code>drbdadm role all</code>
+<file>Secondary/Secondary</file>
+
+==== À ne faire que sur le serveur primaire ====
+Il s'agit maintenant de déclarer un des 2 serveurs comme
+ //primaire// : Le serveur //secondaire// se synchronisera //automagiquement//((oui je sais, ce terme n'est pas de moi, il est souvent utilisé dans les documentations Debian et dérivés, d'où sa place ici.)).\\
+Lancer la commande :
+<code>drbdadm -- --overwrite-data-of-peer primary r0
+
+cat /proc/drbd</code>
+<file>version: 8.2.6 (api:88/proto:86-88)
+GIT-hash: 3e69822d3bb4920a8c1bfdf7d647169eba7d2eb4 build by phil@fat-tyre, 2008-05-30 12:59:17
+ 0: cs:SyncSource st:Primary/Secondary ds:UpToDate/Inconsistent C r---
+    ns:2240 nr:0 dw:0 dr:2240 al:0 bm:0 lo:0 pe:0 ua:0 ap:0 oos:149132568
+        [>....................] sync'ed:  0.1% (145637/145639)M
+        finish: 17:15:38 speed: 2,240 (2,240) K/sec</file>
+On voit que le serveur secondaire se synchronise avec une superbe barre de progression.\\
+Le temps indiqué après ''finish:'' est le temps indicatif restant avant la fin de la première synchronisation. Pour diminuer ce temps, il est vivement conseillé de //débrider// le taux de transfert de la synchronisation en tapant sur les deux serveurs :
+<code>
+drbdsetup /dev/drbd0 syncer -r 100M
+</code>
+
+Le débit ira donc jusqu'à la vitesse autorisée. Lire le [[#au_sujet_de_la_gestion_de_la_bande_passante|chapitre]] concernant les débits à la fin de ce document.
+
+et pour revenir à la configuration courante:
+<code>
+drbdadm adjust r0
+</code>
+
+Une fois les serveurs synchronisés,
+<code>cat /proc/drbd</code>
+<file>version: 8.2.6 (api:88/proto:86-88)
+GIT-hash: 3e69822d3bb4920a8c1bfdf7d647169eba7d2eb4 build by phil@fat-tyre, 2008-05-30 12:59:17
+ 0: cs:Connected st:Primary/Secondary ds:UpToDate/UpToDate C r---
+    ns:2240 nr:0 dw:0 dr:2240 al:0 bm:0 lo:0 pe:0 ua:0 ap:0 oos:149132568</file>
+il est temps de formater la partition ''drbd'' uniquement sur le serveur primaire (vous avez, bien évidemment pensé à revenir à un débit de synchronisation normal.) :
+<code>mkfs.ext3 /dev/drbd0</code>
+et de monter votre partition pour vérifier que tout va bien. Le montage de la partition doit utiliser **/dev/drbd0** et ne doit se faire **que sur le serveur primaire**.
+<code>mkdir /data
+mount /dev/drbd0 /data</code>
+
+<note important>Dans le cas de l'utilisation de ''drbd'' avec ''heartbeat'' et ''samba'', le montage du disque est géré par ''heartbeat''.\\
+**Il ne faut pas ajouter de point de montage avec /dev/drbd0 dans le fichier /etc/fstab.**</note>
+
+===== samba =====
+==== Gestion des utilisateurs ====
+<note>Une solution de gestion des utilisateurs est proposée ici : Libre à vous de choisir de la suivre.</note>
+Les serveurs redondants ne sont utilisés que pour le partage de fichiers avec ''samba''. Sachant cela, il n'est pas forcément nécessaire, dans une configuration simple, de faire en sorte que tous les utilisateurs système soient créés dans des groupes d'utilisateurs différents.\\
+Ce qui est proposé ici est de gérer les droits uniquement via ''samba''. C'est une solution applicable la plupart du temps.
+
+Dans cette optique, un seul groupe d'utilisateurs est créé :
+<code>groupadd sambausers</code>
+Et les utilisateurs sont créés de sorte qu'ils ne puissent pas utiliser le système (shell par défaut sur /bin/false et répertoire personnel (home) sur /dev/null) :
+<code>useradd -s /bin/false -d /dev/null -g sambausers nom_utilisateur
+smbpasswd -a nom_utilisateur</code>
+Puis rentrer deux fois le mot de passe de cet utilisateur (ou le faire taper par l'utilisateur lui-même).\\
+Un utilisateur nommé ''samba'' et faisant partie du groupe ''sambausers'' peut être créé pour qu'il soit propriétaire des répertoires partagés.
+
+==== Configuration ====
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/samba/smb.conf** :
+<file>#======================= Global Settings =======================
+
+[global]
+
+## Browsing/Identification ###
+workgroup = Arcade
+server string = Samba server (%h)
+netbios name = Serveur
+dns proxy = no
+
+#### Networking ####
+interfaces = 192.168.214.20
+bind interfaces only = yes
+
+### Access rights ###
+create mask = 0664
+directory mask = 0775
+
+#### Debugging/Accounting ####
+log file = /var/log/samba/log.%m
+max log size = 1000
+syslog = 0
+panic action = /usr/share/samba/panic-action %d
+
+####### Authentication #######
+security = user
+valid users = @sambausers
+encrypt passwords = true
+passdb backend = tdbsam
+obey pam restrictions = yes
+unix password sync = no
+map to guest = bad user
+
+############ Misc ############
+socket options = IPTOS_LOWDELAY TCP_NODELAY
+usershare allow guests = no
+local master = yes
+os level = 65</file>
+Si samba partage des imprimantes, ajouter les lignes suivantes :
+<file>########## Printing ########## 
+   load printers = yes 
+   printing = bsd 
+   printcap name = /etc/printcap 
+   printing = cups 
+   printcap name = cups 
+
+[printers] 
+   comment = All Printers 
+   browseable = no 
+   path = /var/spool/samba 
+   printable = yes 
+   guest ok = no 
+   read only = yes 
+   create mask = 0700 
+
+[print$] 
+   comment = Printer Drivers 
+   path = /var/lib/samba/printers 
+   browseable = yes 
+   read only = yes 
+   guest ok = no 
+# Uncomment to allow remote administration of Windows print drivers. 
+# Replace 'ntadmin' with the name of the group your admin users are 
+# members of.
+######### !!!!!!!!!! Attention à cette ligne !!!!!!!!!!!!! ########
+   write list = root @ntadmin</file>
+FIXME : Quels sont les fichiers à synchroniser entre les 2 serveurs pour la configuration de ''cups'' ?
+
+<note>En ce qui concerne les partages, il est bien évidemment conseillé d'utiliser un répertoire contenu dans le répertoire synchronisé par ''drbd''.</note>
+
+=== Configuration d'un partage en lecture/écriture pour certains utilisateurs ===
+Ajouter les lignes suivantes pour chacun des partages de ce type :
+<file>[Nom_du_partage]
+   path = /data/répertoire/partagé
+   read only = no
+   valid users = liste des utilisateurs séparés par des espaces
+</file>
+
+=== Configuration d'un partage en lecture/écriture pour certains utilisateurs et en lecture seule pour d'autres===
+Ajouter les lignes suivantes pour chacun des partages de ce type :
+<file>[Nom_du_partage]
+   path = /data/répertoire/partagé
+   read only = yes
+   valid users = liste des utilisateurs n'ayant que le droit de lire séparés par des espaces
+   write list = liste des utilisateurs ayant le droit de lire et d'écrire séparés par des espaces
+</file>
+
+Pour tester votre configuration de ''samba'', lancer la commande suivante sur le serveur primaire (celui sur lequel /dev/drbd0 est monté) :
+<code>/etc/init.d/samba start</code>
+Une fois votre configuration éprouvée par quelques tests, vous pourrez stopper le service ''samba'' :
+<code>/etc/init.d/samba stop</code>
+
+==== Droits sur les répertoires partagés ====
+Il faut que les utilisateurs puissent accéder aux répertoires partagés et à leur contenu, c'est là qu'intervient notre utilisateur ''samba'' créé à cet effet :
+<code>chown -R samba:sambausers /data
+chmod -R 775 /data</code>
+
+===== heartbeat =====
+==== Configuration ====
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/ha.d/ha.cf** :
+<file>mcast eth0 239.0.0.10 694 1 0 
+
+warntime 4 
+deadtime 5 
+initdead 15 
+keepalive 2 
+
+auto_failback off 
+
+node serv1 serv2</file>
+<note>
+  - On remarque que le [[:multicast|multicast]] est utilisé, ceci afin de faire en sorte que ce fichier puisse être identique sur les deux serveurs.
+  - Les noms ''serv1'' et ''serv2'' sont définis dans le fichier **/etc/hosts**.
+</note>
+
+Pour générer le fichier **/etc/ha.d/authkeys** :
+<code>( echo -ne "auth 1\n1 sha1 "; dd if=/dev/urandom bs=512 count=1 | openssl md5 ) > /etc/ha.d/authkeys
+chmod 0600 /etc/ha.d/authkeys</code>
+<note important>Il faut que ce fichier soit identique sur les deux serveurs.\\
+Les droits sur ce fichiers doivent être modifiés comme indiqué, le propriétaire doit être ''root''.</note>
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/ha.d/haresources** :
+<file>serv1 IPaddr::192.168.214.20 drbddisk::r0 Filesystem::/dev/drbd0::/data::ext3 samba MailTo::admin@domain.fr::Changement_d_etat_serveur</file>
+<note>Un mail sera envoyé à l'administrateur chaque fois que le rôle des serveurs changera.</note>
+Dans ce fichier, les champs sont séparés par des espaces, le premier champ est le nom du serveur primaire.\\
+Chaque champs suivant est constitué du nom d'un script, se trouvant dans /etc/init.d/ ou dans /etc/ha.d/resource.d, suivi des paramètres nécessaires à ce script séparés par des "::".\\
+''heartbeat'' rajoute ''start'', ''stop'' ou ''status'' à la fin de la ligne de commande selon que la commande est lancée lorsque le serveur passe primaire ou secondaire ou pour vérifier l'état du service. C'est ce qui explique qu'il ne faut pas démarrer ''samba'' automatiquement, c'est ''heartbeat'' qui s'en charge.
+
+__Par exemple__ : ''Filesystem::/dev/drbd0::/data::ext3'' :
+  * ''Filesystem'' est un script se trouvant dans le répertoire /etc/ha.d/resource.d
+  * la commande lancée sur le serveur primaire lors du démarrage du serveur est :
+<code>/etc/ha.d/resource.d/Filesystem /dev/drbd0 /data ext3 start</code>
+Ce script permet de monter le périphérique **/dev/drbd0** sous **/data** en ext3fs.
+
+===== Finalisation =====
+Il faudrait maintenant démarrer le service ''drbd'' et relancer ''heartbeat'', mais pour éviter de lister ici toutes les pistes en cas de problème, je préfère conseiller de faire comme ceci :
+  * Synchroniser [[#fichiers_a_synchroniser_entre_les_deux_serveurs|tous les fichiers de configuration]]
+  * Redémarrer les deux serveurs((je sais que ça ne fait pas pro, mais bon...))
+
+Si tout s'est bien passé, lors du redémarrage, ''heartbeat'' devrait :
+  * Créer l'adresse IP 192.168.214.20 sur l'alias d'interface Ethernet **eth0:0**((il est possible de personnaliser l'interface Ethernet à utiliser : ''IPaddr::ip-address[/netmask[/interface][/broadcast]]'' par exemple ''IPaddr::192.168.214.20/24/eth0/192.168.214.255''))
+  * Monter /dev/drbd0 sur /data
+  * Démarrer ''samba''
+  * Envoyer un mail pour prévenir que ''serv1'' est le serveur sur lequel tous ces services sont disponibles
+Sinon, le message d'erreur est visible via la commande ''dmesg'' ou dans les log.
+
+===== Au sujet de la gestion de la bande passante =====
+La valeur du paramètre ''rate'' est exprimée en Mo/sec (d'où le ''M''), si vous êtes en réseau 100Mbit/s, n'allez pas au dessus de ''9M'', puisqu'il s'agit (environ) de la valeur maximale de débit. La valeur ''3M'' correspond au tiers de ce débit afin de laisser de la bande passante aux utilisateurs. Le tiers de la bande passante est une valeur  conseillée sur le site de ''drbd''.
+
+Si vos serveurs ont une carte réseau Gigabit, vous pouvez optimiser les débits de deux manières :
+  * Séparation physique des flux
+  * Sous-réseau Gigabit dédié
+
+==== Séparation physique des flux ====
+Il est tout à fait possible (et conseillé) d'avoir 2 cartes réseau sur les serveurs :
+  * eth0 : pour la connexion au réseau : cette connexion sert aux utilisateurs pour accéder aux données,
+  * eth1 : pour une connexion directe (via câble croisé) entre les serveurs : celle-ci pour la synchronisation des données **uniquement**((il ne faut pas faire passer le signe de vie ''heartbeat'' par cette connexion, car le signe de vie **doit** passer par le lien que les utilisateurs utilisent pour vérifier son bon fonctionnement.)).
+{{:tutoriel:mirroring_schema_reseau.png|}}
+
+=== Modification de configuration ===
+Le fichier **/etc/drbd.conf** doit être modifié, le débit ajusté ou supprimé (comme ici) et les adresses IP modifiées :
+<file>...
+
+  syncer {
+    verify-alg sha1;
+  }
+
+...
+
+  on serv1 {
+    address   192.168.24.10:7788;
+  }
+  on serv2 {
+    address   192.168.24.11:7788;
+  }
+}</file>
+Ainsi que les éventuels partages (NFS) permettant la synchronisation des fichiers de configuration.
+<note important>Attention de ne pas modifier le fichier **/etc/hosts**, sauf en rajoutant éventuellement des nouveaux noms de machine, ''serv1_eth1'' par exemple, puisque ''heartbeat'' utilise les noms de machine associés à eth0.</note>
+
+==== Sous-réseau Gigabit dédié ====
+Dans le cas où le réseau utilisateur est en 100Mbit/s, il est possible d'utiliser un //petit// switch Gigabit (de 3 ports minimum) :
+  * Port 1 : liaison avec le switch du réseau utilisateur (lien 100Mbit/s)
+  * Port 2 : liaison avec un serveur (lien Gigabit)
+  * Port 3 : liaison avec l'autre serveur (lien Gigabit)
+De cette manière, la synchronisation entre les deux serveurs se fait via un lien Gigabit, et les utilisateurs ne sont pas pénalisés. La valeur du débit peut alors être fixée à ''10M''.
+
+=== Modification de la configuration ===
+Seul le fichier **/etc/drbd.conf** doit être modifié, plus particulièrement le débit alloué à ''drbd'' :
+<file>...
+  
+  syncer {
+    rate 10M;
+    verify-alg sha1;
+  }
+
+...</file>
+
+===== Fichiers importants =====
+Il est vivement conseillé de créer des partages NFS entre les deux serveurs afin de synchroniser les fichiers de configuration via un script.
+
+==== Fichiers à synchroniser entre les deux serveurs ====
+Système :
+  * /etc/resolv.conf
+  * /etc/group
+  * /etc/passwd
+  * /etc/shadow
+  * /etc/gshadow
+
+Pour ''drbd'' :
+  * /etc/drbd.conf
+
+Pour ''samba'' :
+  * /etc/samba/smb.conf
+  * /var/lib/samba/account_policy.tdb
+  * /var/lib/samba/group_mapping.ldb
+  * /var/lib/samba/ntdrivers.tdb
+  * /var/lib/samba/ntforms.tdb
+  * /var/lib/samba/passdb.tdb
+  * /var/lib/samba/secrets.tdb
+
+Pour ''heartbeat'' :
+  * /etc/ha.d/ha.cf
+  * /etc/ha.d/authkeys
+  * /etc/ha.d/haresources
+
+=== Et éventuellement aussi... ===
+Si vous utilisez les mêmes outils que moi pour la gestion des serveurs...
+
+Pour ''mail'' (ssmtp) :
+  * /etc/ssmtp/revaliases
+  * /etc/ssmtp/ssmtp.conf
+
+Pour ''smcroute'' :
+  * /etc/smcroute/startup.sh
+
+Pour ''NFS'' :
+  * /etc/exports
+  * /etc/hosts.deny
+  * /etc/hosts.allow
+
+==== Fichiers à personnaliser sur les deux serveurs ====
+Système :
+  * /etc/hostname
+  * /etc/hosts
+  * /etc/netwok/interfaces
+  * /etc/fstab
+
+==== Fichiers à personnaliser après un clonage ====
+Si vous avez opté pour le clonage d'un serveur vers l'autre (attention à ''drbd''), vous devrez personnaliser ces fichiers sur chaque serveur :
+  * /var/lib/heartbeat/hb_uuid (supprimer ce fichier sur l'un des 2 serveurs après clonage, il sera généré au prochain démarrage de heartbeat)
+  * /etc/udev/rules.d/70-persistent-net.rules (pour faire en sorte que l'interface Ethernet eth0 soit utilisable)
+
+===== En cas de pépin... =====
+==== Problèmes lors de la mise en place de drbd ====
+En cas d'erreur :
+<file>/dev/drbd0: Failure: (124) Device is attached to a disk (use detach first)
+Command 'drbdsetup /dev/drbd0 disk /dev/sda6 /dev/sda6 internal --set-defaults --create-device --on-io-error=detach' terminated with exit code 10</file>
+faire :
+<code>drbdadm detach r0
+drbdadm up r0</code>
+
+En cas d'erreur :
+<file>/dev/drbd0: Failure: (125) Device has a net-config (use disconnect first)
+Command 'drbdsetup /dev/drbd0 net 192.168.214.10:7788 192.168.214.11:7788 C --set-defaults --create-device' terminated with exit code 10</file>
+faire :
+<code>drbdadm disconnect r0
+drbdadm up r0</code>
+
+En cas d'erreur :
+<file>/dev/drbd0: Failure: (114) Lower device is already claimed. This usually means it is mounted.
+Command 'drbdsetup /dev/drbd0 disk /dev/sad6 /dev/sad6 internal --set-defaults --create-device --on-io-error=detach' terminated with exit code 10</file>
+c'est que la partition est encore montée, il faut d'abord la démonter avec la commande :
+<code>umount /dev/sda6</code>
+
+==== drbd : Standalone ====
+Il est possible qu'après une coupure sur le réseau ou à cause d'un firewall bloquant mal configuré les deux serveurs ne se voient plus. Lancer la commande :
+<code>cat /proc/drbd</code>
+Si ils apparaissent comme étant en "Standalone" c'est qu'ils ne se voient plus.
+
+Sur un des deux nœuds, lancer la commande :
+<code>drbdadm -- --discard-my-data connect all</code>
+et sur l'autre la commande :
+<code>drbdadm connect all</code>
+Là les deux nœuds se voient à nouveau en secondaire/secondaire. Sur l'un des 2, lancer la commande :
+<code>drbdadm primary r0</code>
+Et le problème devrait être résolu.
+
+==== Configuration du pare-feu (Firewall) ====
+Voici les ports à ouvrir: 694 (udp) pour heartbeat  et 7788 (tcp) pour drbd
+
+
+----
+
+//Contributeur principal : [[:utilisateurs:mrwaloo|MrWaloo]].// \\
+Merci à [[http://forum.ubuntu-fr.org/profile.php?id=123930|tempus1984]] pour le dernier chapitre et pour avoir validé ce tutoriel.
+
+----

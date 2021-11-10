@@ -1,0 +1,217 @@
+
+{{tag>Xenial réseau internet sécurité}}
+----
+{{ :dnscrypt.png?nolink&200|}}
+====== DNSCrypt ======
+
+ DNSCrypt est un protocole qui authentifie les communications entre un client DNS et un résolveur [[wpfr>DNS]]. Cela empêche la falsification de DNS. Il utilise des signatures cryptographiques pour vérifier que les réponses proviennent du résolveur DNS choisi et n'ont pas été falsifiées.
+
+C'est une spécification ouverte, avec des implémentations de référence gratuites et opensource, et elle n'est affiliée à aucune entreprise ni organisation.
+
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+ 
+ 
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] [[apt>dnscrypt-proxy]]
+ 
+<note>
+Optionnellement [[apt>dnscrypt-proxy-plugins]], donne beaucoup de contrôle sur le trafic DNS local:
+  * Passer en revue le trafic DNS provenant de votre réseau en temps réel et détecter les hôtes et applications compromises.
+  * Bloque localement les publicités, les trackers, les logiciels malveillants, les spams et tout site Web dont les noms de domaine ou les adresses IP correspondent à un ensemble de règles que vous définissez.
+  * Empêcher que les requêtes concernant les zones locales soient divulguées.
+  * Réduire la latence en cas de mise en cache des réponses et éviter de demander des adresses IPv6 sur les réseaux IPv4 uniquement.
+  * Forcer le trafic à utiliser TCP, pour l'acheminer via des tunnels TCP uniquement ou Tor. 8-)
+</note>
+
+===== Configuration =====
+ 
+Pour configurer dnscrypt-proxy, procédez comme suit:
+
+ <note important>Un fichier de conf bien plus complet est [[https://raw.githubusercontent.com/jedisct1/dnscrypt-proxy/master/dnscrypt-proxy.conf|disponible sur github]]\\
+:!: Cependant prenez bien garde de bien corriger les différents chemin d'accès. En effet, ceux-ci non prévus pour Debian/Ubuntu (et dérivés) sont sous la forme **/etc/dnscrypt-proxy.conf** alors que ce devrait être **/etc/dnscrypt-proxy/dnscrypt-proxy.conf** ou encore **/usr/local/share/dnscrypt-proxy/dnscrypt-resolvers.csv** a la place de **/usr/share/dnscrypt-proxy/dnscrypt-resolvers.csv**\\
+:!: Notez que sytemd outrepasse l'option ''**LocalAddress**''  par un fichier socket et doit donc être commentée dans le fichier de conf</note>
+
+==== Sélectionner le résolveur ====
+
+Sélectionnez un résolveur à partir de ''/usr/share/dnscrypt-proxy/dnscrypt-resolvers.csv'' et [[:tutoriel:comment_modifier_un_fichier|modifiez]] **dnscrypt-proxy.conf** avec les [[:sudo|droits d'administration]], en utilisant un nom abrégé de la première colonne du fichier csv. Par exemple, pour sélectionner ''dnscrypt.eu-nl'' comme résolveur:
+<file - /etc/dnscrypt-proxy/dnscrypt-proxy.conf>ResolverName dnscrypt.eu-nl
+ResolversList /usr/share/dnscrypt-proxy/dnscrypt-resolvers.csv
+# BlackList domains:"/etc/dnscrypt-proxy/dnscrypt-blacklist-domains.txt"
+EDNSPayloadSize 1252
+Daemonize no
+# LocalCache on</file>
+
+ <note tip>
+  * Alternativement, "random" (sans guillemets) choisit un résolveur aléatoire, accessible sur IPv4, qui ne "log" pas et prend en charge DNSSEC.  Pour cela veillez a bien renseigner ''ResolversList'' avec ''/usr/share/dnscrypt-proxy/dnscrypt-resolvers.csv'' dans **/etc/dnscrypt-proxy/dnscrypt-proxy.conf**
+  * Une liste potentiellement plus à jour est disponible directement sur [[https://github.com/jedisct1/dnscrypt-proxy/blob/master/dnscrypt-resolvers.csv|la page Github du projet]]
+  * <del>À ce stade, vous pouvez également ajouter un utilisateur non privilégié pour exécuter dnscrypt</del>. Voir [[#Dnscrypt fonctionne avec les privilèges root|Dépannage]]
+</note>
+
+
+==== Modifier le résolveur du système ====
+Vous devez maintenant indiquer au système sur quelle adresse contacter le résolveur de noms de domaine.\\ Pour cela faites un clic droit sur votre applet Network-Manager et cliquez sur éditer la connection. Choisissez votre type de connection, filaire ou sans fil, puis dans l'onglet IPv4 via le menu déroulant selectionnez //DHCP// __adresse only__.\\
+ Enfin dans le champ pour indiquer les serveur DNS entrez ''**127.0.2.1**'' puis cliquez sur appliquer.\\
+Le fichier **/etc/resolv.conf** doit maintenant afficher:
+<file>nameserver 127.0.2.1</file>
+
+Pour les utilisateurs du bureau gnome le menu  déroulant ne contient pas //DHCP// __adresse only__ selectionnez donc DHCP (automatique) et prenez soin de mettre DNS sur Off avant d'entrer ''**127.0.2.1**'' et d'appliquer\\
+
+**:!: Attention**, d'autres programmes peuvent remplacer ce paramètre! [[##divers_processus_ecrasent_resolvconf|Voir 7.2]]\\
+
+=== Ajout de filtres ===
+Afin de profiter pleinement de Dnscrypt et dépolluer votre navigation sur le web, je vous propose d'utiliser la liste polyvalente [[https://download.dnscrypt.info/blacklists/domains/mybase.txt|MyBase]] qui est mise à jour quotidiennement à partir de sources publiques, afin de bloquer les logiciels malveillants, les publicités et les traceurs courants. 8-)\\
+Pour cela il vous faut décommenter le paramètre ''**BlackList domains:/etc/dnscrypt-proxy/dnscrypt-blacklist-domains.txt**'' (enlever le # en début de ligne)\\
+Ensuite télèchargez puis déplacez la liste au bon endroit avec la commande suivante:
+<code>wget https://download.dnscrypt.info/blacklists/domains/mybase.txt && sudo mv mybase.txt /etc/dnscrypt-proxy/dnscrypt-blacklist-domains.txt</code>
+Exécutez a nouveau la commande pour mettre a jour la liste !
+
+==== Démarrer le service systemd ====
+ Enfin, démarrez puis activez le service ''dnscrypt-proxy.service'' au démarrage de votre machine via [[:systemd]]:
+<code>sudo systemctl start dnscrypt-proxy.service</code>
+<code>sudo systemctl enable dnscrypt-proxy.service</code>
+
+===== Vérification =====
+Pour effectuer une vérification de l'installation, exécutez
+<code>sudo lsof -i -n</code>
+Et assurez-vous que le processus est en train d'écouter l'adresse et le port souhaités.
+Si c'est bon, et que le proxy s'exécute, envoyez votre première requête au proxy pour vérifier que la chaîne entière fonctionne comme prévu. ''dnscrypt-proxy'' inclut la commande ''hostip''. Un petit utilitaire qui peut être utilisé pour envoyer des requêtes DNS à des résolveurs arbitraires.
+<code>hostip -r 127.0.2.1 example.com</code>
+Cela devrait renvoyer les adresses IP de l'hôte example.com.
+Félicitations, vous avez envoyé votre première requête cryptée et authentifiée en utilisant le protocole DNSCrypt!
+Pour confirmer que la réponse provient du résolveur que vous avez choisi et non de votre FAI:
+<code>hostip -r 127.0.2.1 resolver.dnscrypt.info</code>
+Cette requête spéciale (''resolver.dnscrypt.info'') renvoie l'adresse IP du résolveur que vous utiliserez probablement (et cela fonctionne avec ou sans DNSCrypt). Il devrait correspondre à l'adresse IP du résolveur que vous avez choisi.
+
+===== Utilisation avec un DNS local =====
+==== Local DNS cache configuration ====
+<note>Dnscrypt peut mettre en cache les entrées sans compter sur un autre programme. Assurez-vous que **''LocalCache on''** est décommenté dans votre fichier de configuration dnscrypt pour activer cette fonctionnalité.</note>
+Si vous n'utilisez pas la fonctionnalité de cache de dnscrypt il est recommandé d'éxécuter DNSCrypt en tant que redirecteur pour un cache DNS local ; sinon, chaque requête fera un aller-retour vers le résolveur en amont. Tout programme de mise en cache DNS local devrait fonctionner. En plus de configurer dnscrypt-proxy, vous devez configurer votre programme de cache DNS local.
+
+==== Changer le port ====
+<note important>Partie a vérifier - ne fonctionne pas apres test en VM sur ubuntu-Gnome 17.04</note>
+<note>La modification de l'adresse IP ou du port dans ''/etc/dnscrypt-proxy/dnscrypt-proxy.conf'' ne fonctionne pas avec systemd et doit être modifiée dans le socket systemd fourni de la manière suivante.</note>
+Afin de transférer vers un cache DNS local, dnscrypt-proxy doit écouter sur un port différent du port 53 pardéfaut, car le cache DNS lui-même doit écouter sur le port 53 et interroger dnscrypt-proxy sur un autre port. Le numéro de port ''5353'' est utilisé à titre d'exemple dans cette section. Dans cet exemple, le numéro de port est supérieur à 1024, de sorte que ''dnscrypt-proxy'' n'est pas a être exécuté par root. Modifiez **dnscrypt-proxy.socket** avec le contenu suivant:
+<file - /lib/systemd/system/dnscrypt-proxy.socket>[Socket]
+ListenStream=
+ListenDatagram=
+ListenStream=127.0.2.1:5353
+ListenDatagram=127.0.2.1:5353</file>
+<note important>Le port UDP 5353 est utilisé par Avahi (si installé et en cours d'exécution) et peut provoquer des avertissements dans le journal. Dans ce cas, utilisez le port 5354 par example.</note>
+
+===== Exemple de configurations local DNS cache =====
+Les configurations suivantes devraient fonctionner avec dnscrypt-proxy et assume qu'il écoute sur le port ''5353''.
+==== Unbound ====
+Configurez [[:Unbound]] à votre convenance et ajoutez les lignes suivantes à la fin de la section ''server'':
+
+<file - /etc/unbound/unbound.conf>do-not-query-localhost: no
+forward-zone:
+  name: "."
+  forward-addr: 127.0.2.1@5353</file>
+  
+<note tip>Si vous configurez un serveur, ajoutez l'interface: ''interface: 0.0.0.0@53'' et ''access-control: your-network/subnet-mask allow'' dans la section ''server:'' section afin que les autres ordinateurs puissent se connecter au serveur. Un client doit être configuré avec ''nameserver address-of-your-server'' dans **/etc/resolv.conf**.</note>
+  
+ Ensuite redémarrez unbound.service pour appliquer les modifications:
+<code>sudo systemctl restart unbound.service</code>
+
+==== dnsmasq ====
+Configurez dnsmasq en tant que [[#configuration_du_cache_dns|cache DNS local]]. La configuration de base pour fonctionner avec DNSCrypt:
+<file - /etc/dnsmasq.conf>no-resolv
+server=127.0.2.1#5353
+listen-address=127.0.0.1</file>
+Si vous avez configuré DNSCrypt pour utiliser un résolveur avec la validation DNSSEC activée, assurez-vous de l'activer également dans **/etc/dnsmasq.conf**:
+<file>proxy-dnssec</file>
+Redémarrez dnsmasq.service pour appliquer les modifications:
+<code>sudo systemctl restart dnsmasq.service</code>
+
+==== Activer EDNS0 ====
+[[wpfr>EDNS]] qui, entre autres, permettent à un client de préciser la taille d'une réponse via UDP.
+Ajoutez la ligne suivante à votre **/etc/resolv.conf**:
+<file>options edns0</file>
+Vous pouvez également ajouter ce qui suit à **/etc/dnscrypt-proxy/dnscrypt-proxy.conf**:
+<file>EDNSPayloadSize <bytes></file>
+Ou <bytes> est un nombre, la taille par défaut étant 1252, avec des valeurs allant jusqu'à 4096 octets, étant présumée sûre. Une valeur inférieure ou égale à 512 octets désactivera ce mécanisme, sauf si un client envoie un paquet avec une section OPT fournissant une taille.
+=== Tester EDNS0 ===
+Utilisez le [[https://www.dns-oarc.net/oarc/services/replysizetest|serveur de test de taille de réponse DNS]], utilisez l'outil de ligne de commande ''drill'' pour émettre une requête TXT pour le nom ''rs.dns-oarc.net'':
+<code>$ drill rs.dns-oarc.net TXT</code>
+Avec EDNS0 pris en charge, la "answer section" de la sortie devrait ressembler à ceci:
+<code>rst.x3827.rs.dns-oarc.net.
+rst.x4049.x3827.rs.dns-oarc.net.
+rst.x4055.x4049.x3827.rs.dns-oarc.net.
+"2a00:d880:3:1::a6c1:2e89 DNS reply size limit is at least 4055 bytes"
+"2a00:d880:3:1::a6c1:2e89 sent EDNS buffer size 4096"</code>
+===== Problèmes =====
+==== Dnscrypt fonctionne avec les privilèges root ====
+Pour contourner cela, créez manuellement un utilisateur sans privilège:
+<code>sudo useradd -r -d /var/dnscrypt -m -s /sbin/nologin dnscrypt</code> FIXME commande a vérifier !
+
+Deux solutions possibles [[:tutoriel:comment_modifier_un_fichier|modifiez]]  **/etc/dnscrypt-proxy/dnscrypt-proxy.conf** avec les [[:sudo|droits d'administration]], en ajoutant le nouvel utilisateur:
+<file>User dnscrypt</file>
+Sinon, vous devez utiliser User = dans la section [Service] ''dnscrypt-proxy.service'' de [[:systemd]]: FIXME Formulation a revoir !
+<file - /lib/systemd/system/dnscrypt-proxy.service>[Service]
+User=dnscrypt
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE</file>
+Cette deuxième option est utile lors de l'utilisation d'un serveur de mise en cache comme Unbound et est préférable, puisque l'unité n'est pas exécutée en tant que root en premier lieu. Si vous avez changé le port vers un non-privilégié (par exemple 5353), ''CapabilityBoundingSet = CAP_NET_BIND_SERVICE'' n'est pas nécessaire.
+
+==== Divers processus écrasent resolv.conf ====
+Il s'agit généralement d'un comportement souhaitable, mais parfois, les paramètres DNS doivent être définis manuellement (par exemple lors de l'utilisation d'une adresse IP statique). Il existe plusieurs façons d'y parvenir.
+=== Avec Network Manager ===
+NetworkManager enregistre ses paramètres dans **/etc/NetworkManager/system-connections/nom-de-la-connection**.
+Example pour une connection filaire: 
+<file - /etc/NetworkManager/system-connections/Wired connection 1>[802-3-ethernet]
+duplex=full
+mac-address=XX:XX:XX:XX:XX:XX
+
+[connection]
+id=Wired connection 1
+uuid=xxx-xxxxxx-xxxxxx-xxxxxx-xxx
+type=802-3-ethernet
+timestamp=1385213042
+
+[ipv6]
+method=auto
+
+[ipv4]
+method=auto
+dns=127.0.2.1;
+ignore-auto-dns=true</file>
+Cette 1ère solution est a privilégier.
+
+Alternativement, pour empêcher NetworkManager de modifier **/etc/resolv.conf**, [[:tutoriel:comment_modifier_un_fichier|Modifiez]] **/etc/NetworkManager/NetworkManager.conf** et ajoutez ce qui suit dans la section [main]:
+<file>dns=none</file>
+''/etc/resolv.conf'' peut être un lien symbolique brisé que vous devrez supprimer après avoir fait cela. Ensuite, créez simplement un nouveau fichier ''/etc/resolv.conf''.
+
+=== Avec Resolvconf ===
+Si le programme resolvconf est installé, vous ne devez pas modifier le fichier de configuration resolv.conf manuellement car il sera modifié dynamiquement par les programmes du système. Pour définir manuellement les serveurs de noms (comme avec une interface statique), ajoutez une ligne comme suit dans le fichier de configuration d'interfaces dans **/etc/network/interfaces**:
+<file>dns-nameservers 127.0.2.1</file>
+
+=== Avec DHCP Client ===
+Exemple: dhclient3 utilise **/etc/dhcp/dhclient.conf**. Le réglage que vous voulez est
+<file>supersede domain-name-servers 127.0.2.1;</file>
+ou peut-être
+<file>prepend domain-name-servers 127.0.2.1;</file>
+Prenez garde de bien fermer la ligne avec un ;
+Voir la page de manuel dhclient.conf (5) pour plus de détails.
+
+=== Protection contre l'écriture ===
+Une autre façon (radicale!) de protéger votre /etc/resolv.conf d'être modifié par quoi que ce soit est de  mettre en place la protection en écriture:
+<code>sudo chattr +i /etc/resolv.conf</code> pour dévérouiller la protection, éxécutez:
+<code>sudo chattr -i /etc/resolv.conf</code>
+FIXME : Trouver une solution plus élegante qui ne contrarie pas le comportement d'autres services
+===== Désinstallation =====
+ 
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|Supprimez les paquets]] ''**dnscrypt-proxy**'' et ''**dnscrypt-proxy-plugins**''. Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée. Les journaux du système, et les fichiers de préférence des utilisateurs dans leurs dossiers personnels sont toujours conservés.
+ 
+===== Voir aussi =====
+ 
+  * **(en)** [[https://dnscrypt.info|Site officiel de DNSCrypt]]
+  * **(en)** [[https://github.com/DNSCrypt|La page Github du projet]]
+  * **(fr)**   [[https://forum.ubuntu-fr.org/viewtopic.php?id=2012964|Sujet sur le forum Ubuntu-fr]]
+
+----
+//Contributeurs principaux : [[utilisateurs:deobs|deobs]].//
+ 
+//Basé sur [[https://wiki.archlinux.org/index.php/DNSCrypt|ArchWiki]] et [[https://github.com/DNSCrypt/dnscrypt-proxy/wiki|A protocol to improve DNS security]] par [[https://github.com/jedisct1]] mainteneur actuel.//

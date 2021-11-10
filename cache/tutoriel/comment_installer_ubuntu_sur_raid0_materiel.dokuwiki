@@ -1,0 +1,266 @@
+
+{{tag> raid installation tutoriel brouillon}}
+----
+====== Comment installer Ubuntu sur un montage RAID-0 semi-matériel ? ======
+
+<note important>**Attention** si vous possédez un montage RAID semi-logiciel ou semi-matériel, notez que ceux-ci fonctionnent de manière semblable aux montages RAID logiciel. Vous n'obtiendrez donc pas nécessairement de meilleures performances en utilisant un montage RAID semi-matériel plutôt qu'un totalement logiciel !
+
+Le seul intérêt du RAID semi-logiciel est de pouvoir installer sur le même montage RAID une distribution Linux et un système d'exploitation Windows. Cependant, le risque majeur de cette technique est le fait que vous ne puissiez lire votre montage RAID sur un autre ordinateur si votre carte mère venait à rendre l'âme.
+
+C'est pourquoi, nous ne pouvons que vous conseiller de vous diriger vers des montages RAID totalement logiciel, si vous en avez la possibilité.
+
+**Le RAID purement matériel restant totalement transparent de votre système**, le disque dur sera reconnu comme n'importe quel autre disque non monté en RAID. Cette technologie de montage RAID intégralement matérielle, recourant à une carte d'extention dédiée, peut malheureusement s'avérer encore assez chère.</note>
+
+===== Installation =====
+==== Trouver le nom de son disque dur RAID-0 ====
+
+Dans un terminal, exécutez la commande suivante :
+
+<code>ls /dev/mapper</code>
+
+Celle-ci devrait retourner une liste de fichier un peu particulière :
+
+<code>
+control
+sil_ahajdebhcbag
+sil_ahajdebhcbag1
+sil_ahajdebhcbag2
+sil_ahajdebhcbag3
+</code>
+
+{{tutoriel:mapper.png|}}
+
+Notez bien la toute première ligne; celle-ci correspond au nom de votre montage RAID et sera utile pour la suite des opérations (**isw_cfefgeebci_NOM_MONTAGE_RAID** dans notre exemple). Les autres lignes correspondent aux partitions présentes sur ce montage RAID.
+
+
+==== Créer les partitions manuellement ====
+
+Tapez la commande suivante pour lancer le programme de partitionnement **cfdisk** qui prend en charge le RAID0 matériel.
+
+<code>
+sudo cfdisk /dev/mapper/<nom_de_votre_disque>
+</code>
+
+Attention, de nos jours la taille de nos disques durs et montages RAID pouvant dépasser la taille adressable de 2.2To par le MBR, il est conseillé d'utiliser plutôt l'utilitaire de partitionnement parted (ou gparted pour sa version en interface graphique) gérant les tables de partitions GPT qui permettent de s'affranchir de cette limite de 2.2To (privilégiez une version supérieure ou égale à la version 3, les versions inférieures comportant de nombreux bogues).
+
+Créez ensuite vos partitions afin d'obtenir un résultat semblable à celui-ci :
+
+{{tutoriel:cfdisk.png|}}
+
+Redémarrez enfin dmraid afin de prendre en compte les partitions que vous venez de créer :
+<code>
+sudo /etc/init.d/dmraid restart
+</code>
+
+<note important>**cfdisk** crée uniquement la table des partitions sur votre disque, sans formater celles-ci. Nous allons donc maintenant les formatter en leur appliquant un système de fichier.</note>
+
+
+==== Création manuelle des systèmes de fichier ====
+
+Les partions nouvellements créées ne contiennent pas de système de fichiers (ext2, ext3, reiserfs, fat32, ...).
+
+Tapez la commande **mkfs** pour créer les systèmes de fichiers
+
+<code>
+mkfs [-t type-système-de-fichiers] /dev/mapper/<nom_de_votre_disque><numéro_de_partition>
+</code>
+
+<note tip>
+Suivant le type de système de fichier à créer, la commande plus spécifique au système de fichier choisi peut être utilisée.
+<code>
+mkfs           mkfs.cramfs    mkfs.ext3      mkfs.minix     mkfs.ntfs      mkfs.vfat      
+mkfs.bfs       mkfs.ext2      mkfs.jfs       mkfs.msdos     mkfs.reiserfs  mkfs.xfs 
+mkswap
+</code>
+</note>
+
+Ainsi, dans l'exemple, deux systèmes de fichiers ont été créés :
+  * Le SWAP sur isw_lafadafjge_ARRAY2
+<code>
+sudo mkswap /dev/mapper/isw_lafadafjge_ARRAY2
+</code>
+
+  * Une ext3 sur isw_lafadafjge_ARRAY3
+<code>
+sudo mkfs.ext3 /dev/mapper/isw_lafadafjge_ARRAY3
+</code>
+
+==== Installation de Linux ====
+
+
+Lancez l'installation normalement en suivant les instructions mais à l'étape du partitionnement, choisissez le partitionnement manuel.
+
+
+La série des premières partitions que vous verrez sont toutes invalides, il s'agit d'un bug. Double-cliquez sur chacune d'elle et sélectionnez **"dontuse"**.
+
+{{tutoriel:dontuse.png|}}
+
+Pour la partition où sera installé Linux, sélectionnez **ext3** ou un format compatible de votre choix et le point de montage **"/"**. Puis cochez la case pour formater cette partition (obligatoire même si elle est déjà formatée).
+
+Vous devriez avoir quelque chose de similaire à la fin :
+
+{{tutoriel:preparer-les-partitions.png|}}
+
+Pas de panique, si vous n'avez pas fait comme il fallait, vous ne pourrez pas passer à l'étape suivante (message d'erreur).
+
+
+
+
+===== Derniers détails avant de lancer l'installation =====
+
+<note important>Pour Ubuntu 8.04 : à partir d'ici, suivre la méthode donnée sur [[http://forum.ubuntu-fr.org/viewtopic.php?pid=1738308#p1738308|le forum]] </note>
+
+A la dernière étape avant de lancer l'installation, cliquez sur le bouton **"Advanced options"** ou **"Options avancées"** et effacez la ligne **(hd0)** avant de valider.
+
+{{tutoriel:advanced-options.png|}}
+
+Puis lancez enfin l'installation.
+
+Vers la fin de l'installation, vous devriez avoir un message d'erreur indiquant qu'il y a eu un problème dans l'installation de **GRUB**. Ignorez ce message et attendez que l'installation soit terminée.
+
+{{tutoriel:bug-grub.png|}}
+
+<note important>
+Ne redémarrez surtout pas à la fin de l'installation !
+</note>
+
+
+==== Installation manuelle de GRUB ====
+
+Puisque **GRUB** n'a pas pu s'installer correctement, suivez ces étapes pour l'installer manuellement avant de pouvoir enfin redémarrer et utiliser votre système nouvellement installé.
+
+
+Votre nouveau système est donc installé sur **"/target"** mais il n'a pas été monté puisque vous êtes toujours sur le live CD.
+
+Donc pour monter le système, dans un terminal tapez la commande suivante :
+
+<code>
+sudo mount -t ext3 /dev/mapper/nom_de_partition_linux_ext3 /target    # Exemple, chez moi : "sudo mount -t ext3 /dev/mapper/nvidia_fbabhaeb2 /target"
+sudo mount --bind /dev /target/dev
+sudo mount -t proc proc /target/proc
+sudo mount -t sysfs sysfs /target/sys
+</code>
+
+<note tip>Pour moi, après l'installation toutes les partitions étaient correctement montées dans /target/</note>
+
+Copiez ensuite quelques fichiers :
+
+  sudo cp /etc/apt/sources.list /target/etc/apt
+  sudo cp /etc/resolv.conf /target/etc
+
+Puis changez de racine :
+
+<code>sudo chroot /target</code>
+
+Ensuite il faut copier certains fichiers de **GRUB** :
+<code>sudo cp /usr/lib/grub/i386-pc/* /boot/grub</code>
+
+Si vous installez un système 64 bit, il faut remplacer **"i386-pc"** par **"x86_64-pc"** donc :
+
+<code>sudo cp /usr/lib/grub/x86_64-pc/* /boot/grub</code>
+
+
+Ensuite on peu lancer **GRUB** afin de commencer sa configuration :
+
+<code>
+grub
+device (hd0) /dev/mapper/<nom_de_votre_disque>
+</code>
+
+Ensuite il faut indiquer sur quel partition est installé Linux. Sachant que la première partition est **(hd0,0)**, la deuxième est **(hd0,1)** etc... Dans notre exemple, Linux est installé sur la 3ème partition donc on tape :
+
+<code>root (hd0,2)</code>
+
+Sauvegardez les changements et quittez **GRUB** avec les commandes suivantes :
+
+<code>
+setup (hd0)
+quit
+</code>
+
+Au message suivant, tapez **"y"** (sans les guillemets) et sur **entrée** :
+
+<code>
+Could not find /boot/grub/menu.lst file. Would you like /boot/grub/menu.lst generated for you? (y/N)
+</code>
+
+Mettez à jour votre version de **GRUB** et quittez :
+
+<code>
+update-grub
+exit
+</code>
+
+
+===== Vérifiez que tout est bien configuré dans GRUB =====
+
+Voilà, maintenant il ne reste plus qu'à vérifier que tout est bien installé et configuré, sans quoi vous ne pourrez pas lancer Linux ni Windows s'il était sur le même disque dur :
+
+<code>
+gksudo gedit /target/boot/grub/menu.lst
+</code>
+
+Commentez la ligne **hiddenmenu** en mettant un **#** devant pour voir le menu de démarrage au lancement du système.
+
+
+Changez le **timeout** en 5 ou 10 secondes pour avoir le temps de changer de système sans paniquer si vous ne voulez pas démarrer sur celui par défaut à chaque fois.
+
+
+Effacez la ligne **savedefault** sans quoi **GRUB** plantera à chaque fois !
+
+
+Après la ligne **## ## End Default Options ##** :
+
+
+Si vous avez installé le **boot** sur une autre partition que celle de Linux, vérifiez que GRUB pointe bien sur celle-ci. Sinon, vérifiez que c'est bien la partition où Linux est installé qui est sélectionnée.
+
+
+**Exemple :**
+
+
+Dans mon fichier j'ai ça :
+
+<code>
+title		Ubuntu 7.10, kernel 2.6.22-14-generic
+root		(hd0,0)
+kernel		/boot/vmlinuz-2.6.22-14-generic root=/dev/mapper/sil_ahajdebhcbag3 ro quiet splash
+initrd		/boot/initrd.img-2.6.22-14-generic
+</code>
+
+La ligne :
+
+<code>
+root		(hd0,0)
+</code>
+
+Est à modifier pour mettre :
+
+<code>
+root		(hd0,2)
+</code>
+
+Puisque j'ai installé Linux sur la 3ème partition.
+
+
+Si vous avez Windows installé sur le même ordinateur, vous pouvez ajouter :
+
+<code>
+title		Windows XP
+rootnoverify	(hd0,0)
+chainloader	+1
+</code>
+
+(hd0,0) étant la partition où Windows est installé. Ce qui est écrit sur la même ligne après **title** peut être changé pour **"Windows Vista"** ou autre, comme vous voulez.
+
+
+
+===== Sources =====
+
+
+[[http://forum.ubuntu-fr.org/viewtopic.php?id=142645&p=1|Forum Ubuntu]]
+
+[[http://blog.donax.ch/2007/05/14/raid-sur-ubuntu-feisty-nouvelle-installation/|blog.donax.ch]]
+
+
+----
+//Contributeurs : [[utilisateurs:pip99]] //

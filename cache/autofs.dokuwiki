@@ -1,0 +1,299 @@
+
+{{tag>Xenial samba nfs ftp ssh partage réseau}}
+----
+
+
+====== AutoFS - montage automatique de systèmes de fichier ======
+
+
+<note warning>(avril 2021) [[systemd|Systemd]] peut gérer simplement le montage automatique de systèmes de fichiers. Comme en témoigne [[https://unix.stackexchange.com/a/375602/120185|ce post sur StackExchange]] en date du 7 juillet 2017, AutoFS est l'ancien moyen de monter automatiquement des systèmes de fichiers.
+
+Avec Systemd-automount, cela peut se faire facilement, par exemple en ajoutant et adaptant la ligne suivante dans votre fichier ///etc/fstab// :
+
+<file>
+UUID=ed5ac6e5-9fc3-4d28-b0b5-0c4466249c71 /mnt/point-de-montage ext4  noauto,nofail,x-systemd.automount,x-systemd.idle-timeout=2s,x-systemd.device-timeout=30ms</file>
+
+Ainsi, à moins d'avoir des besoins spécifiques, dans la plupart des cas systemd-automount fonctionnera correctement. Cela permet, par exemple, monter automatiquement des disques durs que l'on insère dans un dock sur le bureau (stockage, sauvegarde...).</note>
+
+
+
+Le [[:montage]] manuel ou par [[:mount_fstab]] a plusieurs inconvénients:
+  * Le principal, c'est qu'**il n'est pas toujours possible de rendre le montage automatique**. Il est censé l'être si vous ne spécifiez pas "noauto" dans les options de montage dans ///etc/fstab//. Cependant, si lors du montage vous n'êtes pas encore connecté (en wifi par exemple), alors il ne se fait pas, et il faut l'effectuer manuellement (de même que le démontage).
+  * Un autre inconvénient, moins important, est que **les dossiers restent montés et consomment des ressources** même si vous ne les utilisez pas.
+  * Si vous éteignez l'ordinateur qui partage ses données, les autres ordinateurs auront des difficultés à gérer la situation (par exemple, le shutdown qui bloque à cause d'un ancien montage nfs).
+
+D'autre part les montages réalisés à partir de nautilus (ou files) ne sont pas visibles dans les autres applications comme Firefox, shotwell, ....
+
+**[[http://www.autofs.org/|AutoFS]]** permet de résoudre ces problèmes.
+
+[[https://help.ubuntu.com/community/Autofs|AutoFS]] contrôle les opérations des démons d'automount. Les démons d'automount montent automatiquement des systèmes de fichiers quand ils sont employés et les démontent après une période d'inactivité. Ceci est fait en se basant sur un ensemble de cartographies pré-configurés. \\ 
+Le montage automatique par le noyau sous Linux est implémenté, presque complètement, à la manière de celui de SunOS. Une version récente du module autofs4 du noyau (intégrée ou séparée) est nécessaire.
+ 
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>autofs]]** .
+
+[[:tutoriel:comment_modifier_un_fichier|supprimez (ou commentez)]] dans **/etc/fstab** les montages que vous voulez gérer par **AutoFS** (si vous en aviez écrit auparavant).
+
+===== Partage =====
+
+==== Créer ====
+
+=== Déclaration des répertoires parents de montages et de leur types ===
+
+Pour chaque type de montage via **AutoFS**, [[:tutoriel:comment_modifier_un_fichier|éditez le fichier (avec les droits d'administration)]] **/etc/auto.master** pour y ajouter une ligne concernant le type de système de fichier :
+<file>/<point_de_montage_parent> /etc/auto.<type> --ghost,--timeout=30</file>
+
+**<point_de_montage_parent>** est le répertoire parent de montages…cf. §[[autofs#explications|Explication]] ci-dessous
+
+<note>Les 3 champs peuvent être séparés par un nombre quelconque d'espaces ou par des tabulations.\\ Il est possible de mettre un commentaire précisant ces types de système de fichier.
+
+Pour les noms de dossier avec un espace :
+  * Dans /etc/fstab, on remplaçait les espaces par \040
+  * Avec autoFs, on ajoute un antislash \ avant les espaces
+</note>
+
+exemples :
+<file - /etc/auto.master>
+/media   /etc/auto.media --ghost,--timeout=30    # !! /media est à éviter… cela peut empêcher le montage auto des clés USB, disques externe et autre smartphone !!
+/mnt     /etc/auto.mnt   --ghost,--timeout=30
+/net     /etc/auto.net   --ghost,--timeout=30</file>
+
+=== Création des partages ===
+
+Il faut ensuite **créer** les partages pour chaque type de système fichier [[:tutoriel:comment_modifier_un_fichier|éditez le fichier (avec les droits d'administration)]] **/etc/auto.<type>**
+<file><mon_partage>    -fstype=<type>,rw,options    <ip_serveur>:/<dossier_du_partage_sur_le_serveur></file>
+
+==== Explications ====
+
+=== Déclaration des répertoires parents de montages et de leur types ===
+
+  * **<mon_partage>** est une valeur à votre discrétion ... il se fera, là, à l'intérieur du dossier précisé dans auto.master\\ (ex.: /media/<mon_dossier>, /mnt/<mon_dossier>, /net/<mon_dossier>, ...).\\ Si ce dossier n'existe pas, AutoFS le créera/supprimera automatiquement.\\ **<mon_dossier>** peut vous permettre de //centraliser// un ensemble de partage\\ (ex.: vous avez une série de partage via ftp, vous les regroupez sous /net/ftp).
+
+  * **<type>** vous permet de voir rapidement de quel type de système de fichier il s'agit (ex.: smb - samba, nfs : network file system, ftp , etc.). auto.<type> identifie le fichier qui va contenir les détails du montage… Il n'y a pas de types prédéfinis, mettez auto.toto si ça vous chante m(
+
+  * L'option '**%%--%%ghost**' crée un répertoire pour le montage du média désiré.  Ainsi, le point de montage est créé lorsqu'on y accède.\\ Si cette option est omise, aucun répertoire n'est créé et l'utilisateur devra connaître précisément le point de montage d'un périphérique pour y accéder.
+
+  * L'option '**%%--%%timeout=30**' (ou '**%%-%%t=30**') correspond au temps (secondes) pendant lequel le montage reste activé après le dernier accès au dossier partagé ( ne mettez pas une valeur trop importante !).\\ Il faut attendre au moins 30 secondes entre le dernier accès à un partage samba et l'extinction d'un ordinateur distant pour ne pas avoir de soucis pour le démontage des dossiers distants. 
+
+=== Création des partages ===
+  * '**<mon_partage>**' est à votre discrétion. Ce dossier apparaîtra dans '**<point_de_montage_mon_dossier>/__<mon_partage>__**'\\ (ex: /net/ftp/serveur_1).
+
+paramétrez les [[http://www.linux-consulting.com/Amd_AutoFS/autofs-6.html|options de montage]] suivantes.
+
+  * L'option '**-fstype=<type>**' permet d'indiquer le type de système de fichier à monter (ex: -fstype=ftp).
+
+  * L'option '**rw**' donne des droits de lecture/écriture (//ReadWrite//). Pour une lecture seule : '**ro**' (//ReadOnly//).
+
+  * L'option '**options**' dépend de votre type de montage et des droits à accorder
+    * '**uid=1000,gid=1000**' pour écrire de façon //neutre//
+    * '**uid=id_user,gid=id_groupe**' pour écrire selon les droits id_user et id_groupe (les droits doivent être correctement paramétrés côté serveur)
+    * '**rsize=8192,wsize=8192**' pour accélérer les communications NFS en lecture (rsize) et écriture (wsize)
+
+
+====Prise en compte des modifications apportées dans les fichiers de configuration :====
+
+Après avoir configuré le service par le biais des fichiers que vous avez créés/modifiés il faut penser à relancer le service autofs; pour qu'il actualise les données. \\ 
+Dans un terminal : 
+<code>sudo service autofs restart</code>
+<note important>Quand autofs est actif, vous ne pouvez plus créer de sous-répertoires dans le répertoire où autofs réalise ses montages, ///mnt// par exemple\\
+Cela se traduit par : <code>drwxr-xr-x   3 root root     0 mars  20 08:41 mnt/</code>
+Remarquer ci-dessus le **0** au lieu de **4096** sans autofs\\
+Aussi si vous essayez:
+<code>   sudo mkdir /mnt/test
+[sudo] Mot de passe de user : 
+mkdir: impossible de créer le répertoire «/mnt/test»: Permission non accordée</code>
+Ce qui est assez déroutant avec sudo!!
+</note>
+
+===== Type de montage =====
+
+==== NFS ====
+
+Exemple de partage **NFS** 
+
+[[:tutoriel:comment_modifier_un_fichier|Editez le fichier]] **/etc/auto.master**
+<file>/media/serveur_maison	/etc/auto.nfs --ghost,--timeout=60</file>
+[[:tutoriel:comment_modifier_un_fichier|Editez le fichier]] **/etc/auto.nfs**
+<file>
+Photos_serveur  -fstype=nfs,rw   192.168.1.3:/home/blinckers/Photos
+Entreprise      -fstype=nfs,rw   192.168.1.3:/home/professionnel
+Musique_serveur -fstype=nfs,rw   192.168.1.3:/home/blinckers/Musique
+</file>
+
+Chaque partage sera monté dans :
+  * /media/serveur_maison/Photos_serveur
+  * /media/serveur_maison/Entreprise
+  * /media/serveur_maison/Musique_serveur
+et sera visible sur le bureau (Gnome)
+
+un autre exemple de partage  **NFS**
+
+[[:tutoriel:comment_modifier_un_fichier|Editez le fichier]] **/etc/auto.master**
+<file>+auto.master
+/media/nas	/etc/auto.nfs --ghost,--timeout=60
+</file>
+[[:tutoriel:comment_modifier_un_fichier|Editez le fichier]] **/etc/auto.nfs**
+<file>
+Photos -fstype=nfs,rw,uid=1000,gid=1000,rsize=8192,wsize=8192   192.168.1.250:/volume1/photo
+video -fstype=nfs,rw,uid=1000,gid=1000,rsize=8192,wsize=8192   192.168.1.250:/volume1/video
+music -fstype=nfs,rw,uid=1000,gid=1000,rsize=8192,wsize=8192  192.168.1.250:/volume1/music
+public -fstype=nfs,rw,uid=1000,gid=1000,rsize=8192,wsize=8192   192.168.1.250:/volume1/public
+images -fstype=nfs,rw,uid=1000,gid=1000,rsize=8192,wsize=8192   192.168.1.250:/volume1/homes/remy/images
+</file>
+
+<note tip>
+Pour **NFS**, l'option fstype est facultative : c'est le système de fichier //par défaut// pour autofs.
+</note>
+
+<note important>N'utilisez pas les signets nautilus vers des dossiers issus du partage nfs, le timeout d'autofs ne fonctionnera pas et cela provoquera des freezes si le serveur est hors ligne. Par contre, les volumes NFS présent par défaut dans les raccourcis de nautilus ne poseront pas de problème.
+
+Pour ce faire allez voir le fichier /home/Utilisateur/.gtk-bookmarks, il se peut qu'il y ai une ligne qui pointe vers un partage nfs et qui n'apparaisse pas dans la partie signet de nautilus, supprimez là, sinon freezes... </note>
+
+<note tip>
+En cas de problème au montage (dossier introuvable), essayer de déclarer dans le auto.nfs le répertoire père du répertoire partagé sur le serveur.
+
+Exemple:  
+
+//si sur le serveur /mnt/Mon_DD/Partage//   
+
+//Dans auto.nfs// 
+<file>
+partage_serveur -fstype=nfs,rw,uid=1000,gid=1000,rsize=8192,wsize=8192   192.168.1.250:/mnt/Mon_DD
+</file>
+</note>
+
+==== SSH ====
+
+[[sshfs#autofs|Procédure de montage sur SSH]]
+
+==== FTP ====
+
+Il faut avoir précédemment visité la page [[curlftpfs]]
+
+exemple de partage **FTP** 
+[[:tutoriel:comment_modifier_un_fichier|Editez le fichier]] **/etc/auto.master**
+<file>
+/net/ftp /etc/auto.ftp uid=1000,gid=1000,--ghost,--timeout=30
+</file>
+[[:tutoriel:comment_modifier_un_fichier|Editez le fichier]] **/etc/auto.ftp**
+<file>
+serveur_1      -fstype=fuse,allow_other,user=<login>:<pass>    :curlftpfs\#serveur_1
+</file>
+
+Le partage sera monté dans /net/ftp/serveur_1
+
+==== SAMBA - CIFS ====
+
+=== Pré requis / Remarques générales ===
+
+Si vous avez déjà une solution via fstab, n'oubliez pas de commenter les lignes dans /etc/fstab et de démonter les montages avant de mettre en place cette solution.
+Si le serveur (montage samba) n'est pas accessible, cela empêche l'explorateur de fichier nautilus de démarrer. Dans ce cas ouvrir une console et taper 
+  sudo service autofs stop
+
+===   Installer autofs et cifs ===
+
+  sudo apt-get install autofs cifs-utils
+
+=== création du credential ===
+
+Dans les commandes suivantes, remplacer <user> par votre nom d'utilisateur
+Créer le fichier /home/<user>/.cred-file (référencé ci-dessus) et rendez-le accessible uniquement par vous-même (IMPORTANT car il contient un mot de passe en clair...) : 
+
+  touch /home/$USER/.cred-file
+  chmod 600 /home/$USER/.cred-file
+
+Ajouter les lignes suivantes à ce fichier (à valoriser correctement bien sûr) : 
+  username=<user>
+  password=<password>
+
+Avec <user> et <password> les login et mot de passe sur le serveur nas.
+
+===Modification du fichier auto.master===
+
+Ajoutez la ligne suivante à la fin du fichier /etc/auto.master (sudo) : 
+<file - /etc/auto.master>   /mnt /etc/auto.mnt --ghost,--timeout=30 </file>
+
+
+=== Créer un fichier /etc/auto.mnt ===
+Créer un fichier /etc/auto.mnt contenant les informations d'accès aux partages : 
+<file - /etc/auto.mnt>
+  nas -fstype=cifs,credentials=/home/<user>/.cred-file,user=<user>,uid=1000,gid=1000 ://nomDuNas/montageDuNas
+</file>
+
+Remarques :
+  * N'oubliez pas de valoriser  "<user>" par votre login sur le client
+  *  /mnt doit exister
+  * nas ne doit pas exister et sera le nom du répertoire créé automatiquement pas autofs sous /mnt (i.e. /mnt/nas)
+  * nomDuNas peut être remplacé par l'adresse IP du (serveur) NAS. Attention dans le cas d'un serveur Windows, il faut remplacer le nom du serveur par l'adresse IP, la résolution du nom de domaine ne se faisant pas ,
+<note important>Bien précéder le nom du serveur par le caractère ` **:** ` ((https://help.ubuntu.com/community/Autofs#FUSE_based_file_systems))</note>
+  * testé avec succès avec un NAS synology DS214
+  * uid=1000 : 1000 correspond à votre uid linux sur le client (à verifier par la commande id en étant connecté avec votre login (pas en root)
+  * gid=100 correspond au groupe "users" des utilisateurs. Par défaut votre utilisateur ne fait pas partie du groupe users. Pour ce faire :
+
+  sudo usermod -aG users loginUtilisateur
+Il faut quitter la session et la rouvrir pour que le changement prenne effet.
+
+Quelques options supplémentaires :
+  * iocharset=utf8,
+  * file_mode=0750,
+  * dir_mode=0750,
+<note important>//file_mode// et //dir_mode// en 0777 n'est pas indispensables pour un partage Windows, même si on veut avoir un accès en écriture ! Il suffit que l'utilisateur Windows utilisé pour la connexion (dans le fichier de credentials) ait les droits d'écriture sur le dossier partagé.
+Par ailleurs, si on précise le username dans le fichier de credentials, il est inutile de le re spécifier dans les options du mount. Et uid et gid ne doivent pas forcément être des valeurs numériques.
+Voir mount.cifs(8)
+</note>
+  * nounix
+  * domain=NOM_DE_DOMAINE_DE_L_ENTREPRISE
+
+
+Pour finir, redémarrez autofs : 
+  sudo service autofs restart
+
+=== L'utiliser ===
+Pour y accéder, et lancer le montage auto, il suffit d'ouvrir votre gestionnaire de fichiers ([[nautilus]]) puis de pointer sur le répertoire de montage (/mnt/nas). Pour simplifier les prochains accès, [[:nautilus#autres_parametres|créez un (des) signet(s)]] afin d'accéder aux partages.
+
+=== Si ça ne marche pas ... ===
+
+Arrêter autofs :
+  sudo service autofs stop
+
+Tester le montage avec cette commande :
+
+  sudo mount -t cifs -o credentials=/home/<user>/.cred-file,user=<user>,uid=1000,gid=1000   //ipServeur/nomPartageServeur  /mnt
+  
+Remarques :
+  * remplacer "<user>" par le login linux du pc client de l'utilisateur
+  * des erreurs devraient être retournées pour permettre une analyse du problème
+  
+Une fois que le mount marche, démonter : 
+  sudo umount /mnt
+
+Utiliser les paramètres du mount dans le fichier /etc/auto.mnt et relancer autofs :
+  sudo service autofs start
+
+     
+===== Débogage =====
+
+Tant que ça ne marche pas, laissez arrêté le service et lancez automount manuellement, vous trouverez beaucoup plus facilement d'où vient l'erreur.
+
+
+Arrêter autofs :
+  sudo service autofs stop
+
+Lancer automount directement (Ctrl+C pour l'arrêter) :
+   sudo automount -f -v -d
+
+La plupart des problèmes se voient en regardant la commande "mount". Voici le type d’erreur que vous pourrez trouver :
+
+   >> mount error: could not resolve address for nas: Unknown error
+   lookup(program): lookup for nas failed
+   >> mount: unknown filesystem type 'cif'
+
+Au moins on sait où chercher. Ici par exemple, un problème de résolution de nom et une option de montage avec une erreur de saisie (cif au lieu de cifs)
+
+Le <//nomPartageServeur//> après l'adresse IP du serveur est nécessaire (en tout cas avec un partage Windows 10), sinon ça retourne une erreur <code bash>mount error(22): Invalid argument</code>

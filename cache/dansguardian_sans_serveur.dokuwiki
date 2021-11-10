@@ -1,0 +1,163 @@
+
+====== Contrôle parental simple avec DansGuardian ======
+
+Testé le 18/08/2010 : j'ai rencontré des problèmes avec le script get-iana, il semble que firehol ne soit plus maintenu depuis 2008. A éviter !
+
+<note important>Il existe des méthodes plus simples: [[tutoriel:comment_mettre_en_place_un_controle_parental|Comment mettre en place un contrôle parental ?]]</note>
+
+===== Préambule =====
+
+Cet explicatif a pour but de mettre en place un filtre parental pour ceux qui n'auraient pas de serveur comme le montre cette page:
+[[:dansguardian|Contrôle parental avec DansGuardian]]
+Le système que nous allons mettre en place comporte: firehol, dansguardian, tinyproxy et webstrict pour une administration simple.
+
+Nous installons donc le filtre parental directement sur le PC qui servira à aller sur le net
+
+Le principe est de filtrer le contenu de tout ce qui vient du net pour laisser passer ce qu'il faut et bloquer ce que l'on ne veut pas que nos chères têtes blondes voient.
+
+===== Modification du sources.list =====
+
+<note important>Il est nécessaire de modifier le sources.list que si vous souhaitez utiliser l'interface webstrict, interface qui n'est pas indispensable pour le contrôle parental.</note>
+
+<note important>(25/04/09) le lien qui fonctionne ce jour est donc le suivant :
+<code>deb http://ppa.launchpad.net/sabily.team/ubuntu hardy main</code>
+</note>
+
+Ou si vous êtes sous Intrepid Ibex :
+
+<code>deb http://ppa.launchpad.net/ubuntume.team/ubuntu intrepid main</code>
+
+Ou si vous êtes sous Jaunty (9.04) :
+
+<code>deb http://ppa.launchpad.net/ubuntume.team/ubuntu jaunty main</code>
+
+Il semble que maintenant cela soit devenu sous Jaunty (9.04) 18 mai 2009 
+
+<code>deb http://ppa.launchpad.net/sabily.team/ppa/ubuntu jaunty main</code>
+
+===== Installation. =====
+
+<code>:~$sudo apt-get update</code>
+
+<code>:~$sudo apt-get install firehol dansguardian tinyproxy</code>
+
+Et si vous souhaitez utiliser l'interface webstrict :
+<code>:~$sudo apt-get install webstrict</code>
+===== Configuration. =====
+
+==== Configuration de DansGuardian ====
+
+On édite le fichier de configuration :
+
+<code>:~$sudo gedit /etc/dansguardian/dansguardian.conf</code>
+
+Et nous commentons UNCONFIGURED
+
+<code># Comment this line out once you have modified this file to suit your needs
+#UNCONFIGURED</code>
+
+On change la ligne :
+
+<code>language = 'ukenglish'</code>
+
+par
+
+<code>language = 'french'</code>
+
+==== Configuration de tinyproxy ====
+
+On édite le fichier de configuration :
+
+<code>:~$sudo gedit /etc/tinyproxy/tinyproxy.conf</code>
+
+Et on fait les changements suivants :
+
+<code>##
+## tinyproxy.conf  tinyproxy daemon configuration file
+##
+#
+# Name of the user the tinyproxy daemon should switch to after the port
+# has been bound.
+
+User nobody
+Group nogroup
+#
+# Port to listen on.
+#
+#Port 8888
+Port 3128</code>
+
+==== Configuration de firehol ====
+
+On édite le fichier de configuration :
+
+<code>:~$sudo gedit /etc/firehol/firehol.conf</code>
+
+<code>
+#
+# $Id: clientall.conf,v 1.2 2002/12/31 15:44:34 ktsaou Exp $
+#
+# This configuration file will allow all requests originating from the
+# local machine to be send through all network interfaces.
+#
+# No requests are allowed to come from the network. The host will be
+# completely stealthed! It will not respond to anything, and it will
+# not be pingable, although it will be able to originate anything
+# (even pings to other hosts).
+#
+
+version 5
+iptables -t filter -I OUTPUT -d 127.0.0.1 -p tcp --dport 3128 -m owner ! --uid-owner dansguardian -j DROP
+transparent_squid 8080 "nobody root"
+
+# Accept all client traffic on any interface
+interface any world
+policy drop
+protection strong
+client all accept</code>
+
+Ensuite on édite le fichier suivant :
+
+<code>:~$sudo gedit /etc/default/firehol</code>
+
+Et on s’assure d’avoir :
+
+<code>START_FIREHOL=YES</code>
+
+==== Relancer les services.====
+
+<code>:~$sudo /etc/init.d/tinyproxy restart
+:~$sudo /etc/init.d/dansguardian restart
+:~$sudo /etc/init.d/firehol restart</code>
+
+==== Téléchargement du fichier get-iana.sh pour mettre à jour les IP blacklistées ====
+
+<code>:~$wget http://firehol.sf.net/firehol.tar.gz
+:~$tar xzvf firehol.tar.gz
+:~$cd firehol
+:~$sudo mv get-iana.sh /usr/bin/get-iana.sh
+:~$sudo chmod +x /usr/bin/get-iana.sh</code>
+
+Et on l'exécute pour mettre à jour :
+
+<code>:~$sudo get-iana.sh</code>
+
+À la fin on répond :
+
+<code>yes</code>
+
+Redémarrage de firehol :
+
+<code>:~$sudo /etc/init.d/firehol start</code>
+
+===== Webstrict =====
+
+L'interface de gestion webstrict est accessible à l'emplacement suivant :
+
+Système>administration>webstrict
+
+Le programme est assez simple d'utilisation. Il vous permet de gérer les services (start, stop, redémarrer) et d'accéder aux log d'accès.
+
+----
+
+//Contributeurs : [[:utilisateurs:furious-therapy]]//

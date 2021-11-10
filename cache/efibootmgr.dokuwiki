@@ -1,0 +1,95 @@
+
+{{tag>Trusty Xenial uefi}}
+
+----
+
+======Efibootmgr, gestionnaire de l'amorçage UEFI======
+**EFIBootmgr** est un utilitaire utilisable en [[:commande_shell|ligne de commande]] permettant de gérer le [[wpfr>Unified_Extensible_Firmware_Interface|chargeur de démarrage EFI]], des ordinateurs PC récents. Il permet de:
+  * Modifier l'ordre de démarrage des [[wpfr>Système_d'exploitation|systèmes d'exploitation]] disponibles;
+  * Créer ou supprimer des entrées;
+  * Modifier les options d'exécution du prochain démarrage;
+  * Et plus encore.
+
+=====Pré-requis=====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Utiliser Ubuntu en mode [[:UEFI]]
+  * Quelques connaissances dans le fonctionnement d'un [[:terminal]].
+ 
+=====Installation=====
+**EFIBootmgr** est installé par défaut dans les versions d'[[:UEFI|Ubuntu installé en mode UEFI]]. Si ce n'était pas le cas, [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>efibootmgr]]**
+
+=====Utilisation=====
+<note important> Bien que ne pouvant pas causer de dommages matériels, certaines fonctionnalités de **EFIBootmgr** peuvent corrompre le démarrage de votre ordinateur. Comprenez et sachez ce que vous faites avant toute manipulation.</note>
+
+====Connaître l’ordre d'amorçage====
+Avant de commencer toutes modifications sur l'[[:UEFI]] de votre ordinateur, il est nécessaire d'en connaître un peu plus sur les systèmes disponibles en mode [[:UEFI]] et leur ordre de démarrage. Pour cela, il suffit d'utiliser l'option **-v** \\
+Dans un [[:terminal]], saisir la [[:commande_shell|commande]] suivante: <code>efibootmgr -v</code> Le terminal vous renverra une réponse comme cet exemple: <code>BootCurrent: 0001
+Timeout: 2 seconds
+BootOrder: 0001,3001,0002,2001,2002,2004
+Boot0000* Disque dur USB (UEFI) - Generic Flash Disk	ACPI(a0341d0,0)PCI(14,0)USB(1,0)HD(1,3e,3b5b92,000bb565)RC
+Boot0001* ubuntu	HD(1,145800,82000,393abc6a-5b46-4392-a2fa-aebd5ee7d640)File(\EFI\ubuntu\shimx64.efi)
+Boot0002* Windows Boot Manager	HD(1,145800,82000,393abc6a-5b46-4392-a2fa-aebd5ee7d640)File(\EFI\Microsoft\Boot\bootmgfw.efi)WINDOWS.......
+Boot2001* EFI USB Device	RC
+Boot2002* EFI DVD/CDROM	RC
+Boot3001* Internal Hard Disk or Solid State Disk	RC </code>
+
+===Explications===
+  * La 1ère ligne ''**BootCurrent**'' indique le système amorcé. Dans notre cas, ''0001'' correspondant à Ubuntu.
+  * La 2ème ligne  ''**Timeout**'' indique le temps avant amorçage. 2 secondes dans notre cas.
+  * La 3ème ligne ''**BootOrder**'' indique l'ordre dans lequel sont amorcés les systèmes UEFI.
+  * Les autres lignes listent toutes les possibilités d'amorçage avec leur nombre [[wpfr>Système_hexadécimal|hexadécimal]] correspondant chacun à une entrée dans l'UEFI.
+ 
+<note tip>Après chaque manipulation de l'UEFI et ce avant de redémarrer, il est très intéressant de vérifier vos modifications avec cette commande.</note>
+
+====Remettre Ubuntu en priorité====
+Votre ordinateur ne démarre plus sous Ubuntu mais directement sous Windows® et pourtant Ubuntu a été installé correctement en mode UEFI. Ce peut être le cas par exemple à la suite d'une mise à jour de Windows® intervenant sur l'EFI.
+  - Éteindre complètement Windows® (Pas de veille prolongée) et votre ordinateur;
+  - [[:tutoriel/modifier_ordre_amorcage_du_bios#utiliser_le_boot_menu|Démarrer votre ordinateur en faisant apparaître le menu de démarrage du BIOS]] (touche d'accès au Boot Menu maintenue enfoncée lors du démarrage de l'ordinateur.).
+  - Choisir Ubuntu dans la liste présentée et valider. \\ 
+
+   
+Une fois Ubuntu démarré, il est nécessaire de ré-écrire son entrée dans l'UEFI et ce, en priorité. Le plus simple est de ré-installer [[:Grub-pc|GRUB, (le chargeur de démarrage d'Ubuntu)]] avec la [[:commande_shell|commande]]: <code>sudo grub-install</code> Cette commande ré-installera le [[:Grub-pc|GRUB]] dans la partition UEFI et remettra ainsi l'accès à Ubuntu en priorité au démarrage. \\ Une fois lancé cette commande, le [[:terminal]] vous renverra <code>Installing for x86_64-efi platform.
+Installation terminée, sans erreur.</code>
+La réinstallation du [[:GRUB]] est terminée, au prochain redémarrage votre ordinateur n'amorcera plus sur Windows® mais sur Ubuntu. \\
+
+//(D'après le [[https://forum.ubuntu-fr.org/viewtopic.php?pid=16784541|tutoriel de Malbo sur le forum]])//
+
+====Modifier l'ordre de d’amorçage=====
+Si vous souhaitez ou vous devez modifier l'ordre d'amorçage des entrées UEFI , il suffit dans la [[:commande_shell|commande]] suivante, de classer  de la première à la dernière séparée d'une virgule les valeurs [[wpfr>Système_hexadécimal|hexadécimales]] de chaque entrée UEFI disponible. Par exemple:
+<code>sudo efibootmgr -o 0001,3001,0002,2002,2001</code>
+
+====Amorcer temporairement sur une autre entrée====
+Pour le prochain démarrage de votre ordinateur vous souhaitez exceptionnellement amorcer sur une autre entrée UEFI mais sans modifier l'ordre d'amorçage du ''**BootOrder**''. Pour cela il suffit de programmer ''**BootNext**'' avec la [[:commande_shell|commande]]:
+<code>sudo efibootmgr -n <valeur_hexadécimale_de l_entrée></code>
+''**BootNext**'' supplante le ''**Bootorder**'' pour 1 amorçage seulement et sera supprimé par le gestionnaire de démarrage après la première utilisation.
+<note> Si un BootNext est programmé, il apparaîtra dans le [[#Connaître l’ordre d'amorçage|listage des informations de EFIBootmgr]] juste avant ''**BootOrder**''.</note>
+Et si nécessaire, cette [[:commande_shell|commande]] pour supprimer le ''**BootNext**'' 
+<code>sudo efibootmgr -N</code>
+
+
+====Supprimer une entrée====
+Pour supprimer une entrée de l'UEFI il suffit d'utiliser l'option **-B** suivie de la valeur hexadécimale de l'entrée à supprimer.
+
+==Exemple 1 :==
+<code>sudo efibootmgr -B 2002</code>
+Dans cet exemple de [[:commande_shell|commande]], la valeur hexadécimale ''2002'' supprime l'entrée du périphérique DVD/CDROM de l'exemple en tête de la page.
+
+==Exemple 2 :==
+Supprimer l'entrée « Boot000E » de valeur hexadécimale E :
+<code>sudo efibootmgr -b E -B</code>
+
+====Changer le temps avant amorçage====
+Pour changer le temps avant que l'UEFI ne démarre, il suffit d'utiliser l'option **-t** suivie du nombre de secondes. Exemple de [[:commande_shell|commande]] pour passer à 5 secondes:
+<code>sudo efibootmgr -t 5</code>
+
+Pour ceux qui souhaitent un amorçage rapide de l'UEFI on peut supprimer ce temps d'attente avec la [[:commande_shell|commande]]:
+<code>sudo efibootmgr -T</code>
+
+
+=====Voir aussi=====
+  * **(en)** [[man>efibootmgr|Le manuel]]
+  * [[:Boot-repair|Boot-repair: Un autre moyen en mode graphique de réparer la partition UEFI]]
+
+----
+//Contributeurs:  //

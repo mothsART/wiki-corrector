@@ -1,0 +1,145 @@
+
+{{tag>matériel portable toshiba}}
+----
+======  Toshiba Satellite U500-17D ======
+
+===== En un coup d’œil =====
+
+Le tableau suivant récapitule la prise en charge du matériel de portable par les différentes versions d'Ubuntu.
+Il utilise les notations suivantes :
+  * {{icons:important.png|Fonctionne après config}} : **Fonctionne après quelques manipulations**
+  * {{icons:icon-ubuntu.png|Fonctionne immédiatement}} : **Fonctionne immédiatement**
+  * {{icons:icon-support.png|Pas testé}} : **Pas d'informations disponibles**
+  * {{icons:process-stop.png|Ne fonctionne pas}} : **Ne fonctionne pas**
+
+^ Version ^ Installation ^ Carte graphique ^ Son ^ Wifi ^ Bluetooth ^ Webcam ^ Touchpad ^ Raccourcis multimédia ^ Rétroéclairage ^ Ventilateur ^
+| [[:maverick|Ubuntu 10.10]] | {{icons:icon-ubuntu.png}} | {{icons:icon-ubuntu.png}} | {{icons:icon-ubuntu.png}} | {{icons:icon-ubuntu.png}} | {{icons:icon-support.png|Pas testé}} | {{icons:icon-ubuntu.png}} | {{icons:icon-ubuntu.png}} | {{icons:process-stop.png}} | {{icons:important.png}} | {{icons:important.png}} |
+| Debian Wheezy | {{icons:icon-ubuntu.png}} | {{icons:important.png}} | {{icons:icon-ubuntu.png}} | {{icons:important.png}} | {{icons:icon-ubuntu.png}} | {{icons:icon-ubuntu.png}} | {{icons:icon-ubuntu.png}} | {{icons:important.png}} | {{icons:important.png}} | {{icons:important.png}} |
+
+
+
+**Utilisateurs du Wiki possédant cet ordinateur, fonctionnel :**
+  * **[[:utilisateurs:MaMieMando]]** : [[:maverick|10.10 (Maverick Merkaat)]], Debian wheezy
+
+**Cet ordinateur portable n'est pas [[:pc_tatoué|tatoué]].**
+===== Problèmes =====
+
+Les symptômes présentés dans les sections suivantes et leur résolution dépend beaucoup du noyau que vous utilisez. Vous pouvez voir la version que vous utilisez actuellement en tapant dans un terminal la commande suivante :
+
+<code>
+uname -a
+</code>
+==== Ventilateur ====
+
+=== Symptômes ===
+
+Le PC chauffe énormément. Le ventilateur s'active quand le CPU atteint 100°C.
+
+Concrètement, une fois qu'il a atteint 100°C, le ventilateur va souffler, faire refroidir le CPU de quelques degrés, puis chauffer à nouveau et ainsi de suite.
+
+<note>
+  * Le paquet fancontrol ne vous sera d'aucune utilité car le ventilateur n'est pas prévu pour fonctionner avec.
+  * Le paquet thinkpad ou thinkfan ne concerne pas les portables Toshiba
+</note>
+
+=== Explications ===
+
+En réalité, les ventilateurs devraient souffler bien avant. Ceci est dû au BIOS (plus précisément à la table DSDT) fourni par toshiba qui ne respecte pas les standards sur lesquels se base Linux.
+
+Le noyau standard 3.10-2-amd64 fonctionne correctement, ce qui simplifie grandement la tâche. Il faut cependant initialiser quelques variables pour que tout se passe bien. Pour plus de confort, le mieux est de créer un script lancé au démarrage. [[:tutoriel:comment_modifier_un_fichier|Créez le fichier]] **/etc/init.d/ventilateur** et mettez dedans :
+
+<file bash>
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:          mando
+# Required-Start:    $remote_fs
+# Required-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:
+# Short-Description: patch toshiba
+# Description:       tweak to improve cooling 
+### END INIT INFO
+
+. /lib/lsb/init-functions
+
+[ -f /etc/default/rcS ] && . /etc/default/rcS
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
+
+COOLING_DEVICES_DIR="/sys/devices/virtual/thermal"
+SERVICE_NAME="$(basename $0)"
+
+case "$1" in
+  start)
+    log_begin_msg "Preparing cooling device"
+
+    for x in $(find $COOLING_DEVICES_DIR | grep cur_state)
+    do
+      device_dir="$(dirname $x)"
+      num_device="$(echo $device_dir | egrep -o "cooling_device[0-9]+" | egrep -o "[0-9]+")"
+      max_state="$(cat $device_dir/max_state)"
+      new_state="0"
+      if [ $num_device -gt 4 ]
+      then
+          new_state=$max_state
+      fi
+      echo -n $new_state > $device_dir/cur_state;
+    done
+
+    log_end_msg 0
+    ;;
+  stop)
+    ;;
+  force-reload|restart)
+    $0 start
+    ;;
+  status)
+    ;;
+  *)
+    log_success_msg "Usage: /etc/init.d/$SERVICE_NAME {start|stop|restart|force-reload|status}"
+    exit 1
+esac
+
+exit 0
+</file>
+
+Ajoutez ce fichier à la chaîne de démarrage et lancez-le :
+
+<code>
+sudo update-rc.d ventilateur defaults
+sudo service ventilateur start
+</code>
+
+Si en sortie d'hibernation, le PC chauffe, lancez la commande
+
+<code>
+sudo service ventilateur start
+</code>
+==== Carte graphique (Geforce 210M)====
+
+Si vous souhaitez utiliser le logiciel propriétaire, veillez à utiliser une version suffisamment récente (>=195.36.24). Les versions antérieures du pilote sont instables avec ce modèle de carte graphique. De manière générale, utilisez autant que possible la dernière version pour améliorer les performances.
+
+Passez par le gestionnaire de pilote propriétaire pour [[:nvidia|installer le pilote propriétaire nvidia]]. Toutefois si vous utilisez un noyau modifié (voir section sur le ventilateur), vous devrez utiliser la seconde méthode.
+
+==== Rétro éclairage====
+
+=== Symptômes ===
+
+  * Les touches permettant de régler le volume se comportent comme si elles étaient activées en permanence
+  * Les autres touches multimédia ne fonctionnent pas non plus
+  * La luminosité ne se règle pas correctement lorsqu'on appuie sur fn+f6 / fn+f7.
+
+<note>
+Les paquets fnfx, toshutils, toshset ne semblent pas résoudre le problème.
+</note>
+
+  * Pour la luminosité, essayez de faire ce qui est expliqué [[:toshiba_satellite_u500-119#retroeclairage|ici]] (pas testé).
+
+===== Voir aussi =====
+
+  * (en) [[http://ubuntuforums.org/archive/index.php/t-1473317.html|Le problème de ventilateur]] sur le forum ubuntuforums.org. 
+  * (fr)  [[http://fr.computers.toshiba-europe.com/innovation/download_drivers_bios.jsp|Site fournissant la mise à jour du BIOS]]
+  * (fr) [[:toshiba_satellite_u500-119|Page dédiée au modèle Toshiba u500-119]]
+
+----
+//Contributeurs : [[:utilisateurs:MaMieMando]]//

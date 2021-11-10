@@ -1,0 +1,163 @@
+
+{{tag>Xenial interface_3d graphisme animation}}
+----
+
+====== python-visual ======
+
+python-visual, encore appelé VPython, est un package de graphisme 3D pour le langage de programmation Python, créé par David Scherer en 2000 sous le nom de "Visual". VPython permet de créer facilement des formes 3D en mouvement et des animations. Il est accessible aux personnes ayant une expérience limitée en programmation. Étant donné qu'il est basé sur Python, il offre également de nombreuses possibilités pour les programmeurs ou chercheurs.
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Avoir les pilotes de sa [[:carte_graphique|carte graphique]] installés et à jour.
+
+===== Installation =====
+
+Il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>python-visual]]**.
+
+Pour les versions précédentes d'Ubuntu, l'installation sera plus compliquée, se référer à cette [[http://vpython.org/contents/download_linux.html|page]].
+
+===== Utilisation =====
+
+Visitez le [[http://vpython.org|site internet]] de Vpython, ainsi que la [[http://vpython.org/contents/docs/visual/index.html|page]] de documentation.
+
+Pour démarrer avec un [[http://vpython.org/contents/bounce_example.html|exemple simple]], créez, avec votre [[:editeur_de_texte|éditeur de texte]] préféré, le script ''balle.py'', qui contiendra :
+
+<code>
+from visual import *
+
+floor = box (pos=(0,0,0), length=4, height=0.5, width=4, color=color.blue)
+ball = sphere (pos=(0,4,0), radius=1, color=color.red)
+ball.velocity = vector(0,-1,0)
+dt = 0.01
+
+while 1:
+    rate (100)
+    ball.pos = ball.pos + ball.velocity*dt
+    if ball.y < ball.radius:
+        ball.velocity.y = abs(ball.velocity.y)
+    else:
+        ball.velocity.y = ball.velocity.y - 9.8*dt
+</code>
+
+Ouvrez ensuite une [[:console|console]], déplacez vous dans le répertoire contenant le fichier ''balle.py'', et exécutez le script avec :
+<code>
+python balle.py
+</code>
+
+Vous devriez voir apparaître une nouvelle fenêtre contenant l'animation d'une balle rebondissant sur un sol.
+
+{{:python-visual_lucid_00.png|balle}}
+
+===== Exporter au format vidéo en passant par pov=====
+
+python-visual ne supporte pas de fonctionnalité pour exporter votre animation en fichier vidéo. Afin de remédier à ce problème, il existe une solution consistant à :
+  * Exporter la scène courante de l'animation en fichier ''pov'', grâce au module ''povexport'', à intervalle régulier de l'animation. Cela créera, par exemple, des fichers ''anim00.pov'', ''anim01.pov'' ... ''anim099.pov''. Les fichiers ''pov'' sont des fichiers textes.
+  * Convertir chacun des fichiers ''pov'' obtenus en fichier ''png'', grâce à l'outil en ligne de commande ''povray''.
+  * Assembler toutes les images obtenues en une vidéo ''anim.avi'', grâce à l'outils en ligne de commande [[:mencoder|mencoder]].
+
+==== Téléchargement du module Python povexport.py =====
+
+povexport est une module Python disponible sur le site [[http://vpython.org|vpython.org]] à cette [[http://vpython.org/contents/contributed/povexport-2009-08-26.zip|adresse]] (clic droit + Enregistrer la cible du lien sous...).
+
+Après décompression de l'archive [[:zip|zip]], vous obtiendrez trois fichiers (attention, l'archive ne contient pas de répertoire, directement les trois fichiers) :
+
+  * povexport.py
+  * povexample.py
+  * povexample_wood.py
+
+C'est bien entendu le premier fichier, ''povexport.py'' qui est important. Pour faire simple, il doit être présent dans le même répertoire que votre script ''VPython''. (Les habitués de Python placeront ce script dans un répertoire du ''PYTHONPATH'' par exemple.)
+
+==== Installation de l'outil povray =====
+
+Il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt://povray|povray]]**.
+
+==== Écriture du nouveau script VPython =====
+
+Reprenons notre script d'animation de balle ci-dessus, et modifions le pour créer des fichiers ''pov'' à intervalles réguliers durant l'animation, nous appellerons ce script ''balle_video.py'' :
+
+<code>
+from visual import *
+import povexport
+import os
+
+#creating a directory for stocking *.pov files
+pov_output = 'pov_output'
+if not os.path.isdir(pov_output):
+    os.mkdir(pov_output)
+
+#necessary when exporting to pov file to capture all the scene
+scene.range = 7
+
+floor = box (pos=(0,0,0), length=4, height=0.5, width=4, color=color.blue)
+ball = sphere (pos=(0,4,0), radius=1, color=color.red)
+ball.velocity = vector(0,-1,0)
+dt = 0.01
+
+for image_num in range(100):
+    rate (100)
+    ball.pos = ball.pos + ball.velocity*dt
+    if ball.y < ball.radius:
+        ball.velocity.y = abs(ball.velocity.y)
+    else:
+        ball.velocity.y = ball.velocity.y - 9.8*dt
+
+    #exporting to pov file
+    basename = 'balle%3.3i.pov' % (image_num,)
+    filename = os.path.join(pov_output,basename)
+    povexport.export(filename=filename)
+    print filename
+</code>
+
+Après avoir vérifié que le fichier ''povexport'' est bien présent dans le même répertoire que ''balle_video.py'', l'exécution du script :
+
+<code>
+python balle_video.py
+</code>
+
+va créer 100 fichiers balleXXX.png dans le sous-répertoire ''pov_output''.
+
+==== Création des fichiers images png =====
+
+Déplacez vous dans le répertoire ''pov_output'' :
+
+<code>
+cd pov_output
+</code>
+
+La syntaxe pour créer un fichier image ''png'' à partir du fichier texte ''pov'' est :
+
+<code>
+povray +Oballe000.png balle000.pov
+</code>
+
+Afin de traiter les 100 fichiers en une seule commande, on va utiliser une boucle. (voir ce  [[:tutoriel/script_shell|tutoriel]] pour une introduction aux scripts shell) :
+
+<code>
+for file in *.pov; do povray +O${file%.pov}.png $file; done
+</code>
+
+qui a créer 100 fichiers png.
+
+==== Création du fichier image avi =====
+
+Nous pouvons maintenant encoder les fichiers images ''png'' en fichier vidéo, grâce à [[:mencoder|mencoder]] :
+
+<code>
+mencoder mf://*.png -mf w=320:h=240:fps=10:type=png -ovc lavc -o balle.avi
+</code>
+
+et visualiser la vidéo créée à l'aide d'un [[:lecture_et_encodage_de_fichiers_videos|lecteur vidéo]].
+
+===== Désinstallation =====
+
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer le paquet python-visual]].
+
+=====Voir aussi=====
+
+  * [[http://vpython.org|Site officiel de Vpython]]
+
+----
+
+//Contributeurs principaux : [[:utilisateurs:troisseize]].//

@@ -1,0 +1,168 @@
+
+{{tag>réseau brouillon}}
+====== Smokeping ======
+
+**Outil de surveillance des temps de latence sur votre réseau.**
+
+===== Mise en place =====
+
+
+  * Installation:
+<code>apt-get install smokeping</code>
+
+  * Accès à l'interface:
+ <code>http://localhost/cgi-bin/smokeping.cgi</code>
+  * Changer l'Alias de redirection:
+ <code>/etc/smokeping/apache2.conf</code>
+\\
+  * Configuration:
+La configuration comporte plusieurs fichiers (possibilité d'avoir tout dans un même fichier):
+
+<code>/etc/smokeping/config.d/</code>
+
+General --> Information de base. \\
+Alerts --> Déclarer des alertes (sur mail). \\
+Database --> Déclaration des bases [[rrdtool|rrdtool]]: \\
+- Config du step, par défaut 300 sec (exécution du script toutes les 5 min). \\
+- Nombre de ping (par défaut 20). \\
+Presentation --> Mise en forme des graphs. \\
+Probes --> Déclaration des probes, outils permettant la mesure (fping, httpping, etc.): \\
+- Voir les probes disponibles: [[http://oss.oetiker.ch/smokeping/probe/index.en.html|oss.oetiker.ch]]. \\
+Slaves --> Déclaration en Master/Esclave pour créer des sondes. \\
+Targets --> Déclaration des hosts à monitorer. \\
+
+  * Mode debug:
+<code>/etc/init.d/smokeping stop
+smokeping --debug</code>
+
+  * Activer les logs dans syslog (éditer fichier General):
+<code># specify this to get syslog logging
+syslogfacility = local0
+syslogpriority = debug
+</code>
+
+Il faut ensuite modifier le syslog (ou rsyslog):
+<code>local0.*                        /var/log/smokeping.log</code>
+
+**Pouvez-vous préciser où et comment, s'il vous plait ?**
+
+Créer le fichier:
+<code>touch /var/log/smokeping
+chmod 600 /var/log/smokeping
+chown smokeping /var/log/smokeping</code>
+
+Redémarrer:
+<code>/etc/init.d/rsyslog restart</code>
+
+\\
+
+===== Exemple pour tester temps de réponse HTTP de site web (avec/sans proxy, ntlm, echoping, curl): =====
+
+  * Probe
+<code>
+*** Probes ***
++ FPing
+binary = /usr/bin/fping
+
+# these expect to find echoping in /usr/bin
+# if not, you'll have to specify the location separately for each probe
+# + EchoPing         # uses TCP or UDP echo (port 7)
+# + EchoPingDiscard  # uses TCP or UDP discard (port 9)
+# + EchoPingChargen  # uses TCP chargen (port 19)
++ EchoPingSmtp       # SMTP (25/tcp) for mail servers
++ EchoPingHttps      # HTTPS (443/tcp) for web servers
+
++ EchoPingHttp       # HTTP (80/tcp) for web servers and caches
+accept_redirects = yes
+timeout = 5
+offset = 50%
+revalidate_data = no
+
++ EchoPingIcp        # ICP (3130/udp) for caches
+# these need at least echoping 6 with the corresponding plugins
++ EchoPingDNS        # DNS (53/udp or tcp) servers
++ EchoPingLDAP       # LDAP (389/tcp) servers
++ EchoPingWhois      # Whois (43/tcp) servers
+
+ + Curl
+ binary = /usr/bin/curl
+ forks = 5
+ offset = 50%
+ step = 300
+ # The following variables can be overridden in each target section
+ agent = User-Agent: Lynx/2.8.4rel.1 libwww-FM/2.14 SSL-MM/1.4.1 OpenSSL/0.9.6c
+ extrare = / /
+ follow_redirects = yes
+ include_redirects = yes
+ insecure_ssl = 1
+ interface = eth0
+ pings = 5
+ ssl2 = 1
+ timeout = 20
+ urlformat = http://%host%/ # mandatory
+</code>
+
+\\
+  * Target:
+<code>*** Targets ***
+ # default probe
+ probe = EchoPingHttp
+
+ menu = Top
+ title = Network Latency Grapher
+ remark = Welcome to this SmokePing website.
+
+ + Mesures Echoping HTTP
+ menu = Mesures
+ title = Mesures
+
+# Equip1 (Echoping par proxy)
+
+++ Equip1-google
+ menu = Equip1-google
+ title = Equip1-www.google.fr
+ host = 192.168.0.255
+ port = 80
+ url = http://www.google.fr/
+
++ Mesure Curl
+menu = Mesure Curl
+
+++ NTLM
+menu = NTLM
+probe = Curl
+host = www.google.fr
+extraargs = --proxy-ntlm --proxy-user domaine\user:pass --proxy http://192.168.0.1:80/
+
+++ IP
+probe = Curl
+menu = IP
+host = www.google.fr
+extraargs = --proxy http://192.168.0.1:80/
+</code>
+
+\\
+A continuer. 
+(N'hésitez pas à me faire part de vos attentes). 
+
+===== A partir d'Ubuntu 13.10 =====
+
+La nouvelle version  2.4.6 d'Apache2 introduit des changements dans la configuration de Smokeping. Pour tenir compte de ces changements, il faut effectuer les opérations suivantes:
+
+  * Ajoutez un lien   smokeping 
+<code>sudo ln -s /etc/smokeping/apache2.conf /etc/apache2/conf-available/smokeping.conf</code>
+  * Activez les modules apache smokeping et cgid
+<code>sudo a2enconf smokeping ; sudo a2enmod cgid</code>
+  * Relancez Apache2
+<code>sudo service apache2 reload</code>
+  * Vérifiez le fonctionnement de Smokeping sur un navigateur Web
+
+Ubuntu 14.04 / apache 2.4.7 
+Pour éviter de saisir l'URL complétée par  http://localhost/smokeping/smokeping.fcgi.dist pour accéder à la page d'accueil, créer un lien symbolique d'index vers l'appel au CGI :
+<code>cd /usr/share/smokeping/www/
+ln -s smokeping.fcgi.dist index.cgi</code>
+Et juste accéder via  http://localhost/smokeping
+===== Liens =====
+  * [[http://oss.oetiker.ch/smokeping/doc/index.en.html|Documentation de Smokeping]]
+  * [[http://tobi.oetiker.ch/hp/|Site de l'auteur]]
+  * [[http://oss.oetiker.ch/smokeping-demo/?target=Customers.OP|Demo de Smokeping]]

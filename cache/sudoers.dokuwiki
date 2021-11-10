@@ -1,0 +1,193 @@
+
+{{tag>Xenial administration sécurité}}
+-----
+
+====== Configuration avancée de l'utilitaire sudo ======
+
+**[[:sudo|L'utilitaire « sudo »]]**, par le jeu de paramètres dont il dispose, peut autoriser ou refuser à un utilisateur ou à un groupe d'utilisateur l'exécution de tâches privilégiées avec ou sans saisie d'un mot de passe. Cette gestion des droits accordés aux utilisateurs est consignée dans le fichier ///etc/**sudoers**//. Le présent document n'est cependant pas le manuel d'utilisation de ce fichier. Son objectif est d'indiquer comment le modifier dans le contexte des distributions Ubuntu, et de donner quelques exemples de configuration adaptés à un environnement domestique ou à une PME/PMI.
+
+D'autres paramètres, destinés aux administrateurs de systèmes, concernent également la durée de validité de l'authentification des utilisateurs, la localisation du journal des événements et le niveau de courtoisie de ''sudo''.
+
+===== Modification du fichier /etc/sudoers =====
+
+==== /etc/sudoers.d/ ====
+
+<note warning>
+Confer le fichier ///etc/sudoers.d/**README**//
+
+La gestion de ''sudo'' est améliorée dans les dernières versions (Debian version 1.7.2). 
+C'est à dire pour toutes les versions d'Ubuntu supportées.
+</note>
+
+Tous les fichiers du répertoire **/etc/sudoers.d/** ne finissant pas par ''~'' ou ne contenant pas un ''.'' sont lus et analysés lorsque l'on utilise la commande ''sudo''.
+
+Pour modifier le fonctionnement de la commande ''sudo'', l'administrateur du système ne modifie plus le fichier ///etc/**sudoers**// mais positionne des fichiers de personnalisation dans le répertoire ///etc/**sudoers.d**//.
+
+=== avantages ===
+
+vous pouvez définir autant de fichiers que de modifications (voir le §2). Le nom est libre et peut donc faire référence à l'élément personnalisé. Exemples : **monfichier** , **10-sysctl** , **20-userX** , **30-apt**.
+
+  - Vous disposez d'un aperçu des modifications en listant simplement le contenu du répertoire ///etc/**sudoers.d**//.
+  - l'administrateur peut annuler à tout moment une autorisation particulière de la commande ''sudo'' en supprimant le fichier de personnalisation correspondant. 
+  - En supprimant tous les fichiers de personnalisation, vous êtes certain de revenir à la configuration par défaut de ''sudo'' qui sera restée d'origine.
+  - Cette configuration peut se mettre à jour sans perdre vos modifications locales.
+
+pour ce faire
+<code bash>
+sudo visudo -f /etc/sudoers.d/monfichier
+</code>
+  
+
+==== /etc/sudoers ====
+
+Si il est toujours préférable de privilégier d'écrire ses modifications locales dans [[#etcsudoersd|/etc/sudoers.d]] il est toujours possible de surcharger directement le fichier /etc/sudoers.
+
+La configuration de ''sudo'' est enregistrée dans le fichier de configuration ///etc/**sudoers**//.
+
+
+La modification de ce fichier s'effectue à travers un utilitaire de vérification appelé **visudo**. <code bash> sudo visudo </code>Il effectue une vérification de l'intégrité du fichier après modification avant de l'enregistrer. En cas d'erreur lors de la modification, le nouveau fichier n'est pas enregistré, ce qui vous évite de vous retrouver dans l'impossibilité de corriger votre erreur. Enfin, il s'assure que ce fichier conserve ses droits Unix originaux, ce qui garantit le bon fonctionnement de ''sudo''. \\
+À la fermeture du fichier // /etc/sudoers // ouvert par son outil d'édition **visudo**, la nouvelle configuration est automatiquement chargée.
+==== Choisir l'éditeur utilisé par visudo ====
+=== A chaque fois ===
+Pour forcer l'utilisation d'un éditeur lors de l'ouverture du fichier ///etc/**sudoers**// par ** visudo **,  exécutez dans [[:terminal|une fenêtre de terminal]]  l'une des commandes suivantes :
+  * **Dans Ubuntu :** ''sudo VISUAL=/usr/bin/gedit visudo''
+  * **Dans Kubuntu :** ''sudo VISUAL=/usr/bin/kate visudo''
+  * **Dans Xubuntu :** ''sudo VISUAL=/usr/bin/mousepad visudo''
+  * **Dans Lubuntu :** ''sudo VISUAL=/usr/bin/leafpad visudo''
+  * **En mode console :** ''sudo EDITOR=/usr/bin/nano visudo'' ** ou ** ''sudo EDITOR=/usr/bin/vim  visudo''
+=== configurer l'éditeur par défaut ===
+pour changer l'éditeur en ligne de commande, par défaut, il suffit de lancer :
+  sudo update-alternatives --config editor
+
+et de sélectionner l'éditeur de votre choix, dans la liste des [[:editeur_de_texte#editeurs_en_ligne_de_commande|éditeurs de texte]] déjà installés.
+
+----
+
+===== Ajout ou retrait de privilèges à un compte d'utilisateur ou un groupe d'utilisateurs =====
+À __**la fin du fichier**__, ajoutez une ligne d'instruction...
+<note important>En cas de litige entre ligne, ce sera la dernière dans le fichier sudoers qui sera comptée !
+Si par exemple , //jérome// fait partie du groupe //paris// et que vous mettez que //jérome// peut executer la commande //ls//, puis que plus loin vous mettez que le groupe //paris// ne peut pas executer la commande //ls//, //jérome// ne pourra pas executer la commande //ls// (du moins pas avec sudo) car la dernière ligne qui le concerne refuse l'execution de ls ! D'où l'importance de __**bien situer la ligne que vous souhaitez inclure**__, notamment **par rapport aux lignes déjà pré-définies pour les groupes admin et sudo** !</note>
+ ...telle que la suivante :
+<file>identifiant	ALL = (user) /chemin/complet/commande,/chemin/complet/autrecommande
+%groupe	ALL = (user) /chemin/complet/commande,!/chemin/complet/autrecommande</file>
+  * ''identifiant'' représente un identifiant utilisateur du système Ubuntu. Un seul identifiant doit être précisé par ligne ;
+  * ''%groupe'' désigne un groupe d'utilisateurs du système Ubuntu. Le nom du groupe doit donc être précédé d'un symbole de pourcentage (''%''). Un seul groupe doit être précisé par ligne ;
+  * ''ALL'' désigne la ou les machines dans lesquelles les commandes suivantes sont autorisées ou refusées pour cet utilisateur ou ce groupe d'utilisateurs. Le mot-clé ''ALL'' désigne l'ensemble des machines de votre parc informatique. Dans le cadre d'une utilisation à domicile, laisser ''ALL'' n'est pas un inconvénient. Dans un grand parc d'entreprise, de meilleures stratégies sont à prévoir ;
+  *  ''user'' (entre parenthèses) désigne l'utilisateur dont on prend les droits (peut valoir ALL pour tous)
+  *  ''commande'' et ''autrecommande'' représentent des commandes pouvant être exécutées par l'utilisateur ou le groupe d'utilisateurs désigné en début de ligne.
+    *  Les commandes précédées d'un point d'exclamation (''!'') sont refusées, alors que celles sans point d'exclamation sont autorisées ;
+    * Les commandes multiples sont séparées par une virgule, sans espace ;
+    * Les commandes doivent être entrées de manière exacte. Pour cette raison, préférez saisir des chemins absolus vers des commandes plutôt que des chemins relatifs (par exemple, ''/usr/sbin/update-manager'' plutôt que ''update-manager''). Pour connaître le chemin absolu d'une commande ou d'un utilitaire, saisissez dans un terminal ''which //commande//'' (([[man>which]])), ou ''whereis //commande//'' (([[man>whereis]])) en remplaçant //''commande''// par la commande en question.
+==== Exécuter des tâches d'administration sans mot de passe ====
+À la fin du fichier, ajoutez une ligne d'instruction telle que la suivante :
+<file>identifiant	ALL = (ALL) /chemin/complet/commande, NOPASSWD: /chemin/complet/autrecommande
+%groupe	ALL = (ALL) NOPASSWD: /chemin/complet/commande,/chemin/complet/autrecommande</file>
+Toutes les commandes situées à la droite du mot-clé ''NOPASSWD:'' peuvent être exécutées par l'utilisateur ou le groupe d'utilisateurs précisé en début d'instruction. Celles restées à sa gauche sont toujours soumises à l'authentification par mot de passe.
+
+Dans cet exemple, //identifiant// doit fournir son mot de passe pour exécuter ''commande'', mais n'a pas à le saisir pour exécuter ''autrecommande''. Quand aux membres du groupe //groupe//, ils n'ont pas à saisir leur mot de passe pour exécuter ''commande'' ou ''autrecommande''.
+
+Attention : il ne faut pas mettre juste la commande, mais tout le chemin vers le fichier. Par exemple il ne faut pas mettre "ls" mais "/bin/ls".
+
+<note warning>**Attention aux brèches de sécurité !** \\ Faites //extrêmement// attention lorsque vous autorisez un utilisateur ou un groupe à exécuter une commande sans mot de passe. Ceci pourrait causer des brèches de sécurité si les commandes autorisées sont potentiellement dangereuses.</note>
+
+<note tip>
+Pensez à utiliser newgrp pour basculer votre groupe actif avant de faire appel à la commande autorisée par le sudo.\\
+Voici un petit exemple, changer un code clavier.\\
+Après avoir créé le groupe codeclavier, pensez à utiliser un numéro spécial pour éviter les conflits avec les groupes utilisateurs, vous ajoutez cette ligne dans le fichier /etc/sudoers.
+<code bash>
+ %codeclavier    ALL = (ALL) NOPASSWD: /bin/changecode
+</code>
+et maintenant le petit script évidemment mis dans /bin/code.clavier.sh
+<code bash>
+sudo /bin/changecode
+</code>
+et enfin /bin/changecode
+<code bash>
+ #!/bin/sh
+ setkeycodes 0x2b 86
+</code>
+Et miracle, il marche. Si vous ajoutez un lien dans /etc/profile.d/, il sera exécuté à votre connexion en toute transparence!!!
+</note>
+
+====Exécuter un programme en tant qu'un autre 'user'====
+La commande sudo permet d'exécuter un programme en tant qu'un autre utilisateur.
+Par exemple, la ligne :
+<file>foo      ALL=(bar) NOPASSWD: /chemin/complet/program</file>
+permet à foo d'utiliser program en tant que bar sans qu'on ne lui demande son mot de passe.
+
+//**Note**// : Après il faut quand même utiliser **sudo** pour le lancement de **program**. Comme ceci :
+<file>sudo program</file>
+
+----
+
+===== Changement d'options =====
+
+==== Augmenter ou réduire le temps de grâce avant que la saisie du mot de passe soit de nouveau demandée ====
+Ajoutez l'option ''timestamp_timeout=X'' à la fin de la ligne débutant par ''Defaults''. La valeur ''X'' doit être remplacée par la durée, en minutes, durant laquelle le mot de passe n'a pas à être fourni pour effectuer des actions d'administration dans le terminal ou pseudo-terminal courant. La valeur ''0'' désactive ce temps de grâce : un mot de passe doit être fourni à chaque action d'administration.
+<file>Defaults	env_reset</file>
+devient
+<file>Defaults	env_reset,timestamp_timeout=X</file>
+Si cette option n'est pas précisée, le temps de grâce par défaut est 15 minutes.
+
+==== Afficher des astérisques lors de la saisie du mot de passe ====
+
+{{etoiles_sudo.png?600nolink}}
+
+Ajoutez l'option ''pwfeedback'' à la fin de la ligne débutant par ''Defaults''.
+<file>Defaults	env_reset</file>
+devient
+<file>Defaults	env_reset,pwfeedback</file>
+
+{{visudo_etoiles.png?600nolink}}
+
+==== Changer le message d'erreur de mauvais mot de passe ====
+Ajoutez l'option badpass_message="texte à afficher" à la fin de la ligne débutant par "Defaults".
+<file>Defaults	env_reset</file>
+devient
+<file>Defaults	env_reset,badpass_message="texte à afficher"</file>
+
+==== Des insultes en cas d'erreur de mot de passe ====
+Ajoutez l'option ''insults'' à la fin de la ligne débutant par ''Defaults''.
+<file>Defaults	env_reset</file>
+devient
+<file>Defaults	env_reset,insults</file>
+
+----
+
+===== Réparer un fichier erroné =====
+
+Si, en tentant d’exécuter une commande sudo, vous obtenez une erreur comme ci-dessous, c'est que votre fichier sudoers est corrompu.
+Comme il est corrompu, vous ne pouvez plus exécuter sudo, et donc plus modifier le fichier ... cercle vicieux
+
+  toto@fixe:~$ sudo
+  >>> sudoers file: syntax error, line 0 <<<
+
+Une solution à tenter est de lancer la commande :
+<file>pkexec visudo</file>
+
+<note>Ou bien d'utiliser [[http://www.psychocats.net/ubuntu/fixsudo|la solution suivante]]((source http://askubuntu.com/questions/73864/how-to-modify-a-invalid-etc-sudoers-file-it-throws-out-an-error-and-not-allowi)).</note>
+  
+==== Redémarrer en mode recovery ====
+{{:tutoriel:sudo1.jpg?nolink600}}
+
+==== Choisir l'option "root" ====
+{{:tutoriel:sudo2.jpg?nolink600}}
+
+==== Remonter les disques en écriture ====
+  mount -o remount,rw /
+  
+==== Editer / corriger le fichier 'sudoers'  ====
+Faire les opérations souhaitées comme éditer le fichier à la main :
+
+      cp /etc/sudoers /etc/sudoers.backup
+      nano /etc/sudoers
+      
+Voir [[http://www.psychocats.net/ubuntu/fixsudo|ici]] pour d'autres possibilités.
+
+===== Aller plus loin... =====
+Consultez la page de manuel officiel du fichier ///etc/**sudoers**// :
+  * En ligne : [[http://www.sudo.ws/sudo/sudoers.man.html|Sudoers Manual]] ;
+  * Copie locale : ''man sudoers'' Ce document regorge d'options supplémentaires et d'exemples pour personnaliser grandement le comportement de ''sudo''.
+  * **(fr)** [[http://guide.andesi.org/html/ksudo.html|Comment donner certains droits root à un utilisateur (Sudo)]]
+--------
+

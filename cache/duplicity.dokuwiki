@@ -1,0 +1,121 @@
+
+{{tag>sauvegarde}}
+
+-----
+
+====== duplicity, un utilitaire de sauvegarde en ligne de commande ======
+L'utilitaire **''duplicity''** est un outil en ligne de commande permettant d'effectuer des sauvegardes incrémentielles de fichiers et dossiers.
+
+Il effectue la sauvegarde en créant des archives TAR chiffrées avec GnuPG. Ces archives sont alors envoyées dans un répertoire de sauvegarde local ou distant -- les protocoles distants pris en charge sont FTP, SSH/SCP, Rsync, WebDAV/WebDAVs et Amazon S3. Puisque ''duplicity'' repose sur ''librsync'', les sauvegardes incrémentielles sont économes en espace de stockage : seules les parties modifiées des fichiers sont prises en considération.
+
+
+
+===== Installation =====
+
+**Duplicity** est installé par défaut sur Ubuntu, en effet cette version de la distribution inclut le logiciel [[deja-dup|Déjà Dup]], qui est une interface graphique pour **duplicity**.
+
+Pour installer Duplicity sur une [[:variante]] d'Ubuntu, il suffit d'[[:tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt>duplicity]]**.
+
+
+
+===== Exemples d'utilisation =====
+==== Exemple simple ====
+Un exemple simple de copie de sauvegarde du dossier personnel d'un utilisateur (''/home/utilisateur/'') vers un dossier local ''backup/'' dans un disque dur externe monté en ''/media/DisqueExterne/'' (''/media/DisqueExterne/backup/''): <code>utilisateur@ordinateur:~$ duplicity --no-encryption /home/utilisateur /media/DisqueExterne/backup</code>
+
+==== Exemple un peu plus élaboré avec mot de passe ====
+Dans l'exemple suivant, la sauvegarde sera chiffrée avec une phrase de passe (qu'il ne faut surtout pas oublier !!) et enregistrée sur un disque externe. Les répertoire "--exclude" ne seront pas sauvegardés. 
+<code>
+usr@pc:~$  PASSPHRASE="PHRASE DE PASSE POUR LE CHIFFRAGE"
+usr@pc:~$ export PASSPHRASE
+usr@pc:~$ duplicity --volsize 50 --exclude "/home/$USER/Téléchargements" --exclude "/home/$USER/.local/share/Trash"  /home/$USER "file:///media/DisqueExterne/backup"
+usr@pc:~$ unset PASSPHRASE
+</code>
+<note tip>
+unset permet d'effacer la phrase de passe de la mémoire vive.
+
+Ne pas oublier de nettoyer aussi le fichier .bash_history qui peut contenir la phrase de passe en clair.
+
+Par exemple avec :
+<code>
+usr@pc:~$ sed -i '/^PASSPHRASE=.*/d' /home/usr/.bash_history;
+</code>
+
+Alternatives :
+
+<code>
+# - ne pas oublier l'espace au début de la ligne pour dire à bash de ne pas stocker la ligne dans l'historique
+# - PASSPHRASE ne sera connu que pour cette execution de duplicity
+usr@pc:~$  PASSPHRASE="PHRASE DE PASSE POUR LE CHIFFRAGE" duplicity --volsize 50 --exclude "/home/$USER/Téléchargements" --exclude "/home/$USER/.local/share/Trash"  /home/$USER "file:///media/DisqueExterne/backup"
+
+# si vous souhaitez garder la ligne de sauvegarde dans l'historique
+usr@pc:~$ PASSPHRASE="$(head -1)" duplicity --volsize 50 --exclude "/home/$USER/Téléchargements" --exclude "/home/$USER/.local/share/Trash"  /home/$USER "file:///media/DisqueExterne/backup"
+
+# vous ne voulez pas montrer le mot de passe ?
+usr@pc:~$ stty -echo; PASSPHRASE="$(head -1)" duplicity --volsize 50 --exclude "/home/$USER/Téléchargements" --exclude "/home/$USER/.local/share/Trash"  /home/$USER "file:///media/DisqueExterne/backup"; stty echo
+
+</code>
+
+
+</note>
+
+==== Sauvegarde incrémentale toutes les semaines et complète tous les mois ====
+Une sauvegarde complète consiste à sauvegarder tous les répertoires dans leur intégralité. Une sauvegarde incrémentale est plus économe en volume de stockage car, à à partir d'une première suavehgarde complète, elle se contente de sauvegarder les différences. Toutefois il faut de temps en temps remettre la base de données à jour. Dans l'exemple suivant c'est tous les mois :
+<code>
+usr@pc:~$ duplicity --no-encryption  --full-if-older-than 1M  /home/$USER "file:///media/DisqueExterne/backup"
+</code>
+==== Effacer les sauvegardes les plus anciennes ====
+Au bout d'un certain temps, les sauvegardes anciennes ne sont plus utiles. On peut donc les supprimer. Dans l'exemple suivant, les sauvegardes âgées de plus d'une année sont supprimées :
+<code>
+usr@pc:~$ duplicity remove-older-than 1Y --no-encryption  /home/$USER "file:///media/DisqueExterne/backup"
+</code>
+==== Obtenir la liste des fichiers sauvegardés ====
+<code>
+usr@pc:~$ duplicity --no-encryption list-current-files --verbosity 8 file:///media/DisqueExterne/backup
+</code>
+ou
+<code>
+usr@pc:~$ PASSPHRASE="PHRASE DE PASSE POUR LE CHIFFRAGE"
+usr@pc:~$ export PASSPHRASE
+usr@pc:~$ duplicity list-current-files ${disqueDeSauvegarde}/RepPerso
+usr@pc:~$ usr@pc:~$ unset PASSPHRASE
+sed -i 's/PASSPHRASE="PHRASE DE PASSE POUR LE CHIFFRAGE"//g' /home/usr/.bash_history; sed -i '/^$/d' .bash_history)
+</code>
+<note tip>L'option --verbosity permet de rendre duplicty plus bavard et savoir un peu ce qu'il fait</note>
+==== Restaurer la sauvegarde ====
+<code>
+usr@pc:~$ duplicity restore --verbosity 8 --no-encryption --file-to-restore /home/utilisateur file:///media/DisqueExterne/backup
+</code>
+ou
+<code>
+usr@pc:~$ PASSPHRASE="PHRASE DE PASSE POUR LE CHIFFRAGE"
+usr@pc:~$ export PASSPHRASE
+usr@pc:~$ duplicity restore --verbosity 8 --file-to-restore home/usr/ file:///media/DisqueExterne/backup
+usr@pc:~$ usr@pc:~$ unset PASSPHRASE
+sed -i 's/PASSPHRASE="PHRASE DE PASSE POUR LE CHIFFRAGE"//g' /home/usr/.bash_history; sed -i '/^$/d' .bash_history)
+</code>
+==== Restaurer un fichier particulier ====
+On souhaite restaurer le fichier MonTexte.odt situé dans le répertoire /home/usr/Documents/Textes dans sa dernière version. Cette restauration portera le nom de MonTexteRestaure.odt :
+<code>
+usr@pc:~$ duplicity restore --verbosity 8 --no-encryption --file-to-restore Documents/Textes/MonTexte.odt file:///media/DisqueExterne/backup /home/usr/Documents/Textes/MonTexteRestaure.odt
+</code>
+Si je souhaite que la version restaurée soit la version d'il y a 3 jours (3D) :
+<code>
+usr@pc:~$ duplicity restore -t 3D --verbosity 8 --file-to-restore Documents/Textes/MonTexte.odt file:///media/DisqueExterne/backup /home/usr/Documents/Textes/MonTexteRestaure.odt
+</code>
+
+===== Voir aussi =====
+  * Consultez [[https://manpages.ubuntu.com/cgi-bin/search.py?q=duplicity&cx=003883529982892832976%3A5zl6o8w6f0s&cof=FORID%3A9&ie=UTF-8|le manuel de duplicity]] pour plus d'exemples de sauvegarde et de restauration à l'aide des divers protocoles pris en charge.
+  * (fr) [[https://sites.google.com/site/bernarddegallaix/home/informatique/os/linux/sauvegarde/duplicity|duplicity est une commande qui permet les sauvegardes complètes et incrémentales]]
+  * (fr) [[https://www.unicoda.com/?p=2929|Sauvegarde distante avec duplicity]]
+  * (en) [[https://help.ubuntu.com/community/DuplicityBackupHowto|Duplicity backup how to]]
+  * (en) [[https://askubuntu.com/questions/520152/extract-a-folder-from-duplicity-archive|Extract a folder from duplicity archive]]
+  * 
+
+
+
+===== Déjà Dup: une interface graphique pour duplicity =====
+**Déjà Dup** (prononcer //dé-ja-doop//) est un utilitaire de sauvegarde très simple. Interface graphique pour l'outil ''duplicity'', Déjà Dup a pour but de cacher les complexités relatives à une bonne façon d'effectuer des copies de sauvegarde (chiffrement, sauvegardes locales ou en réseau, fréquence de la prise des sauvegardes…) pour se concentrer sur l'essentiel : effectuer des sauvegardes de votre système et de vos données personnelles de manière sécuritaire, complète et fiable.
+  * //[[deja-dup|Plus d'informations à propos de Déjà Dup]]//
+
+==== Voir aussi ====
+  * [[http://duplicity.nongnu.org/|Site officiel de Duplicity]]

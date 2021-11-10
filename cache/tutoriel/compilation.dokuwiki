@@ -1,0 +1,256 @@
+
+{{tag> compilation paquet tutoriel}}
+----
+
+====== Installer un logiciel ou une bibliothèque par compilation ======
+
+En informatique, la **compilation** (d'un logiciel ou d'une bibliothèque) est une procédure par laquelle un code source (format compréhensible par un humain, type [[#ASCII]]) est transformé en code [[#binaire]], un langage compréhensible par votre ordinateur, dans le but d'être exécuté.  Un logiciel est compilé afin de pouvoir être lancé par l'utilisateur.
+
+<note>Compiler soi-même un logiciel ou une bibliothèque peut apporter quelques avantages, mais est souvent à éviter pour le néophyte du monde linuxien.</note>
+
+Cette documentation présente une méthode //généraliste// et //vulgarisée// pour compiler des programmes et des bibliothèques.  
+<note important>Elle devrait être utilisée, le plus fréquemment, **lorsque les autres méthodes d'installation de programmes ont échoué**:</note>
+
+  - Le [[:apt|système de gestion de paquets APT]] permet d'installer simplement énormément de logiciels répondant aux besoins quotidiens de l'utilisateur moyen.  Lorsque c'est possible, //**privilégiez cette méthode**//!
+  - Si un logiciel n'est pas disponible dans les dépôts APT par défaut d'Ubuntu, il est peut-être disponible en [[:apt#le_paquet|paquet Ubuntu (.deb)]] sur un autre dépôt ou directement sur le site du distributeur du logiciel.  Vérifiez si un paquet est disponible sur le site du distributeur.
+  - Si un logiciel n'existe pas en paquet .deb mais est disponible en d'autres types de paquets (.rpm, .slp, .tgz), le logiciel [[:alien]] est d'une bonne utilité.
+  - Enfin, d'autres distributeurs, comme [[http://www.mozilla.com|Mozilla]], publient leurs logiciels sous forme de [[:wiki:glossaire#binaire|code binaire]], donc déjà compilé.
+
+<note>Lorsque aucune de ces possibilités n'est valable pour le programme que vous cherchez à installer, vous devrez alors passer par la compilation. </note>
+Le mot est gros et semble effrayant, mais l'est moins qu'il n'y paraît; essayons de démystifier ensemble ce procédé.
+
+
+===== Pourquoi compiler ? =====
+
+Sous GNU/Linux, //comme pour tout autre système d’exploitation//, les logiciels doivent être compilés avant de pouvoir être utilisés. « Compilation » est le nom d'une procédure permettant de transformer du code source, un ensemble d'instructions compréhensibles par les programmeurs, en code binaire, compréhensible uniquement par votre ordinateur. L'ordinateur est incapable de comprendre directement du code source: il doit donc être « traduit » de façon à ce que la machine puisse l'interpréter.
+
+Ce procédé est souvent long, lourd et rebutant pour le nouvel arrivant sous Linux, car il n'a probablement jamais eu à en faire sous son ancien système d'exploitation. Sous Microsoft(r) Windows(r), par exemple, il n’est pratiquement jamais requis de votre part que vous compiliez vos logiciels, les éditeurs de programmes proposant des installateurs (le fameux « install.exe » ou « setup.exe ») qui contiennent le programme compilé et une procédure qui copie les fichiers du programme au bon endroit sur votre disque dur. Or, sous Linux, il n’existe pas d'« install.exe ». Un procédé plus simple et convivial a été créé pour éviter à l'utilisateur moyen de devoir compiler : c'est le cas, entre autres, du [[:apt|système de gestion de paquets APT]].
+
+Seulement, tout n'est pas toujours disponible à l'aide d'un de ces systèmes simplifiés. C'est le cas, par exemple, de certains pilotes pour vos périphériques ou encore de logiciels en cours de développement. Ubuntu étant une distribution orientée poste de travail et visant à être accessible à tous, nous espérons que vous aurez essayé les autres méthodes disponibles auparavant, la compilation représente la dernière solution à vos problèmes.
+
+
+===== Préalables =====
+
+Par défaut, Ubuntu n'inclut pas tous les outils nécessaires pour procéder à la compilation de logiciels et bibliothèques.  Ces outils peuvent toutefois être installés à l'aide de [[:Synaptic]] ou de [[:Apt-get]], car ils se trouvent sur le CD-ROM d'installation de Ubuntu, de même que dans les [[:depots#principaux|dépôts APT]] officiels. Le méta-paquet à installer se nomme  **build-essential**.
+
+Nous vous suggérons aussi d'installer les paquets « fakeroot » et « checkinstall » et nous supposerons que vous les aurez installés. L'outil « checkinstall » surveille la procédure d'installation et crée un paquet « .deb » qui sera présent dans votre liste de paquets installés.  Ceci aura pour avantage de vous permettre une désinstallation simplifiée et propre, si vous souhaitez désinstaller ultérieurement vos logiciels et bibliothèques.
+
+En résumé, vous devriez [[:tutoriel:comment_installer_un_paquet|installer les paquets]] **[[apt>build-essential|build-essential]]** **[[apt>fakeroot|fakeroot]]** **[[apt>checkinstall|checkinstall]]**  .
+
+
+===== Récupérer le code source =====
+
+Le code source d'un logiciel en version stable est habituellement disponible sous forme d'archive compressée au format « tar.gz » ou « .tar.bz2 » voire « .zip ». Certaines personnes (particulièrement des développeurs) vont préférer récupérer la toute dernière version de développement du logiciel (avec toutes les complications qu'il peut contenir) ; celle-ci peut être récupérée depuis un dépôt [[:CVS]], [[:subversion|SVN]] ou [[:Git]].
+
+==== Dépendances ====
+
+Si le système APT récupère toutes les dépendances d'un logiciel, ce n'est pas le cas lorsque vous effectuez vous-même une compilation. Parcourez bien le site du projet et les pages de documentation afin de savoir quelles dépendances nécessite le logiciel (fréquemment, vous en trouverez aussi une liste dans le fichier « README » se trouvant dans l'archive contenant le code source). Beaucoup de paquets sont disponibles dans les dépôts APT pour les satisfaire.
+
+
+<note>
+Essayez de satisfaire les dépendances AVANT de compiler vos logiciels, sans quoi la compilation n'aboutira forcément qu'à une suite d'erreurs.
+</note>
+
+==== Bibliothèques de développement ====
+
+Le plus important pour une bonne compilation, ce sont les bibliothèques de développement. Elles sont contenues dans des paquets qui finissent par "**-dev**". Pour connaître celles qui sont nécessaires, lisez bien les fichiers README ou INSTALL livrés habituellement avec le programme.
+
+Par exemple, si le logiciel dispose d'une interface graphique en GTK+, il vous faut les bibliothèques de développement GTK+. En général, le nom du paquet à récupérer a la forme « //nom-de-la-dépendance//-dev » et se trouve dans Synaptic ; ici, le paquet à installer se nommerait « libgtk2.0-dev ».
+
+=== Pour les programmes déjà dans les dépôts, mais que vous voulez compiler pour avoir la dernière mise-à-jour ===
+
+Une méthode très intéressante pour trouver les paquets utile à la compilation est la commande **apt-cache showsrc** (Les dépots source "deb-src" doivent être activés !!). Cette commande n'est valide que pour les logiciels déjà présents dans les dépôts (et que vous compilez pour profiter d'une mise-à-jour).
+
+<code>
+apt-cache showsrc amsn | grep Build-Depends
+Build-Depends: debhelper (>> 4.0.0), imlib11-dev (>> 1.8.2), tcl8.4-dev, tk8.4-dev, dpatch (>= 1.11)
+</code>
+
+Attention tout de même, les paquets nécessaires peuvent différer. Certains nouveaux paquets sont parfois nécessaires pour compiler un logiciel.
+
+Vous pouvez aussi utiliser directement build-dep :
+
+  sudo apt-get build-dep amsn
+
+S'il vous manque des dépendances, le logiciel ne sera pas compilé correctement.  Le processus (''./configure'') se terminera par un échec dès qu'une dépendance est manquante.  De façon générale, le message d'erreur retourné (dans les quelques dernières lignes) indique clairement quelle dépendance est manquante. Notez alors ce message d'erreur et recherchez cette dépendance à satisfaire dans votre gestionnaire de paquets. Recommencez ensuite le processus de compilation. S'il s'arrête de nouveau, vérifiez si une autre dépendance n'est pas satisfaite ((C'est certainement pour cette raison (des dépendances insatisfaites) que la compilation est considérée comme longue et fastidieuse.)).
+
+
+
+==== Archive contenant le code source ====
+
+Une fois téléchargée, décompressez l'archive dans votre dossier personnel ou ailleurs (par exemple, dans « /opt », qui est une place toute indiquée à cet effet) soit à l'aide d'un outil graphique tel [[:File-Roller]], soit à l'aide de la commande suivante, dans un terminal :
+
+  * Pour les archives « .tar.gz » : <code>tar xzfv nom_archive.tar.gz</code>
+  * Pour les archives « .tar.bz2 » : <code>tar xjfv nom_archive.tar.bz2</code>
+
+<note tip>N'hésitez pas à utiliser la touche « Tab » de votre clavier pour compléter automatiquement le nom de commandes et de fichiers dans votre terminal. ;-)</note>
+
+
+==== Depuis un dépôt CVS ou SVN ====
+
+La procédure pour récupérer un code source depuis un dépôt CVS ou SVN varie d'une place à une autre.  Les instructions pour récupérer le code source sont indiquées, dans la plupart des cas, sur la page des téléchargements du site du logiciel concerné ou dans les pages pour développeurs.
+
+
+
+
+===== Compiler =====
+
+Pour compiler un programme sans utiliser sudo rajouter l'utilisateur au groupe src.
+<code bash>
+sudo usermod -aG src user
+</code>
+
+D'ordre général, la compilation d'un logiciel s'effectuera de la façon suivante :
+<code bash>
+cd ''/chemin_vers_le_répertoire_des_sources''
+test -f configure || sh autogen.sh #facultatif
+./configure --enable-optimizations
+make
+sudo checkinstall # ou sudo make install dans ce cas il n'y aura pas de construction de deb
+</code>
+
+Voyons, en étapes, cette procédure :
+
+  - On se rend dans le répertoire dans lequel se trouve le code source du logiciel ou de la bibliothèque à compiler en utilisant la commande [[tutoriel/console_commandes_de_base#cd|cd]].
+  - On appelle l'utilitaire « configure » se trouvant dans ce répertoire. Celui-ci vérifie que toutes les dépendances du logiciel ou de la bibliothèque à compiler sont bien satisfaites. Si certaines ne sont pas satisfaites, il s'arrête en indiquant ce qui est manquant pour continuer la procédure. Voir juste après comment corriger cela.
+  - On effectue la compilation en exécutant la commande « make », qui se charge d'appeler le compilateur.  C'est certainement l'étape la plus longue.
+  - Finalement, le code binaire étant généré, il ne reste qu'à installer le logiciel ou la bibliothèque. \\
+On appelle le programme 
+<code bash>
+sudo checkinstall
+</code>
+(qui nécessite [[:sudo|les droits du super-utilisateur]]), qui surveille son installation et génère, à la fin, un paquet « .deb ».
+
+<note important>Le paquet obtenu lors de l'utilisation de ''checkinstall'' n'est absolument pas destiné à être diffusé. 
+Son rôle est simplement de vous permettre de désinstaller plus proprement le logiciel ultérieurement et par l'intermédiaire du gestionnaire de paquets.</note>
+
+
+
+===== Problèmes =====
+
+==== Retrouver les bibliothèques manquantes ====
+
+=== Les dépendances du paquet ===
+
+Tout paquet Debian/Ubuntu qui se respecte liste toutes les dépendances qui lui sont nécessaires tant à l'exécution comme à la compilation. La manière la plus simple de télécharger les dépendances est d'utiliser apt-get avec l'option build-dep, ainsi la commande :
+
+<code bash>
+sudo apt-get build-dep epdfview
+</code>
+
+Va s'occuper de télécharger toutes les dépendances nécessaires à la compilation du projet. Bien sûr cette technique ne fonctionne que si le paquet existe déjà .
+
+=== Les erreurs de « configure » ===
+
+Si les dépendances ne sont pas installées, l'étape de configuration 
+
+<code bash>
+./configure
+</code>
+ n'ira pas jusqu'au bout et vous donnera un message d'erreur indiquant ce qui manque.
+Prenons l'exemple de la dépendance manquante « gtk+-2.0 ».
+On nous indique alors :
+
+   No package 'gtk+-2.0' found
+
+On sait que l'on cherche un paquet « -dev ». Donc on va utiliser la commande :
+
+   apt-cache search --names-only gtk dev
+
+L'option « --names-only » permet de faire abstraction des descriptions des paquets pour la recherche.
+
+Il y a beaucoup de résultat pour pouvoir choisir le bon paquet.
+Mais on sait que l'on recherche une dépendance bibliothèque, donc on va réduire le nombre de résultats avec :
+
+   apt-cache search --names-only libgtk dev
+
+Enfin, dernier indice, c'est que c'est GTK 2 que l'on recherche. Donc, on lance la recherche avec :
+
+   apt-cache search --names-only libgtk2 dev
+
+Ce qui nous donne le résultat :
+
+  libgtk2.0-dev - Development files for the GTK+ library
+
+Le paquet manquant était : **libgtk2.0-dev**.
+[[:tutoriel:comment_installer_un_paquet|On installe donc ce paquet]] (avec [[:Aptitude]] de préférence, pour pouvoir le supprimer intégralement ensuite, apt-get ne supprimant pas toutes les dépendances installées).
+
+
+
+
+===== Informations =====
+
+
+==== Les bibliothèques ====
+
+Les fichiers appelés par les programmes en C sont des parties de bibliothèques (traduction de « library »). Les bibliothèques sont des ensembles de fonctions (des mini-programmes qui effectuent une tâche précise, par exemple réunir deux mots en un seul, afficher une image, réagir lorsqu'on clique...) qui n'ont pas besoin d'être réécrites à chaque fois que quelqu'un veut développer un logiciel. Par exemple, les bibliothèques GTK et Qt dépendent toutes deux de « libpng », qui sert à manipuler des images « .png » (pour un résultat totalement différent).
+
+Chez Ubuntu (comme sur toutes les distributions basées sur Debian), les bibliothèques sont distribuées dans plusieurs paquets (deux au minimum). Prenons l'exemple de « libfltk ». Elle est installée dans « libfltk1.1 » et dans « libfltk1.1-dev » (« libfltk1.1 » et « libfltk1.1-dev » étant les noms des paquets, installables //via// [[:APT]]).
+La bibliothèque « libfltk1.1 » contient les fichiers nécessaires à **l'exécution** d'un programme se servant de cette bibliothèque ([[http://packages.ubuntu.com/cgi-bin/search_contents.pl?searchmode=filelist&word=libfltk1.1&version=dapper&arch=i386|voir ce paquet]]), c'est-à-dire des fichiers « .so.x.y » installés dans « /usr/lib ». 
+La bibliothèque « libfltk1.1-dev » contient les fichiers nécessaires à la **compilation** (les fameux fichiers « .h » que l'on a évoqué tout à l'heure ([[http://packages.ubuntu.com/cgi-bin/search_contents.pl?searchmode=filelist&word=libfltk1.1-dev&version=dapper&arch=i38|voir ce paquet]]).
+
+Pour chaque bibliothèque existante dans Ubuntu, il existe un paquet dont le nom finit par « -dev », qu'il est nécessaire d'installer pour compiler les logiciels qui dépendent de cette bibliothèque.
+
+
+
+==== Les « autotools » ====
+
+En fait, des //autotools// créent le fichier « configure » des sources. Le fichier « configure » est un script exécutable, qui est dans votre dossier source il nécessite d'être exécuté avec « ./ ».
+
+''make'' est une commande, installée dans « /usr/bin ». Il suffit donc de taper son nom pour l'exécuter.
+''make'' utilise le Makefile (qui lui est dans votre dossier source).
+« configure » crée le Makefile à partir d'un Makefile.in (que vous avez dans les sources). Tout ça est créé à partir d'un fichier assez simple qu'écrit le développeur.
+Les //autotools//  - ou "outils de gestion automatisée" - forment un ensemble de scripts qui permettent la gestion des procédures de configuration, compilation et installation très complexes à partir de quelques fichiers - relativement - simples.
+
+
+
+==== Quelques commandes ====
+
+=== make ===
+
+« make » peut être suivi d'un mot clé comme « install », « uninstall », « clean », « distclean ». Ça permet d'appeler une fonction particulière du Makefile :
+  * « make install » permet d'installer le programme ;
+  * « make uninstall » permet de tout désinstaller ;
+  * « make clean » supprime tout ce qui a été créé pendant la compilation ;
+  * « make distclean » supprime aussi ce que « configure » a généré.
+
+=== apt-file ===
+
+[[:apt#Apt-file]] est une application qui recherche des fichiers présents à l'intérieur de paquets, même si ceux-ci ne sont pas installés. C'est donc très pratique pour trouver des dépendances.
+Pour l'installer, lancez la commande :
+
+  sudo apt-get install apt-file
+
+On l'initialise ensuite comme pour apt-get en tapant :
+
+  sudo apt-file update
+
+Dans notre exemple de tout à l'heure, on voulait trouver dans quel paquet se trouve la bibliothèque « libgthread », on tape alors :
+
+  apt-file search libgthread
+
+Le paquet recherché est donc soit « libglib2.0-dev » soit « libglib1.2-dev ».
+
+On peut préciser la recherche avec :
+
+  apt-file search libgthread-2.0
+
+Il se base sur le « sources.list ». 
+   The contents packages are fetched from the location(s) specified in /etc/apt/sources.list.
+
+==== Les options de configuration ====
+
+Si 
+Par exemple  « ''./configure --prefix=/usr'' » installera les fichiers dans « /usr/ » au lieu de « /usr/local » (utilisé par défaut). 
+Lancer « ''./configure --help'' » avant la compilation est toujours une bonne idée.
+
+
+
+===== Voir aussi =====
+
+  * Une [[tutoriel:creer_un_paquet#foire_aux_questions|foire aux questions]] est disponible.
+  * Discussion [[http://forum.ubuntu-fr.org/viewtopic.php?id=987|Désinstaller un programme compilé]] sur le forum ubuntu-fr
+
+----
+
+//Contributeurs : [[utilisateurs:Id2ndR]], [[utilisateurs:Ner0lph]], [[utilisateurs:Johndescs]].//

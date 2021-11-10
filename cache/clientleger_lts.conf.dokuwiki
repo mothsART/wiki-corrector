@@ -1,0 +1,113 @@
+
+{{tag>edubuntu ltsp serveur BROUILLON}}
+
+
+
+
+====== LTS.CONF ======
+
+
+Le fichier lts.conf est utilisé pour la configuration des paramètres des clients légers LTSP. 
+
+
+===== Localisation =====
+
+Pour les versions de LTSP inférieures à 5.0.39, il est situé dans chaque environnement $CHROOT/etc/lts.conf (par défaut $CHROOT=/opt/ltsp/i386).  Ce fichier, dans les versions 5.0.39 et plus, est envoyé en clair via tftp en UDP sur le réseau.
+
+Pour la version 5.0.39 et supérieur, le fichier se trouve dans le répertoire du TFTP lié à l'environnement /var/lib/tftpboot/ltsp/<arch> (par défaut <arch>=i386). Cette différence de localisation s'explique par le passage de NFS à NBD comme système de fichier monté sur les clients.
+
+Quel que soit son emplacement, ce fichier devra être protégé au niveau lecture pour éviter que n'importe quel utilisateur puisse lire les informations inscrites, surtout si vous utilisez les options d'ouverture automatique de ldm. 
+
+===== Exemple de fichier =====
+
+<code>
+################
+# Section défaut, elle est 
+# commune à tous les clients
+################
+[default]
+    SERVER=192.168.0.1
+    X_COLOR_DEPTH=16
+    LOCALDEV=True
+    SOUND=True
+    NBD_SWAP=True
+    SYSLOG_HOST=server
+    XKBLAYOUT=fr
+
+################
+#[ADRESSE MAC]: Paramètre spécifique par client
+################
+[00:11:25:84:CE:BA]
+    XSERVER = vesa
+    X_MOUSE_DEVICE=/dev/ttyS0
+    X_MOUSE_PROTOCOL=intellimouse
+
+###############
+# Partage d'une imprimante par un client léger
+# (utilisation du terminal F7 en shell à la place 
+# d'une session X, permettant les réglages)
+###############
+[00:11:25:93:CF:00]
+    PRINTER_0_DEVICE=/dev/usblp0
+    SCREEN_07=shell
+
+###############
+# Le client exécutera un script 
+#après l'ouverture de session
+###############
+[00:11:25:93:CF:02]
+    LDM_REMOTECMD=/usr/bin/myloginscript
+</code>
+
+===== Explication des options du lts.conf =====
+
+
+Le fichier se décompose en deux sections principales : une section commune à tous les clients légers [default] et une autre partie qui est la configuration qui sera utilisée pour chaque client individuellement. La deuxième section est facultative dans un environnement simple : avec des clients presque identiques seule la section [default] sera utile. Une option dans la section [default] peut être inversée dans la section d'une machine, exemple SOUND=True dans [default] active le son sur tous les clients, mais SOUND=False dans la section [00:11:25:93:CF:02] désactivera le son pour cette machine si nécessaire.
+
+==== Section [default] ====
+
+
+Nous n'allons pas détailler toutes les options possibles car beaucoup ne sont que rarement utilisées. Reportez vous au Manuel d'Edubuntu pour avoir l'ensemble.
+
+  * SERVER : cette option sert à spécifier l'adresse IP du serveur LTSP. Elle n'est pas obligatoire si le serveur TFTP est sur le serveur LTSP, mais si vous avez plusieurs serveurs vous devez spécifier quel sera le serveur LTSP utilisé par le client.
+
+  * SYSLOG_HOST : spécifie l'adresse IP du serveur pour enregistrer les logs des clients. Si c'est votre serveur LTSP qui est utilisé mettez la valeur à "server" sinon indiquez l'adresse IP de votre serveur Syslog.
+
+  * NBD_SWAP : cela permet d'activer ou non le swap par le réseau sur le serveur LTSP, les valeurs sont "True" pour l'activation, "False" pour la désactivation. L'utilisation du swap est recommandée car si votre client n'a pas assez de mémoire pour l'ensemble des processus, le système peut devenir instable.
+
+  * LOCALDEV : cette option va activer la détection des périphériques disques. Elle est nécessaire si vous voulez utiliser les clés USB sur vos clients. Les valeurs sont "True" pour l'activer et "False" pour l'inverse.
+
+  * SOUND : active ou non le son pour les clients, valeur "True" ou "False"
+
+  * XKBLAYOUT : configure le clavier pour les clients au niveau de la session graphique valeur; Pour les claviers azerty choisir fr ; attention pour les sessions types "shell" cette valeur n'est pas utilisée.
+
+  * X_COLOR_DEPTH : fixe la profondeur de couleur pour la configuration graphique des clients. Valeur : 8, 16, 24 ou 32. Attention à ne pas mettre une valeur trop élevée car cela provoque un écran noir au lancement de la session graphique. La valeur 16 est fréquemment un bon compromis par rapport au besoin des clients.
+
+  * XSERVER : cette option est utile pour fixer la valeur du serveur graphique à utiliser. Par défaut la configuration du serveur xorg sur les clients se passe automatiquement, il y a une détection de la carte vidéo et une configuration optimisée en fonction des paramètres comme X_COLOR_DEPTH dans le lts.conf. Mais il arrive que certaines cartes ne soient pas faciles à détecter donc, afin d'éviter un crash du serveur X, vous pouvez fixer la valeur, par exemple ati, vesa, .... Pour connaître toutes les valeurs reportez-vous au manuel d'Edubuntu paragraphe "X-Windows Parameters".
+
+  * SCREEN_02, ...,SCREEN_07 : cette option vous permet de spécifier quel type de session sur tel terminal (Ctrl-Alt-F1 à Ctrl-Alt-F7). Par défaut le terminal F7 est pour la session graphique. Vous pouvez modifier ces paramètres en fonction de vos besoins pour activer ou non un shell de débuggage ou désactiver la session graphique sur un poste qui par exemple vous sert de machine pour partager une imprimante. Les valeurs possibles sont shell, ldm, sdm, startx, telnet. Mais les plus utiles/utilisées sont ldm et shell.
+<note tip>Dans le cas classique si vous faites des tests ou du dépannage fixez SCREEN_02=shell et SCREEN_07=ldm. Attention à ne pas oublier de fixer ldm sinon vous n'aurez que le shell. Ainsi vous aurez un shell "root" sur le client pour pouvoir analyser les problèmes éventuels. Attention par defaut le clavier sera en qwerty car les locales de root sont en "POSIX", pour passer en fr utilisez la commande "loadkeys fr".</note>
+
+  * PRINTER_0_DEVICE : permet d'activer une imprimante branchée sur un client léger et de la partager avec les autres clients via le serveur CUPS du serveur.
+
+    * X_MODE_0 = 800x600 permet de choisir la résolution
+
+
+
+==== Options spécifiques LDM ====
+
+Si vous n'utilisez pas ldm pour le client les options suivantes ne seront pas actives.
+
+  * LDM_AUTOLOGIN=True : connecte automatiquement l'utilisateur décrit par les options LDM_USERNAME et LDM_PASSWORD. Attention, ce fichier est transmis en clair sur le réseau et il peut être impossible de déconnecter un tel compte...
+
+  * LDM_USERNAME : spécifie le nom d'utilisateur que le client devra utiliser pour une ouverture de session automatique. Le nom doit être un compte réel du serveur.
+
+  * LDM_PASSWORD : spécifie le mot de passe à utiliser pour l'ouverture automatique de session. Il faut le taper en clair et il doit être associé avec le nom utilisé pour LDM_USERNAME.
+
+  * LDM_ALLOW_GUEST=True : fait apparaitre un bouton "Login as Guest" sur l'écran de connection. Cliquer sur ce bouton connecte l'utilisateur décrit par les options LDM_USERNAME et LDM_PASSWORD.
+
+  * LDM_LANGUAGE : permet de fixer les locales de l'utilisateur connecté automatiquement avec les options ci-dessus.
+
+  * LDM_DIRECTX : quand on utilise ldm comme "Display Manager" les sessions sont cryptés via un tunnel ssh entre le serveur et le client. Le problème est que cela demande beaucoup de ressource donc en utilisant cette option vous limitez le cryptage à l'ouverture où le mot de passe sont transmis et le reste de la session ne sera pas crypté. L'utilisation dépendra de la sécurité de votre réseau.
+
+  * LDM_REMOTECMD : cette option permet de lancer un script après l'ouverture de session sur le client léger.

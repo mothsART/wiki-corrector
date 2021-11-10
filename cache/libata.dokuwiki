@@ -1,0 +1,80 @@
+
+{{tag>brouillon kernel}}
+
+----
+
+====== libATA ======
+
+La libATA est une bibliothèque pour le [[:kernel|noyau]] [[:linux]] introduite lors de la version 2.6.18. Elle est censée permettre de gérer tous les transferts [[http://fr.wikipedia.org/wiki/Advanced_Technology_Attachment|ATA]] et [[http://fr.wikipedia.org/wiki/ATAPI|ATAPI]] //via// le sous-système [[http://fr.wikipedia.org/wiki/SCSI|SCSI]].
+
+C'est « grâce » à elle que vos partitions apparaissent sous la forme **/dev/sdX** au lieu de **/dev/hdX** depuis qu'Ubuntu a fait le choix d'utiliser les modules liés à cette bibliothèque par défaut. C'est aussi à cause d'elle que vous rencontrez peut-être des performances catastrophiques, des problèmes de prise en charge du [[http://fr.wikipedia.org/wiki/Accès_direct_à_la_mémoire|DMA]], ou autre option traditionnellement activée par [[hdparm]].
+
+Cette page a pour but de recenser quelques solutions face aux problèmes que peuvent engendrer l'utilisation de cette bibliothèque.
+
+===== Diagnostic =====
+
+==== Faux problème ====
+
+Vous avez décidé d'activer le DMA et la prise en charge de l'I/O 32bits (ou tout autre option) sur votre disque dur (ou votre graveur DVD), en utilisant la commande [[hdparm]]. Et là, c'est le drame :
+<code>sudo hdparm -d1 -c1 /dev/sda</code>
+<file>
+/dev/sda:
+setting 32-bit IO_support flag to 1
+HDIO_SET_32BIT failed: Invalid argument
+IO_support = 0 (default) (16-bit)
+HDIO_GET_DMA failed: Inappropriate ioctl for device
+</file>
+
+Pas d'inquiétude : la libATA active par défaut le DMA sur tous les périphériques compatibles. La prise en charge de l'I/O 32bits n'est pour l'instant disponible que sur un nombre limité de périphériques, et ce n'est pas la priorité des développeurs de la libATA, car les situations où le besoin s'en fait sentir sont relativement rares. Lorsque c'est possible, cette option est également activée par défaut.
+
+==== Vrai problème ====
+
+Si votre disque est lent, si la lecture d'un DVD est saccadée, s'il vous faut plusieurs heures pour graver quelques centaines de Mo, alors vous avez peut-être réellement un problème avec la libATA. Commencez par effectuer le test suivant sur le périphérique problématique (dans cet exemple, /dev/sda) :
+<code>sudo hdparm -T /dev/sda</code>
+
+Si le résultat est de plusieurs centaines de Mo par seconde, votre problème est ailleurs. En revanche, si le résultat donne quelques Mo voire des centaines de ko par seconde, alors votre problème vient vraisemblablement de la libATA : votre matériel n'est pas (encore) correctement pris en charge. C'est en particulier vrai pour les cartes mères Intel fonctionnant en mode « combiné ».
+
+===== Solutions =====
+
+Il existe plusieurs solutions préconisées. Elles sont présentées ici par ordre (supposé) de préférence de la part des développeurs de la libATA. Si l'une d'elle ne fonctionne pas, passez à la suivante.
+
+Elles sont surtout valables pour les cartes mères Intel proposant le mode « combiné », qui permet aux modes [[http://fr.wikipedia.org/wiki/PATA_(informatique)|PATA]] (comprendre [[http://fr.wikipedia.org/wiki/Integrated_drive_electronics|IDE]]) et [[http://fr.wikipedia.org/wiki/SATA|SATA]] de fonctionner comme une seule fonction [[http://fr.wikipedia.org/wiki/Peripheral_Component_Interconnect|PCI]], mais entre en conflit avec la libATA, les pilotes IDE et la libATA essayant de gérer le même matériel. Le principe est donc de n'utiliser soit QUE la libATA, soit QUE les pilotes IDE.
+
+<note important>Si vous choisissez une solution qui utilise les pilotes IDE, vos disques vont redevenir du type /dev/hdX. N'oubliez pas de modifier les fichiers /etc/fstab en conséquence ! Le label de la [[:swap]] va également changer.</note>
+
+==== Dans le BIOS ====
+
+Modifiez dans votre BIOS l'option **mode IDE** de **legacy** ou **combined** en **AHCI**, **RAID** ou **native**.
+
+==== Dans Grub ====
+
+Essayez de démarrer [[Grub]] en ajoutant à la ligne **kernel** le paramètre **combined_mode=libata** ou le paramètre **combined_mode=ide**, afin de permettre à l'un ou l'autre des pilotes libata/ide de prendre en charge tous les ports IDE.
+
+
+==== Désactiver libATA ====
+
+=== Par les modules ===
+
+Désactiver les modules liés à la libATA. Dans le fichier **/etc/modprobe.d/blacklist**, ajouter les lines suivantes (toutes ne sont pas forcément nécessaires, vous pouvez faire des tests si vous le souhaitez) :
+<file>
+blacklist pata_atiixp
+blacklist pata_acpi
+blacklist sg
+blacklist sr_mod
+blacklist sd_mod
+</file>
+
+=== Par le noyau ===
+
+Vous pouvez également [[:kernel|recompiler le noyau]] en désactivant complètement la libATA (CONFIG_ATA) et en activant CONFIG_BLK_DEV_IDE_SATA.
+
+=== Alternative par le noyau ===
+
+Alternativement, vous pouvez désactiver complètement CONFIG_IDE, et autoriser la libATA à diriger tous vos ports IDE et SATA.
+
+
+
+===== Liens =====
+
+  * (en) [[http://linux-ata.org/faq.html|Site officiel]]
+  * (en) [[http://ata.wiki.kernel.org|Wiki libATA]]

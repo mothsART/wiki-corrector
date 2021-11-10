@@ -1,0 +1,328 @@
+
+{{tag>tutoriel matériel wifi}}
+
+----
+
+====== Philips MCW770 & TwonkyMediaServer sur Debian/Ubuntu ======
+
+La mini chaîne hifi MCW770 de Philips permet une lecture via [[:wifi]] de vos titres présents sur votre ordinateur, au moyen d'un bouchon (//dongle//) fourni. La suite logicielle (pilote+media manager) fournie par Philips est destinée à Windows XP et son gestionnaire de média PMM qui n'est pas des plus performants.
+
+Cette page a pour but d'expliquer la démarche globale permettant de faire fonctionner la mini chaîne Philips MCW770 avec un serveur Twonky, le tout sur une unité centrale aux performances limitées. 
+
+Le serveur ainsi créé a été testé sur un vieux Dell Optiplex G1 166 MHz/256 Mio SDRAM avec une distribution Debian Testing ([[wpfr>Debian#Versions_6.x|Squeeze]]).
+
+===== Pré-requis matériels =====
+Munissez vous d'un PC sur lequel est installé Windows XP, vous en aurez besoin par la suite pour configurer la partie chaîne haute fidélité à l'aide des applications livrées sur le CD Philips.
+
+<note important>Les applications du CD Philips ne semblent pas fonctionner sous Vista/Seven, d'où l'importance du XP...</note>
+
+Si vous désirez installer cette configuration sur votre PC de bureau déjà équipé d'une Debian/Ubuntu, passez directement à la 3e partie.
+
+Sinon, avant de vous lancer dans les installations, vérifiez le branchement correct de vos disques durs, lecteurs externes, clavier, souris (pour éviter les blocages éventuels au démarrage) et écran (à moins que vous n'utilisiez une méthode de [[:netboot#configurer_les_fichiers_preseed_et_pxelinuxcfg_necessaire_au_demarrage_reseau|"preseed"]] à l'installation).
+
+<note>Dans toute la page, "debian-ms" désignera le serveur de musique, alors que "debhub" désignera le PC y accédant via ''ssh''</note>
+
+===== Installation du système de base =====
+
+==== Récupération et installation de Debian/Ubuntu ====
+
+Partant du principe que vous allez dédier une vieille unité centrale à la tâche de gestionnaire de média, il vous faut télécharger une distribution à installer.
+
+Pour Debian, rendez-vous directement sur la plate-forme de téléchargement à [[http://www.debian.org/CD/|cette adresse]]. Pour Ubuntu, rendez-vous à [[http://www.ubuntu-fr.org/telechargement|cette adresse]].
+
+Selon le support que vous choisirez, vous pourrez graver cette image ISO (ne prenez que le CD1) sur un CD, ou la mettre sur une clé USB...(au moyen de [[:unetbootin|UnetBootIn]] par exemple). À l'installation, répondez aux questions et installez uniquement une version de base, sans interface graphique. Une fois l'installation terminée, redémarrez votre ordinateur pour finaliser.
+
+==== Gestion des dépôts ====
+
+Si vous désirez connecter votre serveur à Internet afin de lui faire quelques mises à jour régulièrement, un petit tour dans ''/etc/apt/sources.list'' s'impose, afin d'y ajouter les dépôts de votre choix.
+  debian-ms:~#vi /etc/apt/sources.list
+Pour Ubuntu, vous pouvez vous référer à [[:depots#listes_de_depots|cette page]]. Sinon un petit tour par Google vous les donnera tout autant...
+
+==== Montage des différents disques ====
+Si vous possédez plusieurs disques durs dans votre serveur, il va vous falloir modifier le fichier ''/etc/fstab'' afin qu'ils soient montés automatiquement au démarrage.
+
+Par exemple, vous pouvez installer Debian/Ubuntu sur un petit disque dur de quelques Go et stocker vos musiques et autres données sur un plus gros disque dur de plusieurs dizaines/centaines de Go (attention tout de même, certains vieux PC ne reconnaîtront pas forcément toutes leurs capacités, voire pas du tout).
+
+Pour ceci :
+  debian-ms:~#vi /etc/fstab
+Allez faire un tour à [[:mount_fstab|cette adresse]] si vous ne savez pas comment faire.
+
+===== Ajout des applications nécessaires =====
+Nous avons maintenant un système fonctionnel de base. Nous allons procéder à l'installation des différents éléments propres à notre serveur de musique.
+
+==== Installation des pilotes du bouchon wifi ====
+Le bouchon wifi fourni avec la mini chaîne est un Zydas ZD1201.
+<note important>Le ZD1201 ne supporte pas le WPA/WPA2...pour le connecter à Internet, il vous faudra passer par une connexion non sécurisée ou utilisant le chiffrement WEP</note> Selon la disponibilité ou non d'une carte réseau filaire connectée sur votre machine, vous pouvez l'installer directement ou au moyen d'une clé USB. Avant toute chose, débranchez le bouchon du serveur.
+
+=== Via clé USB ===
+À l'aide d'un PC connecté à Internet, téléchargez le micrologiciel à cette [[http://sourceforge.net/projects/linux-lc100020/files/%28NEW%29%20zd1201%20driver/zd1201-0.14-fw.tar.gz/download|adresse]], décompressez-le et mettez-le sur votre clé USB. Branchez votre clé USB sur votre serveur.
+
+À l'aide de la commande :
+  debian-ms:~#fdisk -l
+regardez où se trouve votre clé, et montez-la :
+  debian-ms:~#mkdir /media/usbkey
+  debian-ms:~#mount /dev/sda1 /media/usbkey  \\ (si votre clé se trouve en /dev/sda1)
+Copiez le micrologiciel :
+  debian-ms:~#cp -v /media/usbkey/*.fw /lib/firmware
+Installez le paquet ''wireless-tools'' (il se trouve sur l'ISO) :
+  debian-ms:~#apt-get update
+  debian-ms:~#apt-get install wireless-tools
+Connectez le bouchon au serveur. Le module devrait se charger tout seul. Vous pouvez cependant le charger manuellement à l'aide de :
+  debian-ms:~#modprobe zd1201
+Vérifiez que votre bouchon est reconnu (''wlan0'' chez moi) :
+  debian-ms:~#ifconfig
+
+=== Via Ethernet ===
+Si votre machine a une carte Ethernet reconnue, branchez le câble RJ45 et activez l'interface :
+  debian-ms:~#ifconfig eth0 up  \\ (si votre carte est reconnue en eth0)
+Si votre réseau utilise DHCP: (sinon allez configurer votre interface dans ''/etc/network/interfaces'')
+  debian-ms:~#dhclient eth0
+Récupérez le micrologiciel :
+  debian-ms:~#wget 'http://sourceforge.net/projects/linux-lc100020/files/%28NEW%29%20zd1201%20driver/zd1201-0.14-fw.tar.gz/download'
+Décompressez-le et copiez-le :
+  debian-ms:~#tar xvf zd1201-0.14-fw.tar.gz
+  debian-ms:~#cp -v zd1201-0.14-fw/*.fw /lib/firmware
+Installez le paquet ''wireless-tools'' (il se trouve sur l'ISO) :
+  debian-ms:~#apt-get update
+  debian-ms:~#apt-get install wireless-tools
+Connectez le bouchon au serveur. Le module devrait se charger tout seul. Vous pouvez cependant le charger manuellement à l'aide de :
+  debian-ms:~#modprobe zd1201
+Vérifiez que votre bouchon est reconnu (''wlan0'' chez moi) :
+  debian-ms:~#ifconfig
+
+==== Mise en place d'un serveur ssh ====
+Si votre machine dispose d'une carte Ethernet et que dorénavant vous voulez la gérer à partir d'un autre PC, vous pouvez passer par ''ssh''. Cela vous permettra d'enlever l'écran que vous avez éventuellement utilisé pour effectuer les étapes précédentes.
+
+Pour ce faire, installez ''openssh-server'' sur votre machine (il peut être necessaire de rajouter des dépôts dans ''/etc/apt/sources.list'') :
+  debian-ms:~#apt-get install openssh-server
+J'ai choisi de mettre mes connexions en IP fixe, ce qui me donne cette configuration sur la machine (à modifier selon votre convenance) :
+  debian-ms:~#vi /etc/network/interfaces
+
+  #/etc/network/interfaces
+  
+  auto l0
+  iface lo inet loopback
+  
+  auto eth0
+  iface eth0 inet static
+  address 192.168.3.56   \\IP de eth0 sur le serveur
+  netmask 255.255.255.0
+  network 192.168.3.0
+  broadcast 192.168.3.255
+  gateway 192.168.3.55   \\IP de la passerelle = du pc qui gèrera le serveur
+Voilà qui est fait côté machine, si tout se passe bien vous n'aurez plus besoin de votre écran à partir de maintenant. Paramétrez la carte réseau filaire du « PC maître » de manière réciproque à celle du serveur. Puis accédez à votre serveur via ''ssh'' par :
+  debhub:~#ssh root@192.168.3.56   \\si vous voulez être sous la session 'root' du serveur
+  OU
+  debhub:~#ssh <user>@192.168.3.56   \\si vous voulez être sous la session de l'utilisateur <user>
+À tout moment, vous pourrez mettre fin à la connexion ''ssh'' par la commande :
+  debhub:~#logout
+Par la suite, quand le serveur de musique sera paramétré, vous pourrez y ajouter vos musiques via ''ssh'' par la commande ''scp''. Pour plus d'infos sur les possibilités offertes par ''scp'', [[http://cc.in2p3.fr/docenligne/134|rendez-vous ici]].
+
+==== Paramétrage d'une autoconnexion ====
+Si vous voulez sauter l'étape de la saisie du mot de passe ''root'' (déconseillé) ou utilisateur au démarrage du serveur, vous pouvez suivre la procédure suivante :
+
+Installez ''mingetty'' :
+  debian-ms:~#apt-get install mingetty
+Modifiez le fichier ''/etc/inittab'' avec ''vi'', ''vim'' ou ''nano'' selon ce que vous avez installé sur votre serveur :
+  debian-ms:~#vi /etc/inittab
+Cherchez la ligne :
+  1:2345:respawn:/sbin/getty 38400 tty1
+et remplacez-la par :
+  1:2345:respawn:/sbin/mingetty --autologin <username> --noclear tty1
+où <username> est l'utilisateur (ou ''root'', mais déconseillé !) à autoconnecter.
+
+Redémarrez le serveur pour appliquer les changements :
+  debian-ms:~#reboot
+
+==== Configuration de la connexion ====
+Maintenant que le système de base est installé sur le serveur et que les interfaces sont reconnues, il convient de mettre en place la connexion serveur-chaîne haute fidélité.
+
+=== Partie chaîne haute fidélité ===
+Pour cette partie, vous allez devoir vous munir du CD Philips fourni avec la chaîne haute fidélité. Insérez-le dans un PC muni de Windows XP.
+
+Au lancement, il vous demande votre langue puis vous affiche un menu.
+
+Allez dans la partie « Installation personnalisée ».
+
+Suivez les instructions d'installation du pilote du bouchon. (Débranchez-le au préalable, si toutefois il était connecté) Une fois ceci fait, retournez dans le menu d'installation personnalisée et lancez la configuration du réseau.
+
+Cochez en bas la case « Ne pas effectuer la configuration automatique ». Il vous demande d'appuyer pendant cinq secondes sur le bouton PCLINK de la chaîne...Faites-le.
+
+Modifiez le profil « STANDARD » qui apparaît sur la droite de l'écran. Mettez-y les paramètres de votre choix (prenez soin de les noter quelque part, ils nous seront nécessaires par la suite). Validez afin de terminer la configuration de la chaîne.
+
+Vous pouvez maintenant désinstaller l'application qui a été installée sur votre Windows XP auparavant, en passant par « Panneau de configuration -> Ajout/Suppression de programmes » (''IEEE802.11bWLANUtility''...)
+
+=== Partie serveur ===
+La configuration de votre serveur dépend de ce que vous avez spécifié à la chaîne à l'étape précédente, et s'effectuera pour votre serveur dans ''/etc/network/interfaces''. Pour accéder au serveur par ''ssh'' via votre « PC maître » :
+  debhub:~#ssh root@192.168.3.56
+Si vous avez toujours votre écran branché au serveur, vous pouvez directement taper en console. Ma configuration est la suivante :
+<note>Chaîne hifi : \\ ESSID : MCW770 \\ IP : 192.168.4.4 \\ Channel : 1 \\ Mode : Ad-Hoc \\ Enc. : WEP \\ Key : 123456789A</note>
+Ce qui va me donner dans ''/etc/network/interfaces'' du serveur :
+  debian-ms:~#vim /etc/network/interfaces
+
+  #/etc/network/interfaces
+  
+  auto lo
+  iface lo inet loopback
+  
+  #Ethernet pour connexion ssh
+  auto eth0
+  address 192.168.3.56
+  netmask 255.255.255.0
+  network 192.168.3.0
+  broadcast 192.168.3.255
+  gateway 192.168.3.55
+  
+  #Dongle wifi pour MCW770
+  auto wlan0
+  iface wlan0 inet static
+  address 192.168.4.3
+  netmask 255.255.255.0
+  network 192.168.4.0
+  broadcast 192.168.4.255
+  gateway 192.168.4.4
+  wireless-essid MCW770
+  wireless-key 123456789A
+  wireless-mode ad-hoc
+  wireless-channel 1
+
+Par la suite, il pourra vous être utile de vous créer un script du genre :
+  #!/bin/sh
+  ifconfig wlan0 down
+  ifconfig wlan0 192.168.4.3 netmask 255.255.255.0 broadcast 192.168.4.255 up
+  iwconfig wlan0 essid MCW770 key 123456789A mode ad-hoc channel 1
+pour les éventuelles pertes de connexion quand vous travaillez avec ''ssh'' sur votre serveur (J'en ai assez souvent...Bizarrement. Problème d'utilisation des deux interfaces en même temps ?).
+
+==== TwonkyMediaServer ====
+Maintenant que nous avons une machine en état de fonctionner et de se connecter à la chaîne haute fidélité, il nous reste à installer le serveur média à proprement parler. Nous utiliserons ici TwonkyMediaServer. La version disponible est une version d'essai de 30 jours, période au-delà de laquelle il vous faudra vous enregistrer. Vous pouvez soit récupérer un ''.zip'' (ce qui est détaillé ci-dessous), ou vous procurer une version en ''.sh'', qu'il suffit d'éxécuter pour procéder à une installation automatique.
+
+=== Installation ===
+Aller sur le site [[http://twonky.com/downloads/|twonky]] et récupérer la dernière version pour Linux, en ''.zip''. Vous pouvez aussi passer par votre console :
+
+  debian-ms:~#wget http://www.twonkyvision.com/downloads/twonkymedia-i386-glibc-2.2.5-full-5.0.61-20090403.zip   \\pour une architecture i386
+  debian-ms:~#apt-get install unzip   \\est nécessaire pour décompresser l'archive .zip
+
+Créez le dossier d'installation (pour les versions en ''.sh'', ''/usr/local/twonkyvision'' est le répertoire par défaut) :
+
+  debian-ms:~#mkdir /usr/local/twonkyvision
+
+et décompressez dedans :
+
+  debian-ms:~#cp twonkymedia-i386-glibc-2.2.5-full-5.0.61-20090403.zip /usr/local/twonkyvision/
+  debian-ms:~#unzip twonkymedia-i386-glibc-2.2.5-full-5.0.61-20090403.zip
+
+Vous vous retrouvez maintenant avec un serveur twonky sur votre machine.
+
+=== Paramétrage ===
+
+== Lancement auto au démarrage du PC ==
+
+Normalement, votre serveur twonky devrait se lancer automatiquement au démarrage grâce au script ''twonkymedia.sh'' placé dans ''/etc/init.d''. Cependant, ne se lançant pas chez moi, j'ai modifié ce fichier et dû modifier la ligne « WORKDIR1 »...Pour ce faire, modifiez le fichier :
+  debian-ms:~#vim /etc/init.d/twonkymedia.sh
+Cherchez la ligne « WORKDIR1 » (qui devrait ressembler à ceci) :
+  WORKDIR1="/usr/local/twonkymedia"
+  WORKDIR2="'dirname $0'"
+  PIDFILE=/var/run/mediaserver.pid
+Si comme dans cet extrait la variable « WORKDIR1 » ne contient pas le dossier où est installé votre serveur twonky (''/usr/local/twonkyvision'' chez moi), modifiez cette ligne pour le faire apparaître :
+  WORKDIR14="/usr/local/twonkyvision"
+
+== Configuration ==
+Tous les fichiers de configuration de votre serveur twonky se trouvent dans ''/var/twonkymedia/''. Pour configurer votre serveur comme bon vous semble, allez dans ce dossier et modifiez le fichier ''twonkymedia-server.ini'' :
+  debian-ms:~#cd /var/twonkymedia
+  debian-ms:~#vim twonkymedia-server.ini
+Vous allez alors avoir accès à de nombreuses options paramétrables...Vous pouvez laisser la grande majorité d'entre elles à leur valeur par défaut. Je vais donc ici vous détailler celles qui peuvent réellement vous servir.
+
+Pour régler la profondeur de recherche dans l'arbre de votre banque de données, modifiez la valeur de « autotree » (par défaut : 3)
+  #autotree
+  autotree=3
+
+Pour modifier la taille du cache utilisé par twonky, modifiez la variable « cachemaxsize » (vide par défaut, fonctionne très bien par défaut) :
+  #cachemaxsize
+  cachemaxsize=
+
+Pour entrer votre clé d'enregistrement de votre produit twonky, modifiez la variable « cdkey » :
+  # Registration key
+  cdkey=votre_cle_twonky
+
+Pour spécifier le dossier où se trouvent vos titres modifiez la variable « contentdir » :
+  # Content Locations
+  contentdir=+M|/media/dbase/
+Le « +M » précise que le dossier contient de la musique. Le dossier est comme vous pouvez le voir sur ''/media/dbase'' chez moi, à modifier selon votre emplacement.
+
+Pour modifier le nom du serveur qui va apparaître sur votre chaine haute fidélité, changez la variable « friendlyname » :
+  # Server name
+  friendlyname=MUSIC--DBASE
+Pour indiquer à votre serveur l'IP qui lui est attribuée, modifiez la variable « ip » :
+  # ip
+  ip=192.168.4.3
+
+Si vous voulez que le serveur balaie régullièrement votre base de donnée de manière automatique, modifiez la variable « scantime » (par défaut : 0, c.-à-d. ne balaie jamais de manière automatique) :
+  # Rescan in minutes
+  scantime=0
+
+Bien d'autres options vous sont proposées, vous pouvez détailler leur utilisation dans ce tutoriel...
+
+=== Commandes utiles ===
+Le serveur twonkymedia, une fois installé, vous offre quelques commandes et fonctions utiles à sa gestion et son entretien. Partant du principe que twonky est installé dans ''/usr/local/twonkyvision/'' et que l'IP de votre serveur est 192.168.4.3, vous avez à votre disposition :
+
+Démarrage du serveur twonky :
+  debian-ms:~#sh /usr/local/twonkyvision/twonkymedia start
+Arrêt du serveur twonky :
+  debian-ms:~#sh /usr/local/twonkyvision/twonkymedia stop
+Redémarrage du serveur twonky :
+  debian-ms:~#sh /usr/local/twonkyvision/twonkymedia restart
+Rechargement du serveur twonky :
+  debian-ms:~#sh /usr/local/twonkyvision/twonkymedia reload
+
+En ce qui concerne la banque de données de vos titres...
+
+Rebalayage :
+  debian-ms:~#wget http://192.168.4.3:9000/rpc/rescan
+
+Reconstruction de la banque de données :
+  debian-ms:~#wget http://192.168.4.3:9000/rpc/rebuild
+
+Si vous gérez votre serveur en console, il peut vous être utile de garder toutes ces commandes dans un/des script(s), afin d'éviter de tout retaper à chaque fois...Quelques-uns sont proposés en bas de ce tutoriel, à reprendre tels quels ou à modifier selon votre configuration ou votre convenance (Vous pouvez modifier les scripts de cette page, notamment en ce qui concerne leur écriture ou leur optimisation).
+===== Autres petites améliorations =====
+Vous trouverez dans cette partie quelques petits ajouts afin d'optimiser un peu votre installation et de vous faciliter la tâche dans sa gestion. Toute autre suggestion est la bienvenue, n'hésitez pas à modifier...
+
+==== Réduction du temps d'attente du menu GRUB au démarrage ====
+Si GRUB est installé sur votre machine, par défaut il va afficher le menu de sélection au démarrage et attendre un certain temps avant de lancer le serveur sur la sélection par défaut. Si vous voulez réduire ce temps d'attente, ouvrez le fichier de configuration de GRUB :
+  debian-ms:~#vi /boot/grub/menu.lst
+Cherchez la ligne :
+  ##timeout sec
+  #Set a timeout, in SEC seconds, before automatically booting the default entry
+  #(normally the first entry defined)
+  timeout      5
+et remplacez le « 5 » de l'exemple par le temps d'attente en secondes que vous désirez.
+
+Ceci n'est qu'une des nombreuses options paramétrables de GRUB, vous pouvez modifier d'autres lignes de ce fichier afin que le démarrage se fasse conformément à ce que vous recherchez.
+
+==== Scripts utiles... ====
+Vous pouvez créer votre propre script ''.sh'' qui vous affiche un menu avec les différentes commandes du serveur (cf. section plus haut) afin de vous en faciliter la gestion.
+
+Dans le genre :
+  #!/bin/sh
+  echo "GESTION DU SERVEUR DE MUSIQUE"
+  echo "*****************************"
+  echo "1.Statut du serveur de musique"
+  echo "2.Démarrage du TwonkyMediaServer"
+  echo "3.Arrêt du TwonkyMediaServer"
+  echo "4.Redémarrage du TwonkyMediaServer"
+  echo "5.Rebalayage de la banque de données"
+  echo "6.Reconstruction de la banque de données"
+  read act
+  case $act in
+    1)
+        /root/bin/twonky_status.sh;;
+    2)
+        /root/bin/twonky_up.sh;;
+    ...etc...
+  esac
+où les scripts ''twonky_status.sh'', ''twonky_up.sh'' ... sont des mini scripts contenant chacun une des commandes du serveur (explicitées plus haut dans ce tutoriel).
+
+Pensez dans vos scripts à (ré)initialiser la connexion lors d'un (re)démarrage du serveur Twonky (via par exemple ''ifconfig wlan0 down'' puis ''ifconfig wlan0 up'').
+
+De même, si votre boîte utilise le WEP, il vous est possible via script de changer la configuration de votre bouchon Wifi afin qu'il se connecte aux dépôts et mette à jour le serveur. Auquel cas, vous lui faites couper la connexion avec la chaîne haute fidélité, vous le faites se connecter à votre boîte et lui faites lancer dans le script la mise à jour via les commandes ''apt-get update'' puis ''apt-get upgrade''. Vérifiez auparavant que votre fichier ''/etc/sources.list'' est correctement configuré !
+
+À partir de là, tout est possible ! À votre tour de jouer ! ;)

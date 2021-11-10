@@ -1,0 +1,137 @@
+
+{{tag>serveur tutoriel bionic}}
+
+{{ :logo:apache-logo.png?80nolink| Logo du logiciel Apache 2}}
+
+====== Serveur LAMP - Créer un/des répertoires de travail ======
+
+
+Ce tutoriel décrit comment mettre en place un espace de travail pour le [[:web]], avec la mise en pratique de deux cas de figures : un espace public, consultable en [[:web#http_et_navigation|HTTP]] par les internautes et affichant une page web, et un espace privé, seulement visible depuis la machine ou le réseau local et listant les fichiers qui y sont présents.
+
+La mise en place de ces espaces de travail se fait grâce à la fonctionnalité d'[[:apache2#hotes_virtuels|hôte virtuel]] (//VirtualHost//) dont dispose le serveur HTTP [[:apache2|Apache]].
+
+===== Prérequis =====
+
+Afin de suivre ce tutoriel, il vous faut une pile [[:LAMP]] ou au moins [[:apache2|Apache]] installé sur une version récente d'Ubuntu.
+
+Vous pouvez donc au choix :
+  * suivre la [[:lamp#installation|méthode d'installation de LAMP]] (si vous avez besoin de [[:PHP]] et d'un serveur de bases de données)
+  * ou dans le cas contraire simplement installer le paquet [[apt>apache2]] (voir la [[:apache2#installation|documentation à ce sujet]])
+
+Il est aussi conseillé d'avoir quelques rudiments concernant la ligne de commande. Si ce n'est pas le cas mieux vaut commencer par essayer de vous former un minimum en consultant [[:tutoriel:console_ligne_de_commande|cette documentation]], en particulier les chapitres concernant les commandes ''ls'' ''cd'' ''mkdir'' ''mv'' ''cp'' et ''rm''.\\ 
+Il peut aussi être très utile de consulter la documentation de [[:nano]], qui est probablement l'éditeur de fichier en ligne de commande le plus simple à prendre en main. C'est celui que nous documenterons dans ce tutoriel.\\ 
+Vous pouvez également consulter la documentation concernant la commande [[:utilisateurs:roschan:sudo|sudo]] si elle ne vous est pas familière.
+
+===== Mise en place d'un espace public =====
+
+==== Création du répertoire de travail ====
+
+Pour ce cas de figure nous voulons qu'Apache affiche le contenu des fichiers que nous créerons dans le répertoire ''/var/www/public''.
+
+Nous allons donc commencer par créer ce répertoire. Par défaut le répertoire ''/var/www'' appartient à l'utilisateur //root// et les autres utilisateurs n'y ont pas accès en écriture. Il nous faut donc créer ce répertoire avec les [[:sudo|permissions super utilisateur]] ([[:utilisateurs:roschan:sudo|sudo]]) :
+<code>sudo mkdir /var/www/public</code>
+
+Dans la foulée nous allons modifier les [[:permissions]] de ce répertoire en suivant [[:apache2#permissions|cette documentation]], afin qu'Apache soit en mesure d'accéder au répertoire et que nous soyons en mesure d'y apporter des modifications :
+
+<code>sudo chown $USER:www-data /var/www/public
+chmod 750 /var/www/public</code>
+
+Pour l'exemple nous allons y créer un fichier ''index.html'' contenant le minimum nécessaire à l'affichage d'un message d'accueil :
+
+<code>nano /var/www/public/index.html</code>
+
+Ce qui ouvre l'éditeur [[:nano]] dans lequel nous allons coller :
+
+<file - index.html><html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Espace public</title>
+</head>
+<body>
+  <h1>Bienvenue sur notre espace public.</h1>
+</body>
+</html></file>
+
+Puis //Ctrl//+//O// pour sauvegarder et //Ctrl//+//X// pour quitter.
+
+==== Création de l'hôte virtuel ====
+
+Nous allons [[:apache2#creation_d_hotes_virtuels|configurer notre hôte virtuel]] dans un fichier dédié ''/etc/apache2/sites-available/public.conf'' :
+
+<code>sudo nano /etc/apache2/sites-available/public.conf</code>
+
+Ce qui ouvre l'éditeur [[:nano]] dans lequel nous allons coller :
+
+<file - public.conf><VirtualHost *:80>
+	DocumentRoot "/var/www/public"
+	<Directory "/var/www/public">
+		Options +FollowSymLinks
+		AllowOverride all
+		Require all granted
+	</Directory>
+	ErrorLog /var/log/apache2/error.public.log
+	CustomLog /var/log/apache2/access.public.log combined
+</VirtualHost></file>
+
+Puis //Ctrl//+//O// pour sauvegarder et //Ctrl//+//X// pour quitter.
+
+Il faut ensuite activer cet hôte :
+<code>sudo a2ensite public</code>
+
+Ce //VirtualHost// ne possède pas de directive ''ServerName'' ou ''ServerAlias''. Il sera donc utilisé par défaut pour les requêtes sur le port 80 si aucun autre //VirtualHost// ne correspond exactement au nom de domaine appelé. Pour qu'il soit pris en compte il faut par contre désactiver l'hôte virtuel par défaut d'Apache, qui arrive en priorité en suivant l'alphabet :
+<code>sudo a2dissite 000-default</code>
+
+Puis nous pouvons redémarrer Apache afin qu'il prenne en compte notre nouvelle configuration :
+<code>sudo systemctl restart apache2</code>
+
+La page d'accueil publique devrait alors être visible à l'adresse [[http://localhost/]] pour la machine locale, ou à l'adresse IP du serveur pour les autres machines.
+
+===== Mise en place d'un espace privé =====
+
+==== Création du répertoire de travail ====
+
+De la même manière nous allons créer un répertoire ''/var/www/private'' :
+<code>sudo mkdir /var/www/private</code>
+
+Puis modifier pareillement les [[:apache2#permissions]] :
+<code>sudo chown $USER:www-data /var/www/private
+chmod 750 /var/www/private</code>
+
+Pour cet exemple nous n'allons pas créer de fichier index, mais seulement un fichier ''test.txt'' :
+<code>touch /var/www/private/test.txt</code>
+
+==== Création de l'hôte virtuel ====
+
+Notre [[:apache2#creation_d_hotes_virtuels|hôte virtuel]] sera cette fois configuré dans le fichier ''/etc/apache2/sites-available/private.conf'' :
+
+<code>sudo nano /etc/apache2/sites-available/private.conf</code>
+
+Ce qui ouvre l'éditeur [[:nano]] dans lequel nous allons coller :
+
+<file - private.conf><VirtualHost *:80>
+	ServerName private.localhost
+	DocumentRoot "/var/www/private"
+	<Directory "/var/www/private">
+		Options +FollowSymLinks +Indexes
+		AllowOverride all
+		Require ip ::1 127.0.0.1 192.168
+	</Directory>
+	ErrorLog /var/log/apache2/error.private.log
+	CustomLog /var/log/apache2/access.private.log combined
+</VirtualHost></file>
+
+Puis //Ctrl//+//O// pour sauvegarder et //Ctrl//+//X// pour quitter.
+
+Il faut ensuite activer cet hôte et redémarrer Apache :
+<code>sudo a2ensite private.conf
+sudo systemctl restart apache2</code>
+
+  * L'option ''+Indexes'' permet le [[:apache2#index|listing des fichiers]].
+  * La directive //[[https://httpd.apache.org/docs/current/fr/mod/mod_authz_core.html#require|Require ip]]// ne permet l'utilisation de cet hôte que par les machines possédant l'adresse IP locale (''::1'' en [[wpfr>IPv6]] ou ''127.0.0.1'' en [[wpfr>IPv4]]) ou une IP du réseau local (commençant par ''192.168'').
+  * Cet hôte virtuel ne sera appelé que pour le nom de domaine ''private.localhost'', tel que défini par la directive ''ServerName''.
+
+L'espace privé sera alors accessible depuis cette machine à l'adresse [[http://private.localhost/]] et listera les fichiers présents dans le répertoire ''/var/www/private'', en l'occurrence notre fichier ''test.txt''.
+
+----
+//Contributeurs : [[:utilisateurs:krodelabestiole]]//

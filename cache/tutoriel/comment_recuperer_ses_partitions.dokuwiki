@@ -1,0 +1,55 @@
+
+{{tag>tutoriel récupérer partitions}}
+
+----
+
+====== Comment récupérer ses partitions ======
+<note important>Ne s'utilise pas pour récupérer une partition chiffrée. "C'est le but même du chiffrement !"</note>
+<note>Fonctionne uniquement sur les tables de partitions de type MBR</note>
+Ce tutoriel décrit une méthode pour récupérer des partitions de données existantes après une mauvaise manipulation.
+
+<note warning>La méthode est présentée pour vous donner des pistes mais ne garantit pas qu'il n'y aura aucune perte de données. Pensez à faire des sauvegardes avant toute opération dangereuse sur vos partitions.</note>
+
+Cas possibles :
+  * Annulation du déplacement d'une partition à la phase //déplacement du système de fichier// dans gparted.
+  * Corruption de la table des partitions (causes diverses)
+
+<note tip>
+  * fdisk permet d'écrire la table des partitions **sans** toucher au système de fichier qui est dessus. Ainsi pour une partition qui n'a pas été formatée ou écrasée par d'autres données, vous pourrez de nouveau y accéder sans toucher au système de fichier.
+  * Utilisez les cylindres pour créer vos partitions et non une taille donnée en multiple d'octet : ainsi il est plus facile de retrouver les partitions qui sont toujours positionnées sur des cylindres et non n'importe quel bloc du disque
+  * Pensez au décalage possible d'un cylindre suivant le logiciel utilisé (certains comptent à partir de 0, d'autres à partir de 1). Pour le voir : vérifiez par exemple de numéro du dernier cylindre du disque.
+  * Si vous n'arrivez pas à monter une partition, que le fsck sur la partition ne fonctionne pas, vérifiez le point ci-dessus pour savoir si vous n'avez pas un décalage de cylindre.
+</note>
+
+===== Recherche des anciennes partitions sur le disque =====
+
+  * Utilisez [[:testdisk]] pour rechercher vos anciennes partitions :
+    * installez le paquet **[[apt>testdisk|testdisk]]**
+    * Ouvrez un terminal et agrandissez le
+    * Lancez <code>sudo testdisk</code>
+    * Notez bien le fichier de log qui sera enregistré dans votre dossier personnel (testdisk.log)
+    * Choisissez le disque à analyser
+    * Laissez les options par défaut (architecture intel etc) sauf si vous savez précisément ce que vous faites
+    * Après l'analyse rapide, choisissez //deeper search//. Cette opération très longue (comptez 1 à 2h sur un disque de 250Go) recherche sur tout le disque les partitions qui ont existé.
+    * Lorsque cela est fait, prenez soin d'enregistrer le fichier de log (sur une clef usb par exemple). Il servira à réécrire une table de partition correcte.
+
+===== Ecriture de la table des partitions =====
+
+  * Utilisez [[:fdisk]] pour refaire votre table des partitions :
+    * Lancez fdisk pour enregistrer votre table de partition actuelle (sur le bon disque dur, le premier étant sda) <code>sudo fdisk -l /dev/sda > fdisk_table.txt</code>
+    * Sauvegardez le fichier ainsi créé (sur une clef usb par exemple).
+    * Relancez fdisk cette fois pour manipuler vos partitions<code>sudo fdisk /dev/sda</code>
+    * Affichez la table des partitions actuelle : **p**
+    * Ouvrez le fichier de log de testdisk pour avoir les partitions détectées.
+    * Supprimez (**d**) et créez (**n**) les partitions désirées pour coller avec vos anciennes partitions en utilisant les résultats de testdisk. **Attention**, testdisk compte les cylindres à partir de 0 alors que fdisk les numérote à partir de 1 : il faut rajouter 1 au numéro de cylindre détecté par testdisk lorsque vous créez de nouvelles partitions avec fdisk. De plus, testdisk donne les adresses en cylindre, tête et secteur ; fdisk utilise des adresses LBA. On calcule l'adresse linéaire LBA ainsi : 16065 x n°cylindre + 63 x n°tête + n°secteur -1. 
+<note tip>On peut voir la taille de la partition dans la colonne "Secteurs" avec Testdisk après une analyse rapide (ne fermez pas la fenêtre). La valeur en secteurs donnée par Testdisk vous servira à entrer la taille de la partition à restaurer avec Fdisk. Ouvrez un second terminal pour lancer Fdisk avec la ligne de commande ci-dessus en indiquant le bon disque dur (sda, sdb,...) et après avoir appuyé sur "N", laissez les options par défaut en appuyant sur "Entrée" mais lorsque vous verez la ligne commençant par "Dernier secteur ..." : entrez la valeur en secteurs indiquée par Tesdisk et validez</note>
+    * Modifiez le type de fichiers si besoin : **t**
+    * Enregistrez la nouvelle table des partitions : **w**
+    * Si les partitions sont bien reconstruites, vous devriez pouvoir les monter directement. Sous Gnome elle devraient apparaître automatiquement juste après l'écriture de la table des partitions.
+
+===== Voir aussi =====
+
+   * **(en)** [[https://help.ubuntu.com/community/DataRecovery#Lost_Partition|Méthodes de récupération de données et de partitions]]
+----
+
+//Contributeur : [[utilisateurs:Id2ndR]]//

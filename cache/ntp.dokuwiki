@@ -1,0 +1,203 @@
+
+{{tag> Xenial client serveur réseau BROUILLON}}
+
+====== NTP ======
+
+Ubuntu  a longtemps utilisé [[ntpdate]] et ntpd  pour ajuster l'horloge interne des systèmes d'exploitation, cette tâche est désormais assurée par [[timedatectl]] qui est installé par défaut dans votre distribution. NTP (Network Time Protocol) est un protocole permettant de distribuer l'heure sur un réseau informatique. Il se décline en deux faces : le client, [[ntpdate]], et le serveur, ntpd. 
+
+Chaque machine peut être à la fois serveur //et// client.
+
+Chaque machine qui souhaite mettre à jour son horloge va sélectionner dans sa configuration un serveur de temps. En même temps que l'heure, elle récupère un numéro de strate, n, et se déclare elle-même de strate n+1.
+
+Un certain nombre de sources (horloges atomiques d'universités, récepteurs GPS...) sont de strate 0 et connectées à des serveurs (strate 1) qui diffusent donc l'heure. Ces mêmes serveurs fournissent l'heure à des serveurs de strate 2, qui sont eux, généralement accessibles au public (serveurs d'administrations, d'universités ou de centres de recherches dont l'accès est ouvert au public).
+
+Ce fonctionnement pyramidal a pour but de fournir une heure de qualité (déviant peu par rapport aux différentes mesures du temps, temps légal, universel et autre. Ces mesures sont fonction des lois de la physique.) tout en ne surchargeant pas les machines critiques que sont les serveurs de strates 0 et 1. Plus la strate de votre serveur est haute, plus votre signal de temps peut dévier par rapport à l'heure "moyenne", "légale" ou autre. Toutefois, globalement le protocole fournit un signal de temps précis à la seconde, voire encore plus précis.
+
+
+===== Client NTP =====
+C'est l'utilisateur final, il existe typiquement deux façons pour une machine cliente de se synchroniser sur un serveur :
+
+==== Par requête ====
+Le client envoie une requête à un serveur et récupère la réponse.\\
+Par défaut((d'après [[https://help.ubuntu.com/lts/serverguide/NTP.html]])), //[[timedatectl]]//  pré-installée (à partir de [[./xenial]]), qui remplace [[./ntpdate]], synchronise l'heure au démarrage et lors d’activations de connexion réseau. 
+
+==== Par écoute d'un broadcast/multicast ====
+Le client est à l'écoute des émissions en broadcast/multicast régulière de l'heure. Cette solution est optimale, elle évite les requêtes vers le serveur.\\
+
+FIXME Dans les versions récentes d'Ubuntu, //timesyncd// remplace la partie client de ntpd((https://help.ubuntu.com/lts/serverguide/NTP.html#timesyncd))
+
+<note important>Cette solution nécessite d'être dans un réseau maîtrisé, typiquement un réseau d'entreprise où le routeur sert de serveur NTP</note>
+Il faut [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>ntp]]**.
+<code>sudo apt-get install ntp</code>
+puis dé-commenter les deux lignes suivante dans le fichier **/etc/ntp.conf** :
+<file - /etc/ntp.conf>
+disable auth
+broadcastclient
+</file>
+
+===== Serveur NTP =====
+
+====Pré-requis ====
+
+NTP étant un protocole réseau, il vous faut une interface réseau active. Vous pouvez tout à fait diffuser un signal de temps sur un réseau //hors internet//. L'horloge de référence sera celle du serveur ntp, celui-ci sera alors la strate 1 et sera uniquement serveur.
+
+Si toutefois vous voulez disposer d'une heure synchrone avec le reste du monde, votre serveur ntp devra être à la fois serveur (pour diffuser l'heure) //et// client (pour mettre sa propre horloge à jour auprès de serveurs de confiance). Pour ce faire, il doit disposer d'une connexion internet sortante.
+
+De plus il faut que cette connexion sortante supporte UDP et le port 123. Ceci est rarement le cas derrière les hotspots wifi publics par exemple. Dans une telle situation ntpdate donnera uniquement un message comme "no Server suitable for synchronization found".
+
+
+==== Installation ====
+
+Il vous suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>ntp]]**.
+
+Il existe aussi une implémentation BSD du protocole qui est disponible sur Ubuntu via le paquet **[[apt>openntpd]]**.
+
+==== Configuration ====
+
+Toute la configuration du serveur se fait sur le fichier /etc/ntp.conf
+
+<file>
+logfile /var/log/ntpstats/ntpd
+statsdir /var/log/ntpstats/
+statistics loopstats peerstats clockstats
+filegen loopstats file loopstats type day enable
+filegen peerstats file peerstats type day enable
+filegen clockstats file clockstats type day enable
+
+# Addresses to listen on (ntpd does not listen by default)
+listen on *
+#listen on 127.0.0.1
+#listen on ::1
+
+# sync to a single server
+#server ntp.example.org
+
+# use a random selection of 4 public stratum 2 servers
+# see http://twiki.ntp.org/bin/view/Servers/NTPPoolServers
+# and http://www.pool.ntp.org/
+server ntp.metas.ch
+server ntp.obspm.fr
+server ntp2.jussieu.fr
+server ntp.uvsq.fr
+server ntp.u-psud.fr
+server ntp1.belbone.be
+</file>
+
+Les premières lignes concernent les logs. N'oubliez pas qu'une des lignes //listen// doit être non-commentées ! Sinon il n'attendra pas de requêtes !
+Les directives réellement importantes sont les //server//. Chacun de ces serveurs est une source de temps considérée comme fiable. Il n'existe pas vraiment de règle sur le nombre de serveurs à utiliser, mais globalement, plus vous en mettez, plus votre signal sera stable car en cas de défaillance ou de chute d'une des sources, votre serveur aura d'autres serveurs à consulter.
+
+<note tip>L'auteur utilise deux types de sources : des serveurs proches de son domicile (Paris) pour battre la mesure et fournir l'heure courante, et des serveurs étrangers qui permettent "de s'assurer que votre horloge ne s'écarte pas trop du temps mondial". L'auteur tient à dire que cette idée est hautement spéculative et qu'il a d'ailleurs du mal à la formuler. D'autre part, il faut prendre gare à ce que les serveurs soient dans des pays ou des réseaux différents de façon que la chute d'un réseau n'affecte pas votre propre serveur, indépendamment de l'état du serveur source.</note>
+
+Vous pouvez ajouter votre propre horloge système comme source de temps par le paramètre fudge :
+
+<file>
+server 127.127.1.0
+fudge 127.127.1.0 stratum 10
+</file>
+
+
+Vous pouvez restreindre les clients (les ordinateurs autorisés à synchroniser leur horloge sur le serveur) :
+
+<file>
+restrict default kod notrap nomodify nopeer noquery
+restrict 127.0.0.1 nomodify
+restrict 10.8.0.0 mask 255.255.255.0 nomodify notrap
+restrict 192.168.1.0 mask 255.255.255.0 nomodify notrap</file>
+
+Le démon ntpd va de plus utiliser des algorithmes pour déterminer quelle source est la meilleure.
+
+==== Utilisation ====
+
+On va lister ici les commandes qui permettent un bon diagnostic de l'état de votre serveur et qui sont fournies dans son paquet (ntp).
+
+La commande **ntpq -p** (ntp query) va permettre d'interroger votre serveur.
+<code>
+stephane@einstein:~$ ntpq -p
+     remote           refid      st t when poll reach   delay   offset  jitter
+==============================================================================
+ metasweb01.admi 162.23.3.170     2 u   60   64    7   50.108    3.427   3.519
+ syrte8.obspm.fr 195.220.94.163   2 u   58   64    7   28.572   -6.305   4.326
+ horlogegps.rese 10.3.128.189     2 u   56   64    7   28.010  -10.532   4.192
+ soleil.uvsq.fr  .INIT.          16 u    -   64    0    0.000    0.000   0.000
+ ntp.u-psud.fr   145.238.203.14   2 u   54   64    7   27.994   -7.168   4.741
+ ntp1.belbone.be 195.13.23.6      2 u   52   64    7   52.644   -4.681   4.627
+ web1.euromise.c 195.113.144.201  2 u   52   64    7   52.944   -3.416  24.792
+ 4504ds1-vo.1.fu .INIT.          16 u    -   64    0    0.000    0.000   0.000
+
+</code>
+
+Dans ce tableau, chaque ligne concerne un serveur. La première colonne indique le nom du serveur en question. La deuxième indique l'adresse (ou le nom) de sa source de temps (un autre serveur de temps en général). La deuxième indique sa strate. Les colonnes suivantes concernent l'algorithme d'équilibrage du serveur (prise en compte de la distance de votre serveur à la source indiquée en première colonne...).
+Si vous avez que des 0 au niveau des colonnes delay offset jitter alors il y a un problème , vérifiez votre configuration.
+
+<note>Il est important que les serveurs que vous sélectionnez comme sources utilisent eux même des sources différentes !</note>
+
+La commande ntptrace permet notamment de vous indiquer de façon certaine à quelle strate vous vous situez, ainsi que d'autres, sont fournies dans le paquet. Vous êtes encouragés à décrire ici leur fonctionnement.
+
+Pour lancer, arrêter ou redémarrer votre serveur ntp, utilisez la commande service :
+
+lancement
+<code>sudo service ntp start</code>
+
+arrêt
+<code>sudo service ntp stop</code>
+
+redémarrage
+<code>sudo service ntp restart</code>
+
+Pour utiliser votre serveur en tant que source pour les ordinateurs de votre réseau, reportez vous à l'article [[ntpdate]] et mettez son adresse en source dans le paramètre NTPSERVERS.
+
+==== Les Serveurs NTP existants ====
+
+Le Comité Réseau des Universités maintient une liste des grands serveurs ntp français [[http://www.cru.fr/services/ntp/serveurs_francais|ici]].\\
+Des serveurs de strate 2 sont aussi listés ici : [[http://support.ntp.org/bin/view/Servers/StratumTwoTimeServers|serveurs ntp]].\\
+
+Ajoutez ici les serveurs que vous connaissez ou que vous rendez publics :
+  * ntp.22decembre.eu
+  * pool.ntp.org
+  * ntp.ubuntu.com
+
+
+=== le pool NTP ===
+
+Le pool de serveurs ntp est un projet global qui vise à fournir un service ntp fiable tout en répartissant la charge du service sur de nombreux serveurs.
+
+== Utiliser le pool ==
+
+Si vous le souhaitez, vous pouvez l'utiliser dans votre liste de sources :
+<file bash /etc/ntp.conf>
+server 0.fr.pool.ntp.org
+server 1.fr.pool.ntp.org
+</file>
+Le service est décomposé en zones par pays : ch, de, fr ... et par continent : asia, africa, europe. Enfin, vous ajoutez (ou non) les préfixes 0, 1 et 2.
+En général vous pouvez utiliser **pool.ntp.org**
+Le pool va vous renvoyer une adresse de serveur au hasard pris dans la zone considéré. Vous aurez ainsi souvent des sources près de chez vous et fiables.
+
+== Rejoindre le pool ==
+
+Si vous avez une IP fixe (et pas un client dyndns ou une ip dhcp par exemple), on vous encourage à rejoindre vous aussi le pool de serveurs ntp. La charge sur le serveur (bande passante et cpu) est très faible. Il vous suffit d'avoir un serveur stable. Vous pouvez ainsi rendre un grand service à la communauté à peu de frais, y compris en tant que simple particulier.
+
+[[http://www.pool.ntp.org/fr/join.html|Rejoindre le pool]]
+
+Il vous faut dans ce cas rendre votre serveur public. Si vous êtes derrière un pare-feu, il vous faut ouvrir le port ntp (normalement le 123).
+exemple pour [[ufw]] :\\
+<code>sudo ufw allow ntp</code>
+\\
+Si vous êtes derrière un routeur type box, il vous faut rediriger le port 123 de votre box vers le port 123 de votre serveur.
+
+===== Tests =====
+Un moyen simple de voir s'il y a un broadcast NTP dans votre réseau local (généralement le router):
+<code>sudo tcpdump -n "broadcast or multicast" | grep NTP</code>
+
+Pour voir si des clients se connectent à votre serveur NTP :
+<code>ntpq -c mrulist</code>
+
+===== Liens =====
+
+* [[wpfr>Network_Time_Protocol|le protocole ntp sur wikipedia]]\\
+
+* [[http://www.pool.ntp.org/zone/fr|le pool ntp fr]]
+
+* [[http://www.it-connect.fr/configurer-un-client-ntp-sous-linux/|Configurer un client NTP sous Linux]]
+----
+
+Contributeurs : [[utilisateurs:stephaneguedon]] , [[utilisateurs:wido]], M4T

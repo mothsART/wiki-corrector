@@ -1,0 +1,132 @@
+
+{{tag>BROUILLON}}
+
+----
+
+====== Proxoid : utiliser votre téléphone Android comme proxy ======
+
+[[http://code.google.com/p/proxoid/|Proxoid]] est un logiciel disponible sur les téléphones portables Android (HTC G1, G2, Samsung Galaxy,Acer Liquid ...), qui permet d'utiliser votre téléphone comme un proxy.
+Ainsi, vous pouvez surfer sur Internet via une connectivité GPRS/3G.
+
+<note warning>Attention ! S'assurer d'avoir un forfait data illimité au risque d'avoir des surprises lors de la réception de la facture !</note>
+
+===== Installation =====
+
+==== Sur votre téléphone sous Android : ====
+
+Télécharger sur le [[http://fr.wikipedia.org/wiki/Android#Android_Market|Market]] ou en suivant ce code barre proxoid.
+
+{{:proxoid.png|}}
+Si le market est désactivé ou ne fonctionne pas sur votre androphone, vous pouvez également charger le paquet android apk, installable à l'aide d'adb : http://proxoid.googlecode.com/files/proxoid.apk
+
+Il suffit alors de taper dans un terminal (sous root) : <code>adb install proxoid.apk</code> (après être passé en mode deboggage, comme indiqué ci-dessous).
+
+Presser « Home », « Menu », « Paramètres ». Sélectionner « Applications », « Développement ». Puis cocher "USB deboggage" pour que Proxoid puisse fonctionner.
+
+==== Maintenant sur le PC ====
+
+=== Etape 1 : Configurer udev pour qu'il reconnaisse votre téléphone ===
+
+Sur mon PC, à l'emplacement  ''[[:tutoriel:comment_editer_un_fichier|/etc/udev/rules.d]]''  Créer un fichier
+<code>11-android.rules</code>
+avec comme contenu :
+<code>SUBSYSTEMS=="usb", SYSFS{idVendor}=="0bb4", SYSFS{idProduct}=="0c01", MODE="0666", OWNER="mon_nom_de_compte"
+SUBSYSTEMS=="usb", SYSFS{idVendor}=="0bb4", SYSFS{idProduct}=="0c02", MODE="0666", OWNER="mon_nom_de_compte"</code>
+Nous avons 2 entrées pour 1 téléphone. En effet, si vous avez utilisé fastboot, l'idProduct aura changé.
+
+faite un:
+<code>lsusb</code> 
+<code>Bus 001 Device 008: ID 0422:5222 Acer, Inc.</code>
+
+remplacez vos codes idVendor et idProduct par ceux votre androphone dans les 2 ligne de udev, ainsi que le nom d'utilisateur, cela devient pour moi:
+<code>SUBSYSTEMS=="usb", SYSFS{idVendor}=="0422", SYSFS{idProduct}=="5222", MODE="0666", OWNER="moi"
+SUBSYSTEMS=="usb", SYSFS{idVendor}=="0422", SYSFS{idProduct}=="5222", MODE="0666", OWNER="moi"</code>
+
+Puis en console exécuter :
+<code>sudo chmod a+rx /etc/udev/rules.d/11-android.rules</code>
+
+et enfin relancer udev en tapant :
+<code>sudo /etc/init.d/udev restart</code>
+
+=== Etape 2 : SDK ===
+
+Télécharger l'archive SDK ici [[http://developer.android.com/sdk/index.html]] 
+
+Il faut ensuite extraire le fichier adb qui se trouve dans le dossier "tools"
+
+<note important>Remarque : sous SDK "android-sdk_r08-linux_86.tgz" adb n'est plus disponible.
+
+Il faut donc lancer ./android dans le répertoire tools et installer Android SDK Plateform-tools
+
+Ensuite se placer dans le répertoire ../plateform-tools ou on retrouvera adb</note>
+
+
+=== Etape 3 : Tunneling ===
+
+Avec un terminal on se rend dans le dossier "bureau" (dans mon cas je l'ai extrait sur le bureau)
+
+<code>cd /home/moi/Bureau/</code>
+
+Brancher le téléphone via USB (pas la peine d'activer le montage), puis taper la commande suivante :
+
+ <code>./adb forward tcp:8080 tcp:8080</code>
+<note important>Le port TCP 8080 doit être libre sinon vous aurez le message d'erreur suivant : « error: cannot bind socket »</note>
+<note important>Si vous avez le message : "error: insufficient permissions for device"
+Dans un terminal taper :
+<code>sudo ./adb kill-server
+sudo ./adb start-server
+sudo ./adb devices
+sudo ./adb forward tcp:8080 tcp:8080</code>
+
+nb: la commande "adb devices" permet de vérifier si votre téléphone est reconnu par le système.
+</note>
+
+=== Etape 4 : configurer le navigateur (dans mon cas firefox) ===
+
+**A) Configuration du proxy :**
+Aller dans "Édition", "Préférences", onglet "Avancé" ,"Réseau"  puis "Paramètres"
+
+Modifier la configuration du proxy, en cochant "Configuration manuelle du proxy" :
+
+ <code>localhost:8080</code>
+
+puis cocher "Utiliser ce serveur proxy pour tous les protocoles"
+
+On peut également utiliser un add-on "SwitchProxy Tool" qui permet de changer/(dés)activer le proxy facilement comme par exemple: [[https://addons.mozilla.org/fr/firefox/addon/125|SwitchProxy Tool]]
+
+<note important>Attention : Sur certaines versions de Mozilla le passage en //localhost// force l'option "Travailler hors connexion" qui ne vous permettra pas de naviguer.
+Mozilla affichera une page ressemblant à celle-ci :
+<code>Mode hors connexion
+Firefox est actuellement en mode hors ligne et ne peut accéder au Web.
+__________________________________________________________
+Le navigateur est actuellement hors connexion et ne peut se connecter au site.
+- L'ordinateur est-il connecté au réseau ?
+- Passez en mode connecté et réessayer.</code>
+
+Dans ce cas il suffit d'aller dans le menu et de décocher le mode hors connexion:
+Menu : **Fichier** => Décocher : **//Travailler hors connexion//**
+</note>
+
+
+**B) Configuration du user agent :**
+Le user agent permet au serveur d'identifier votre navigateur et votre système d'exploitation.
+Il est préférable avec certain fournisseurs d'accès de modifier le user agent du navigateur de votre PC en lui mettant celui utilisé par le navigateur de votre téléphone.
+
+- Avec votre téléphone visitez par exemple le site [[http://www.anonymat.org/vostraces/index.php|Vos traces...]] et notez le user agent de votre téléphone.
+Ce qui donne par exemple :
+<code>Votre navigateur et votre système d'exploitation sont :
+
+Mozilla/5.0 (iPhone; U; CPU iPhone OS 3_1_2 like Mac OS X; en-us) AppleWebKit/528.18 (KHTML, like Gecko) Version/4.0 Mobile/7D11 Safari/528.16</code>
+
+- Si vous utilisez Mozilla sur votre PC, installez l'extension  ( [[http://extensions.geckozone.org/UserAgentSwitcher|User Agent Switcher]] ) et ajoutez-y le user agent de votre téléphone.
+
+__N'oubliez pas ensuite de le sélectionner à chaque fois que vous ouvrirez mozilla.__ (car mozilla ne mémorise pas ce changement de configuration à la fermeture)
+
+
+=== Etape 5 : Connexion ===
+
+Démarrer proxoid sur votre téléphone et cocher Start.... Enjoy :)
+
+===== Plus d'informations =====
+
+  * site de l'auteur : http://code.google.com/p/proxoid/

@@ -1,0 +1,207 @@
+
+{{tag>Trusty Xenial Proxy}}
+----
+
+====== HTTP-Tunnel, ou comment encapsuler dans des paquets HTTP =======
+{{http-tunnel.png|}}\\
+HTTP-Tunnel sert à encapsuler des paquets d'un autre protocole (FTP, SSH, etc) dans des paquets HTTP. Ceci permet de passer à travers de certains pare-feux ou proxys qui bloquent les paquets, notamment sur des réseaux sécurisés d'entreprise.
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+
+===== Installation =====
+
+[[tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt>httptunnel]]**
+
+===== Fonctionnement ======
+
+Le paquet **http-tunnel** doit être installé sur le client et sur le serveur. Ce paquet est composé du serveur http-tunnel qu'on appelle par la commande **hts** et du client http-tunnel qu'on appelle par la commande **htc**. Le principe est que le serveur http-tunnel écoute sur un port TCP donné (toujours au dessus de 1024) et que le client se connecte sur ce port afin de créer un tunnel. Ensuite le client FTP ou SSH désiré se connecte sur le client **htc** (en local la plupart du temps, nous allons y revenir), et le serveur **hts** redirige le flux vers le serveur SSH (en local aussi).
+
+<code>
+______________                                  _______________
+|  PC Client |                                  | PC Serveur  |
+|------------|                                  |-------------|
+| Client SSH |                                  | Serveur SSH |
+|     |      |                                  |     ^       |
+|     |      |                                  |     |       |
+|     V      |                                  |     |       |
+| Client HTC ===================================> Serveur HTS |
+|__[23000]___|                                  |___[10000]___|
+
+192.168.0.10                                     monsite.com
+</code>
+
+
+===== Configuration =====
+
+Dans cet exemple le serveur **hts** écoute sur le port TCP 10000 de l'adresse **monsite.com**, et redirige
+tout ce qui arrive vers le port 22 de la même machine (localhost) pour le lancer on utilise la ligne de commande suivante :
+
+<code>
+hts -F localhost:22 10000
+</code>
+
+
+
+===== Utilisation =====
+
+Sur le client on transfère le port de connexion SSH (23000) vers le serveur HTTP-Tunnel (monsite.com:10000) et il faut paramétrer le proxy si vous en utilisez un (voir options de connexion).
+
+<code>
+htc -F 23000 -P le_proxy:8080 monsite.com:10000
+</code>
+
+<note warning>
+Il faut impérativement lancer le serveur HTTP-Tunnel avant le client, sinon la connexion qui passe au travers ne s'établit pas.
+</note>
+Ensuite il suffit de lancer la commande suivante sur le client pour se connecter au serveur.
+
+<code>
+ssh utilisateur@localhost -p 23000
+</code>
+
+<note>
+Il est possible de faire touner simultanément plusieurs serveurs HTTP-Tunnel pour rediriger différents flux (SSH, FTP). Il faut qu'ils écoutent sur des ports différents mais toujours au dessus de 1024.
+</note>
+
+===== Script de démarrage =====
+
+<note>
+Il est possible que vous rencontriez l'erreur suivante (avec la version 3.3+dfsg-3) lorsque **hts** est lancé en tant que **root** :
+  tunnel_accept: couldn't write GET header: Invalid argument
+Le problème est discuté là :
+
+  * [[https://github.com/larsbrinkhoff/httptunnel/issues/3|GitHub]]
+  * [[http://askubuntu.com/questions/694510/invalid-argument-error-in-httptunnel-client/694568|AskUbuntu]]
+
+Le bug a été corrigé sur [[https://github.com/larsbrinkhoff/httptunnel/commit/a578fb44f37c9ef8689d1030e19a69a73e914820|GitHub]]
+
+Installer le [[http://packages.ubuntu.com/wily/httptunnel|package httptunnel 3.3+dfsg-4]] de [[Wily]] corrige le problème. 
+</note>
+<note important>À partir d'[[:xenial|Ubuntu 16.04]], le système d'initialisation par défaut d'Ubuntu est [:[Systemd]].
+Reportez-vous au tutoriel suivant : [[Créer un service avec Systemd]]
+</note>
+Ci dessous un script de démarrage pour **/etc/init.d/** pour ajouter au démarrage du système le serveur HTTP-Tunnel.
+
+Créez un fichier appelé **/etc/init.d/httptunnel ** et rendez-le exécutable :
+<code>
+sudo touch /etc/init.d/httptunnel && sudo chmod 755 /etc/init.d/httptunnel
+</code>
+Pensez aussi à créer le fichier de log (**/var/log/hts_server.log**) avant de lancer ce script.
+<code>
+sudo touch /var/log/hts_server.log && sudo chmod 644 /var/log/hts_server.log
+</code>
+Ajouter httptunnel aux applications à démarrer au lancement du système.\\
+<code>
+sudo update-rc.d httptunnel defaults
+
+Adding system startup for /etc/init.d/httptunnel ...
+  /etc/rc0.d/K20httptunnel -> ../init.d/httptunnel
+  /etc/rc1.d/K20httptunnel -> ../init.d/httptunnel
+  /etc/rc6.d/K20httptunnel -> ../init.d/httptunnel
+  /etc/rc2.d/S20httptunnel -> ../init.d/httptunnel
+  /etc/rc3.d/S20httptunnel -> ../init.d/httptunnel
+  /etc/rc4.d/S20httptunnel -> ../init.d/httptunnel
+  /etc/rc5.d/S20httptunnel -> ../init.d/httptunnel
+
+</code>
+\\
+[[tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/init.d/httptunnel** en tant que root (sinon vous n'aurez pas les droits en écriture), et copier/coller le script ci-dessous dedans.
+<file bash httptunnel>
+#!/bin/sh
+#
+### BEGIN INIT INFO
+# Provides:          httptunnel
+# Required-Start:    $syslog $remote_fs $network
+# Required-Stop:     $syslog $remote_fs $network
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Start httptunnel as daemon at boot time
+### END INIT INFO
+#
+# Declaration des variables
+#
+NO_PROCESS=`ps -ef | grep "hts -F" | grep -v grep | awk {'print $2'}`
+NB_PROCESS=`ps -ef | grep "hts -F" | grep -v grep | wc -l`
+LOGFILE="/var/log/hts_server.log"
+DATE=`date +%d/%m/%Y-%Hh%Mm%Ss`
+#
+# Debut du script
+#
+case "$1" in
+    start)
+    if [ $NB_PROCESS = "0" ]
+        then
+        echo "$DATE : Demarrage du Serveur HTTP-Tunnel"
+        echo "$0 $1 : $DATE : Demarrage du Serveur HTTP-Tunnel" >> $LOGFILE
+        hts -F localhost:22 10000
+        exit 0
+        else
+        echo "$DATE : Serveur HTTP-Tunnel deja demarre, process N° : $NO_PROCESS"
+        echo "$0 $1 : $DATE : Serveur HTTP-Tunnel deja demarre, process N° : $NO_PROCESS" >> $LOGFILE
+        exit 0
+    fi
+    ;;
+    stop)
+
+    if [ $NB_PROCESS = "1" ]
+        then
+        echo "$DATE : Arret du Serveur HTTP-Tunnel"
+        echo "$0 $1 : $DATE : Arret du Serveur HTTP-Tunnel" >> $LOGFILE
+        echo "$0 $1 : $DATE : Kill du N° de process : $NO_PROCESS" >> $LOGFILE
+        kill -9 $NO_PROCESS
+        else
+        echo "$DATE : Serveur HTTP non demarre, pas besoin de l'arreter"
+        echo "$0 $1 : $DATE : Serveur HTTP non demarre, pas besoin de l'arreter" >> $LOGFILE
+    fi
+    ;;
+    restart)
+    $0 stop
+    $0 start
+    ;;
+    status)
+    if [ $NB_PROCESS = "0" ]
+        then
+        echo "$DATE : Aucun serveur HTTP-Tunnel en cours"
+        echo "$0 $1 : $DATE : Aucun serveur HTTP-Tunnel en cours" >> $LOGFILE
+        else
+        echo "$DATE : Serveur HTTP-Tunnel en cours : $NO_PROCESS"
+        echo "$0 $1 : $DATE : Serveur HTTP-Tunnel en cours : $NO_PROCESS" >> $LOGFILE
+    fi
+    ;;
+    view_log)
+    cat $LOGFILE
+    ;;
+    *)
+    echo
+    echo "Utilisation : $0 { start | stop | restart | status | view_log }"
+    echo
+    ;;
+esac
+exit 0
+</file>
+
+Ce script peut donc être appelé par la commande **/etc/init.d/httptunnel** et accepte 4 arguments différents : 
+  * **start** pour lancer le service ;
+  * **stop** pour l'arrêter ;
+  * **status** pour afficher un état des lieux ;
+  * **view_log** pour afficher le journal.
+===== En cas de soucis =====
+Si votre tunnel ne se crée pas coté serveur ou coté client, pensez à vérifier si le port demandé en écoute pour **hts** ou **htc** est bien libre.
+
+<code>
+sudo netstat -a | grep le_n°_de_port
+</code>
+
+Si le port est déja occupé cette commande affichera quelque chose dans le résultat, autrement elle n'affichera rien. Bon courage
+
+
+
+===== Voir aussi =====
+\\
+[[https://www.commentcamarche.net/forum/affich-59147-tunnelling-ip-over-http|Documentation commentcamarche]]\\
+[[https://en.wikipedia.org/wiki/HTTP_tunnel_(software)|Documentation Wikipedia]] en anglais\\
+[[https://github.com/larsbrinkhoff/httptunnel|Site Officiel]]
+----
+//Contributeurs : [[utilisateurs:maclane45|maclane45]]//

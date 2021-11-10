@@ -1,0 +1,736 @@
+
+====== ZwookMachine ======
+<note important>Cette page est en cours de construction. Les informations qu'elle contient sont fortement susceptibles d'être modifiées.</note>
+<note>Dernière mise à jour : le 23/09/2011</note>
+
+===== Présentation =====
+La ZwookMachine est un serveur LAMPPPZZ :
+  * **L**inux (ici Ubuntu)
+  * **A**pache (serveur HTTP et HTTPS)
+  * **M**ySQL (serveur de bases de données de type SQL)
+  * **P**HP
+  * **P**erl
+  * **P**ython
+  * **Z**ope (le serveur d'applications sécurisé)
+  * **Z**wook (un CMS fonctionnant sous Zope)
+
+Le but de cette page est de créer un LiveDVD installable.
+
+Contrairement aux serveurs traditionnels, qui ne comprennent aucune interface graphique, la ZwookMachine proposera Gnome, et ce pour deux raisons : 
+  * Une interface graphique est nécessaire pour créer un LiveDVD
+  * Le but est de créer un serveur facilement installable et paramétrable par un newbie
+
+===== Installation d'Ubuntu =====
+==== Version conseillée ====
+
+Pour un serveur, il est habituellement conseillé d'utiliser une [[/versions|version]] LTS  (//Long Term Support//) d'Ubuntu. La dernière LTS en date est Lucid Lynx, ou 10.04, sortie fin Avril 2010.
+
+Rendez-vous sur la page des [[http://ubuntu-fr.org/telechargement|téléchargements]]. J'aime particulièrement la [[/cd_ubuntu-fr#liens_de_telechargement_du_cd|version francisée]] !
+
+==== Partitionnement ====
+C'est la partie la plus délicate de l'installation.
+
+En supposant que le serveur web ne comporte qu'un seul disque, et que l'on ne voudra pas redimensionner un jour ses partitions, voici ce que je propose de créer, successivement:
+  * une nouvelle table de partitions
+<note important>cela aura pour effet de rendre inaccessibles toutes les partitions existantes</note>
+  * une partition primaire /boot de 384 MB, de type ext3 ou ext4 (/dev/sda1) ;
+  * une partition étendue swap, de type swap (/dev/sda5), de taille 1,5 fois celle de la RAM (si vous avez 4 GB de RAM, mettez 6 GB) ;
+  * une partition étendue /, de type ext3 ou ext4 (/dev/sda6), de taille 4 à 5 GB ;
+  * une partition étendue /home, de type ext3 ou ext4 (/dev/sda7), de taille 4 à 5 GB ;
+  * une partition étendue /tmp, de type ext3 ou ext4 (/dev/sda8), de taille 4 à 6 GB (j'ai vu des serveurs planter parce que le /tmp devenait trop gros, notamment avec de gros sites Zope) ;
+  * une partition étendue /var, de type ext3 ou ext4 (/dev/sda8), occupant le reste du disque.
+
+C'est en effet la partition /var qui va recueillir toutes les données du serveur : /var/www contiendra les pages html et php, les cripts cgi (et tout ce qui concerne Apache) ; /var/lib/mysql contiendra les bases de données MySQL ; /var/lib/zope//x.y// (où x.y est la version de Zope installée) contiendra les sites et bases de données Zope, etc.
+
+==== Nom d'utilisateur et mot de passe, nom de machine ====
+Nom d'utilisateur : **adminzm**
+
+Mot de passe : à votre guise, mais retenez-le !
+
+Nom de machine : je suggère **www**, ou **www2** (si www.votredomaine.com existe déjà)
+
+
+==== Installation derrière un proxy ====
+Si vous ne devez passer par un proxy (serveur mandataire) pour accéder à l'internet, passez cette section.
+
+En présence d'un proxy, vous devrez l'indiquer par l'intermédiaire du bouton **[Avancé...]** dans le panneau **"Prêt à installer"**.
+N'oubliez pas de renseigner une éventuelle authentification, comme ceci : //identifiant:mot_de_passe//**@ip**
+
+==== Fin de l'installation d'Ubuntu ====
+Il vous sera demandé de retirer le DVD pour que le serveur ne risque pas de redémarrer sur une nouvelle procédure d'installation.
+
+===== Premiers paramétrages et mise à jour =====
+==== Résolution de l'écran ====
+En général, la résolution de l'écran est aisément modifiable par le menu Système / Préférences / Écrans.
+
+Cependant, si vous vous trouvez bloqué dans une résolution trop basse (800x600 par exemple), et que vous savez pertinemment que votre carte graphique et votre moniteur acceptent une résolution plus grande, essayez d'abord d'installer les pilotes propriétaires de ceux-ci (s'ils existent) dans Système / Administration / Pilotes de périphériques, puis tentez à nouveau de modifier la résolution de l'écran.
+
+Si cela ne fonctionne toujours pas, tentez ceci :
+  * fermez votre session graphique (déconnectez-vous)
+  * quand l'écran de connexion s'affiche, faites un Ctrl-Alt-F1 pour ouvrir la console tty1 ; vous vous retrouvez devant un écran tout noir, qui effraie un peu le néophyte, mais ça mord pas !
+  * sur tty1, connectez-vous en adminzm
+  * une fois connecté, tapez : 
+    * **sudo service gdm stop** ; cela va arrêter le serveur graphique (gdm est l'interface de connexion graphique)
+    * **sudo X -configure** ; cela va créer le fichier xorg.conf.new
+    * **sudo cp xorg.conf.new xorg.conf** ; on copie ce fichier dans xorg.conf
+    * **sudo nano xorg.conf** ; et on ouvre xorg.conf dans un petit éditeur de texte
+    * Dans la section Modules, commenter, en les faisant débuter par un #, les lignes contenant //glx//, //dbe//, et //dri2//
+    * Dans la section Monitor, rajoutez les lignes : <code>
+        HorizSync       31-80
+        VertRefresh     56-76</code>
+    * Dans la section Device, vérifiez que la ligne contenant Driver indique bien "vesa".
+    * Dans la section Screen, vérifiez que vous avez bien les lignes :<code>
+        SubSection "Display"
+                Viewport   0 0
+                Depth     24
+                Modes   "1280x1024" "1024x768"
+        EndSubSection
+        DefaultDepth    24</code>
+    * Tapez Ctrl-X pour quitter l'éditeur de textes (confirmez par O, puis validez, pour que les modifications soient enregistrées)
+    * **sudo cp xorg.conf /etc/X11/** ; place le fichier de configuration au bon endroit
+    * **sudo service gdm start**
+  * faites un Ctrl-F7 pour ouvrir la console graphique tty7 et connectez-vous
+  * La résolution de l'écran est normalement modifiable par le menu Système / Préférences / Écrans.
+==== Si votre serveur est derrière un proxy ====
+Vous devez renseigner un éventuel proxy à deux endroits (même si vous l'avez déjà fait durant l'installation !) :
+  * Menu Système / Préférences / Serveur mandataire (n'oubliez pas de cliquer sur le bouton [Détails] en cas d'authentification nécessaire). Appliquez à tout le système.
+  * Menu Système / Administration / Gestionnaire de paquets Synaptics, puis dans Synaptics : menu Configuration / Préférences, onglet Réseau.
+
+<note important>Karmic possède un bug, empêchant l'utilisation correcte de l'authentification auprès d'un proxy. Cf. [[http://forum.ubuntu-fr.org/search.php?action=show_user&user_id=4055 | ce sujet de forum]].</note>
+
+Si vous n'arrivez pas à faire des mises à jour en ligne de commande (si la commande **sudo apt-get update** retourne une erreur 407), entrez la commande :
+  sudo gedit /etc/environment
+et modifiez la ligne :
+  http_proxy="http://ip:port/"
+en :
+  http_proxy="http://id:mdp@id:port/"
+
+Recommencez à l'identique avec le fichier ///etc/apt/apt.conf//.
+
+Ensuite, tapez :
+  source /etc/environment
+  sudo apt-get update
+
+==== Sources de logiciels ====
+Les //logiciels// se trouvent dans des //paquets// téléchargeables dans des //dépôts//.
+
+Soit dans Synaptics (menu Configuration / Dépôts), soit dans Système / Administration / Sources de logiciels : 
+  * onglet Logiciels de Ubuntu : tout cocher **sauf** //Code source// et //CD-Rom// ; choisir //Télécharger depuis// **serveur principal** (plus réactif et davantage disponible, pour les mises à jour de sécurité, que le serveur national).
+  * onglet Mises à jour : cochez **//security//**, **//updates//**, éventuellement //backports//, mais surtout pas //proposed// ; demandez de //vérifier les mises à jour// **tous les jours** et d'**installer les mises à jour de sécurité sans confirmation** ; //mise à niveau de la distribution// : **jamais**.
+
+==== Mise à jour des paquets ====
+La mise à jour des paquets se fait soit par l'intermédiaire de Synaptics (en cliquant successivement sur Recharger, Tout mettre à jour, puis Appliquer), soit par le Gestionnaire de mises à jour (menu Système / Administration).
+==== Prise en charge linguistique ====
+Si vous n'avez pas utilisé, lors de l'installation, la version francisée d'Ubuntu, il vous faut effectuer les mises à jour des langues par : Système / Administration / prise en charge des langues.
+
+==== Suppression de logiciels inutiles ====
+<note important>Ne désinstallez jamais un paquet qui entrainerait la suppression du paquet **ubuntu-desktop** ! </note>
+=== Les jeux ===
+On ne joue pas sur un serveur !
+  sudo apt-get remove --purge gnome-games-common gbrainy
+ou bien dans Synaptics sélectionnez **gnome-games-common** et **gbrainy** pour suppression complète.
+
+=== Compiz ===
+Pas besoin de fenêtre bondissantes !
+  sudo apt-get remove --purge compiz-core compiz-wrapper mesa-utils
+ou bien dans Synaptics sélectionnez ces paquets pour suppression complète.
+
+=== Graphisme ===
+Pas besoin de Gimp (graphisme), Xsane (scanneur), ni de pilotes d'imprimantes :
+  sudo apt-get remove --purge gimp gimp-data sane-utils xsane xsane-common min12xxw gimp-help-common
+ou bien dans Synaptics sélectionnez ces paquets pour suppression complète.
+
+=== OpenOffice ===
+Pas besoin de suite bureautique, sauf si vous lisez de la documentation en .odt, ou .doc.
+  sudo apt-get remove --purge openoffice.org-common
+ou bien dans Synaptics sélectionnez ce paquet pour suppression complète.
+
+=== Paquets obsolètes ===
+Certains paquets sont rendus obsolètes par une mise à jour avec une version plus élevée ; c'est souvent le cas de //linux-headers-2.6.xx-yy//. Supprimez-les avec : 
+  sudo apt-get autoremove
+
+===== Installation des logiciels nécessaires =====
+Nous avons besoin d'installer les logiciels cités dans [[#presentation | la présentation]].
+
+Nous pouvons les installer en [[apt://apache2,apache2-doc,mysql-server,php5,libapache2-mod-php5,php5-mysql,php5-auth-pam,libapache2-mod-auth-pam,perl,php-pear,proftpd-basic,phpmyadmin,openssl,php5-gd,freetype2-demos,libfreetype6,libjpeg-progs,libjpeg62,libpng12-0,libgdbm3,zlib1g,zlib1g-dev,expat,sablotron,php5-cli,proftpd-doc,libgd-tools,libcompress-zlib-perl,libxml2-dev,mingw32-binutils,webalizer,php-fpdf,ncurses-bin,libapache2-mod-perl2,libapache2-mod-perl2-doc,freetds-dev,gettext,php5-mcrypt,php5-mhash,php5-sqlite,dovecot-postfix,php5-xcache,dokuwiki,txt2tags,zopeedit,python-ldap,python-zodb,openssh-server,nautilus-gksu,nautilus-open-terminal,vim,debconf-utils,ssh,filezilla|un clic]] (cela prend du temps). (Si firefox vous demande avec quoi ouvrir ce lien, validez le choix par défaut qui est **apturl**.)
+
+Ou bien les installer en ligne de commande : 
+
+<code>
+sudo apt-get update
+sudo apt-get install apache2 apache2-doc mysql-server php5 libapache2-mod-php5 php5-mysql php5-auth-pam libapache2-mod-auth-pam perl php-pear proftpd-basic phpmyadmin openssl php5-gd freetype2-demos libfreetype6 libjpeg-progs libjpeg62 libpng12-0 libgdbm3 zlib1g zlib1g-dev expat sablotron php5-cli proftpd-doc libgd-tools libcompress-zlib-perl libxml2-dev mingw32-binutils webalizer php-fpdf ncurses-bin libapache2-mod-perl2 libapache2-mod-perl2-doc freetds-dev gettext php5-mcrypt php5-mhash php5-sqlite dovecot-postfix php5-xcache dokuwiki txt2tags zopeedit python-ldap python-zodb openssh-server nautilus-gksu nautilus-open-terminal vim debconf-utils ssh filezilla
+</code>
+
+Ou bien les installer un par un : [[apt>apache2]], [[apt>apache2-doc]], [[apt>mysql-server]], [[apt>php5]], [[apt>libapache2-mod-php5]], [[apt>php5-mysql]], [[apt>php5-auth-pam]], [[apt>libapache2-mod-auth-pam]], [[apt>perl]], [[apt>php-pear]], [[apt>proftpd-basic]], [[apt>phpmyadmin]], [[apt>openssl]], [[apt>php5-gd]], [[apt>freetype2-demos]], [[apt>libfreetype6]], [[apt>libjpeg-progs]], [[apt>libjpeg62]], [[apt>libpng12-0]], [[apt>libgdbm3]], [[apt>zlib1g]], [[apt>zlib1g-dev]], [[apt>expat]], [[apt>sablotron]], [[apt>php5-cli]], [[apt>proftpd-doc]], [[apt>libgd-tools]], [[apt>libcompress-zlib-perl]], [[apt>libxml2-dev]], [[apt>mingw32-binutils]], [[apt>webalizer]], [[apt>php-fpdf]], [[apt>ncurses-bin]], [[apt>libapache2-mod-perl2]], [[apt>libapache2-mod-perl2-doc]], [[apt>freetds-dev]], [[apt>gettext]], [[apt>php5-mcrypt]], [[apt>php5-mhash]],  [[apt>php5-sqlite]], [[apt>dovecot-postfix]], [[apt>php5-xcache]], [[apt>dokuwiki]], [[apt>txt2tags]], [[apt>zopeedit]], [[apt>python-ldap]], [[apt>python-zodb]], [[apt>openssh-server]], [[apt>nautilus-gksu]], [[apt>nautilus-open-terminal]], [[apt>vim]], [[apt>debconf-utils]], **[[apt>ssh]]**, **[[apt>filezilla]]**
+
+^Paquet  ^Renseignement demandé ^Conseil ^
+|proftpd | Lancement de proftpd | //inetd// si l'usage du ftp est très ponctuel, //standalone// s'il est intensif |
+|mysql-server | Mot de passe du root (administrateur) de MySQL | Évitez les accents |
+|phpmyadmin | Quel serveur HTTP faut-il configurer | Apache2 |
+|phpmyadmin | Utiliser dbconfig-common ? | Oui |
+|phpmyadmin | Mot de passe de l'administrateur de MySQL | Le même que précédemment |
+|dovecot-postfix | Configuration-type du courrier de messagerie | Internet avec un "smarthost" |
+|dovecot-postfix | Nom de courrier | Indiquez votre nom de domaine, ou le FQDN de votre ZwookMachine |
+|dovecot-postfix | Relais SMTP | Indiquez l'adresse du serveur SMTP de votre FAI (smtp.fai.com) ou de votre réseau |
+|dokuwiki | Emplacement du dokuwiki | Indiquez le chemin à partir de la racine du site, par exemple /wiki |
+|dokuwiki | Supprimer les pages à la suppression du paquet | Ne pas cocher, au risque de perdre des données |
+
+===== Installation de Remastersys =====
+C'est avec [[/remastersys]] que nous allons créer le DVD-live.
+
+Pour Ubuntu **Karmic** (version 2.0.13-1 et supérieures), entrez dans un terminal, l'une après l'autre, les commandes :
+<code>echo "deb http://www.geekconnection.org/remastersys/repository karmic/" | sudo tee -a /etc/apt/sources.list.d/remastersys.list
+sudo apt-get update
+sudo apt-get install remastersys ubiquity-frontend-gtk</code>
+
+Ou bien téléchargez directement la version 2.0.15 : [[http://www.geekconnection.org/remastersys/repository/karmic/remastersys_2.0.15-1_all.deb]] et installez-la d'un double-clic.
+
+===== Installation de Zope 2.9.12 (Ubuntu Lucid 10.04.2) =====
+Zope 2.9.12 est nécessaire pour faire tourner certains sites Zwook. Mais il faut auparavant compiler et installer Python 2.4.6, qui n'est plus dans les dépôts de Lucid.
+==== Installation de Python 2.4.6 ====
+=== Paquets nécessaires à la compilation ===
+  sudo apt-get install build-essential libreadline-dev zlib1g-dev libjpeg62-dev subversion libpq-dev lib32z1-dev
+
+
+=== Préparation et installation ===
+Pour Python 2.4.6 :
+  cd
+  mkdir install
+  cd install
+  wget http://www.python.org/ftp/python/2.4.6/Python-2.4.6.tgz
+  tar xzf Python-2.4.6.tgz
+  cd Python-2.4.6
+  make clean
+  ./configure --prefix=/usr/lib/python2.4
+  make
+  sudo make install
+
+Pour l'utilitaire easy_install :
+  cd ~/install
+  wget http://peak.telecommunity.com/dist/ez_setup.py
+  sudo /usr/lib/python2.4/bin/python ez_setup.py
+
+Pour l'utilitaire virtualenv :
+  sudo /usr/lib/python2.4/bin/easy_install virtualenv
+
+Pour la bibliothèque PIL (Python Imaging Library) :
+  sudo /usr/lib/python2.4/bin/easy_install PIL
+
+Pour les module python-ldap et sasl :
+  sudo apt-get install libsasl2-dev libssl-dev libldap2-dev
+  sudo /usr/lib/python2.4/bin/easy_install python-ldap sasl
+==== Zope 2.9.12 ====
+  cd ~/install
+  wget http://www.zope.org/Products/Zope/2.9.12/Zope-2.9.12-final.tgz
+  tar xzf Zope-2.9.12-final.tgz
+  cd Zope-2.9.12-final
+  make clean
+  ./configure --prefix=/usr/lib/zope2.9 --with-python=/usr/lib/python2.4/bin/python
+  make
+  sudo make install
+
+==== Création de l'instance ZwookEdu de Zope ====
+Pour créer l'instance **zwookedu** dans ''/var/lib/zope2.9/instances'', avec pour utilisateur principal **admin**, qui aura pour mot de passe **adminzope** :
+  sudo /usr/lib/zope2.9/bin/mkzopeinstance.py --dir=/var/lib/zope2.9/instances/zwookedu --user=admin:adminzope
+
+Vérification : 
+  ls /var/lib/zope2.9/instances/zwookedu/
+''bin  etc  Extensions  import  inituser  lib  log  Products  README.txt  var''
+
+==== Rendre adminzm propriétaire des instances de Zope 2.9 ====
+Rendre adminzm propriétaire du dossier ''/var/lib/zope2.9'', et root propriétaire des scripts ''inituser'' (s'ils existent) :
+  sudo chown -R $USER:$USER /var/lib/zope2.9
+  sudo chown root:root /var/lib/zope2.9/instances/*/inituser 2> /dev/null
+
+Éditer le fichier de configuration de l'instance :
+  gedit /var/lib/zope2.9/instances/zwookedu/etc/zope.conf
+Vers la ligne 150, insérer : 
+  effective-user adminzm
+Ainsi, l'instance zwookedu fonctionnera sous le nom d'adminzm.
+
+Nous reviendrons plus tard sur ce fichier de configuration.
+
+==== Démarrage de l'instance zwookedu et test ====
+Démarrage de l'instance zwookedu :
+  /var/lib/zope2.9/instances/zwookedu/bin/zopectl start
+
+Test : Ouvrir Firefox sur [[http://localhost:8080]]
+
+La page d'accueil de Zope apparait. 
+
+Cliquez ensuite sur le lien [[http://localhost:8080/manage|Zope Management Interface]], une fenêtre d'authentification apparait. Utilisateur : admin et mot de passe adminzope, comme défini précédemment.
+
+==== Liens symboliques simplificateurs ====
+Si zwookedu est votre seule instance de Zope 2.9, créer les liens suivants :
+  sudo ln -s /var/lib/zope2.9/instances/zwookedu/bin/zopectl /usr/bin/zopectl2.9
+  sudo ln -s /var/lib/zope2.9/instances/zwookedu/bin/runzope /usr/bin/runzope2.9
+  sudo mkdir /etc/zope2.9
+  sudo ln -s /var/lib/zope2.9/instances/zwookedu/etc/zope.conf /etc/zope2.9
+
+Ainsi, il vous sera plus facile de faire un ''zopectl2.9 restart'' au lieu d'un ''/var/lib/zope2.9/instances/zwookedu/bin/zopectl restart'', et d'éditer le fichier ''/etc/zope2.9/zope.conf'' plutôt que le fichier ''/var/lib/zope2.9/instances/zwookedu/etc/zope.conf''
+
+==== Daemonisation de l'instance zwookedu ====
+Pour faire en sorte que l'instance zwookedu de Zope se lance au démarrage du serveur, nous allons la //daemoniser//.
+
+Les liens symboliques dont il est question ci-dessus ont été créés.
+
+On crée le script ''/etc/init.d/zope2.9''
+  sudo gedit /etc/init.d/zope2.9
+qui contient ceci  (Attention à la ligne 27 : **OWNER=adminzm** ; à modifier éventuellement pour l'adapter à votre cas) :
+<code>
+#! /bin/sh
+### BEGIN INIT INFO
+# Provides:          zope2.9
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Lance l'instance Zope 2.9
+# Description:       Lance l'instance Zope 2.9 contrôlée par le lien
+# 		symbolique /usr/bin/zopectl2.9
+### END INIT INFO
+
+# Author: Claude Clerc <claude.clerc@ac-aix-marseille.fr>
+#
+
+# Do NOT "set -e"
+
+# PATH should only include /usr/* if it runs after the mountnfs.sh script
+PATH=/sbin:/usr/sbin:/bin:/usr/bin
+DESC="Zope 2.9.12"
+NAME=zopectl2.9
+DAEMON=/usr/bin/$NAME
+#DAEMON_ARGS="--options args"
+DAEMON_ARGS=""
+PIDFILE=/var/run/zope2.9.pid
+SCRIPTNAME=/etc/init.d/zope2.9
+OWNER=adminzm
+
+# Exit if the package is not installed
+[ -x "$DAEMON" ] || exit 0
+
+# Read configuration variable file if it is present
+[ -r /etc/default/$NAME ] && . /etc/default/$NAME
+
+# Load the VERBOSE setting and other rcS variables
+. /lib/init/vars.sh
+
+# Define LSB log_* functions.
+# Depend on lsb-base (>= 3.0-6) to ensure that this file is present.
+. /lib/lsb/init-functions
+
+#
+# Function that starts the daemon/service
+#
+do_start()
+{
+	su $OWNER $DAEMON start || exit 1
+	su $OWNER $DAEMON status | sed s/^.*pid=// > $PIDFILE
+	exit 0
+}
+
+#
+# Function that stops the daemon/service
+#
+do_stop()
+{
+	rm -f $PIDFILE
+	su $OWNER $DAEMON stop || exit 1
+	exit 0
+}
+
+do_restart()
+{
+	rm -f $PIDFILE
+	su $OWNER $DAEMON restart || exit 1
+	su $OWNER $DAEMON status | sed s/^.*pid=// > $PIDFILE
+	exit 0
+}
+
+read_status()
+{
+	su $OWNER $DAEMON status
+	exit 0
+}
+
+case "$1" in
+  start)
+	do_start
+	;;
+  stop)
+	do_stop
+	;;
+  status)
+	read_status
+        ;;
+  restart|force-reload)
+	do_restart
+	;;
+  *)
+	#echo "Usage: $SCRIPTNAME {start|stop|restart|force-reload}" >&2
+	echo "Usage: $SCRIPTNAME {start|stop|status|restart|force-reload}" >&2
+	exit 3
+	;;
+esac
+
+:
+</code>
+
+Rendons-le exécutable :
+  sudo chmod +x /etc/init.d/zope2.9
+
+Installons les raccourcis-service : 
+  sudo update-rc.d zope2.9 defaults 90 10
+Ainsi le service zope2.9 démarrera en position 90, avant Apache2 (qui démarre en position 91), et s'arrêtera en position 10, après Apache2 (qui s'arrête en position 9).
+
+==== Paramétrage de l'instance ====
+
+Éditer le fichier /var/lib/zope2.9/instances/zwookedu/etc/zope.conf, ou plus simplement /etc/zope2.9/zope.conf :
+  gedit /etc/zope2.9/zope.conf
+
+Vérifier les "directives" suivantes, en les adaptant à vos besoins : 
+<code>
+<environment>
+	TZ Europe/Paris	# TimeZone (fuseau horaire) ; liste : ls /usr/share/zoneinfo
+	TMPDIR /tmp	        # Dossier des données temporaires (doit contenir plusieurs GiO)
+</environment>
+
+debug-mode off
+
+effective-user adminzm	# Zope tourne avec les droits de l'utilisateur adminzm.
+
+zserver-threads 30	# Le nombre de threads de votre serveur Zope ; dépend de la quantité de RAM.
+
+python-check-interval 2000
+
+http-realm Espace privé	# Domaine apparaissant, en cas d'authentification, dans la boîte de dialogue.
+
+maximum-number-of-session-objects 5000
+
+suppress-all-site-roots off
+
+<eventlog>
+  level info
+  <logfile>
+    path $INSTANCE/log/event.log
+    level info
+  </logfile>
+</eventlog>
+
+<logger access>
+  level WARN
+  <logfile>
+    path $INSTANCE/log/Z2.log
+    format %(message)s
+  </logfile>
+</logger>
+
+<warnfilter>
+   action ignore
+   category exceptions.DeprecationWarning
+</warnfilter>
+
+<http-server>
+  # valid keys are "address" and "force-connection-close"
+  address 9080
+  # force-connection-close on
+</http-server>
+
+<ftp-server>
+  # valid key is "address"
+  address 9021
+</ftp-server>
+
+<zodb_db main>
+    # Main FileStorage database
+    <filestorage>
+      path $INSTANCE/var/Data.fs
+    </filestorage>
+    mount-point /
+</zodb_db>
+
+<zodb_db temporary>
+    # Temporary storage database (for sessions)
+    <temporarystorage>
+      name temporary storage for sessioning
+    </temporarystorage>
+    mount-point /temp_folder
+    container-class Products.TemporaryFolder.TemporaryContainer
+</zodb_db>
+
+# zoperunner section (tells zopectl where runzope is)
+<zoperunner>
+  program $INSTANCE/bin/runzope
+</zoperunner>
+
+</code>
+
+Penser à redémarrer Zope après toute modification de sa configuration :
+  sudo service zope2.9 restart
+
+<note important>Si le port a été modifié (par exemple 9080 au lieu de 8080, comme ici), penser à le changer dans la barre d'adresse de votre navigateur : http://localhost:9080/</note>
+
+
+===== Zwook/ZwookEdu =====
+**ZwookEdu** est un CMS (//Content Management System// ou système de gestion de contenu) Libre, pensé pour favoriser les échanges ente professeurs et élèves, développé par des enseignants Suisses et Français à partir du CMS **Zwook**.
+
+Sites : [[http://zwook.org|zwook.org]] (site communautaire), [[http://zwook.ch|zwook.ch]] (site de développement), [[http://zwookedu.ch|zwookedu.ch]] (site pédagogique)
+
+
+
+==== Installation de ZwookEdu ====
+=== Téléchargement du ZwooksManager ===
+Le ZwooksManager permet de créer ou de mettre à jour des sites web Zwook.
+
+Télécharger la dernière version sur [[http://sourceforge.net/projects/zwook/files/]].
+
+=== Installation du ZwooksManager ===
+Déplacer le fichier que vous venez de télécharger dans le dossier Product de l'instance zwookedu que vous avez créée.
+
+  cd /var/lib/zope2.9/instances/zwookedu/Products/
+  mv ~/Téléchargements/ZwooksManagerAAAAMMJJ.tgz .
+
+(AAAAMMJJ est une date ; ne pas oublier le point, qui désigne le répertoire actuel, à la fin de la dernière commande.)
+
+Décompresser ce fichier :
+
+  tar xzf ZwooksManager20100516.tgz
+
+Un ''ls -l'' permet de constater qu'un dossier **ZwooksManager** a été créé.
+
+Pour faire un peu de ménage, supprimer le tarball :
+
+  rm ZwooksManagerAAAAMMJJ.tgz
+
+Copier les extensions nécessaires au bon endroit :
+
+  mkdir ../Extensions
+  cp ZwooksManager/NeedExtensions/* ../Extensions/
+
+Copier les products nécessaires dans le dossier actuel :
+
+  cp -a ZwooksManager/NeedProducts/* .
+
+Redémarrer zope2.9 :
+  sudo service zope2.9 restart
+
+
+Ouvrir la page manage_main de Zope : http://localhost:9080/manage_main
+
+En haut à droite de cette page, une liste déroulante commence par //Accelerated HTTP Cache Manager//. Le dérouler pour sélectionner **ZwooksManager** (en bas de la liste).
+
+Un objet nommé **ZwooksManager** (doté d'une icone rouge) apparait. Cliquer dessus, puis sur l'onglet //View//.
+
+=== Créer un site de type ZwookEdu ===
+
+Tout en bas de la page intitulée **Zwooks Manager**, dans la partie **Installer un Zwook**, indiquer le nom du nouveau Zwook : **internet** ; choisir la version 1.3.1 de zwook et cliquer sur le bouton **Install**.
+
+Au bout de quelques dizaines de secondes, apparait ceci :
+
+''container ok''
+
+''copy du zexp dans import''
+
+''import du zexp''
+
+''copy ok''
+
+''cleaning ok''
+
+''[[http://localhost:9080/internet|Cliquez ici]] pour voir...''
+
+Cliquer sur le lien ; le site apparait. Se connecter en administrateur avec login et mot de passe : admin/admin.
+
+===== DNS =====
+L'utilisation d'un service DNS (//Domain Name Server//) est nécessaire pour l'utilisation d'hôtes virtuels dans Apache2.
+
+==== Paquets à installer ====
+
+  sudo apt-get install bind9 bind9-doc bind9utils
+
+==== Configuration du DNS ====
+
+Les fichiers de configuration sont dans ''/etc/bind''.
+
+Nous allons configurer un serveur DNS hybride, qui d'une part sera maître pour le ou les pseudo-noms de domaine correspondants aux FQDN des sites hébergés, et d'autre part servira de cache pour les autres noms de domaine.
+
+=== Fichier named.conf.options ===
+
+Ce DNS va consulter d'autres serveurs DNS locaux ou distants (par exemple ceux du FAI) pour les noms de domaines qu'il ne gère pas.
+
+Remplacez le fichier ''/etc/bind/named.conf.options'' par le modèle ci-dessous, en substituant à **<nowiki>%%NAMESERVER%%</nowiki>** et **<nowiki>%%NAMESERVER2%%</nowiki>** les IP des DNS à consulter. (Un petit ''cat /etc/resolv.conf'' peut vous être utile pour connaître ces IP.)
+
+<note tip>Si vous ne savez pas quoi mettre, essayez les IP des serveurs [[http://www.opendns.com|OpenDNS]] : 208.67.222.222 et 208.67.220.220. </note>
+
+<code>
+options {
+	directory "/var/cache/bind";
+
+	// S'il y a un firewall entre ce poste et les serveurs de noms
+	// que vous désirez consulter, vous pouvez avoir besoin de décommenter
+	// l'instruction query-source ci-après. Les précedentes versions de BIND
+	// envoyaient toujours leurs requêtes à travers le port 53, mais BIND 
+	// version 8.1 et suivantes utilisent un port non-privilégié par défaut.
+
+	query-source address * port 53;
+
+	// Si votre FAI propose une ou plusieurs addresses IP de 
+	// serveurs de noms, vous voudrez probablement les utiliser comme
+	// forwarders, c'est-à-dire leur transmettre les requêtes pour les noms
+	// de domaines extérieurs. Attention au point-virgule après chaque IP.
+
+	forwarders {
+		%%NAMESERVER%%;
+		%%NAMESERVER2%%;
+	};
+
+	auth-nxdomain no;    # conform to RFC1035
+	listen-on-v6 { any; };
+};
+</code>
+
+=== Fichier db.zm ===
+
+Ce fichier définit les domaines gérés par la ZwookMachine.
+
+Dans le modèle ci-dessous, **<nowiki>%%EPOCH%%</nowiki>** devra être remplacé par le résultat de :
+  date +%s
+
+**<nowiki>%%FQDN_POINT%%</nowiki>** devra être remplacé par le nom de domaine pleinement qualifié (//Full Qualified Domain Name//) de votre machine, celui-ci **terminé par un point** ; par exemple : ''www2.lyc-detest.ac-aix-marseille.fr.''
+
+**<nowiki>%%HOSTIP%%</nowiki>** devra être remplacé par l'IP de votre ZwookMachine.
+
+Voici le modèle de fichier ''/etc/bind/db.zm'' :
+<code>
+; BIND data file for rfc1918 zone
+;
+$TTL	86400
+@	IN	SOA	%%FQDN_POINT%% adminzm.%%FQDN_POINT%% (
+			%%EPOCH%%	; Serial
+			 604800		; Refresh
+			  86400		; Retry
+			2419200		; Expire
+			  604800 )	; Negative Cache TTL
+;
+@	IN	NS	%%FQDN_POINT%%
+@	IN	A	%%HOSTIP%%
+</code>
+
+=== Fichier db.zm.inv ===
+
+Remplacer les variables comme indiqué ci-dessus.
+
+**<nowiki>%%HOSTIP_4%%</nowiki>** devra être remplacé par le dernier nombre de l'IP de votre ZwookMachine.
+
+Voici le modèle de fichier ''/etc/bind/db.zm.inv'' :
+<code>
+; BIND data file for rfc1918 zone
+;
+$TTL	86400
+@	IN	SOA	%%FQDN_POINT%% adminzm.%%FQDN_POINT%% (
+			%%EPOCH%%	; Serial
+			 604800		; Refresh
+			  86400		; Retry
+			2419200		; Expire
+			 604800 )	; Negative Cache TTL
+;
+@	IN	NS	%%FQDN_POINT%%
+%%HOSTIP_4%%	PTR	%%FQDN_POINT%%
+</code>
+
+
+=== Fichier named.conf.local ===
+
+C'est le fichier à renseigner pour que les fichier ''db.zm'' et ''db.zm.inv'' soient pris en compte.
+
+**<nowiki>%%HOSTIP_3%%.%%HOSTIP_2%%.%%HOSTIP_1%%</nowiki>** est l'écriture inversée des 3 premiers nombres de l'IP de la ZwookMachine. Par exemple, si l'IP est 172.19.34.10, alors vous devrez remplacer ceci par 34.19.172.
+
+<code>
+//
+// Do any local configuration here
+//
+
+// Consider adding the 1918 zones here, if they are not used in your
+// organization
+//include "/etc/bind/zones.rfc1918";
+
+zone "%%FQDN%%" {
+       type master;
+       file "/etc/bind/db.zm";
+       forwarders{};
+};
+
+zone "%%HOSTIP_3%%.%%HOSTIP_2%%.%%HOSTIP_1%%.in-addr.arpa" {
+       type master;
+       file "/etc/bind/db.zm.inv";
+       forwarders{};
+};
+</code>
+
+=== Redémarrage du service bind ===
+
+  sudo service bind9 restart
+
+=== Utiliser ce service DNS ===
+
+Éditer le fichier ''/etc/resolv.conf'' afin qu'il ne contienne que la ligne nameserver suivante :
+  nameserver 127.0.0.1
+
+(Commentez les autres lignes en les faisant commencer par un #.)
+
+=== Tests ===
+
+Peut-on //pinguer// le nom de domaine ?
+  ping www2.lyc-detest.ac-aix-marseille.fr
+
+
+Test du fichier de configuration ''db.zm'' :
+  named-checkzone www2.lyc-detest.ac-aix-marseille.fr /etc/bind/db.zm
+
+
+Test du fichier de configuration ''db.zm.inv'' :
+  named-checkzone www2.lyc-detest.ac-aix-marseille.fr /etc/bind/db.zm.inv
+
+(S'il vous est répondu que cette zone //has no address records (A or AAAA)//, c'est normal.)
+
+
+Test de la résolution directe : 
+  host www2.lyc-detest.ac-aix-marseille.fr
+ou, plus complet :
+  dig www2.lyc-detest.ac-aix-marseille.fr AXFR
+
+
+Test de la résolution inverse :
+  host 192.168.0.13
+ou, plus complet :
+  dig 0.168.192.in-addr.arpa AXFR
+
+
+===== Apache2.2 =====
+
+<note>En raison de l'utilisation de Php5, le MPM (module multi-traitement) d'Apache2.2 utilisé est le //prefork// et non le //worker// (qui est plus rapide, mais ne permet pas d'isoler les requêtes, ce qui est nécessaire avec Php5).</note>
+
+==== Php5 ====
+
+Une erreur m'a bloqué longtemps, m'empêchant d'utiliser des solutions Php/MySQL : les modules idoines de Php5 ne se chargent pas ; une erreur "**PHP Startup: Unable to load dynamic library**" apparaît dans ''/var/log/apache2/error.log''.
+
+La solution : 
+  cd /usr/lib/php5
+  sudo ln -s 20090626+lfs modules
+
+Ensuite, éditer le fichier ''/etc/php5/apache2/php.ini'' ; modifier la ligne :
+  extension_dir = "/usr/lib/php5/*/"
+en :
+  extension_dir = "/usr/lib/php5/modules/"
+
+==== Modules ====
+=== Module Python ===
+**[[apt>libapache2-mod-wsgi]]**
+
+ou
+  sudo apt-get install libapache2-mod-wsgi
+
+==== Hôtes virtuels (vhosts) ====
+
+
+==== Proxies ====

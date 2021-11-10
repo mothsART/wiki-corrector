@@ -1,0 +1,248 @@
+
+{{tag>système sécurité BROUILLON}}
+----
+====== schroot ======
+
+**schroot** permet de gérer plus efficacement un environnement [[wpfr>chroot]]. L'usage de ces deux outils (schroot et chroot) permet de créer un [[virtualisation|environnement virtualisé]] minimal. Puisque le système d'exploitation de l'environnement chroot partage le même noyau que le système « hôte », les ressources système (mémoire vive, processeur) sont moins sollicitées, mis à part l'utilisation du disque dur.
+
+En terme de sécurité, schroot est moins robuste que les solutions de [[virtualisation]] régulières.
+
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+
+===== Installation =====
+
+Il suffit d'[[:tutoriel:comment_installer_un_paquet|installer les paquets]] **[[apt://schroot,debootstrap|schroot debootstrap]]**.
+
+===== L'arborescence =====
+
+Voici un petit descriptif de l'arborescence de **/etc/schroot** :
+
+  * **chroot.d** : On peut placer des fichiers de configuration supplémentaires dans ce répertoire qui seront lus de la même manière que schroot.conf
+  * **copyfiles-defaults** : Les fichiers à copier à partir du système hôte dans l'environnement chroot
+  * **mount-defaults** : Les systèmes de fichiers à monter à l'intérieur du chroot.
+  * **nssdatabases-defaults** : Système de base de données NSS à copier dans le chroot.
+  * **schroot.conf** : Définit chaque chroot à mettre en place
+  * **script-defaults** : Script à exécuter par défaut lors du démarrage de l'environnement chroot
+  * **setup.d** : Dossier qui possède des scripts de configuration
+  
+
+===== Mise en place d'un environnement chroot =====
+  * Création du répertoire :<code>mkdir chroot</code>N'importe quel répertoire peut faire l'affaire. L'exemple est donné avec le dossier **/chroot**, à changer à loisir.
+
+  * Installation d'une distribution (Ubuntu). Pour cela, on récupérera l'ensemble des paquets. Pour du 64 bits :<code>sudo debootstrap --arch amd64 quantal /chroot/quantal http://us.archive.ubuntu.com/ubuntu/</code>Ou bien, pour installer l'environnement en 32 bits :<code>sudo debootstrap --arch i386 quantal /chroot/quantal http://us.archive.ubuntu.com/ubuntu/</code>Après cela, le dossier **/chroot/quantal/** contient l'arborescence habituelle de la racine de la distribution Ubuntu Quantal Lynx 10.04.
+
+  * Pour conserver les logins utilisateurs, mots de passe, groupes etc du système hôte, ajouter ces lignes au fichier /etc/schroot/default/copyfiles :<code>
+/etc/passwd
+/etc/shadow
+/etc/group
+/etc/sudoers
+/etc/hosts
+/etc/hostname
+</code>Pour conserver les dépôts de paquets (NE PAS FAIRE lorsque les distributions sont différentes...), ajouter cette ligne:<code>
+/etc/apt/sources.list
+</code>
+
+
+  * [[:tutoriel:comment_modifier_un_fichier|Configuration du fichier]] **/etc/schroot/schroot.conf**<file>
+[quantal]
+description=quantal
+directory=/chroot/quantal
+users=user1,user2,...
+root-groups=root
+root-users=root
+type=directory
+aliases=default
+</file>Et remplacer "user1", "user2" par les utilisateurs ayant le droit d'utiliser le chroot. La ligne peut être remplacée par "groups=schroot" par exemple, en ajoutant les utilisateurs au groupe "schroot".
+===== Utilisation courante =====
+  * Pour se connecter dans un environnement chroot et avoir la main en ligne de commande :<code>schroot</code> ou bien, si plusieurs environnements chroot sont installés :<code>schroot -c lucid</code>Pour quitter l'environnement, utiliser les touches **Ctrl+d** ou bien la commande **exit**.
+
+  * Démarrer un environnement chroot :<code>schroot -b -c lucid</code>Lors du démarrage du chroot, schroot nous donne l'identifiant du chroot, par exemple **lucid-00e8c158-e183-48ad-8407-272808c6b0c6**
+
+  * S'identifier dans l'environnement schroot :<code>schroot -r -c lucid-00e8c158-e183-48ad-8407-272808c6b0c6</code>
+
+  * Stopper le chroot :<code>schroot -e -c lucid-00e8c158-e183-48ad-8407-272808c6b0c6</code>
+
+===== Exemple d'utilisation avancée =====
+
+Nous allons installer un serveur [[LAMP|LAMP]] dans un environnement chroot. Le système exploitation hôte sera une distribution ubuntu. Par contre le système invité sera une distribution Debian.
+
+==== Configuration de schroot ====
+
+
+  * Installation d'une distribution Debian. Pour cela, on récupérera l'ensemble des paquets :
+
+  debootstrap --arch amd64 squeeze /chroot/squeeze http://ftp.fr.debian.org/debian/
+
+  * [[:tutoriel:comment_modifier_un_fichier|Configuration du fichier]] **/etc/schroot/schroot.conf**, on ajoute notre nouvelle distribution debian.
+<file>
+[squeeze]
+description=squeeze
+directory=/chroot/squeeze
+root-groups=root
+root-users=root
+type=directory
+script-config=script-squeeze
+</file>
+
+  * On crée le fichier script-squeeze qui a la même structure et qui se trouve dans répertoire que script-defaults
+
+  touch /etc/schroot/script-squeeze
+
+  * Puis, on édite le fichier **/etc/schroot/script-squeeze**
+<file>
+# Default settings for chroot setup and exec scripts.
+# See schroot-script-config(5) for further details.
+
+# Filesystems to mount inside the chroot.
+FSTAB="/etc/schroot/mount-squeeze"
+</file>
+  * On copie le fichier /etc/schroot/mount-defaults
+
+  cp /etc/schroot/mount-defaults /etc/schroot/mount-squeeze
+
+  * On commente les lignes dont le montage ne doit pas s'effectuer
+<file>
+# mount.defaults: static file system information for chroots.
+# Note that the mount point will be prefixed by the chroot path
+# (CHROOT_PATH)
+#
+# <file system> <mount point>   <type>  <options>       <dump>  <pass>
+proc            /proc           proc    defaults        0       0
+#procbususb      /proc/bus/usb   usbfs   defaults        0       0
+/dev            /dev            none    rw,bind         0       0
+/dev/pts        /dev/pts        none    rw,bind         0       0
+/dev/shm        /dev/shm        none    rw,bind         0       0
+#/home          /home           none    rw,bind         0       0
+#/tmp           /tmp            none    rw,bind         0       0
+</file>
+  
+==== Installation du serveur LAMP ====
+
+=== Installation ===
+
+  sudo -s
+  schroot -b -c lenny
+  schroot -r -c lenny-00e8c158-e183-48ad-8407-272808c6b0c6
+  apt-get install apache2 mysql-server php5
+
+=== Démarrage automatique du serveur lamp ===
+
+Pour démarrer de façon automatique la chroot et tout les services que vous désirez, je vous propose ce script : 
+<code bash>
+#!/bin/bash
+
+#******************************************************************************
+# File : /etc/init.d/schrootlamp
+#
+# Auteur : Zarkxe
+#
+# Date create : Mon Nov  1 16:01:09 2010
+# Description : démarrer de façon automatique la chroot et tout les services
+#		que vous désiré
+#******************************************************************************
+
+. /lib/lsb/init-functions
+
+NAMESCRIPT="schrootlamp"
+
+do_start() {
+
+	if [ ! -e "/tmp/schroot/$NAMESCRIPT" ]; then
+
+		SCHROOT_ID=$(schroot -b -c lenny)
+
+		schroot -r -c $SCHROOT_ID /etc/init.d/mtab.sh		
+		schroot -r -c $SCHROOT_ID /etc/init.d/mysql start
+		schroot -r -c $SCHROOT_ID /etc/init.d/apache2 start
+		schroot -r -c $SCHROOT_ID /etc/init.d/exim4 start
+
+		mkdir /tmp/schroot/
+		echo $SCHROOT_ID >  /tmp/schroot/$NAMESCRIPT
+
+	elif [ -e "/tmp/schroot/$NAMESCRIPT" ]; then
+		echo "$NAMESCRIPT is already running"
+	fi
+}
+
+do_stop() {
+
+	if [ -e "/tmp/schroot/$NAMESCRIPT" ]; then
+		SCHROOT_ID=$(cat /tmp/schroot/$NAMESCRIPT)
+		schroot -r -c $SCHROOT_ID /etc/init.d/mysql stop
+		schroot -r -c $SCHROOT_ID /etc/init.d/apache2 stop
+		schroot -r -c $SCHROOT_ID /etc/init.d/exim4 stop
+		schroot -e -c $SCHROOT_ID
+
+		rm -R /tmp/schroot/
+	elif [ ! -e "/tmp/schroot/$NAMESCRIPT" ]; then
+		echo "$NAMESCRIPT is not starting"
+	fi
+}
+
+case $1 in 
+ start)
+	log_daemon_msg "Starting configuration" $NAMESCRIPT
+	if [[ $EUID = 0 ]]
+	then
+		do_start
+		log_end_msg 0
+	else
+		log_end_msg 1
+		echo "You are not root !"
+		
+	fi
+	;;
+ stop)
+	log_daemon_msg  "Stopping configuration" $NAMESCRIPT
+	if [[ $EUID = 0 ]]
+	then
+		do_stop
+		log_end_msg 0
+	else
+		log_end_msg 1
+		echo "You are not root !"
+	fi 
+	;;
+ restart)
+	log_daemon_msg  "restarting configuration" $NAMESCRIPT
+	if [[ $EUID = 0 ]]
+	then
+		do_stop
+		do_start
+		log_end_msg 0
+	else
+		log_end_msg 1
+		echo "You are not root !"
+	fi 
+	;;
+ status)
+	if [[ $EUID = 0 ]]
+	then
+		if [ ! -e "/tmp/schroot/$NAMESCRIPT" ]; then
+			echo "$NAMESCRIPT isn't running"
+		elif [ -e "/tmp/schroot/$NAMESCRIPT" ]; then
+			SCHROOT_ID=$(cat /tmp/schroot/$NAMESCRIPT)
+			echo "$NAMESCRIPT is running : $SCHROOT_ID"
+		fi
+	else
+		echo "You are not root !"
+	fi
+	;;
+     *)
+	log_daemon_msg  "./$NAMESCRIPT [start|stop|restart|status]"
+	;;
+esac
+</code>
+
+===== Voir aussi =====
+  * [[chroot|chroot]]
+  * **(fr)** [[http://ftp.traduc.org/doc-vf/gazette-linux/html/2008/150/lg150-C.html|Virtualiser sans virtualiser]], article sur l'usage de chroot et schroot
+  * **(fr)** [[http://cepcasa.info/apt/debootstrap.html|Installer Debian depuis une distribution Debian avec debootstrap]]
+  * **(en)** [[http://www.debian-administration.org/articles/566|schroot - chroot for any users]]
+
+----
+//Contributeur principal : ...//

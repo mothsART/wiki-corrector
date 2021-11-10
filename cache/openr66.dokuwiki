@@ -1,0 +1,570 @@
+
+{{tag>TAGS}}
+
+----
+
+====== GoldenGate OpenR66 ======
+
+
+
+Le projet [[http://openr66.free.fr/|GoldenGate OpenR66]] est un moniteur de transfert de fichiers pour l'environnement de production réel. Il permet d'envoyer et de recevoir des fichiers (plusieurs fichiers en simultané, par exemple à partir d'un serveur web en passant par OpenR66 vers un autre serveur), une seule prise réseau est utilisé entre deux serveurs),on peut y ajouter un traitement pré-post- ou bien une gestion d'erreur de transfert (plusieurs possibilités, y compris l'exécution de scripts externes), la validation de paquets MD5 (en option), le support de SSL (en option), la limitation de bande passante à la fois au niveau mondial (toutes les sockets) ou locale (une prise à un moment) (optionnel), une supervision Web est inclus, l'outil a besoin d'une base de donnée simples type H2, Oracle, PostgreSQL, MySQL ce qui permettent de renforcer le contrôle ou la manipulation .il existe également un client léger on peut ainsi émettre des transferts (envoyer ou recevoir), mais on ne pas accepter un nouveau transfert à partir de serveurs externes.
+
+L'outil est basé essentiellement sur le cadre Netty (http://www.jboss.org/netty)  et ont tendance à être réellement efficace, tant en terme de mémoire, de threads et la bande passante réseau.
+ 
+
+** Configuration de GoldenGateR66 Server et Clients **
+
+Ce projet repose sur les bibliothèques suivantes:
+
+    * NETTY (excellent NIO framework) from version 3.2 (NIO support). An extension to Netty is needed and can be found as Netty-Extension project.
+    * Apache Commons IO from 1.4 (special file functions like wildcard support). 
+    * Apache Commons Codec from 1.3 (Base64 support).
+    * Apache Commons Exec from 1.0 (external Exec support).
+    * DOM4J from 1.6.1 and JAXEN from 1.1.1 (XML support), only used by the current implementation of the standard Ftp Server. It could be replaced very easily. 
+    * optional: SLF4J from 1.5.8 and LOGBACK from 0.9.17, can be replaced by any logger facilities (default is Java native logger). Only used by the current implementation of the standard Ftp Server. It could be replaced very easily.
+    * A Database support: right now tested were H2 database engine ; partially tested are Oracle, PostGreSQL and MySQL support. Any new database could easily be implemented (only 3 functions are to be implemented).
+    * From GoldenGate project, two modules are necessary: GG Common (files support) and GG MD5 (MD5 Support)
+
+sous ubuntu les fichiers jar se trouve sous /usr/share/java
+
+===== Pré-requis =====
+
+Les paquets java doivent être installé par la commande :
+
+<code>
+sudo apt-get install mysql-connector-java logback-access jaxen dom4j logback-core commons-io netty 
+</code>
+
+Récupérer les derniers fichiers .jar  et GoldenGateR66-x.x.x.zip de openr66 sur  le site [http://sourceforge.net/projects/goldengate/files/ openr66.free.fr] et récupérer également le fichier netty-3.1.3.GA.jar 
+et les copier sous /usr/share/java (sauf le fichier GoldenGateR66-x.x.x.zip)
+puis créer les liens comme ci-dessous 
+<code>
+$ ls -ltr GoldenGate*
+ -rwxrwxrwx 1 root root 317355 2010-05-31 11:44 GoldenGateR66Gui-1.0.2.jar
+ -rwxrwxrwx 1 root root  68207 2010-05-31 11:44 GoldenGateDigest-1.0.0.jar
+ lrwxrwxrwx 1 root root     26 2010-05-31 11:45 GoldenGateR66Gui.jar -> GoldenGateR66Gui-1.0.2.jar
+ lrwxrwxrwx 1 root root     26 2010-05-31 11:45 GoldenGateDigest.jar -> GoldenGateDigest-1.0.0.jar
+ -rwxrwxrwx 1 root root 101155 2010-05-31 11:55 GoldenGateCommon-1.0.8.jar
+ lrwxrwxrwx 1 root root     26 2010-05-31 11:55 GoldenGateCommon.jar -> GoldenGateCommon-1.0.8.jar
+ lrwxrwxrwx 1 root root     23 2010-06-02 10:30 GoldenGateR66.jar -> GoldenGateR66-1.0.4.jar
+ -rwxrwxrwx 1 root root 487412 2010-06-02 10:31 GoldenGateR66-1.0.4.jar
+ -rwxrwxrwx 1 root root 574838 2010-02-08 12:01 netty-3.1.0.CR1.jar
+ lrwxrwxrwx 1 root root     19 2010-05-27 18:58 netty.jar -> netty-3.1.0.CR1.jar
+ -rwxrwxrwx 1 root root 697683 2010-05-31 13:16 netty-3.1.3.GA.jar
+ lrwxrwxrwx 1 root root     18 2010-05-31 13:17 netty.GA.jar -> netty-3.1.3.GA.jar
+</code>
+
+===== Installation =====
+
+Créer un répertoire pour l'installation de la conf de openr66 et y déposer le fichier zip
+<code>
+ sudo mkdir /usr/share/opengater66
+ cd /usr/share/opengater66
+ unzip GoldenGateR66-1.0.6.zip
+ sudo mkdir web data certs log conf
+ sudo data
+ sudo mkdir arch in out work
+</code> 
+Sous /usr/share/opengater66/GoldenGateR66/src/main/example
+Copier le fichier ENV_R66 sous /usr/share/opengater66/
+ <code>sudo cp ENV_R66 /usr/share/opengater66/ </code>
+Et Copier les répertoires bin et conf sous /usr/share/opengater66/
+<code>sudo cp -R conf bin /usr/share/opengater66/</code>
+Copier également l'admin http  
+Sous /usr/share/opengater66/GoldenGateR66/src/main/admin
+ <code>sudo cp -R * /usr/share/opengater66/web </code>
+
+sous la home directory modifier le fichier .bashrc et ajouter la ligne suivante :
+<code>
+ cd
+ vi .bashrc
+</code>
+Ajouter a la fin du fichier
+<code>
+ if [ -f /usr/share/goldengater66/ENV_R66 ] ; then
+    . /usr/share/goldengater66/ENV_R66
+ fi
+</code>
+modifier le fichier /usr/share/goldengater66/ENV_R66
+
+<code bash>
+ #!/bin/sh
+ set +x
+ export AIXTHREAD_SCOPE=S
+ # JDK SUN
+ #export JAVABASE="/usr/local/jdk1.6.0_13"
+ #export JAVAJDK="${JAVABASE}"
+ #JAVA_HOME="${JAVAJDK}/jre"
+ #JAVA_OPTS1="-server"
+ #JAVA_OPTS2="-Xms256m -Xmx4096m"
+ #export JAVA_RUN="${JAVA_HOME}/bin/java ${JAVA_OPTS1} ${JAVA_OPTS2} "
+ # JDK IBM
+ #export JAVABASE="/usr/java6_64"
+ export JAVABASE="/usr/lib/jvm/java-6-openjdk"
+ export JAVAJDK="${JAVABASE}"
+ JAVA_HOME="${JAVAJDK}/jre"
+ JAVA_OPTS1=""
+ #JAVA_OPTS1="-Xquickstart -Xgcpolicy:gencon -Xdisableexcessivegc"
+ JAVA_OPTS2="-Xms256m -Xmx1024m"
+ export JAVA_RUN="${JAVA_HOME}/bin/java ${JAVA_OPTS1} ${JAVA_OPTS2} "
+ export PATH=${JAVA_HOME}/bin:${JAVAJDK}/bin:$PATH
+ export LDR_CNTRL=LARGE_PAGE_DATA=Y
+ export R66HOME="/usr/share/goldengater66"
+ export R66BIN="${R66HOME}/lib"
+ # command for Client
+ # Logger
+ loggerserver=" -Dlogback.configurationFile=${R66HOME}/conf/logback.xml "
+ loggerclient=" -Dlogback.configurationFile=${R66HOME}/conf/logback-client.xml "
+ libraries=" ${R66BIN}/slf4j-api.jar:\
+ ${R66BIN}/logback-access.jar:${R66BIN}/logback-classic.jar:${R66BIN}/logback-core.jar:\
+ ${R66BIN}/dom4j.jar:${R66BIN}/jaxen.jar:\
+ ${R66BIN}/commons-io.jar:\
+ ${R66BIN}/commons-codec.jar:${R66BIN}/commons-exec-1.0.jar:\
+ ${R66BIN}/ojdbc5.jar:${R66BIN}/orai18n.jar:\
+ ${R66BIN}/mysql.jar:\
+ ${R66BIN}/GoldenGateCommon.jar:${R66BIN}/GoldenGateDigest.jar:\
+ ${R66BIN}/NettyExtension.jar:${R66BIN}/netty.GA.jar:\
+ ${R66BIN}/GoldenGateR66.jar "
+ export JAVARUNCLIENT="${JAVA_RUN} -cp ${libraries} ${loggerclient} "
+ export JAVARUNSERVER="${JAVA_RUN} -cp ${libraries} ${loggerserver} "
+ ################
+ # R66 COMMANDS #
+ ################
+ # SERVER SIDE #
+ ###############
+ # start the OpenR66 server
+ # no option
+ export R66SERVER="${R66HOME}/bin/server.sh"
+ #alias -x r66server="${R66SERVER}"
+ alias r66server="${R66SERVER}"
+ # shutdown locally the server
+ # [ PID ] optional PID of the server process
+ export R66SIGNAL="${R66HOME}/bin/localshutdown.sh"
+ #alias -x r66signal="${R66SIGNAL}"
+ alias r66signal="${R66SIGNAL}"
+ # shutdown by network the server
+ # no option
+ export R66SHUTD="${JAVARUNCLIENT} openr66.server.ServerShutdown ${R66HOME}/conf/config`hostname`.xml"
+ #alias -x r66shutd="${R66SHUTD}"
+ alias r66shutd="${R66SHUTD}" 
+ # change limits of bandwidth
+ # "[ -wglob x ] [ -rglob w ] [ -wsess x ] [ -rsess x ]"
+ export R66LIMIT="${JAVARUNCLIENT} openr66.server.ChangeBandwidthLimits ${R66HOME}/conf/config`hostname`.xml "
+ #alias r66limit="${R66LIMIT}"
+ alias r66limit="${R66LIMIT}"
+ # init database from argument
+ # [ -initdb ] [ -dir rulesDirectory ] [ -limit xmlFileLimit ] [ -auth xmlFileAuthent ]
+ export R66INIT="${JAVARUNCLIENT} openr66.server.ServerInitDatabase ${R66HOME}/conf/configinit`hostname`.xml "
+ #alias -x r66init="${R66INIT}"
+ alias r66init="${R66INIT}"
+ # export the log
+ # [ -purge ]|[ -clean ] [ -start timestamp ] [ -stop timestamp ]
+ export R66EXPORT="${JAVARUNCLIENT} openr66.server.LogExport ${R66HOME}/conf/config`hostname`.xml "
+ #alias -x r66export="${R66EXPORT}"
+ alias r66export="${R66EXPORT}"
+ # export configuration
+ # directory
+ export R66CNFEXP="${JAVARUNCLIENT} openr66.server.ServerExportConfiguration ${R66HOME}/conf/configclient`hostname`.xml "
+ #alias -x r66cnfexp="${R66CNFEXP}"
+ alias r66cnfexp="${R66CNFEXP}" 
+ # CLIENT SIDE #
+ ###############
+ # get information on remote files or directory
+ # "-to host -rule rule [ -file file ] [ -exist | -detail | -list | -mlsx ]
+ export R66INFO="${JAVARUNCLIENT} openr66.client.RequestInformation  ${R66HOME}/conf/configclient`hostname`.xml "
+ #alias -x r66info="${R66INFO}"
+ alias r66info="${R66INFO}" 
+ # test the connectivity
+ # -to host -msg "message"
+ export R66MESG="${JAVARUNCLIENT} openr66.client.Message ${R66HOME}/conf/configclient`hostname`.xml "
+ #alias -x r66mesg="${R66MESG}"
+ alias r66mesg="${R66MESG}"
+ # get information on transfers
+ # -id transferId [ -to hostId | -from hostId ] [ -cancel | -stop | -restart ]
+ export R66REQ="${JAVARUNCLIENT} openr66.client.RequestTransfer ${R66HOME}/conf/configclient`hostname`.xml "
+ #alias -x r66req="${R66REQ}"
+ alias r66req="${R66REQ}" 
+ # synchronous transfer
+ # -to hostId -file filepath -rule ruleId [ -md5 ] [ -block size ] [ -nolog ] [ -info "information" ]
+ export R66SYNCSEND="${JAVARUNCLIENT} openr66.client.DirectTransfer ${R66HOME}/conf/configclient`hostname`.xml "
+ #alias -x r66syncsend="${R66SYNCSEND}"
+ alias r66syncsend="${R66SYNCSEND}"
+ # asynchronous transfer
+ # -to hostId -file filepath -rule ruleId [ -md5 ] [ -block size ] [ -nolog ] [ -info "information" ]
+ export R66SEND="${JAVARUNCLIENT} openr66.client.SubmitTransfer ${R66HOME}/conf/configclient`hostname`.xml "
+ #alias -x r66send="${R66SEND}"
+ alias r66send="${R66SEND}"
+</code>
+sous /usr/share/opengater66/conf modifier le fichier logback-client.xml et remplacer les lignes avec le bon path
+<code xml>
+ <configuration>
+  <appender name="FILE"
+    class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>**/usr/share/goldengater66**/log/R66Client.log</file>
+    <Append>true</Append>
+    <BufferedIO>false</BufferedIO>
+    <ImmediateFlush>true</ImmediateFlush>
+    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+      <FileNamePattern>**/usr/share/goldengater66**/log/R66Client.%d{yyyy-MM-dd}.%i.log.zip</FileNamePattern>
+      <MaxHistory>30</MaxHistory>
+      <TimeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+          <MaxFileSize>10MB</MaxFileSize>
+      </TimeBasedFileNamingAndTriggeringPolicy>
+    </rollingPolicy>
+</code>
+
+sous /usr/share/opengater66/conf modifier le fichier logback.xml
+
+<code xml>
+ <configuration>
+  <appender name="FILE"
+    class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>**/usr/share/goldengater66**/log/R66Server.log</file>
+    <Append>true</Append>
+    <BufferedIO>false</BufferedIO>
+    <ImmediateFlush>true</ImmediateFlush>
+    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+      <FileNamePattern>**/usr/share/goldengater66**/log/R66Server.%d{yyyy-MM-dd}.%i.log.zip</FileNamePattern>
+      <MaxHistory>30</MaxHistory>
+      <TimeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+          <MaxFileSize>10MB</MaxFileSize>
+      </TimeBasedFileNamingAndTriggeringPolicy>
+    </rollingPolicy>
+    <layout class="ch.qos.logback.classic.PatternLayout">
+      <Pattern>
+        %date{dd/MM/yyyy/HH:mm:ss.SSS} %level [%logger] [%thread] %msg%n
+      </Pattern>
+    </layout>
+  </appender>  
+  <root>
+    <level value="warn" />
+    <appender-ref ref="FILE" />
+  </root>
+ </configuration>
+</code>
+
+sous /usr/share/opengater66/conf copier un fichier exemple configinitbparq102.xml modifier le fichier configinit`hostname`.xml
+ici j'utilise mysql comme SGBD (mais on peut utiliser oracle , postgres )
+<code xml>
+$ cd  /usr/share/opengater66/conf
+$ cp configinitbparq102.xml configinit`hostname`.xml
+$ vi configinitmyhost.xml 
+ <config>
+        <comment>Example of config file: change its as your need.</comment>
+        <hostid>myhost</hostid>
+        <dbdriver>mysql</dbdriver>
+        <dbserver>jdbc:mysql://localhost:3306/openr66</dbserver>
+        <dbuser>openr66</dbuser>
+        <dbpasswd>golden</dbpasswd>
+ </config>
+</code>
+== Generation de la cle SSL ==
+
+=== Installation des packages ===
+Vérifiez d'abord tous les paquets nécessaires sont installés.
+<code>
+ sudo apt-get install apache2 libapache-mod-ssl
+</code>
+
+=== Générer le certificat ===
+<code>
+$  sudo keytool -genkey -alias openr66.store -keyalg RSA -validity 3650 -keystore /usr/share/goldengater66/certs/openr66.store
+Tapez le mot de passe du Keystore :
+ Ressaisissez le nouveau mot de passe :
+ Quels sont vos prénom et nom ?
+   [Unknown] :  cequevousvoulez
+ Quel est le nom de votre unité organisationnelle ?
+   [Unknown] :  cequevousvoulez
+ Quelle est le nom de votre organisation ?
+   [Unknown] :  cequevousvoulez
+ Quel est le nom de votre ville de résidence ?
+   [Unknown] :  cequevousvoulez
+ Quel est le nom de votre état ou province ?
+   [Unknown] :  cequevousvoulez
+ Quel est le code de pays à deux lettres pour cette unité ?
+   [Unknown] :  fr
+ Est-ce CN=rouen, OU=spirouen, O=laposte, L=rouen, ST=france, C=fr ?
+   [non] :  oui
+
+ Spécifiez le mot de passe de la clé pour <openr66.store>
+         (appuyez sur Entrée s'il s'agit du mot de passe du Keystore) :
+ Ressaisissez le nouveau mot de passe :
+
+ rootb@REY00014:/usr/share/goldengater66/certs$ sudo keytool -genkey -alias admin66.store -keyalg RSA -validity 3650 -keystore    /usr/share/goldengater66/certs/admin66.store
+ Tapez le mot de passe du Keystore :
+ Ressaisissez le nouveau mot de passe :
+ Quels sont vos prÃ©nom et nom ?
+   [Unknown] :  cequevousvoulez
+ Quel est le nom de votre unité organisationnelle ?
+   [Unknown] :  cequevousvoulez
+ Quelle est le nom de votre organisation ?
+   [Unknown] :  cequevousvoulez
+ Quel est le nom de votre ville de résidence ?
+   [Unknown] :  cequevousvoulez
+ Quel est le nom de votre état ou province ?
+   [Unknown] :  cequevousvoulez
+ Quel est le code de pays à deux lettres pour cette unité ?
+   [Unknown] :  fr
+ Est-ce CN=rouen, OU=spirouen, O=laposte, L=rouen, ST=france, C=fr ?
+   [non] :  oui
+
+ SpÃ©cifiez le mot de passe de la clÃ© pour <admin66.store>
+         (appuyez sur Entrée s'il s'agit du mot de passe du Keystore) :
+ Ressaisissez le nouveau mot de passe :
+</code>
+ 
+Lister les fichiers sous /usr/share/goldengater66/certs
+<file>
+ -rw-r--r-- 1 root root 1354 2010-06-04 13:19 openr66.store
+ -rw-r--r-- 1 root root 1353 2010-06-04 13:20 admin66.store
+</file>
+
+sous /usr/share/opengater66/conf copier un fichier exemple configbparq102.xml modifier le fichier config`hostname`.xml
+<code xml>
+
+$ cat configmyhost.xml
+<config>
+        <comment>Test de transfert de fichier.</comment>
+        <hostid>myhost</hostid>
+        <sslhostid>myhosts</sslhostid>
+        <serveradmin>admin</serveradmin>
+        <serverpasswd>/usr/share/goldengater66/conf/serveradminkey.txt</serverpasswd>
+        <serverport>6666</serverport>
+        <serversslport>6667</serversslport>
+        <serverhttpport>8066</serverhttpport>
+        <serverhttpsport>8067</serverhttpsport>
+        <httpadmin>/usr/share/goldengater66/web/</httpadmin>
+        <keypath>/usr/share/goldengater66/certs/openr66.store</keypath>
+        <keypass>opengater66</keypass>
+        <keystorepass>storeopenr66</keystorepass>
+        <admkeypath>/usr/share/goldengater66/certs/admin66.store</admkeypath>
+        <admkeypass>admin66</admkeypass>
+        <admkeystorepass>storeadmin66</admkeystorepass>
+        <serverhome>/usr/share/goldengater66/</serverhome>
+        <in>data/in</in>
+        <out>data/out</out>
+        <arch>data/arch</arch>
+        <work>data/work</work>
+        <conf>conf</conf>
+        <serverthread>49</serverthread>
+        <clientthread>800</clientthread>
+        <timeoutcon>10000</timeoutcon>
+        <deleteonabort>0</deleteonabort>
+        <usenio>0</usenio>
+        <usefastmd5>1</usefastmd5>
+        <fastmd5>/usr/share/goldengater66/lib/MD5.so</fastmd5>
+        <blocksize>65536</blocksize>
+        <dbdriver>mysql</dbdriver>
+        <dbserver>jdbc:mysql://localhost:3306/openr66</dbserver>
+        <dbuser>openr66</dbuser>
+        <dbpasswd>golden</dbpasswd>
+</config>
+</code>
+
+sous /usr/share/opengater66/conf copier un fichier exemple limitConfigbparq102.xml modifier le fichier limitConfig`hostname`.xml
+
+<code xml>
+$ cat limitConfig`hostname`.xml
+<config>
+        <comment>Example of config file: change its as your need.</comment>
+        <hostid>myhost</hostid>
+        <sessionlimit2>102400</sessionlimit2>
+        <globallimit2>1024000</globallimit2>
+        <sessionlimit>0</sessionlimit>
+        <globallimit>0</globallimit>
+        <delaylimit>10000</delaylimit>
+</config>
+</code>
+
+modifier le fichier authent.xml sous /usr/share/opengater66/conf 
+<code xml>
+<authent>
+        <entry>
+               <hostid>myhost</hostid>
+                <address>xxx.xxx.xxx.xxx</address>
+                <port>6666</port>
+                <isssl>0</isssl>
+                <keyfile>/usr/share/goldengater66/conf/myhost.key</keyfile>
+                <admin>0</admin>
+        </entry>
+</authent>
+</code>
+
+
+
+==== Configuration du client ====
+
+sous /usr/share/opengater66/conf copier un fichier exemple configclientbparq102.xml modifier le fichier configinit`hostname`.xml
+ici j'utilise mysql comme SGBD (mais on peut utiliser oracle , postgres )
+<code>
+$ cd  /usr/share/opengater66/conf
+$ cp configinitbparq102.xml configinit`hostname`.xml
+$ vi configclientREY00014.xml
+ <config>
+        <comment>Example of config file: change its as your need.</comment>
+        <hostid>myhost</hostid>
+        <serverhome>/usr/share/goldengater66/</serverhome>
+        <in>data/in</in>
+        <out>data/out</out>
+        <arch>data/arch</arch>
+        <work>data/work</work>
+        <conf>conf</conf>
+        <serverthread>49</serverthread>
+        <clientthread>800</clientthread>
+        <timeoutcon>10000</timeoutcon>
+        <deleteonabort>0</deleteonabort>
+        <usenio>0</usenio>
+        <usefastmd5>1</usefastmd5>
+        <fastmd5>/usr/share/goldengater66/lib/MD5.so</fastmd5>
+        <blocksize>65536</blocksize>
+        <dbdriver>mysql</dbdriver>
+        <dbserver>jdbc:mysql://localhost:3306/openr66</dbserver>
+        <dbuser>openr66</dbuser>
+        <dbpasswd>golden</dbpasswd>
+ </config>
+</code>
+
+
+**Création de la base sous MYSQL**
+
+lancer le script init.sh sous /usr/share/goldengater66/bin
+<code bash>
+$ cat init.sh
+ #!/bin/sh
+ set +x
+ PATH_R66=/usr/share/goldengater66
+ export PATH_R66
+ . $PATH_R66/ENV_R66
+ $PATH_R66/bin/r66command.sh openr66.server.ServerInitDatabase $PATH_R66/conf/configinit`hostname`.xml -initdb -dir $PATH_R66/conf/ 
+ -auth $PATH_R66/conf/authent.xml -limit $PATH_R66/conf/limitConfig`hostname`.xml
+</code>
+Executer le script 
+<code>
+sudo sh init.sh
+Start R66Command
+/usr/lib/jvm/java-6-openjdk/jre/bin/java -Xms256m -Xmx1024m -cp /usr/share/goldengater66/lib/slf4j-api.jar:/usr/share/goldengater66/lib/logback-access.jar:/usr/share/goldengater66/lib/logback-classic.jar:/usr/share/goldengater66/lib/logback-core.jar:/usr/share/goldengater66/lib/dom4j.jar:/usr/share/goldengater66/lib/jaxen.jar:/usr/share/goldengater66/lib/commons-io-1.4.jar:/usr/share/goldengater66/lib/commons-codec-1.3.jar:/usr/share/goldengater66/lib/commons-exec-1.0.jar:/usr/share/goldengater66/lib/ojdbc5.jar:/usr/share/goldengater66/lib/orai18n.jar:/usr/share/goldengater66/lib/mysql.jar:/usr/share/goldengater66/lib/GoldenGateCommon.jar:/usr/share/goldengater66/lib/GoldenGateDigest.jar:/usr/share/goldengater66/lib/NettyExtension.jar:/usr/share/goldengater66/lib/netty.GA.jar:/usr/share/goldengater66/lib/GoldenGateR66.jar -Dlogback.configurationFile=/usr/share/goldengater66/conf/logback-client.xml openr66.server.ServerInitDatabase /usr/share/goldengater66/conf/configinitREY00014.xml -initdb -dir /usr/share/goldengater66/conf/ -auth /usr/share/goldengater66/conf/authent.xml -limit /usr/share/goldengater66/conf/limitConfigREY00014.xml
+CREATE TABLE IF NOT EXISTS  CONFIGURATION (READGLOBALLIMIT BIGINT  NOT NULL , WRITEGLOBALLIMIT BIGINT  NOT NULL , READSESSIONLIMIT BIGINT  NOT NULL , WRITESESSIONLIMIT BIGINT  NOT NULL , DELAYLIMIT BIGINT  NOT NULL , UPDATEDINFO INTEGER  NOT NULL , HOSTID VARCHAR(254)  PRIMARY KEY )
+CREATE TABLE IF NOT EXISTS  HOSTS (ADDRESS VARCHAR(254)  NOT NULL , PORT INTEGER  NOT NULL , ISSSL BOOLEAN  NOT NULL , HOSTKEY BLOB  NOT NULL , ADMINROLE BOOLEAN  NOT NULL , UPDATEDINFO INTEGER  NOT NULL , HOSTID VARCHAR(254)  PRIMARY KEY )
+CREATE TABLE IF NOT EXISTS  RULES (HOSTIDS TEXT , MODETRANS INTEGER , RECVPATH VARCHAR(254) , SENDPATH VARCHAR(254) , ARCHIVEPATH VARCHAR(254) , WORKPATH VARCHAR(254) , RPRETASKS TEXT , RPOSTTASKS TEXT , RERRORTASKS TEXT , SPRETASKS TEXT , SPOSTTASKS TEXT , SERRORTASKS TEXT , UPDATEDINFO INTEGER , IDRULE VARCHAR(254)  PRIMARY KEY )
+CREATE TABLE IF NOT EXISTS  RUNNER (GLOBALSTEP INTEGER  NOT NULL , GLOBALLASTSTEP INTEGER  NOT NULL , STEP INTEGER  NOT NULL , RANK INTEGER  NOT NULL , STEPSTATUS CHAR(3)  NOT NULL , RETRIEVEMODE BOOLEAN  NOT NULL , FILENAME VARCHAR(254)  NOT NULL , ISMOVED BOOLEAN  NOT NULL , IDRULE VARCHAR(254)  NOT NULL , BLOCKSZ INTEGER  NOT NULL , ORIGINALNAME VARCHAR(254)  NOT NULL , FILEINFO TEXT  NOT NULL , MODETRANS INTEGER  NOT NULL , STARTTRANS TIMESTAMP  NOT NULL , STOPTRANS TIMESTAMP  NOT NULL , INFOSTATUS CHAR(3)  NOT NULL , UPDATEDINFO INTEGER  NOT NULL , OWNERREQ VARCHAR(254)  NOT NULL , REQUESTER VARCHAR(254)  NOT NULL , REQUESTED VARCHAR(254)  NOT NULL , SPECIALID BIGINT  NOT NULL ,  CONSTRAINT runner_pk  PRIMARY KEY (OWNERREQ,REQUESTER,REQUESTED,SPECIALID))
+CREATE INDEX IDX_RUNNER ON  RUNNER (STARTTRANS, OWNERREQ, STEPSTATUS, UPDATEDINFO, GLOBALSTEP)
+CREATE TABLE Sequences (name VARCHAR(22) NOT NULL PRIMARY KEY,seq BIGINT NOT NULL)
+INSERT INTO Sequences (name, seq) VALUES ('RUNSEQ', -9223372036854775807)
+End creation
+Load done
+R66Command stopped
+
+</code>
+
+Vérifier si les tables sont créées via phpmyadmin par exemple ;-) ou en ligne de commande 8-)
+
+lancer le serveur
+
+<code>
+sudo sh server.sh
+</code>
+
+Vérifier si le serveur a démarré 
+
+<code>
+$ ps -ef | grep java
+root     14624     1  0 Jun08 ?        00:03:13 /usr/lib/jvm/java-6-openjdk/jre/bin/java -Xms256m -Xmx1024m -cp /usr/share/goldengater66/lib/slf4j-api.jar:/usr/share/goldengater66/lib/logback-access.jar:/usr/share/goldengater66/lib/logback-classic.jar:/usr/share/goldengater66/lib/logback-core.jar:/usr/share/goldengater66/lib/dom4j.jar:/usr/share/goldengater66/lib/jaxen.jar:/usr/share/goldengater66/lib/commons-io-1.4.jar:/usr/share/goldengater66/lib/commons-codec-1.3.jar:/usr/share/goldengater66/lib/commons-exec-1.0.jar:/usr/share/goldengater66/lib/ojdbc5.jar:/usr/share/goldengater66/lib/orai18n.jar:/usr/share/goldengater66/lib/mysql.jar:/usr/share/goldengater66/lib/GoldenGateCommon.jar:/usr/share/goldengater66/lib/GoldenGateDigest.jar:/usr/share/goldengater66/lib/NettyExtension.jar:/usr/share/goldengater66/lib/netty.GA.jar:/usr/share/goldengater66/lib/GoldenGateR66.jar -Dlogback.configurationFile=/usr/share/goldengater66/conf/logback.xml openr66.server.R66Server /usr/share/goldengater66/conf/configmyhost.xml
+
+</code>
+
+
+
+===== Utilisation OpenR66 =====
+
+==== Envoyer un fichier ====
+
+Pour transférer un fichier, il existe deux méthodes principales. Celui-ci est une demande de soumission, si une opération asynchrone car une fois la demande est présentée, le client retourne sans attendre la fin de l'opération.
+Il prend l'argument suivant:
+  * Le client fichier de configuration XML en tant que premier argument, celui dont l'accès base de données
+  * Au moins 3 autres arguments sont nécessaires:
+
+    * '-to' option : spécifie l'ID de l'hôte distant (soit l'ID de SSL ou non).
+    * '-file' option : spécifie le fichier à transférer (soit en recevoir ou d'envoyer le mode).
+    * '-rule' option : spécifie la règle a appliquer (qui spécifie le mode de transfert, le pré, post ou des opérations d'erreur, ...).
+
+  * Les autres options sont:
+    * '-info' option: précise les informations optionnelles qui est envoyé en même temps à la demande de transfert (des informations supplémentaires qui pourraient être nécessaires par l'hôte distant).
+    * '-md5' option: précise que chaque transfert en bloc sera vérifié avec une clé MD5. Si la règle utilisée est déjà en mode MD5, cette option ne changera rien.
+    * '-block' option : spécifie la taille du bloc (par défaut est de 64 Ko).
+    * '-nolog' option : précise que ce transfert ne sera pas connecté (uniquement sur côté demandeur).
+
+==== Transfert direct ====
+
+
+Il s'agit de la deuxième méthode pour transférer un fichier. Cette méthode est directe, donc comme une opération synchrone. Cette fois, le client va faire le vrai travail (transfert de fichier). Les options sont exactement les mêmes qu'avec SubmitTransfer. Toutefois, deux cas existent:
+
+1. client lourd: Le fichier de configuration XML client comprend l'accès à la base. Toutes les opérations de transfert sera connecté (éventuellement supprimées à la fin du côté client si l'option '-nolog est fixé). Cette option est utile pour la "production" des clients dans un centre de données.
+
+2. Client léger: Le fichier de configuration XML client ne comprend pas de l'accès à la base. Toutes les opérations de transfert ne sera pas connecté à tous (à côté du client). Cette option est utile pour "client léger" comme les ordinateurs personnels, où le transfert de fichiers depuis ou vers un centre de données est une nécessité.
+Toutefois, les deux clients ne peut être l'initiateur du transfert (recevoir ou d'envoyer), car aucun service n'est en cours d'exécution une fois que le client est terminée.
+
+  * SendThroughClient
+
+Cette méthode n'est pas une méthode complète mise en œuvre. C'est une façon de router un transfert de fichier d'un protocole en Java pour OpenR66. Par exemple, si un protocole comme upload HTTP ou FTP upload permet d'obtenir un transfert de fichiers par paquets, vous pouvez ensuite la route de ce transfert de fichiers par le biais OpenR66 à une finale Server OpenR66 utilisant le protocole, mais sans écrire un fichier intermédiaire (écrire directement les octets à partir de le téléchargement à l'interface OpenR66 SendThroughClient). Un exemple simple est montré dans TestSendThroughClient.
+
+Ainsi, cette méthode nécessite quelques développements mineurs à mettre en œuvre.
+
+  * RecvThroughClient
+
+Cette méthode n'est pas une méthode complète mise en œuvre. C'est une façon de router un transfert de fichier à un protocole en Java pour OpenR66. Par exemple, si un protocole comme HTTP ou FTP de téléchargement permet d'obtenir un fichier téléchargé par paquets, vous pouvez ensuite acheminer directement le transfert de fichiers à partir de OpenR66 un serveur distant en utilisant le protocole OpenR66 directement, mais sans écrire un fichier intermédiaire (écrire directement les octets de la télécharger à partir de l'interface OpenR66 RecvThroughHandler). Un exemple simple est montré dans TestRecvThroughClient.
+
+Ainsi, cette méthode nécessite quelques développements mineurs à mettre en œuvre.
+
+  * RequestTransfer
+
+Cet utilitaire est utilisé pour obtenir des informations spécifiques pour un coureur ou d'avoir une action sur ce coureur.
+
+Les arguments sont les suivants:
+
+  * Le premier argument est le client fichier de configuration XML, y compris l'accès à la base.
+  * 'Id' option: c'est le Id Runner.
+  * «À» ou «de-option" (exclusivité): Ceci spécifie le chemin de la demande de transfert. 'À' précise que la demande initiale a été initié par l'hôte actuel en cours d'exécution sur l'hôte distant spécifié. '-De' précise que la demande initiale a été initié par l'hôte distant spécifié.
+  * Les arguments optionnels (exclusive): sans aucun de ces arguments, la requête retourne uniquement les informations actuelles du coureur.
+    * "D'annulation de l'option" : le coureur sera annulée. Tout fichier actuellement en écriture sera supprimé.
+    * option «guichet unique»: le coureur sera arrêté (mais pas d'annulation).
+    * '-Restart' option: le coureur sera le redémarrage (si arrêté).
+  * RequestInformation
+
+Cet utilitaire est utilisé pour obtenir des informations d'un fichier, un répertoire, avec ou sans caractères génériques («*» et'?").
+
+Les arguments sont les suivants:
+
+  * Le premier argument est le client fichier de configuration XML, y compris l'accès à la base.
+  * 'À' option: spécifie l'hôte demandé.
+  * «Régner», option: la règle
+  * 'Fichier' le fichier option pour laquelle pour obtenir des infos (peut contenir des caractères génériques)
+  * Les arguments optionnels (exclusive): sans aucun de ces arguments, la demande ne renvoie que l'existence du fichier ou du répertoire.
+    * »-Exister» pour tester l'existence.
+    * »-Détail» pour obtenir le détail dans le dossier.
+    * «Liste» pour obtenir la liste des fichiers.
+    * »-Mlsx 'pour obtenir la liste et les détails des fichiers
+ 
+==== Règles OpenR66 ====
+
+Nous nous concentrons ici sur les différentes tâches qui sont possibles de faire avant que le transfert commence (action préalable), après un transfert est terminé correctement (action post) ou après une erreur se produit (soit en pré ou post action ou lors du transfert: l'action d'erreur) . 
+
+Ces actions sont définies dans une règle. Chaque règle contient 2 parties:
+  - actions de l'expéditeur: Un hôte est un expéditeur s'il est demandeur d'une règle SEND ou si c'est la demande sur une règle RECV.
+  - actions récepteur: Un hôte est un expéditeur s'il est demandeur d'une règle RECV ou si c'est la demande sur une règle ENVOYER.
+
+Chaque action pourrait être le pré, post ou pas d'erreur, chaque étape peut avoir plusieurs actions. 
+Exemple :
+<code xml>
+      <tasks>
+          <task>
+             <type>NAME</type>
+             <path>path</path>
+             <delay>x</delay>
+          </task>
+          <task>
+             <type>NAME</type>
+             <path>path</path>
+             <delay>x</delay>
+          </task>
+      </tasks>
+</code>

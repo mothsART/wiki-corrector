@@ -1,0 +1,1268 @@
+
+{{tag>Precise virtualisation serveur tutoriel}}
+----
+ 
+====== OpenStack ======
+ 
+OpenStack est un logiciel libre ((license Apache 2.0)) qui permet la construction de [[:cloud]] privé et public. OpenStack est aussi une communauté et un projet en plus d'un logiciel qui a pour but d'aider les organisations à mettre en oeuvre un système de serveur et de stockage virtuel.\\
+OpenStack est composé d'une série de logiciels et de projets au code source libre qui sont maintenus par la communauté incluant: OpenStack Compute (nommé Nova), OpenStack Object Storage (nommé Swift), et OpenStack Image Service (nommé Glance).\\
+Ce document présente l'installation des composants d'identité, d'images et virtualisation sur une seule machine.\\
+Il s'agit plutôt d'une configuration de développement mais néanmoins fonctionnelle. Les services réseau avancé et stockage que sont respectivement Quantum et Swift ne seront pas abordés dans ce document.
+ 
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Avoir les [[:dépôts]] d'activés
+  * Un processeur supportant la virtualisation matérielle ([[:kvm#mise_en_place|test sur la page KVM]])
+  * Disposer d'un disque dur ou d'une partition non formatée pour [[:LVM]]
+  * Ne pas avoir peur de la ligne de [[:commande_shell|commande]]
+  * Avoir [[:tutoriel:comment_installer_un_paquet|installé les paquets]]:
+    * **[[apt>kvm,libvirt-bin,virtinst]]**.
+    * **[[apt>mysql-server,python-mysqldb]]**
+    * **[[apt>bridge-utils|bridge-utils]]**
+  * Il est nécessaire de configurer le réseau en IP Fixe. Supprimez les paquets Network-Manager ou Wicd et resolvconf.
+
+Tous les services OpenStack seront installés sur la même machine.\\
+La configuration abordée suppose l'utilisation de 2 interfaces réseau.\\
+
+ ===== Préparation du système =====
+ 
+==== Réseau ====
+
+<note important>l'utilisation d'une interface wifi pour les bridges peut se révéler très complexe voire impossible. Préférez une interface virtuelle</note>
+[[:tutoriel:comment_modifier_un_fichier|Modifiez avec les droits d'administration]] votre fichier **/etc/network/interfaces** comme ci-dessous en adaptant a votre configuration.
+
+<file>
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet manual
+
+auto eth1
+iface eth1 inet manual
+
+auto br0
+iface br0 inet static
+	bridge_ports eth0
+	address 192.168.1.250
+	netmask 255.255.255.0
+	gateway 192.168.1.254
+	broadcast 192.168.1.255
+
+auto br1
+iface br1 inet manual
+	bridge_ports eth1
+
+</file>
+ 
+[[:tutoriel:comment_modifier_un_fichier|Modifiez avec les droits d'administration]] votre fichier **/etc/resolv.conf** comme ci-dessous et ajoutez vos [[wpfr>Domain_Name_System|DNS]] habituels.\\
+Les DNS ci dessous sont ceux de Google
+
+<file>
+nameserver 8.8.8.8
+nameserver 8.8.4.4
+</file>
+
+Relancez les cartes réseau pour que les modifications soient prises en compte.\\
+<code>
+for a in `ifconfig | awk '/Link/ { if ($1 != "lo") print $1 }'`; do sudo ifdown $a ; done
+sudo ifup -e lo -av
+</code>
+
+<note tip> Assurez-vous d'avoir décommenté l'option permettant le forward des paquets en IPV4 dans le fichier /etc/sysctl.conf
+ : 
+<file>
+net.ipv4.ip_forward=1 
+</file>
+puis lancez la commande : 
+<code>sysctl -p</code>
+</note>
+==== Serveur NTP ====
+
+Le serveur [[:ntp|NTP]] étant nécessaire à la bonne synchronisation du cloud,  [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>ntp|ntp]]**.\\
+Ensuite, [[:tutoriel:comment_modifier_un_fichier|ouvrez avec les droits d'administration]] le fichier **/etc/ntp.conf** et ajoutez les lignes
+
+<file>
+server ntp.ubuntu.com iburst
+server 127.127.1.0
+fudge 127.127.1.0 stratum 10
+</file>
+
+redémarrez le service 
+<code>
+sudo service ntp restart
+</code>
+
+==== LVM ====
+Les volumes [[:lvm|LVM]] serviront de disques durs supplémentaires pour les serveurs virtuels.
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>tgt,open-iscsi,open-iscsi-utils,lvm2]]** \\
+
+Les commandes qui suivent supposent que vous avez un disque dur **/dev/sdc** vide sans [[:partitions|partition]]. Adaptez les commandes en fonction de votre configuration.\\
+Créez une [[:partitions|partition]] non formatée de 100Gigas sur **/dev/sdc** en adaptant à votre configuration:
+<code>
+sudo fdisk /dev/sdc
+n p 1 <return> +100G w
+</code>
+Vous avez maintenant une partition primaire vide de 100 Gigas **/dev/sdc1**.\\
+Créez maintenant le volume LVM. Attention, le nom **nova-volumes** doit être respecté:
+<code>
+sudo pvcreate /dev/sdc1
+sudo vgcreate nova-volumes /dev/sdc1
+</code>
+
+==== RabbitMQ ====
+RabbitMQ est un courtier de messages se basant sur le standard [[wpfr>Advanced_Message_Queuing_Protocol|AMQP]] afin d'échanger avec différents clients.\\
+Pour faire simple: c'est le service qui permet aux composants OpenStack de communiquer entre eux.
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>rabbitmq-server,memcached,python-memcache]]**
+
+==== Mysql ====
+Chaque composant possède sa base de données [[:mysql|MySQL]], contenant toutes les données modifiables à chaud (ID des images disques, des instances virtuelles, réseaux, identités...). Les données de configuration fixes sont stockées dans des fichiers texte.\\
+<note tip>Il est possible d'utiliser un autre [[:sgbd|SGBD]], MySQL étant recommandé dans la documentation OpenStack.</note>
+
+Pour indiquer a MySQL que le serveur doit écouter sur toutes les adresses et pas seulement sur la boucle locale, modifiez sa configuration en [[:tutoriel:comment_modifier_un_fichier|ouvrant avec les droits d'administration]] le fichier **/etc/mysql/my.cnf** pour remplacer:
+<file>
+bind-address		= 127.0.0.1
+</file>
+par
+<file>
+bind-address		= 0.0.0.0
+</file>
+et redémarrez MySQL
+<code>
+sudo service mysql restart
+</code>
+
+===== Keystone =====
+
+Le composant Keystone est chargé de la gestion des utilisateurs et des services.
+
+=== Gestion des utilisateurs ===
+La gestion des utilisateurs s'articule autour de 3 objets:
+  * l'objet //[[#Création_des_utilisateurs|User]]// représentant l'utilisateur final.
+  * L'objet //[[#Création des Tenants|Tenant]]// que l'on peut représenter par un projet, une organisation au sein duquel les instances seront regroupées et administrées par les utilisateurs.
+  * L'objet //[[#Création des rôles|Role]]// qui définit le rôle de l'utilisateur sur un //Tenant//. Un utilisateur peut avoir un ou plusieurs rôles sur différents Tenants.
+
+=== Gestion des services et points d'accès ===
+La gestion des différents services, comme Glance pour les images ou Swift pour le stockage.\\
+La définition des points d'accès a ces différents services, les url et ports pour y accéder\\
+
+==== Préparation de la base de données Mysql ====
+Commencez par créer la base MySQL.\\
+La commande suivante crée un utilisateur et sa base de données nommés "keystone". Changez SQLPASSWD par un mot de passe de votre choix.
+<code>
+mysql -u root -p <<EOF
+CREATE DATABASE keystone;
+GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%' IDENTIFIED BY 'SQLPASSWD';
+FLUSH PRIVILEGES;
+EOF
+</code>
+
+
+==== Installation ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>keystone,python-keystone,python-keystoneclient,python-mysqldb]]**
+
+Puis supprimer la base de donnée SQlite :
+<code>
+rm /var/lib/keystone/keystone.db
+</code>
+==== Configuration ====
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez avec les droits d'administration]] le fichier **/etc/keystone/keystone.conf** pour modifier les sections suivantes:
+Remplacez ADMPASSWD par un mot de passe de votre choix et et SQLPASSWD par le mot de passe MySQL défini ci dessus
+<file>
+[DEFAULT]
+bind_host = 0.0.0.0
+public_port = 5000
+admin_port = 35357
+# Mot de passe d'administration
+admin_token = ADMPASSWD
+compute_port = 8774
+verbose = True
+debug = True
+log_config = /etc/keystone/logging.conf
+
+
+[sql]
+connection = mysql://keystone:SQLPASSWD@192.168.1.250:3306/keystone
+idle_timeout = 200
+</file>
+
+Redémarrez keystone:
+
+<code>
+sudo service keystone restart
+</code>
+
+Synchronisez la base de données:
+
+<code>
+sudo keystone-manage db_sync
+</code>
+
+et donnez les droits en lecture / écriture à keystone
+
+<code>
+chown keystone:keystone /var/lib/keystone/keystone.db
+</code>
+==== Création des utilisateurs ====
+Chaque commande ci-dessous contient l'authentification définie dans le fichier **keystone.conf** et utilisée par le client python sous la forme ''%%--%%token admin_token <mot de passe d'administration> %%--%%endpoint url_du_service_keystone <adresse du serveur:port/directory/>''.\\
+
+=== Création du compte administrateur ===
+<code>
+keystone --token ADMPASSWD --endpoint http://192.168.1.250:35357/v2.0/ user-create --name=admin --pass=ADMPASSWD --email=admin@example.com
+</code>
+Répondra quelque chose comme
+<code>
++----------+-------------------------------------------------------------------------------------------------------------------------+
+| Property |                                                          Value                                                          |
++----------+-------------------------------------------------------------------------------------------------------------------------+
+| email    | admin@example.com                                                                                                       |
+| enabled  | True                                                                                                                    |
+| id       | c97c87b3ed894401975dd6d757b40330                                                                                        |
+| name     | admin                                                                                                                   |
+| password | $6$rounds=40000$cZhg187ypC6hMMD1$YQAxiXspmMVsu1di.o3UlZjvjlEO9WXii48Q29tyIXTzDpT5e92XBij9Pz4A5YLoGaccf8PBf1jcAan9YLDOl. |
+| tenantId | None                                                                                                                    |
++----------+-------------------------------------------------------------------------------------------------------------------------+
+</code>
+
+=== Création du compte interne du service Glance ==
+<code>
+keystone --token ADMPASSWD --endpoint http://192.168.1.250:35357/v2.0/ user-create --name=glance --pass=ADMPASSWD --email=glance@example.com
+</code>
+Répondra
+<code>
++----------+-------------------------------------------------------------------------------------------------------------------------+
+| Property |                                                          Value                                                          |
++----------+-------------------------------------------------------------------------------------------------------------------------+
+| email    | glance@example.com                                                                                                      |
+| enabled  | True                                                                                                                    |
+| id       | 876ef0a6c0c048039f847e61da7260b4                                                                                        |
+| name     | glance                                                                                                                  |
+| password | $6$rounds=40000$pYJjQYtDJGdFB/nl$UOmryhbqCIROSPNhs8/svbPg2JIns31yImcAXTh/CXT3o9GOZTNYadZe2zp7M0.XeHqJD5bI1lhZYM09uSrmN0 |
+| tenantId | None                                                                                                                    |
++----------+-------------------------------------------------------------------------------------------------------------------------+
+</code>
+
+=== Création du compte interne du service Nova ===
+
+<code>
+keystone --token ADMPASSWD --endpoint http://192.168.1.250:35357/v2.0/ user-create --name=nova --pass=ADMPASSWD --email=nova@example.com
+</code>
+Répondra
+<code>
++----------+-------------------------------------------------------------------------------------------------------------------------+
+| Property |                                                          Value                                                          |
++----------+-------------------------------------------------------------------------------------------------------------------------+
+| email    | nova@example.com                                                                                                        |
+| enabled  | True                                                                                                                    |
+| id       | 5c54624fef2242e185af10b7a2a2768f                                                                                        |
+| name     | nova                                                                                                                    |
+| password | $6$rounds=40000$ogH/.VbZJgp2pDF8$w7TCuRu95Q8c6PMR5Zmbs7Osjk8tXfkDKixzRY.t/Ghv/WvOoLD1au/cCbMWVfaEhr14RAGheTA2E2rPoVEjd1 |
+| tenantId | None                                                                                                                    |
++----------+-------------------------------------------------------------------------------------------------------------------------+
+</code>
+
+==== Création des rôles ====
+
+Pour les rôles utilisateurs vous avez le choix entre :
+  - //[[#Role_admin|admin]]//: donne le droit de modifier la configuration des services (ex:allouer une plage d'adresse IP, un quota d'espace disque pour un projet etc...)
+  - //[[#Role_Membre|Member]]//: permet de gérer le contenu du projet (création d'instances de machines, ajout d'un disque virtuel a l'une d'elles etc...)
+Les rôles //[[#Role_KeystoneAdmin|KeystoneAdmin]]// et //[[#Role_KeystoneServiceAdmin|KeystoneServiceAdmin]]// sont des rôles internes __nécessaires__.
+
+=== Rôle admin ===
+<code>
+keystone --token ADMPASSWD --endpoint http://192.168.1.250:35357/v2.0/ role-create --name=admin
+</code>
+<code>
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+| id       | 3d945f41e08e4e2db1584fdb8f05d333 |
+| name     | admin                            |
++----------+----------------------------------+
+</code>
+
+=== Rôle Membre ===
+<code>
+keystone --token ADMPASSWD --endpoint http://192.168.1.250:35357/v2.0/ role-create --name=Member
+</code>
+<code>
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+| id       | 84697b61736c439288900904bdf4a48d |
+| name     | Member                           |
++----------+----------------------------------+
+</code>
+
+=== Rôle KeystoneAdmin ===
+<code>
+keystone --token ADMPASSWD --endpoint http://192.168.1.250:35357/v2.0/ role-create --name=KeystoneAdmin
+</code>
+<code>
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+| id       | d4d6482b0ec04e0fa24aa8263c182d08 |
+| name     | KeystoneAdmin                    |
++----------+----------------------------------+
+</code>
+
+=== Rôle KeystoneServiceAdmin ===
+<code>
+keystone --token ADMPASSWD --endpoint http://192.168.1.250:35357/v2.0/ role-create --name=KeystoneServiceAdmin
+</code>
+<code>
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+| id       | 46590e32dbbe40f29253b5b928b83d1b |
+| name     | KeystoneServiceAdmin             |
++----------+----------------------------------+
+</code>
+
+==== Création des Tenants ====
+=== Tenant admin ===
+Le Tenant admin permet à ses membres d'administrer les services.
+<code>
+keystone --token ADMPASSWD --endpoint http://192.168.1.250:35357/v2.0/ tenant-create --name=admin
+</code>
+<code>
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description | None                             |
+| enabled     | True                             |
+| id          | 0f71e86d30e247d3b1216fe5f2f3aa50 |
+| name        | admin                            |
++-------------+----------------------------------+
+</code>
+=== Tenant service ===
+Le Tenant interne des services.
+<code>
+keystone --token ADMPASSWD --endpoint http://192.168.1.250:35357/v2.0/ tenant-create --name=service
+</code>
+<code>
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description | None                             |
+| enabled     | True                             |
+| id          | 1a3515e468f14e0ebb4a4e83447e7bf7 |
+| name        | service                          |
++-------------+----------------------------------+
+</code>
+
+==== Définition des rôles ====
+
+Il faut pour cela utiliser les ID affichés lors de la création des //[[#Création_des_utilisateurs|Users]]((utilisateurs)), [[#Création_des_rôles|Roles]]((rôles))// et //[[# Création_des_Tenants|Tenants]]//.\\
+L'//User// "admin" a un //Role// admin sur le //Tenant// "admin".\\
+<code>
+keystone --token ADMPASSWD --endpoint http://192.168.1.250:35357/v2.0/ user-role-add --user-id c97c87b3ed894401975dd6d757b40330 --role-id 3d945f41e08e4e2db1584fdb8f05d333 --tenant_id 0f71e86d30e247d3b1216fe5f2f3aa50
+</code>
+Comme ce n'est pas pratique de recopier les IDs, les erreurs de frappe seront évitées grâce à l'outil //awk//. Il s'agira de définir les rôles ainsi:
+  * L'//User// "admin" a un //Role// "KeystoneAdmin" sur le //Tenant// "admin".
+  * L'//User// "admin" a un //Role// "KeystoneServiceAdmin" sur le //Tenant// "admin".
+  * L'//User// "glance" a un //Role// "admin" sur le //Tenant// "service".
+  * L'//User// "nova" a un //Role// "admin" sur le //Tenant// "service".
+Voici les commandes correspondantes :
+<code>
+keystone user-role-add --user-id `keystone user-list | awk '/ admin / { print $2 }'` --role-id `keystone role-list | awk '/ KeystoneAdmin / { print $2 }'` --tenant_id `keystone tenant-list | awk '/ admin / { print $2 }'`
+keystone user-role-add --user-id `keystone user-list | awk '/ admin / { print $2 }'` --role-id `keystone role-list | awk '/ KeystoneServiceAdmin / { print $2 }'` --tenant_id `keystone tenant-list | awk '/ admin / { print $2 }'`
+keystone user-role-add --user-id `keystone user-list | awk '/ glance / { print $2 }'` --role-id `keystone role-list | awk '/ admin / { print $2 }'` --tenant_id `keystone tenant-list | awk '/ service / { print $2 }'`
+keystone user-role-add --user-id `keystone user-list | awk '/ nova / { print $2 }'` --role-id `keystone role-list | awk '/ admin / { print $2 }'` --tenant_id `keystone tenant-list | awk '/ service / { print $2 }'`
+</code>
+
+
+==== Création d'un utilisateur supplémentaire ====
+Il s'agira dans l'exemple qui suit de la création d'un compte utilisateur, d'un projet supplémentaire et définition du role avec la variable d'environnement $USER (remplacer par ce que vous voulez, c'est juste un exemple)\\
+Le rôle "Member" est suffisant. Remplacez USRPASSWD par un mot de passe de votre choix.
+L'User $USER (xavier ici) a un Role "Member" sur le Tenant $USER (xavier ici).
+
+=== User ===
+<code>
+keystone --token ADMPASSWD --endpoint http://192.168.1.250:35357/v2.0/ user-create --name=$USER --pass=USRPASSWD --email=$USER@example.com
+</code>
+<code>
++----------+-------------------------------------------------------------------------------------------------------------------------+
+| Property |                                                          Value                                                          |
++----------+-------------------------------------------------------------------------------------------------------------------------+
+| email    | xavier@example.com                                                                                                      |
+| enabled  | True                                                                                                                    |
+| id       | 13247a59ad844458ad36c0bd06451376                                                                                        |
+| name     | xavier                                                                                                                  |
+| password | $6$rounds=40000$3YPS4NJ1DqKdzEjc$XPGFlqCfu2ZCNUMJCjFMkvFfXrOkixuVq1I6.mjd9PXzU.4u6ELHYeNbvYJyiCGvUHaggIgo9rMESeA8v4x3Y1 |
+| tenantId | None                                                                                                                    |
++----------+-------------------------------------------------------------------------------------------------------------------------+
+</code>
+=== Tenant ===
+<code>
+keystone --token ADMPASSWD --endpoint http://192.168.1.250:35357/v2.0/ tenant-create --name=$USER
+</code>
+<code>
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description | None                             |
+| enabled     | True                             |
+| id          | c6f05a03b4aa482c91b61a2230356618 |
+| name        | xavier                           |
++-------------+----------------------------------+
+</code>
+
+=== Rôle ===
+<code>
+keystone --token ADMPASSWD --endpoint http://192.168.1.250:35357/v2.0/ user-role-add --user-id 13247a59ad844458ad36c0bd06451376 --role-id 84697b61736c439288900904bdf4a48d --tenant_id c6f05a03b4aa482c91b61a2230356618
+</code>
+
+
+
+==== Création des services et leurs points d'accès ====
+
+=== Le service Keystone ===
+<code>
+keystone --token ADMPASSWD --endpoint http://192.168.1.250:35357/v2.0/ service-create --name=keystone --type=identity --description='Keystone Identity Service'
+</code>
+<code>
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description | Keystone Identity Service        |
+| id          | 41905e02540d48228166c6d06ddcd9f0 |
+| name        | keystone                         |
+| type        | identity                         |
++-------------+----------------------------------+
+</code>
+=== Le point d'accès Keystone ===
+<code>
+keystone --token ADMPASSWD --endpoint http://192.168.1.250:35357/v2.0/ endpoint-create --region RegionOne --service_id=41905e02540d48228166c6d06ddcd9f0 --publicurl=http://192.168.1.250:5000/v2.0 --internalurl=http://192.168.1.250:5000/v2.0 --adminurl=http://192.168.1.250:35357/v2.0
+</code>
+<code>
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| adminurl    | http://192.168.2.250:35357/v2.0  |
+| id          | f1c517d5754a493fa67fc21b3f4264c4 |
+| internalurl | http://192.168.2.250:5000/v2.0   |
+| publicurl   | http://192.168.2.250:5000/v2.0   |
+| region      | RegionOne                        |
+| service_id  | 41905e02540d48228166c6d06ddcd9f0 |
++-------------+----------------------------------+
+</code>
+
+Les services et points d'accès des autres services seront ajoutés après l'installation du composant bien qu'il soit possible de les définir dès maintenant.
+
+==== Utilisation ====
+
+Il y a plusieurs façons possibles de s'identifier en lançant une commande keystone.
+  * La méthode d'identification utilisée précédemment avec le mot de passe d'administration (variable //admin_token// définie dans le fichier **keystone.conf**) avec les arguments ''%%--%%endpoint'' et ''%%--%%token''
+<code>
+keystone --endpoint http://localhost:35357/v2.0 --token  ADMPASSWD user-list
+</code>
+  * La méthode user/password avec les arguments ''%%--%%username'', ''%%--%%tenant_name'', ''%%--%%password'', après définition des utilisateurs, rôles et projets, et l'argument  ''%%--%%auth_url''.
+<code>
+keystone --username admin --password ADMPASSWD --tenant_name admin --auth_url http://localhost:5000/v2.0 user-list
+</code>
+
+Pour les deux méthodes, il est possible d'utiliser des variables d'environnement pour éviter de ressaisir tous les arguments à chaque commande.
+
+__1ère méthode__:
+<code>
+export SERVICE_ENDPOINT=http://localhost:5000/v2.0/
+export SERVICE_TOKEN=ADMPASSWD
+keystone user-list
+</code>
+
+__2ème méthode__:
+<code>
+export OS_TENANT_NAME=admin 
+export OS_USERNAME=admin 
+export OS_PASSWORD=ADMPASSWD 
+export OS_AUTH_URL="http://localhost:5000/v2.0/"
+keystone user-list
+</code>
+
+Pour éviter de refaire un export des variables à chaque ouverture de terminal, vous pouvez les exporter automatiquement.\\
+Il suffit de [[:tutoriel:comment_modifier_un_fichier|créer]] un fichier **.novarc** dans votre //Dossier Personnel// contenant les lignes suivantes 
+<file>
+export OS_TENANT_NAME=admin
+export OS_USERNAME=admin
+export OS_PASSWORD=ADMPASSWD
+export OS_AUTH_URL="http://192.168.1.250:5000/v2.0/"
+</file>
+Ajoutez ensuite la ligne suivante a la fin de votre fichier **.bashrc**
+<code>
+source ~/.novarc
+</code>
+Les variables seront exportées comme variables d'environnement et vous pourrez utiliser toutes les commandes sous la forme simple sans ressaisir les informations d'authentification.
+
+<code>
+keystone user-list
+</code>
+<code>
++----------------------------------+---------+--------------------------+--------+
+|                id                | enabled |          email           |  name  |
++----------------------------------+---------+--------------------------+--------+
+| 13247a59ad844458ad36c0bd06451376 | True    | xavier@example.com       | xavier |
+| 5c54624fef2242e185af10b7a2a2768f | True    | nova@example.com         | nova   |
+| 876ef0a6c0c048039f847e61da7260b4 | True    | glance@example.com       | glance |
+| c97c87b3ed894401975dd6d757b40330 | True    | admin@example.com        | admin  |
++----------------------------------+---------+--------------------------+--------+
+</code>
+
+Les commandes ''keystone role-list'' et '' keystone tenant-list'' affichent respectivement la liste des rôles et tenants.
+
+
+Il est bien sûr possible d'envoyer des commandes à partir de n'importe quel autre ordinateur où le paquet **[[apt>python-keystoneclient|python-keystoneclient]]** est installé.\\
+
+Pour voir la liste des commandes disponibles et les détails utilisez : 
+<code>
+keystone help [NOM DE LA COMMANDE]
+</code>
+
+===== Glance =====
+La prochaine étape est l'installation du service d'images Glance.\\
+C'est le service chargé de distribuer les images de disque dur système utilisées par les machines virtuelles.
+
+==== Préparation de la base de données Mysql ====
+La commande suivante crée un utilisateur et sa base de données nommés "glance". Changez SQLPASSWD par un mot de passe de votre choix.
+
+<code>
+mysql -u root -p <<EOF
+CREATE DATABASE glance;
+GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' IDENTIFIED BY 'SQLPASSWD';
+FLUSH PRIVILEGES;
+EOF
+</code>
+
+==== Installation ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>glance,glance-api,glance-client,glance-common,glance-registry,python-glance]]**
+
+==== Configuration ====
+
+Il faut aussi créer les services et points d'accès correspondants pour Keystone
+<code>
+keystone service-create  --name=glance --type=image --description='Glance Image Service'
+</code>
+<code>
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description | Glance Image Service             |
+| id          | 39bbd3107c4c4153a408a3b6a34ef931 |
+| name        | glance                           |
+| type        | image                            |
++-------------+----------------------------------+
+</code>
+<code>
+keystone endpoint-create --region RegionOne --service_id=39bbd3107c4c4153a408a3b6a34ef931 --publicurl=http://192.168.1.250:9292/v1 --internalurl=http://192.168.1.250:9292/v1 --adminurl=http://192.168.1.250:9292/v1
+</code>
+<code>
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| adminurl    | http://192.168.1.250:9292/v1     |
+| id          | 8fa4c9092dbb4ce989fdcbaceddec45d |
+| internalurl | http://192.168.1.250:9292/v1     |
+| publicurl   | http://192.168.1.250:9292/v1     |
+| region      | RegionOne                        |
+| service_id  | 39bbd3107c4c4153a408a3b6a34ef931 |
++-------------+----------------------------------+
+</code>
+
+Dans les fichiers ci-dessous, SQLPASSWD est le mot de passe MySQL [[#Glance|Glance]], ADMPASSWD le mot de passe du [[#Création_du_compte_interne_du_service_Glance|compte de service Glance]]
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez avec les droits d'administration]] le fichier **/etc/glance/glance-api-paste.ini**, allez à la fin pour modifier ces lignes avec les valeurs correspondant à votre installation:
+
+<file>
+admin_tenant_name = service
+admin_user = glance
+admin_password = ADMPASSWD
+</file>
+
+La section [pipeline:glance-api] doit contenir
+<file>
+[pipeline:glance-api]
+pipeline = versionnegotiation authtoken auth-context apiv1app
+</file>
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez avec les droits d'administration]] le fichier **/etc/glance/glance-api.conf** pour y ajouter les lignes suivantes:
+<file>
+[paste_deploy]
+flavor = keystone
+</file>
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez avec les droits d'administration]] le fichier **/etc/glance/glance-registry.conf** et modifiez la ligne suivante:
+<file>
+sql_connection = mysql://glance:SQLPASSWD@192.168.1.250:3306/glance
+</file>
+et ajoutez à la fin
+<file>
+[paste_deploy]
+flavor = keystone
+</file>
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez avec les droits d'administration]] le fichier **/etc/glance/glance-scrubber.conf** pour ajouter les lignes suivantes:
+<file>
+sql_connection = mysql://glance:SQLPASSWD@192.168.1.250:3306/glance
+sql_idle_timeout = 3600
+</file>
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez avec les droits d'administration]] le fichier **/etc/glance/glance-registry-paste.ini** et modifiez les lignes suivantes:
+<file>
+admin_tenant_name = service
+admin_user = glance
+admin_password = ADMPASSWD
+</file>
+et la section 
+<file>
+[pipeline:glance-registry]
+pipeline = authtoken auth-context context registryapp
+</file>
+
+Synchronisez maintenant la base de données MySQL
+
+<code>
+sudo glance-manage version_control 0
+sudo glance-manage db_sync
+</code>
+
+Si message d'erreur "CRITICAL glance [-] ValueError: Tables "migrate_version" have non utf8 collation, please make sure all tables are CHARSET=utf8" : 
+
+<code>
+mysql -u root -p glance
+alter table migrate_version convert to character set utf8 collate utf8_unicode_ci;
+flush privileges;
+quit
+</code>
+
+Redémarrez les services pour la prise en compte des modifications
+<code>
+sudo service glance-api restart && sudo service glance-registry restart
+</code>
+
+==== Utilisation ====
+
+Vérifiez maintenant si tout fonctionne correctement. Téléchargez une première [[wpfr>Image_disque|image]] pour tester:
+
+<code>
+wget http://uec-images.ubuntu.com/releases/precise/release/ubuntu-12.04-server-cloudimg-amd64-disk1.img
+</code>
+
+Ajoutez maintenant l'image téléchargée aux images Glance
+
+<code>
+glance add name="Ubuntu 12.04 cloudimg amd64" is_public=true container_format=ovf disk_format=qcow2 < ubuntu-12.04-server-cloudimg-amd64-disk1.img
+</code>
+<code>
+Uploading image 'Ubuntu 12.04 cloudimg amd64'
+=====================================================================================================================================================================================================================================[100%] 136.648660M/s, ETA  0h  0m  0s
+Added new image with ID: d1b7defa-0c35-4e8c-aef5-0d58c8d80a52
+</code>
+
+La commande ''glance index'' donne une liste des images:
+
+<code>
+glance index
+</code>
+<code>
+ID                                   Name                           Disk Format          Container Format     Size          
+------------------------------------ ------------------------------ -------------------- -------------------- --------------
+d1b7defa-0c35-4e8c-aef5-0d58c8d80a52 Ubuntu 12.04 cloudimg amd64    qcow2                ovf                       230490112
+</code>
+La commande ''glance details'' affiche des informations détaillées sur toutes les images.
+<code>
+glance details
+</code>
+<code>
+================================================================================
+URI: http://192.168.1.250:9292/v1/images/d1b7defa-0c35-4e8c-aef5-0d58c8d80a52
+Id: d1b7defa-0c35-4e8c-aef5-0d58c8d80a52
+Public: Yes
+Protected: No
+Name: Ubuntu 12.04 cloudimg amd64
+Status: active
+Size: 230490112
+Disk format: qcow2
+Container format: ovf
+Minimum Ram Required (MB): 0
+Minimum Disk Required (GB): 0
+Owner: 0f71e86d30e247d3b1216fe5f2f3aa50
+================================================================================
+</code>
+
+La syntaxe de la commande **glance add** est la suivante :
+<code>
+glance add name="<Image name>" is_public=true container_format=<container_format> disk_format=<disk_format> < <filename>
+</code>
+où:
+  * <Image name> : Nom que l'on veut donner a l'image
+  * is_public=true : L'image est visible (true) ou non (false) dans tous les projets
+  * <container_format> : Container Type de container bare pas de container, ovf OVF Container, aki ari ami Amazon kernel ramdisk ou machine
+  * <disk_format> : Format de l'image raw, qcow2, vmdk, iso etc...
+  * %%<filename>%% : Le nom de l'image a uploader
+
+Pour voir la liste des commandes disponibles et les détails utilisez : 
+<code>
+glance help [NOM DE LA COMMANDE]
+</code>
+
+===== Nova =====
+Passez maintenant à l'installation de Nova, la gestion des instances des machines virtuelles, de leur espace disque et du réseau.
+
+==== Préparation de la base de données Mysql ====
+La commande suivante crée un utilisateur et sa base de données nommés "nova". Changez SQLPASSWD par un mot de passe de votre choix
+
+<code>
+mysql -u root -p <<EOF
+CREATE DATABASE nova;
+GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'%' IDENTIFIED BY 'SQLPASSWD';
+EOF
+</code>
+
+
+
+==== Installation ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>nova-api,nova-cert,nova-common,nova-compute,nova-compute-kvm,nova-doc,nova-network,nova-objectstore,nova-scheduler,novnc,nova-consoleauth,nova-volume,python-nova,python-novaclient|nova-api nova-cert nova-common nova-compute nova-compute-kvm nova-doc nova-network nova-objectstore nova-scheduler novnc nova-consoleauth nova-volume python-nova python-novaclient]]**.
+
+==== Configuration ====
+ 
+Création des services et points d'accès pour Keystone, au nombre de 2: les services de type [[#service compute|compute]] (auquel on donne le nom de "nova") et de type [[#service volume|volume]] (auquel on donne le nom de "volume").
+== Service compute ==
+<code>
+keystone service-create --name=nova --type=compute --description='OpenStack Compute Service'
+</code>
+<code>
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description | OpenStack Compute Service        |
+| id          | 4ba6c7149dd1421f8c429afc0c8dbdfe |
+| name        | nova                             |
+| type        | compute                          |
++-------------+----------------------------------+
+</code>
+<code>
+keystone endpoint-create --region RegionOne --service_id=4ba6c7149dd1421f8c429afc0c8dbdfe --publicurl='http://192.168.1.250:8774/v2/%(tenant_id)s' --internalurl='http://192.168.1.250:8774/v2/%(tenant_id)s' --adminurl='http://192.168.1.250:8774/v2/%(tenant_id)s'
+</code>
+<code>
++-------------+--------------------------------------------+
+|   Property  |                   Value                    |
++-------------+--------------------------------------------+
+| adminurl    | http://192.168.1.250:8774/v2/%(tenant_id)s |
+| id          | f783461a1d0f4d9fb8e6dabc0fd0a177           |
+| internalurl | http://192.168.1.250:8774/v2/%(tenant_id)s |
+| publicurl   | http://192.168.1.250:8774/v2/%(tenant_id)s |
+| region      | RegionOne                                  |
+| service_id  | 4ba6c7149dd1421f8c429afc0c8dbdfe           |
++-------------+--------------------------------------------+
+</code>
+
+== Service volume ==
+<code>
+keystone service-create --name=volume --type=volume --description='OpenStack Volume Service'
+</code>
+<code>
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description | OpenStack Volume Service         |
+| id          | de65a68c5ae34737bc6678f6c7bc884a |
+| name        | volume                           |
+| type        | volume                           |
++-------------+----------------------------------+
+</code>
+<code>
+keystone endpoint-create --region RegionOne --service_id=de65a68c5ae34737bc6678f6c7bc884a --publicurl='http://192.168.1.250:8776/v1/%(tenant_id)s' --internalurl='http://192.168.1.250:8776/v1/%(tenant_id)s' --adminurl='http://192.168.1.250:8776/v1/%(tenant_id)s'
+</code>
+<code>
++-------------+--------------------------------------------+
+|   Property  |                   Value                    |
++-------------+--------------------------------------------+
+| adminurl    | http://192.168.1.250:8776/v1/%(tenant_id)s |
+| id          | 36834fdc7ce3410a8442dffd90c3d3e2           |
+| internalurl | http://192.168.1.250:8776/v1/%(tenant_id)s |
+| publicurl   | http://192.168.1.250:8776/v1/%(tenant_id)s |
+| region      | RegionOne                                  |
+| service_id  | de65a68c5ae34737bc6678f6c7bc884a           |
++-------------+--------------------------------------------+
+</code>
+\\
+
+Dans les fichiers ci-dessous, SQLPASSWD est le mot de passe MySQL [[#Nova|Nova]], ADMPASSWD le mot de passe du [[#Création_du_compte_interne_du_service_Nova|compte de service Nova]]
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez avec les droits d'administration]] le fichier **/etc/nova/api-paste.ini** et modifiez les lignes:
+<file>
+admin_tenant_name = service
+admin_user = nova
+admin_password = ADMPASSWD
+</file>
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez avec les droits d'administration]] le fichier **/etc/nova/nova.conf** et remplacer tout avec les lignes ci dessous.\\
+La configuration obtenue utilisera le mode DHCP. La ligne "nova.scheduler.simple.SimpleScheduler" définit une utilisation avec un seul serveur.\\
+Pour un mode VLAN, pour utiliser plusieurs serveurs ou d'autres options, reportez-vous à la [[http://docs.openstack.org/|documentation OpenStack]] **(en)**.
+
+<file>
+# LOGS/STATE
+--verbose
+--logdir=/var/log/nova
+--state_path=/var/lib/nova
+--lock_path=/var/lock/nova
+--allow_admin_api=true
+--use_deprecated_auth=false
+--cc_host=192.168.1.250
+--nova_url=http://192.168.1.250:8774/v1.1/
+--routing_source_ip=192.168.1.250
+--s3_host=192.168.1.250
+--ec2_host=192.168.1.250
+--ec2_url=http://192.168.1.250:8773/services/Cloud
+--keystone_ec2_url=http://192.168.1.250:5000/v2.0/ec2tokens
+--scheduler_driver=nova.scheduler.simple.SimpleScheduler
+#root_helper est deprecie, rootwrap_config=/etc/nova/rootwrap.conf
+--root_helper=sudo nova-rootwrap
+# AUTHENTICATION
+--auth_strategy=keystone
+# VOLUMES
+--iscsi_helper=tgtadm
+--iscsi_ip_prefix=172.16.0
+# DATABASE
+--sql_connection=mysql://nova:SQLPASSWD@192.168.1.250/nova
+# COMPUTE
+--libvirt_type=kvm
+--connection_type=libvirt
+--libvirt_use_virtio_for_bridges=true
+--api_paste_config=/etc/nova/api-paste.ini
+--allow_resize_to_same_host=True
+--start_guests_on_host_boot=true
+--resume_guests_state_on_host_boot=true
+# RABBITMQ
+--rabbit_host=192.168.1.250
+# GLANCE
+--image_service=nova.image.glance.GlanceImageService
+--glance_api_servers=192.168.1.250:9292
+# NETWORK
+--network_manager=nova.network.manager.FlatDHCPManager
+--dhcpbridge_flagfile=/etc/nova/nova.conf
+--dhcpbridge=/usr/bin/nova-dhcpbridge
+--fixed_range=172.16.0.0/24
+--flat_network_dhcp_start=172.16.0.2
+--flat_network_bridge=br1
+--flat_interface=eth1
+--network_size=256
+--flat_injected=False
+--my_ip=192.168.1.250
+--floating_range=192.168.1.0/24 
+--force_dhcp_release
+--public_interface=br0
+# NOVNC CONSOLE
+--vnc_enabled=true
+--novncproxy_base_url=http://192.168.1.250:6080/vnc_auto.html
+--vncserver_proxyclient_address=127.0.0.1
+--vncserver_listen=127.0.0.1
+</file>
+
+Toutes les entrées //%%--%%flat...// correspondent au réseau privé(172.16.0.0/24, début 172.16.0.2), destiné aux communications entre les VMs (pour Virtual Machine ou machines virtuelles), les autres serveurs Nova ou de stockage s'il y a...\\
+
+//%%--%%floating_range// est le réseau public (LAN ou Internet) sur lequel est branché l'interface br0, pour attribuer une adresse aux VMs sur le réseau public. L'adresse 192.168.1.250 est celle de l'interface br0, ne remplacez pas par 127.0.0.1, ça ne fonctionnera pas.\\
+
+Modifiez les [[:droits]] sur le répertoire **/etc/nova**
+
+<code>
+sudo chown -R nova:nova /etc/nova/
+</code>
+
+Redémarrez tous les services nova
+
+<code>
+for a in libvirt-bin nova-network nova-compute nova-api nova-objectstore nova-scheduler nova-volume nova-cert nova-consoleauth novnc; do sudo service "$a" stop; done
+for a in libvirt-bin nova-network nova-compute nova-api nova-objectstore nova-scheduler nova-volume nova-cert nova-consoleauth novnc; do sudo service "$a" start; done
+</code>
+
+Synchronisez la base de données
+
+<code>
+sudo nova-manage db sync
+</code>
+
+Redémarrez de nouveau tous les services
+
+<code>
+for a in libvirt-bin nova-network nova-compute nova-api nova-objectstore nova-scheduler nova-volume nova-cert nova-consoleauth novnc; do sudo service "$a" stop; done
+for a in libvirt-bin nova-network nova-compute nova-api nova-objectstore nova-scheduler nova-volume nova-cert nova-consoleauth novnc; do sudo service "$a" start; done
+</code>
+==== Utilisation ====
+
+Vous pouvez maintenant vérifier que tous les services fonctionnent, le résultat dans la colonne //STATE// doit être
+  * un smiley, représenté par %%:-)%%, pour "OK". 
+  * un XXX : quelque chose n'as pas fonctionné, consultez les logs dans **/var/log/nova/nova-le_nom_du_service_KO**.
+
+<code>
+sudo nova-manage service list
+</code>
+<code>
+2012-05-16 00:20:09 DEBUG nova.utils [req-527f4f50-f02e-41da-bc96-43d3d9070807 None None] backend <module 'nova.db.sqlalchemy.api' from '/usr/lib/python2.7/dist-packages/nova/db/sqlalchemy/api.pyc'> from (pid=9869) __get_backend /usr/lib/python2.7/dist-packages/nova/utils.py:658
+Binary           Host                                 Zone             Status     State Updated_At
+nova-scheduler   myhost                                 nova             enabled    :-)   2012-05-15 22:20:04
+nova-volume      myhost                                 nova             enabled    :-)   2012-05-15 22:20:03
+nova-compute     myhost                                 nova             enabled    :-)   2012-05-15 22:20:05
+nova-network     myhost                                 nova             enabled    :-)   2012-05-15 22:20:03
+nova-consoleauth myhost                                 nova             enabled    :-)   2012-05-15 22:20:03
+nova-cert        myhost                                 nova             enabled    :-)   2012-05-15 22:20:04
+</code>
+
+<note important>L'affichage du résultat d'une commande est beaucoup plus rapide que son exécution réelle. Si vous n'obtenez pas de message d'erreur, patientez quelques instants et vérifiez avec une commande d'affichage que l'action a bien été prise en compte.\\
+Relancer une commande ou demander son annulation alors qu'elle est en cours d'exécution peut rendre le composant Nova instable et empêcher la suppression de l'action demandée ou laisser des entrées indésirables dans la base de données. Exemples: l'attribution d'une adresse IP publique ou la création d'un disque virtuel.\\
+N'hésitez pas à... patienter</note>
+
+=== Images disques ===
+
+Listez les images disque fournies par le service Glance
+
+<code>
+nova image-list
+</code>
+<code>
++--------------------------------------+-----------------------------+--------+--------+
+|                  ID                  |             Name            | Status | Server |
++--------------------------------------+-----------------------------+--------+--------+
+| d1b7defa-0c35-4e8c-aef5-0d58c8d80a52 | Ubuntu 12.04 cloudimg amd64 | ACTIVE |        |
++--------------------------------------+-----------------------------+--------+--------+
+</code>
+
+=== Réseaux ===
+
+Profitez-en pour créer les réseaux privés et publics. Les adresses seront enregistrées dans la base MySQL.
+Le réseau public
+<code>
+sudo nova-manage floating create --ip_range=192.168.1.0/24
+</code>
+Le réseau privé, destiné aux communications entre les VMs, les autres serveurs Nova ou de stockage s'il y a...
+<code>
+sudo nova-manage network create private --fixed_range_v4=172.16.0.0/24 --num_networks=1 --bridge=br1 --bridge_interface=eth1 --network_size=256
+</code>
+
+=== Parefeu ===
+
+Par défaut, les règles de parefeu bloquent les paquets entrants sur l'interface publique à destination des VMs. Il est possible de créer des ensembles de règles. L'ensemble des règles utilisées devra être spécifié au lancement de chaque instance. Ci-dessous un exemple de création de règles sur l'ensemble "default" créé automatiquement à l'installation, si vous voulez autoriser le ping et [[:SSH]] pour toutes les VMs sur l'interface publique ( icmp -1 correspond a tout ).
+
+<code>
+nova secgroup-add-rule default icmp -1 -1  0.0.0.0/0
+</code>
+<code>
++-------------+-----------+---------+-----------+--------------+
+| IP Protocol | From Port | To Port |  IP Range | Source Group |
++-------------+-----------+---------+-----------+--------------+
+| icmp        | -1        | -1      | 0.0.0.0/0 |              |
++-------------+-----------+---------+-----------+--------------+
+</code>
+<code>
+nova secgroup-add-rule default tcp 22 22 0.0.0.0/0
+</code>
+<code>
++-------------+-----------+---------+-----------+--------------+
+| IP Protocol | From Port | To Port |  IP Range | Source Group |
++-------------+-----------+---------+-----------+--------------+
+| tcp         | 22        | 22      | 0.0.0.0/0 |              |
++-------------+-----------+---------+-----------+--------------+
+</code>
+
+Listez les règles de ports autorisés sur le groupe de règles "default"
+
+<code>
+nova secgroup-list-rules default
+</code>
+<code>
++-------------+-----------+---------+-----------+--------------+
+| IP Protocol | From Port | To Port |  IP Range | Source Group |
++-------------+-----------+---------+-----------+--------------+
+| icmp        | -1        | -1      | 0.0.0.0/0 |              |
+| tcp         | 22        | 22      | 0.0.0.0/0 |              |
++-------------+-----------+---------+-----------+--------------+
+</code>
+
+
+==== Première machine virtuelle ====
+Maintenant que tout fonctionne, vous allez pouvoir créez votre première VM.\\
+Assurez-vous d'avoir créé une clé [[:SSH]]:
+
+<code>
+ssh-keygen -t rsa
+</code>
+
+Ajoutez-la au serveur
+
+<code>
+nova keypair-add --pub_key ~/.ssh/id_rsa.pub key1
+</code>
+
+Il faut définir les spécifications de la future VM, pour voir les possibilités, utilisez la commande ci-dessous, la création de vos propres définitions étant bien sûr possible:
+
+<code>
+nova flavor-list
+</code>
+<code>
++----+-----------+-----------+------+-----------+------+-------+-------------+
+| ID |    Name   | Memory_MB | Disk | Ephemeral | Swap | VCPUs | RXTX_Factor |
++----+-----------+-----------+------+-----------+------+-------+-------------+
+| 1  | m1.tiny   | 512       | 0    | 0         |      | 1     | 1.0         |
+| 2  | m1.small  | 2048      | 10   | 20        |      | 1     | 1.0         |
+| 3  | m1.medium | 4096      | 10   | 40        |      | 2     | 1.0         |
+| 4  | m1.large  | 8192      | 10   | 80        |      | 4     | 1.0         |
+| 5  | m1.xlarge | 16384     | 10   | 160       |      | 8     | 1.0         |
++----+-----------+-----------+------+-----------+------+-------+-------------+
+</code>
+
+Pour la suite, il sera utilisé l'ID 1 correspondant à une machine disposant de 512 Mb de RAM, 1 CPU virtuel et aucun disque supplémentaire.
+
+Lancez votre première VM avec la commande ''nova boot'', le paramètre //%%--%%flavor// indique les spécifications choisies, //%%--%%image// l'ID de l'image fournie par glance, vient ensuite le nom et la clé ssh utilisée. Indiquez aussi l'ensemble de règles de [[#Parefeu|parefeu]], sinon c'est l'ensemble "default" qui est appliqué.
+
+<code>
+nova boot --flavor 1 --image d1b7defa-0c35-4e8c-aef5-0d58c8d80a52 myfirstvm --key_name key1 &
+</code>
+<code>
+[1] 5472
++-------------------------------------+--------------------------------------+
+|               Property              |                Value                 |
++-------------------------------------+--------------------------------------+
+| OS-DCF:diskConfig                   | MANUAL                               |
+| OS-EXT-SRV-ATTR:host                | myhost                               |
+| OS-EXT-SRV-ATTR:hypervisor_hostname | None                                 |
+| OS-EXT-SRV-ATTR:instance_name       | instance-00000003                    |
+| OS-EXT-STS:power_state              | 0                                    |
+| OS-EXT-STS:task_state               | scheduling                           |
+| OS-EXT-STS:vm_state                 | building                             |
+| accessIPv4                          |                                      |
+| accessIPv6                          |                                      |
+| adminPass                           | 4BMRzdXgtLvF                         |
+| config_drive                        |                                      |
+| created                             | 2012-07-09T17:09:18Z                 |
+| flavor                              | m1.tiny                              |
+| hostId                              |                                      |
+| id                                  | 9360ae16-6b3a-4eb6-9b15-6b05d3f83989 |
+| image                               | Ubuntu 12.04 cloudimg amd64          |
+| key_name                            | key1                                 |
+| metadata                            | {}                                   |
+| name                                | myfirstvm                            |
+| progress                            | 0                                    |
+| status                              | BUILD                                |
+| tenant_id                           | 0f71e86d30e247d3b1216fe5f2f3aa50     |
+| updated                             | 2012-07-09T17:09:19Z                 |
+| user_id                             | c97c87b3ed894401975dd6d757b40330     |
++-------------------------------------+--------------------------------------+
+
+[1]+  Fini                    nova boot --flavor 1 --image d1b7defa-0c35-4e8c-aef5-0d58c8d80a52 myfirstvm --key_name key1
+
+</code>
+
+Un récapitulatif des propriétés de la machine s'affiche. Pour le réafficher, utilisez la commande 
+
+<code>
+nova show myfirstvm
+</code>
+
+Pour lister les VM existantes
+
+<code>
+nova list
+</code>
+<code>
++--------------------------------------+-----------+--------+--------------------+
+|                  ID                  |    Name   | Status |      Networks      |
++--------------------------------------+-----------+--------+--------------------+
+| 9360ae16-6b3a-4eb6-9b15-6b05d3f83989 | myfirstvm | ACTIVE | private=172.16.0.2 |
++--------------------------------------+-----------+--------+--------------------+
+</code>
+
+Connectez-vous sur la VM
+
+<code>
+ssh ubuntu@172.16.0.2
+</code>
+<code>
+Welcome to Ubuntu 12.04 LTS (GNU/Linux 3.2.0-25-virtual x86_64)
+
+ * Documentation:  https://help.ubuntu.com/
+
+  System information as of Mon Jul  9 17:10:53 UTC 2012
+.
+.
+.
+To run a command as administrator (user "root"), use "sudo <command>".
+See "man sudo_root" for details.
+
+ubuntu@myfirstvm:~$ exit
+logout
+Connection to 172.16.0.2 closed.
+</code>
+
+Vous pouvez créez un disque dur supplémentaire
+
+<code>
+nova volume-create --display_name "volume1" 10
+</code>
+
+Attachez-le à la VM
+
+<code>
+nova volume-attach myfirstvm 1 /dev/vdb
+</code>
+
+Vérifiez le rattachement
+<code>
+nova volume-list
+</code>
+<code>
++----+--------+--------------+------+-------------+--------------------------------------+
+| ID | Status | Display Name | Size | Volume Type |             Attached to              |
++----+--------+--------------+------+-------------+--------------------------------------+
+| 1  | in-use | volume1      | 10   | None        | 9360ae16-6b3a-4eb6-9b15-6b05d3f83989 |
++----+--------+--------------+------+-------------+--------------------------------------+
+</code>
+
+Vous pouvez maintenant vous reconnecter à la VM pour partitionner ce disque et l'utiliser.
+
+Connectez maintenant cette instance virtuelle à votre LAN.\\
+Il faut tout d'abord allouer une adresse IP 
+
+<code>
+nova floating-ip-create
+</code>
+<code>
++-------------+-------------+----------+------+
+|      Ip     | Instance Id | Fixed Ip | Pool |
++-------------+-------------+----------+------+
+| 192.168.1.1 | None        | None     | nova |
++-------------+-------------+----------+------+
+</code>
+
+Puis attachez cette adresse à la VM
+<code>
+nova add-floating-ip myfirstvm 192.168.1.1
+</code>
+Patientez quelques secondes et vérifiez la présence sur votre LAN d'une machine à cette adresse
+<code>
+ping -c 2 192.168.1.1
+</code>
+<code>
+PING 192.168.1.1 (192.168.1.1) 56(84) bytes of data.
+64 bytes from 192.168.1.1: icmp_req=1 ttl=64 time=0.589 ms
+64 bytes from 192.168.1.1: icmp_req=2 ttl=64 time=0.452 ms
+
+--- 192.168.1.1 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 999ms
+rtt min/avg/max/mdev = 0.452/0.520/0.589/0.072 ms
+</code>
+
+La commande nova list vous confirme l'attribution
+<code>
+nova list
+</code>
+<code>
++--------------------------------------+-----------+--------+---------------------------------+
+|                  ID                  |    Name   | Status |             Networks            |
++--------------------------------------+-----------+--------+---------------------------------+
+| 9360ae16-6b3a-4eb6-9b15-6b05d3f83989 | myfirstvm | ACTIVE | private=172.16.0.2, 192.168.1.1 |
++--------------------------------------+-----------+--------+---------------------------------+
+</code>
+
+Il est bien sûr possible d'envoyer des commandes à partir de n'importe quel autre ordinateur où les paquets **[[apt>python-novaclient,python-nova-adminclient]]** sont installés.\\
+
+Pour voir la liste des commandes disponibles et les détails utilisez : 
+<code>
+nova help [NOM DE LA COMMANDE]
+</code>
+
+===== Dashboard Horizon =====
+L'interface graphique, le Dashboard Horizon, a été développée pour simplifier l'administration du serveur et des projets. L'accès se fait à partir d'un [[:navigateur]] web pointant à l'adresse du serveur.\\
+Les différents services doivent être installés et configurés avant de pouvoir l'utiliser. Une grande partie des commandes est alors à portée d'un clic de souris.\\
+
+==== Installation ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>apache2,libapache2-mod-wsgi,openstack-dashboard]]**
+
+Redémarrez le serveur web [[:Apache2|Apache]] pour vérifier que tout est OK
+
+<code>
+sudo service apache2 restart
+</code>
+
+==== Utilisation ====
+
+Ouvrez votre [[:navigateur]] favori à l'adresse de votre interface publique ou 127.0.0.1\\
+
+{{ ::dashboard.png?600 |Interface de dashboard Horizon}}
+
+<note important>Comme pour les commandes shell, l'affichage du résultat d'une commande ne garantit pas qu'elle soit entièrement exécutée. Si vous n'obtenez pas de message d'erreur, la mise à jour de la page peut demander quelques secondes supplémentaires.\\
+Relancer une commande ou demander son annulation alors qu'elle est en cours d'exécution peut rendre le composant Nova instable et empêcher la suppression de l'action demandée ou laisser des entrées indésirables dans la base de données. Exemple: lors de la suppression d'un disque virtuel, les données sont supprimées avant que l'espace ne soit libéré.\\
+N'hésitez pas à... patienter</note>
+
+<note important>L'url par défaut est http://IP/horizon</note>
+
+Les identifiants de connexion de l'administrateur sont les mêmes que ceux du fichier **.novarc**. Si vous avez suivi ce document sans rien changer, il s'agit donc pour le compte d'administration de:\\
+//Username //:%%	%%[[#Création_du_compte_administrateur|admin]]%%    %%//Password//:%% 	%%[[#Création_du_compte_administrateur|ADMPASSWD]].\\
+Les comptes qui ont pour rôle "admin" ont accès à l'interface d'administration sur le Dashboard, ainsi qu'à leur(s) projet(s). Les rôles "Member" n'ont accès qu'à leur(s) projet(s).
+
+=== Accès Admin ===
+
+Dans l'ordre les différents menus : 
+	* //Overview// : Récapitulatif de l'usage des serveurs par projet, utilisation actuelle en nombre de CPU virtuels, RAM et Disques puis compteur en CPU et espace disque(GB) par heures.
+	* //Instances// : Liste des instances de machines virtuelles actuelles plus quelques infos globales comme le projet auquel elles appartiennent, le serveur hôte, l'adresse IP, la taille, le statut et les actions en cours.
+	* //Services// : Liste des services activés et le serveur hôte.
+	* //Flavors// : La liste des types d'instances disponibles, leurs spécifications en nombre de CPUs, mémoire, espace disque. La création de nouvelles définitions d'instance est possible.
+	* //Images// : Les images disques stockées par le service Glance.
+	* //Projects// : les projets existants et leur statut. Il est possible de créer de nouveaux projets.
+	* //Users// : La liste des utilisateurs enregistrés, avec la possibilité d'ajouter ou d'éditer les détails mais pas d'ajouter l'utilisateur à plusieurs projets.
+	* //Quotas// : Les quotas définis sur les ressources des serveurs, pas de modification possible.
+
+=== Accès projets ===
+
+Un bouton permet de basculer entre les différents projets dont l'utilisateur est membre, si il y a.
+Puis viennent les menus : 
+	* //Overview// : Récapitulatif, comme dans la partie Admin, mais ne concernant que le projet sélectionné.
+	* //Instances & Volumes// : La liste des instances existantes et les possibilités de les éditer, la création ou modification des volumes disques virtuels.
+	* //Images & Snapshots// : Liste des images autorisées pour le projet, sert a lancer de nouvelles instances. Regroupe aussi les instantanés disponibles, instances et volumes disques.
+	* //Acces & Security// : Les adresses IP disponibles pour connecter les instances au réseau public avec possibilité de création, les groupes de règles de pare-feu et leur interface d'édition, et enfin la liste des clés SSH avec l'import ou la création de certificat.
+===== Créez vos propres images =====
+
+L'intérêt d'OpenStack étant de déployer rapidement des instances de machines virtuelles, ça ne servirait à rien de devoir passer ensuite des heures à les configurer. La création de vos propres images vous permettra de gagner un temps précieux.\\
+Plusieurs grandes distributions ont été testées avec succès, dont Ubuntu et Debian, RedHat et Centos mais aussi Mandriva. D'autres systèmes peuvent aussi servir comme FreeBSD ou encore Windows.\\
+Pour un système Linux, les pré-requis sont : un système à jour, Curl et un serveur SSH. Pour FreeBSD ou Windows, prévoyez l'installation du pilote //Virtio//.(driver Windows signé disponible [[http://alt.fedoraproject.org/pub/alt/virtio-win/latest/images/bin/|ici]]).\\
+
+Installez et configurez une VM avec [[:KVM]], installez les logiciels et services voulus et les comptes utilisateurs. Gardez à l'esprit que tout ce que vous faites sur cette image se retrouvera sur chaque instance. Et à l'inverse, tout ce que vous n'aurez pas fait sera aussi à refaire à chaque nouvelle VM.\\
+
+Pour simplifier l'administration des comptes sur les instances, l'utilisation d'un annuaire LDAP facilite grandement le travail. Il suffira ensuite de faire les changements sur l'annuaire pour ne pas être obligé de remettre ses images à jour.\\
+Pour finir, pour les images Linux, [[:tutoriel:comment_modifier_un_fichier|ouvrez avec les droits d'administration]] le fichier **/etc/rc.local** et ajoutez les lignes suivantes avant la ligne "exit 0" (ou avant "/var/lock/subsys/local" pour Centos). Ceci permettra à l'instance de récupérer les clés SSH au lancement.
+
+<file>
+echo >> /root/.ssh/authorized_keys
+curl -m 10 -s http://169.254.169.254/latest/meta-data/public-keys/0/openssh-key | grep 'ssh-rsa' >> /root/.ssh/authorized_keys
+echo "AUTHORIZED_KEYS:"
+echo "************************"
+cat /root/.ssh/authorized_keys
+echo "************************"
+</file>
+
+Une dernière précaution à prendre pour éviter les conflits de nommage des interfaces réseau: effacer la règle [[:udev]] y faisant référence:
+<code>
+sudo rm -rf /etc/udev/rules.d/70-persistent-net.rules
+</code>
+
+Votre image disque est maintenant prête à être exportée sur le serveur Glance.
+
+===== Désinstallation =====
+ 
+Pour supprimer cette application, [[:tutoriel:comment_supprimer_un_paquet|supprimer les paquets]]. Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée. Les journaux du système, et les fichiers de préférence des utilisateurs dans leurs dossiers personnels sont toujours conservés.\\
+Supprimez ensuite les bases de données keystone, glance et nova\\ 
+
+===== Voir aussi =====
+ 
+  * **(en)** [[http://openstack.org/|Le site du Projet]]
+
+----
+//Contributeurs principaux : [[utilisateurs:xavier4811|Xavier4811]].//

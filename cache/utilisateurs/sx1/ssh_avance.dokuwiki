@@ -1,0 +1,230 @@
+
+{{tag>administration sécurité serveur}}
+----
+
+====== Fonctionnalités avancées de SSH ======
+
+Cette page présente les usages avancés ou particuliers de SSH répondant à un besoin très précis.\\
+Pour plus d'information sur les usages les plus courants de SSH et sa configuration de base reportez-vous à [[:ssh|cette page]].
+
+===== Se connecter en ssh à travers un mandataire http (proxy) =====
+
+Il peut arriver (en entreprise, dans un cybercafé...) qu'il y ait un mandataire (« proxy ») HTTP. Pour initier une connexion vers un poste de l'extérieur, il est alors nécessaire d'utiliser l'outil ''connect-proxy''.
+  * [[tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt>connect-proxy|connect-proxy]]**.
+  * [[tutoriel:comment_modifier_un_fichier|Éditer le fichier]] **/etc/ssh/ssh_config** pour y ajouter les adresses IP extérieures :<file>host ip_du_pc_distant
+  ProxyCommand connect-proxy -H adresse_du_proxy:port %h %p</file> où vous remplacerez ''ip_du_pc_distant'' et ''adresse_du_proxy:port'' par ce qui convient.
+Vous pouvez maintenant vous connecter à travers votre mandataire en toute transparence, avec la commande ssh.
+
+===== Restriction d'accès SSH =====
+
+Quand on utilise SSH avec une [[ssh_bases#authentification_par_un_systeme_de_cles_publiqueprivee|authentification par clés]] , le serveur distant peut limiter l'utilisation de certaines commandes permises.\\
+Si vous maintenez un dépôt [[:cvs]] , vous pourriez utiliser des lignes comme ceci dans le fichier **~/.ssh/authorized_keys** :
+ <file>command="/usr/bin/cvs server" ssh-dss <nom_commande> </file>
+
+Ceci permettrait que seule cette commande puisse être utilisée à l'exception d'autres.
+
+===== Accès automatique pour des scripts =====
+
+L'authentification par clé publique (voir [[:ssh#authentification_par_un_systeme_de_cles_publiqueprivee|SSH]]) peut également être employée pour automatiser les tâches qui exigeraient habituellement l'introduction au clavier d'un mot de passe.\\
+Imaginez vouloir copier un dossier à partir d'un ordinateur distant tous les jours à minuit. Tout ce que vous avez à faire c'est d'établir la confiance entre ces deux ordinateurs.\\
+Créez un compte de service sur un ordinateur, créez une paire de clés comme expliqué sur la page relatives aux bases de SSH
+et quand on vous demande de rentrer la //passphrase// tapez juste sur la touche « Entrée ». 
+
+Ceci fera que votre clé privée ne sera pas protégée. 
+
+Ajoutez la clé publique de l'autre ordinateur dans le fichier **~/.ssh/authorized_keys** par la commande **ssh-copy-id** comme expliqué sur la page relative aux bases sur SSH ([[:ssh#authentification_par_un_systeme_de_cles_publiqueprivee|SSH]])
+Maintenant vous pouvez utiliser SSH sur cette machine sans une //passphrase// à taper. Ajoutez une référence à SSH dans votre //[[:cron|crontab]]// et vous êtes prêt.
+
+<note importante>
+Avoir une clef privée non protégée peut être une faille de sécurité. Les intrus devront seulement obtenir l'accès à la clé privée et pourront accéder aux ordinateurs distants.
+</note>
+
+===== Utiliser le ssh-agent =====
+
+Si vous devez fréquemment ouvrir des sessions distantes avec SSH ou copier des fichiers avec SCP (ou toute autre utilisation de SSH) il existe une solution pour ne pas avoir à saisir votre passphrase à chaque utilisation. 
+ en utilisant **SSH agent**. 
+Vous devez indiquer une fois votre //passphrase// à ssh-agent en employant la commande **ssh-add** et tout ce que vous commencez comme sous-processus de **SSH agent** (donc SSH, SCP, etc.) se rappellera automatiquement de la passphrase.
+<code>
+~$ ssh-add
+Enter passphrase for /home/<nom_utilisateur>/.ssh/id_rsa: 
+Identity added: /home/<nom_utilisateur>/.ssh/id_rsa (/home/<nom_utilisateur>/.ssh/id_rsa)
+</code>
+Une fois effectué cette opération un seule fois, vous n'aurez pas besoin de vous inquiéter de l'agent.
+Votre session est prête pour exploiter le **ssh-agent** automatiquement.
+
+L'agent ssh ne transmet pas votre passphrase sur le réseau ni votre clé privée.
+
+Vous pouvez savoir quel utilisateur est déclaré avec ssh-agent à l'aide de la commande suivante : 
+<code>
+ssh-add -l
+</code>
+qui renvoi l'empreinte de la clé connue, le nom de l'utilisateur et le type de clé de chiffrement utilisée.
+Exemple :
+2048 1f:98:46:a2:b9:25:0e:68:35:20:fa:9e:b0:cb:5e:3e albert@monordi (RSA)
+
+<note importante>
+  * Vous devrez bloquer votre session pendant vos absences car d'autres pourraient accéder aux ordinateurs distants à partir de votre machine sans savoir votre //passphrase//.
+  * Si vous voulez rentrer votre //passphrase// une fois juste après l'ouverture de session, vous pouvez ajouter un appel à **ssh-add** comme ceci :
+    * Cliquez sur //Système → Préférences → Sessions → Programme au démarrage//.
+    * Cliquez sur « Ajouter ».
+    * Entrez la commande « ''ssh-add'' ».
+
+À la prochaine ouverture de session, vous devrez taper votre //passphrase//.
+</note>
+
+===== Utiliser SSH pour faire du SFTP (Transfert de fichier sécurisé) =====
+
+Vous pouvez :
+  * Utiliser le mode natif de base de SSH, voir [[ssh|SSH]] 
+  * Utiliser le mode natif avancé de SSH :  les directives //Chroot// et //Match// de SSH, qui permettent de limiter pour certains utilisateurs l'utilisation du ssh au sftp et dans un répertoire déterminé.\\ Voir [[http://www.dsfc.net/infrastructure/securite/chroot-ssh-protocolesftp/|sftp avec Chroot]] pour les détails.
+  * Utiliser [[:mysecureshell_sftp-server|MySecureShell]]. MysecureShell, qui s'installe en plus de ''openssh-server'', ajoute une couche au dessus de SSH sur le serveur et demande l'emploi de Java sur le client pour disposer d'une interface graphique de paramétrage de SSH/SFTP.\\ Cela n'apporte toutefois aucune fonction ni sécurité supplémentaire par rapport au mode natif avancé.
+
+===== Tunnéliser sa connexion internet par SSH avec l'aide de Squid =====
+
+Tunnéliser sa connexion Web est très utile dans quelques situations :
+ 
+  * l'administrateur du réseau où vous êtes vous empêche d'accéder à certains sites.
+  * votre connexion Web est peu ou pas sécurisée (wifi sans chiffrement (//encryption//) ou par chiffrement WEP).
+
+On va donc installer le serveur de médiation Squid (serveur mandataire) sur une machine Ubuntu (qui sera le serveur) à laquelle on accèdera par une machine distante possédant un client SSH et un navigateur Web. Dans l'exemple présent, ce sera un client sous Windows.
+
+On obtiendra alors un accès sécurisé à un mandataire distant (le serveur sous Ubuntu) qui se connectera aux sites Web et renverra le résultat à votre navigateur.
+
+Ayez bien à l'esprit qu'en effectuant cette opération vous violez certainement les règles de sécurité définies au sein de votre organisation.
+
+==== Partie serveur ====
+
+Premièrement, il faut mettre en place le programme [[:Squid]] en [[:tutoriel:comment_installer_un_paquet|installant]] son paquet **[[apt>squid]]**.
+
+Normalement si tout se déroule bien, Squid devrait être fonctionnel.\\
+Il est cependant probable qu'une erreur arrive car le programme de configuration n'arrivera pas à trouver le nom d'hôte de la machine. Il faut donc ouvrir le fichier de configuration de Squid et lui indiquer que la machine n'a pas de nom d'hôte. On [[:tutoriel:comment_editer_un_fichier|ouvre avec les droits d'administration]] le fichier de configuration **/etc/squid/squid.conf** pour y ajouter cette ligne :
+<file>visible_hostname none</file>
+Après l'enregistrement du fichier de configuration, vous pouvez normalement générer les répertoires qui contiendront le cache de Squid par la commande :
+<code>sudo squid -z</code>
+
+Grâce à SSH, les connexions reçues par Squid seront des connexions provenant du serveur lui-même. Mais, par défaut, Squid n'accepte que les connexions sur la boucle locale 127.0.0.1 en Ipv4 (loopback). On devrait alors quand même ajouter une autorisation pour l'adresse IP du serveur qui n'est pas celle de bouclage. Vous ouvrez donc le fichier de configuration [[:squid#configuration|Squid configuration]] et vous ajoutez ces deux lignes :
+
+<file>
+acl ordi src 192.168.1.1
+http_access allow ordi
+</file>
+
+Dans l'exemple, ''ordi'' est le nom choisi pour la règle et ''192.168.1.1'' est l'adresse IP locale de l'ordinateur. Vous pouvez donc maintenant démarrer Squid par :
+<code>sudo squid start</code>
+ou le redémarrer par :
+<code>sudo squid reload</code>
+Squid est normalement prêt à recevoir les connexions venant de la machine hôte.
+
+==== Partie client ====
+
+FIXME **À rédiger, manquant.**
+
+===== Tunnéliser sa connexion internet par SSH (sans Squid) =====
+
+[[#Tunnéliser sa connexion internet par SSH avec l'aide de Squid|La partie précédente]] consiste à installer un [[http://fr.wikipedia.org/wiki/Proxy|mandataire HTTP]] sur le serveur et de s'y connecter via SSH. Cependant, SSH lui-même peut jouer le rôle de mandataire, ce qui évite l'installation d'un logiciel supplémentaire.
+
+==== Partie serveur ====
+
+Il n'y a en principe rien à faire. Cette fonctionnalité est activée par défaut sous Ubuntu.
+
+==== Partie client ====
+
+Cette fois, le mandataire à prendre en compte notamment lors de la configuration du navigateur est de type //[[wpfr>SOCKS]]//.
+
+=== Sous Linux (dont Ubuntu) ===
+
+Utiliser la commande ''ssh'' avec l'option ''-D'' :
+<code>
+# Ouverture d'un tunnel ssh (sur le port 1234 local) vers un serveur qui autorise la connexion
+# le port (1234 dans cet exemple) est choisi arbitrairement, tant qu'il n'est pas utilisé pour autre chose
+ssh -D 1234 monuser@monserver.net
+</code>
+Configurer ensuite le navigateur, gestionnaire de courrier, etc., pour utiliser un mandataire de type //SOCKS 5//, adresse : //localhost//, port: //1234// (selon ce que vous avez utilisé ci dessus).
+
+La connexion fonctionnera tant que le tunnel restera ouvert : si vous fermez le terminal ayant servi à ouvrir le tunnel, vous fermerez le tunnel.\\
+Pour vous assurer que le tunnel remplit son office, rendez-vous sur une page telle que [[http://www.monip.org|mon ip.org]] et constatez que l' adresse IP affichée n'est pas la même que lorsque vous naviguez sans mandataire.
+
+=== Sous Windows, avec Putty ===
+
+La configuration est la même qu'au [[#Partie client|point 6.2]], sauf qu'il faut cocher la case "dynamic". La case "destination" n'est pas prise en compte et peut rester vide.
+
+<note>
+Vous pouvez ouvrir plusieurs tunnels utilisant des ports différents ou des utilisateurs différents. Ainsi, la navigation peut utiliser un tunnel vers un serveur, la messagerie un tunnel vers un autre serveur, etc.
+
+Il est possible aussi d'utiliser un navigateur passant par le tunnel et un autre navigateur sortant directement.
+</note>
+
+==== Gestion des tunnels ====
+
+Il existe une petite application graphique bien pratique pour gérer les tunnels SSH : au lieu de les recréer chaque fois on utilise Graphical SSH Tunnel Manager.
+
+===== Accéder à ses ressources réseau locales depuis l'extérieur sans NAT : tunnel =====
+
+Il est intéressant de pouvoir accéder à des ressources réseau locales (RDP, VNC, Administration périphérique réseau comme les box, etc.) sans pour autant rendre ces périphériques directement accessibles depuis Internet. SSH permet l'accès à ces ressources comme si l'on était en local (une sorte de réseau privé virtuel).
+
+Prenons un exemple.
+
+==== Accéder à une machine Windows via RDP ====
+
+Donc nous avons un réseau avec une machine sous Windows (XP, Vista...) avec comme adresse locale ''192.168.1.2'' où le client RDP du Terminal Service (TSE) est activé mais accessible uniquement en local, un serveur ssh sous Ubuntu avec comme IP locale ''192.168.1.3'', et une Livebox (ou autre) dont seul le port ssh (22) est traduit (en franglais on dit translaté, Cf.[[wpfr>Network_address_translation]]) pour un accès au serveur ssh depuis l'extérieur.
+
+Nous voulons depuis l'extérieur accéder à la machine Windows via RDP.
+
+Nous allons pour cela utiliser la tunnélisation. À partir de votre station depuis l'extérieur on va tunnéliser la connexion RDP de la station Windows au travers du serveur ssh :
+<code>ssh -L 3389:192.168.1.2:3389 username@IP_Publique_Box</code>
+
+Il suffit ensuite d'ouvrir le terminal serveur client sur votre machine et de se connecter à ''localhost''.
+
+Nous pouvons de la même façon accéder à la configuration de notre Box sans pour autant devoir la rendre accessible depuis Internet (attention seul ''root'' peut faire suivre le port 80) :
+
+<code>sudo ssh -L 80:192.168.1.1:80 username@IP_Publique_Box</code>
+
+Puis en ouvrant son navigateur préféré et en entrant comme adresse **%%http://localhost%%**
+
+===== Accéder à un serveur par rebond ssh (serveur ssh intermédiaire) =====
+
+FIXME Expliquer dans quel cadre ces opérations peuvent servir.
+
+Pour accéder à un serveur par rebond sur un serveur ssh intermédiaire, on réalise normalement 2 connexions ssh ce qui peut devenir fastidieux lorsqu'on doit réaliser cette opération régulièrement.\\
+SSH peut cependant faciliter cette opération en effectuant au choix une des deux manipulations :
+  - une seule ligne de commande pour réaliser une [[#connexion ssh vers le serveur de destination via un serveur ssh intermédiaire]]
+  - une modification de fichier pour provoquer une [[#connexion ssh directement vers le serveur de destination]]
+<note help>Pour toutes les commandes décrites ci-dessous, il est possible d'ajouter un nom d'utilisateur pour changer d'utilisateur.</note>
+
+==== Connexion ssh vers le serveur de destination via un serveur ssh intermédiaire ====
+
+Il s'agit d' exécuter sur le poste client la commande ssh vers le serveur final <code>ssh <srv_intermédiaire> ssh <srv_final></code>
+<note important>Si vous obtenez l'erreur suivante : <code>Pseudo-terminal will not be allocated because stdin is not a terminal.</code> rajouter l'option ''-t'' sur la connexion ssh du serveur intermédiaire, ce qui donne : <code>ssh -t <srv_intermédiaire> ssh <srv_final></code></note>
+
+==== Connexion ssh directement vers le serveur de destination ====
+Le fonctionnement n'est pas du tout le même que [[#Connexion ssh vers le serveur de destination via un serveur ssh intermédiaire|précédemment]] car ssh parlera ici directement avec le serveur final.\\
+Indiquez directement sur le poste client la commande ''ProxyCommand'' en [[:tutoriel:comment_modifier_un_fichier|modifiant le fichier]]
+<file bash ~/.ssh/config>
+Host <srv_final>
+ProxyCommand ssh <srv_intermédiaire> nc %h %p
+</file>
+L'utilisation de la commande ''nc'' (''netcat''), qui doit être présente sur le serveur intermédiaire, permet ainsi de se connecter sur le port ssh du serveur final et établit juste un lien entre le client et le serveur final.\\ 
+<note important>Avec le [[http://blog.rootshell.be/2010/03/08/openssh-new-feature-netcat-mode/|"mode netcat intégré" introduit avec la version 5.4]], l'option "nc" n'est plus nécessaire.\\
+Il s'agira donc de modifier sur le serveur intermédiraire <file bash ~/.ssh/config>
+Host <srv_final>
+ProxyCommand ssh -W %h:%p <srv_intermédiaire>
+</file>
+</note>
+
+===== Problèmes et solutions =====
+
+==== Délai lors de la connexion ====
+
+Si vous avez un délai de plusieurs secondes avant que la connexion SSH ne se fasse, essayez d'ajouter ceci à votre fichier **~/.ssh/config**
+<file>GSSAPIAuthentication no</file>
+
+Ceci désactive l'identification par [[wp>Generic_Security_Services_Application_Program_Interface|GSSAPI]]  qui engendre parfois des délais lorsqu'elle n'est pas utilisée.
+
+==== Liens ====
+
+  * [[http://www.dsfc.net/infrastructure/securite/chroot-ssh-protocolesftp/|Tuto]]. « Chrooter » un utilisateur en ssh facilement.
+  * [[http://technique.arscenic.org/connexion-distante-au-serveur-ssh/|Config]]. Configuration et sécurisation de ssh.
+  * [[http://www.refreshinglyblue.com/2007/5/18/long-delay-before-ssh-authentication|Source]] pour le problème de [[#délai lors de la connexion]]
+
+----
+//Contributeurs : [[:utilisateurs:sx1]]

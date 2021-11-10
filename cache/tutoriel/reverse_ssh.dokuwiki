@@ -1,0 +1,102 @@
+
+{{tag>sécurité ssh réseau tutoriel}}
+----
+
+====== reverse SSH ======
+
+Il est simple de configurer un serveur [[:SSH]] et de s'y connecter lorsque le pare-feu/routeur est correctement configuré.\\
+Cependant certains réseaux ne laissent pas par défaut entrer les connexions ssh, le port par défaut (22) n'étant pas ouvert, comme ce peut notamment être le cas des particuliers derrière une BOX. Les connexions sortantes ne sont toutefois pas bloquées, ce qui va vous permettre de vous connecter quand même.
+
+Une parade est donc d'utiliser la fonction REVERSE de SSH. Le principe consiste à initier une connexion depuis la machine derrière le routeur ((donc la machine dont le port entrant est bloqué)) sur une machine tierce ((celle-ci disposant d'un serveur SSH accessible)), et ainsi permettre une connexion retour depuis la machine tierce qui ne sera pas bloquée.
+
+Cette façon de procéder est très utile pour dépanner quelqu'un à distance qui aura juste à initier la connexion sortante en tapant une ligne depuis le [[:terminal]], sans avoir à configurer le pare-feu/routeur/BOX. Il n'est également pas nécessaire de connaitre l'adresse IP de la machine distante ni d'effectuer un routage de la connexion.
+
+===== Connexion directe =====
+
+Prenez l'exemple de configuration suivant:
+
+{{:tutoriel:ssh:reverse_ssh_dfwil.png|userD@distant est le serveur SSH à joindre mais est inaccessible dû aux paramétrages du routeur/pare-feu...}}
+
+Ici 
+  * **userD@distant** correspond à l'utilisateur //userD//, sur le poste appelé **//distant//** qui a les ports entrants bloqués et donc inaccessible depuis l'extérieur
+  * **userL@local** correspond à l'utilisateur //userL//, sur le poste appelé **//local//** qui dispose également d'un serveur ssh, et qui va permettre d'accéder à la machine **//distant//**
+
+<note tip>Le principe de connexion à [[:Ssh]] est habituellement basé sur le système du //Client **local**// qui se connecte au //Serveur **distant**//.\\
+N'oubliez pas qu'ici c'est le //Serveur **distant**// qui se connecte au //Client  **local**//.</note>
+
+==== Création d'un utilisateur dédié sur le poste local ====
+
+Créez un nouvel utilisateur spécialement pour cette connexion afin que l'utilisateur **userD** du poste //**distant**// ne puisse pas avoir un accès complet au poste //**local**//. Ce nouvel utilisateur créé pourra cependant avoir des [[:users-admin|droits]] personnalisés.\\
+Saisissez dans un [[:terminal]] sur **//local//** la [[:commande_shell|commande]] suivante :
+<code>sudo adduser --no-create-home userL</code>
+où :
+  * **--no-create-home** est l'option spécifiée pour ne pas créer de dossier **/home/userL** sur le poste //**local**//.
+  * **userL** est à remplacer par le nom de votre choix mais suffisamment explicite pour savoir sur quelle machine vous êtes. Le mot de passe créé servira pour se connecter lors de l'[[#Connexion sur le poste local depuis le poste distant|étape suivante]].
+
+==== Connexion au poste local depuis le poste distant ====
+
+Initiez une connexion à //**local**// en saisissant sur le poste //**distant**//:
+<code>ssh -NR 12345:localhost:22 userL@local</code>
+où
+  * //12345// est à remplacer par un numéro de port aléatoire (entre 1024 et 65535 qui sont réservés pour des applications utilisateurs) et non utilisé de votre choix
+  * **userL** et le mot de passe de connexion sont ceux [[#Création d'un utilisateur dédié sur le poste local|défini précédemment]].
+  * **local** est l'adresse IP publique de la machine locale (au besoin avec une règle NAT dans la box locale pour être joignable de l'extérieur)
+
+==== Connexion au poste distant depuis le poste local ====
+
+La connexion étant désormais activée depuis //**distant**// vers //**local**//, le [[:pare-feu]] va donc laisser rentrer la connexion reverse, à savoir depuis //**local**// vers //**distant**//.\\
+Pour cela taper dans un terminal sur //**local**//:
+<code>ssh -p 12345 userD@localhost</code>
+où 
+  * //12345// est le port [[#Connexion sur le poste local depuis le poste distant|choisi auparavant]]
+  * **userD** est à remplacer par le nom d'utilisateur permettant de se connecter au serveur ssh sur //**distant**//
+
+===== Connexion par un serveur tiers =====
+
+Cette configuration est pratique quand le poste **local** est lui-même derrière un pare-feu et/ou ne dispose pas d'un serveur ssh.
+Prenez l'exemple de configuration suivant:
+
+{{:tutoriel:ssh:reverse_ssh_dfwisl.png|userD@distant et userL@local ne sont pas accessibles depuis l'extérieur}}
+
+Ici 
+  * **userD@distant** correspond à l'utilisateur //userD//, sur le poste appelé **//distant//** qui a les ports entrants bloqués et donc inaccessible depuis l'extérieur
+  * **userS@serveur** correspond à l'utilisateur //userS//, sur le poste appelé **//serveur//** qui dispose d'un accès libre à son serveur ssh.
+  * **userL@local** correspond à l'utilisateur //userL//, sur le poste appelé **//local//** qui va accéder à la machine **//serveur//** pour atteindre **//distant//**
+
+Pour résumé le principe, il s'agira de:
+  - connecter **//distant//** sur **//serveur//**
+  - connecter **//local//** sur **//serveur//**
+  - depuis le [[:terminal]] qui a initié la connexion **//local//** sur **//serveur//** pour atteindre **//distant//**
+
+==== Création d'un utilisateur dédié sur le poste serveur ====
+<note tip>Cette partie est facultative si la machine //**serveur**// dispose déjà d'un utilisateur public</note>
+Taper dans un terminal :
+<code>sudo adduser --no-create-home userS</code>
+où 
+  * l'option **--no-create-home** est spécifiée pour ne pas créer de dossier **/home/userS** sur le poste //**serveur**//.
+  * **userS** est à remplacer par le nom de votre choix mais suffisament explicite pour savoir sur quelle machine vous êtes. Le mot de passe créé servira pour se connecter lors de l'[[#Connexion sur le poste serveur depuis le poste distant|étape suivante]].
+
+==== Connexion sur le poste serveur depuis le poste distant ====
+Initiez une connexion sur **//serveur//** en tapant dans un [[:terminal]] de la machine **//distant//** :
+<code>ssh -R 12345:localhost:22 userS@serveur</code>
+où 
+  * //12345// est à remplacer par un numéro de port aléatoire de votre choix,
+  * le port //22// est le port d'écoute ssh sur la machine //**distant**//,
+  * **userS** et le mot de passe de connexion sont ceux [[#Création d'un utilisateur dédié sur le poste serveur |défini précédemment]]
+  * **serveur** est l'adresse ip ou le nom de domaine du serveur tiers
+
+<note tip> L'option ''-N'' peut également être ajoutée pour ne pas faire apparaitre d'invite de terminal sur //**distant**//</note>
+
+==== Connexion sur le poste serveur depuis le poste local ====
+Créer un pont entre **//serveur//** et **//local//** en tapant dans un [[:terminal]] de ce dernier
+<code>ssh userS@serveur</code>
+où
+  * **userS** et le mot de passe de connexion sont ceux [[#Création d'un utilisateur dédié sur le poste serveur |défini précédemment]]
+  * **serveur** est l'adresse ip ou le nom de domaine du serveur tiers
+
+==== Accès à la machine distante depuis la machine locale ====
+Vous pouvez désormais atteindre le poste **//distant//** en saisissant dans le terminal du poste **//local//** [[#Connexion sur le poste serveur depuis le poste local|connecté précédemment]] sur **//serveur//** 
+<code>ssh -p 12345 userD@localhost</code>
+
+----
+//Contributeurs:[[:utilisateurs:nesthib]]//

@@ -1,0 +1,330 @@
+
+{{tag>Precise hp matériel tactile portable installation}}
+
+----
+
+====== HP TC1100 ======
+
+{{:materiel:portable:hptc1100.jpg?200&nolink}}
+
+Le TC1100 est une tablette de la société HP que la marque commercialisa en 2003 et cessa de produire en 2005. Sa popularité est pourtant restée quasiment intacte au fil des années tant la machine a symbolisé pour beaucoup la tablette idéale : élégante, solide et pratique avec son clavier détachable.
+
+Commercialisée avec //Windows XP Tablet Edition//, elle n'a pas manqué de susciter l'intérêt de la planète Linux et si la tablette est capable de faire tourner décemment Windows 7 (pour peu que la configuration matérielle suive), elle retrouve une seconde jeunesse en passant par la case libre et plus précisément la case Ubuntu. L'ensemble des fonctionnalités est opérationnelle ou presque et ce bien souvent dès le premier lancement du système. Pour toutes celles qui demanderaient des ajustements, la présente page constitue un guide simple et intuitif.
+
+À noter que l'intégralité de ce qui suit se veut le travail d'un membre du forum officiel d'Ubuntu et provient d'un sujet dédié à la machine sur ce même forum dont vous retrouverez les références en bas de page.
+
+
+===== Installation =====
+
+Avant tout chose, le HP TC1100 ne proposant pas de lecteur CD/DVD (si ce n'est via une station d'accueil), je vous invite à consulter la documentation pour tout ce qui touche à l'[[live_usb|installation d'Ubuntu via une clé USB]].
+
+Pensez à bien [[gestionnaire_de_mises_a_jour|mettre à jour]] votre distribution, a fortiori si vous entamez ce guide suite à une nouvelle installation d'Ubuntu. 
+
+Installez ensuite les [[nvidia|pilotes de la carte graphique]] si ce n'est pas déjà fait.
+
+Installez les [[wacom|pilotes Wacom]] en [[:tutoriel:comment_installer_un_paquet|installant les paquets]] **[[apt>wacom-tools]]** et **[[apt>wacomcpl]]** (([[apt>wacom-tools,wacomcpl|Cliquez ici pour tous les installer]])).
+
+===== Les indispensables pour tablettes =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] suivants pour une meilleure expérience tactile(([[apt>cellwriter,xournal,xbindkeys|Cliquez ici pour tous les installer]])) :
+  * **[[apt>cellwriter]]** – programme de reconnaissance d'écriture et clavier virtuel.
+  * **[[apt>xournal]]** – équivalent du Journal de Windows, ce programme permet de prendre des notes manuscrites rapidement.
+  * **[[apt>xbindkeys]]** – permet d'assigner des fonctions aux boutons du stylet.
+
+==== Configurer Xbindkeys ====
+ 
+Il s'agit d'assigner les boutons du HP TC1100 (ceux de l'écran ainsi que les boutons Q et de changement d'écran) à des programmes ou actions.
+
+Dans un terminal, tapez :
+
+  gedit .xbindkeysrc
+
+Dans le fichier qui s'ouvre, entrez le code suivant :
+
+<file>
+"rotate"
+b:30
+"xournal"
+b:31
+"cellwriter"
+b:32
+#"customcommand1"
+#c:159
+#"customcommand2"
+#c:151
+</file>
+
+c:159 et c:151 correspondent respectivement aux boutons « Q » et « Changement d'écran », libre à vous de les assigner au programme ou à une action désiré. Pour ce faire, remplacer le texte « customcommand1 » et « customcommand2 » par le lanceur en question, en gardant bien les guillemets.
+
+Sauvez et fermez.
+
+
+==== Paramétrez Ubuntu pour que certains indispensables soient lancés à son ouverture ====
+
+Cliquez sur le menu « Système » du tableau de bord, puis dirigez-vous dans le menu « Préférences » afin de cliquer sur l'option « Applications au démarrage ».
+
+Cliquez sur le bouton « Ajouter » dans la boite de dialogue qui s'ouvre. Recopiez la commande suivante dans chaque case et cliquez sur « Ajouter » pour valider.
+
+  xbindkeys
+
+Faites de même pour Cellwriter si vous le désirez avec la commande suivante :
+
+  cellwriter
+
+===== Permettre la rotation de l'écran =====
+
+Dans un terminal, tapez :
+
+  gksudo gedit /etc/X11/xorg.conf
+
+Remplacer le contenu du fichier par ceci :
+
+<file>
+Section "Monitor"
+	Identifier	"Configured Monitor"
+EndSection
+
+Section "Screen"
+	Identifier	"Default Screen"
+	Monitor		"Configured Monitor"
+	Device		"Configured Video Device"
+	DefaultDepth	24
+	Option		"AddARGBGLXVisuals"	"True"
+EndSection
+
+Section "Module"
+	Load	"glx"
+EndSection
+
+Section "Device"
+	Identifier	"Configured Video Device"
+	Driver	"nvidia"
+	Option	"NoLogo"	"True"
+	Option  "RandRRotation"	"True"
+	Option  "NvAGP"		"1"
+	Option	"RenderAccel"	"False"
+EndSection
+
+Section "ServerLayout"
+	Identifier	"Default Layout"
+	Screen		"Default Screen"
+EndSection
+</file>
+
+Sauvez et fermer.
+
+==== Régler la rotation et le stylet ====
+
+Puisque le fichier suivant est protégé au niveau des permissions, je vous conseille de passer Nautilus en mode administrateur. Pour ce faire, tapez dans un terminal :
+
+  gksudo nautilus
+
+Entrez votre mot de passe administrateur et rendez-vous dans le dossier /usr/share/hal/fdi/policy/20thirdparty/ et ouvrez le fichier 10-linuxwacom.fdi.
+
+Remplissez le fichier avec le code suivant :
+
+<file xml 10-linuxwacom.fdi>
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!-- this is probably a bit imprecise -->
+<deviceinfo version="0.2">
+  <device>
+    <match key="info.category" contains="input">
+      <match key="info.product" contains_outof="Wacom">
+	<merge key="input.x11_driver" type="string">wacom</merge>
+	<merge key="input.x11_options.Type" type="string">stylus</merge>
+	<append key="info.callouts.add" type="strlist">hal-setup-wacom</append>
+	<append key="wacom.types" type="strlist">eraser</append>
+	<append key="wacom.types" type="strlist">cursor</append>
+	<append key="wacom.types" type="strlist">pad</append>
+      </match>
+    </match>
+    <match key="info.capabilities" contains="serial">
+      <match key="@info.parent:pnp.id" contains_outof="WACf001;WACf002;WACf003;WACf004;WACf005;WACf006;WACf007;WACf008;WACf009;WACf00a;WACf00b;WACf00c;FUJ02e5">
+	<append key="info.capabilities" type="strlist">input</append>
+	<merge key="input.x11_driver" type="string">wacom</merge>
+	<merge key="input.x11_options.Type" type="string">stylus</merge>
+	<merge key="input.x11_options.ForceDevice" type="string">ISDV4</merge>
+	<merge key="input.x11_options.Button2" type="string">3</merge>
+	<merge key="input.device" type="copy_property">serial.device</merge>
+	<append key="info.callouts.add" type="strlist">hal-setup-wacom</append>
+	<append key="wacom.types" type="strlist">eraser</append>
+        <match key="@info.parent:pnp.id" contains_outof="WACf008;WACf009">
+	  <!-- Serial tablets with touch capabilities -->
+	  <append key="wacom.types" type="strlist">touch</append>
+	</match>
+        <match key="@info.parent:pnp.id" contains_outof="WACf008">
+          <!-- Serial tablets that operate at higher baud rate -->
+          <merge key="input.x11_options.BaudRate" type="string">38400</merge>
+       </match>
+      </match>
+    </match>
+    <!-- N-Trig Duosense Electromagnetic Digitizer -->
+    <match key="info.product" contains="HID 1b96:0001">
+      <match key="info.parent" contains="if0">
+       <merge key="input.x11_driver" type="string">wacom</merge>
+       <merge key="input.x11_options.Type" type="string">stylus</merge>
+      </match>
+    </match>
+  </device>
+  <!-- Match the Wacom Bluetooth A5 pen tablet -->
+  <device>
+    <match key="info.capabilities" contains="input.mouse">
+      <match key="info.product" contains="WACOM">
+        <match key="info.product" contains="Tablet">
+          <merge key="input.x11_driver" type="string">wacom</merge>
+          <merge key="input.x11_options.Type" type="string">stylus</merge>
+	  <append key="info.callouts.add" type="strlist">hal-setup-wacom</append>
+	  <append key="wacom.types" type="strlist">eraser</append>
+	  <append key="wacom.types" type="strlist">cursor</append>
+        </match>
+      </match>
+    </match>
+  </device>
+  <device>
+    <match key="input.x11_options.Type" contains="eraser">
+      <merge key="info.product" type="string">eraser</merge>
+    </match>
+  </device>
+  <device>
+    <match key="input.x11_options.Type" contains="stylus">
+      <merge key="info.product" type="string">stylus</merge>
+    </match>
+  </device>
+</deviceinfo>
+</file>
+
+Sauvez et fermer. Redémarrez pour valider ces modifications.
+
+==== Configuration et modifications supplémentaires ====
+
+ATTENTION : Les opérations suivantes doivent être exécutées en tant qu'administrateur pour être fonctionnelles. 
+
+Pour passer en mode administrateur, ouvrez un terminal et tapez la commande suivante : 
+
+  sudo su
+
+Entrer votre mot de passe pour valider.
+
+
+=== Contrôler la luminosité de l'écran avec le jogdial ===
+
+Puisque la luminosité de l'écran ne peut être contrôlée par l'option habituelle d'Ubuntu, utilisez le jogdial (roulette) à la place se trouve être l'une des meilleurs solutions. Pour ce faire, tapez dans le terminal :
+
+  gedit /etc/rc.local
+
+Dans le fichier qui s'ouvre, collez la ligne suivante avant la ligne de code « exit 0 » :
+
+  echo 0 > /sys/devices/platform/tc1100-wmi/jogdial
+
+Sauvez et fermez.
+
+=== Corriger la calibration du stylet en sortie du mode veille ===
+
+Tapez dans le terminal :
+
+  gedit 10_calibrate.sh
+
+Dans le fichier qui s'ouvre, collez le texte suivant :
+
+<file bash 10_calibrate.sh>
+#!/usr/bin/env bash
+
+FILE=/tmp/calibration
+XSETWACOM=/usr/bin/xsetwacom
+
+function store_value()
+{
+    value=`$XSETWACOM --display :0.0 get $1 $2`
+    echo "$XSETWACOM --display :0.0 set $1 $2 $value" >> $FILE
+}
+
+# Store calibration of all devices
+function store_devices_calibration()
+{
+    >$FILE
+    store_value "stylus" "TopX"
+    store_value "stylus" "TopY"
+    store_value "stylus" "BottomX"
+    store_value "stylus" "BottomY"
+    chmod +x $FILE
+}
+
+# Store calibration of all devices
+function restore_devices_calibration()
+{
+    if [[ -e $FILE ]]
+    then
+	( sleep 2; $FILE )&
+    fi
+}
+
+MODE=$1
+
+case "$MODE" in
+    hibernate|suspend)
+	store_devices_calibration
+	;;
+    thaw|resume) 
+	restore_devices_calibration
+	;;
+    *) exit $NA
+        ;;
+esac
+</file>
+
+Sauvez et fermez.
+
+Dans le terminal, tapez :
+
+  chmod +x 10_calibrate.sh
+  mv 10_calibrate.sh /etc/pm/sleep.d/
+
+=== Création d'un script de rotation ===
+
+Dans le terminal, tapez :
+
+  gedit rotate
+
+Collez ce qui suit dans le fichier :
+<file bash rotate>
+#!/bin/sh
+if [ -n "$(xrandr | grep 768x1024)" ]; then
+        xrandr -o normal
+        xsetwacom set "stylus" Rotate NONE
+else
+        xrandr -o left
+        xsetwacom set "stylus" Rotate CCW
+fi
+</file>
+
+Sauvez et fermez.
+
+Tapez dans le terminal :
+
+  chmod +x rotate
+  mv rotate /usr/bin/rotate
+
+=== Empêcher le verrouillage de l'écran ===
+
+Utile en cas où le clavier n'est pas connecté et que vous ne pouvez pas accéder à cellwriter.
+Il n'est pas utile de posséder les droits d'administrateur pour effectuer les modifications suivantes ; si votre terminal est toujours en mode administrateur, tapez simplement « exit ».
+Ensuite, tapez :
+
+<code>
+gconftool -s /apps/gksu/disable-grab -t bool true
+gconftool -s /apps/gnome-power-manager/lock/suspend -t bool false
+gconftool -s /apps/gnome-power-manager/lock/hibernate -t bool false
+</code>
+
+===== Voir aussi =====
+
+  * [[http://www.unifyingtheory.net/tabletubuntu9.10.html|Installer Ubuntu 9.10 sur un HP TC1100]]
+  * [[http://ubuntuforums.org/showthread.php?t=563736|Sujet autour du HP TC1100 sur le forum officiel]] **(en)**
+  * [[http://wiki.linuxquestions.org/wiki/TC1100|Wiki du HP TC1100 sur LinuxQuestions.org]]
+  * [[http://wiki.linuxquestions.org/wiki/Tablet_pc|Wiki des tablettes sur LinuxQuestions.org]]
+  * [[https://www.youtube.com/watch?v=MnreJBVT5zQ|Vidéo sur l'installation]]
+
+
+----
+
+//Contributeurs principaux : FIXME.//

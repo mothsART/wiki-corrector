@@ -1,0 +1,105 @@
+
+{{tag>trusty tutoriel boot chiffrement}}
+----
+====== Double boot Windows/Linux sur des machines chiffrées avec PBA ======
+
+Ce tutorial a été réalisé dans le cas suivant :
+  * machine intégrée dans un environnement Windows, qui doit respecter des règles dans un environnement d'entreprise
+  * chiffrement logiciel de partitions, et non de disque
+  * Securedoc **WinMagic** : outil de sécurité de type PBA (Pre-Boot Authentification), qui se positionne à l'amorçage sur le disque dur, avant le lancement du bootloader
+  * Boot sur disque MBR (et non GPT, ou via UEFI)
+
+Partitionnement initial considéré, classiques chez les constructeurs de PC :
+  - SYSTEM (ntfs) : équivalent de la partition /boot sous Linux
+  - WINDOWS (ntfs) : OS éponyme
+  - *_RECOVERY (ntfs) : partition de restauration complète de l'OS
+  - *_TOOLS (fat16) : outils du constructeur, utilisée aussi par WinMagic
+
+===== Introduction =====
+
+Un système Linux peut être installé en tant que VM au sein de VirtualBox par exemple. Si ceci permet un usage d'autres outils que ceux du monde Windows, les performances d'une machine virtuelle restent limitées du fait de :
+  * la couche de stockage virtualisée plus lente, elle même stockée sur un stockage Windows dégradé en performance du fait du chiffrement de l'hôte
+  * la mémoire disponible réduite à cause de la part prise par l'hôte
+  * l'accélération graphique limitée
+
+Il peut donc être souhaitable d'utiliser un système Linux utilisé en double boot avec Windows.
+
+===== WinMagic =====
+
+Voici les données importantes utilisées par WinMagic :
+  * programme dans la MBR
+  * fichiers WinMagicSECURDOC.WMG et WinMagic/SECURDOC.PH1, présent à priori dans une partition non chiffrée : ils contiennent probablement le programme complet WinMagic chargé en relai depuis la MBR, et la clef de déchiffrement (protégé par mot de passe comme LUKS ?) des partitions Windows chiffrées
+  * partiton SYSTEM : Boot/BCD : le chargeur d'amorçage de Windows légèrement patché pour le déchiffrement
+
+===== Installation =====
+
+**Précaution** : il est souhaitable de faire une image **complète** du disque, en vue d'une restauration ultérieure en cas de souci (sudo dd if=/dev/sda bs=16M | gzip -c > image.gz).
+
+==== Préparation ====
+
+Pour installer Linux, il est nécessaire de procéder aux opérations suivantes :
+  * déchiffrement de la partition Windows si elle a été chiffrée
+  * démarrage sur le média d'installation de Linux
+  * partitionnement :
+    * si 4 partitions primaires : suppression de la partition <constructeur>_recovery inutile (faire au besoin une sauvegarde avec un dd de la partition)
+    * réduction de la taille de la partition Windows
+    * création d'une partition étendu dans l'espace libéré
+    * création d'une partition logique pour le système Linux (10Go, brtfs)
+    * création d'une partition logique pour le swap (2G)
+    * création d'une partition logique non formatée, qui contiendra le home chiffré (le reste)
+  * chiffrement du home : <code>sudo cryptsetup luksFormat /dev/sda7
+sudo cryptsetup luksOpen /dev/sda7 home_crypt
+sudo dd if=/dev/zero of=/dev/mapper/home_crypt
+sudo mkfs.ext4 -L home /dev/mapper/home_crypt
+</code>
+
+==== Installation ====
+
+Installation Linux à la suite de l'opération précédente, en affectant les points de montage aux partitions. 
+
+Le double boot se fait automatiquement, avec Grub.
+
+Pour déchiffrer le home au démarrage de linux,
+  * identifier l'UUID de la partition home chiffrée <code bash>sudo blkid | grep LUKS</code>
+  * ajouter la ligne appropriée dans /etc/crypttab <file>home_crypt        UUID=12345678-9abc-def012345-6789abcdef01     none      luks</file>
+  * éditer les montages dans /etc/fstab <file>/dev/mapper/home_crypt        /home           ext4    defaults        0       2</file>
+
+===== Post-installation =====
+
+Il faut maintenant remettre en place le chiffrement de la partition Windows.
+
+Ensuite, il faut prendre quelques précautions supplémentaires pour éviter une perte totale de données en cas de réinstallation de Linux. En effet, la solution WinMagic :
+  * se positionne dans la MBR à la place du chargement d'amorçage normal, avant de passer le relais au chargeur d'amorçage
+  * sert en particulier à accéder à la clef de chiffrement de la partition Windows
+Aussi la réinstallation de Linux viendra réécrire la MBR ce qui aura pour effet la __perte totale de l'accès aux données chiffrées Windows__.
+
+==== Sauvegarde ====
+
+Une fois le chiffrement remis en place sous Windows, voici les sauvegardes à faire :
+  * **indispensable** : la MBR : <code bash>sudo dd if=/dev/sda of=~/mbr-backup-512.bin bs=512 count=1</code>
+  * éventuellement les fichiers décrit précédemment
+
+==== Réglage de Grub ====
+
+La partition Windows étant chiffrée, grub n'est plus en mesure de la détecter lors de la génération de son fichier de configuration. \\
+Néanmoins il suffit peut l'amorcer normalement, le programme WinMagic ayant auparavant préparer ce qu'il faut pour la déchiffrer.
+
+Ajouter le contenu suivant au fichier **/etc/grub.d/40_custom**
+<file>
+menuentry 'Windows 7 (loader) (chiffré sur /dev/sda2)' --class windows --class os {
+        insmod part_msdos
+        insmod ntfs
+        set root='hd0,msdos2'
+        chainloader +1
+}
+</file>
+Regénérer ensuite la configuration de grub : <code bash>sudo update-grub2</code>
+
+===== Réinstallation =====
+
+En cas de réinstallation de grub, ou d'un autre linux, sans avoir déchiffrer les données de Windows
+  * restaurer le programme d'amorçage WinMagic dans la MBR : <code bash>sudo dd if=~/mbr-backup-512.bin of=/dev/sda bs=446 count=1</code>
+
+----
+
+//Contributeurs : [[utilisateurs:Id2ndR]]//

@@ -1,0 +1,211 @@
+
+====== Démarrer un système physique sous VirtualBox ======
+
+Il peut être utile de démarrer un système déjà installé physiquement sous VirtualBox.
+Les deux parties de cette doc sont issues du forum : [[http://forum.ubuntu-fr.org/viewtopic.php?id=365418|[HowTo] Démarrer un Windows installé physiquement dans VirtualBox]] et [[http://forum.ubuntu-fr.org/viewtopic.php?pid=3137234|Démarrer un Linux installé physiquement dans VirtualBox]]. Vous pouvez donc y exposer les problèmes que vous rencontrez.
+
+L'idée, comme VirtualBox ne peut pas utiliser un disque physique directement, est de créer un petit fichier "redirigeant" vers votre disque. On utilisera pour cela l'utilitaire VBoxManage.
+
+===== Manipulation générales =====
+La plupart des manipulations sont communes à tous systèmes invités. Nous verrons par la suite les divergences entre Linux (Ubuntu) et Windows.
+
+<note tip>Dans cet exemple :
+  * Le système hôte est Ubuntu (et pourrait être n'importe quelle distribution avec Virtualbox fonctionnel
+  * Le système invité est Fedora, installé sur le disque interne, partition ''/dev/sda4''
+</note>
+
+==== Mapping du disque dur ====
+=== Détermination de la partition à utiliser ===
+Il faudra indiquer à VirtualBox les partitions du disque auxquelles il peut avoir accès (et pas plus, pour ne par entrer en conflit avec le système hôte !). \\ On pourra utiliser GParted ou tout autre outil pour repérer les identifiants sous la forme ''/dev/sdXY'' des partitions concernées.
+
+=== Paramétrage des autorisations de votre utilisateur ===
+Pour pouvoir utiliser VBoxManage et le fichier qu'il génère, il est nécessaire d'ajouter son compte utilisateur au groupe ''disk''. Rien de très compliqué la dedans, voici deux solutions :
+
+  * Soit en allant dans Système » Administration » Utilisateurs et groupes ; cliquer sur le bouton Gérer les groupes ; rechercher le groupe ''disk'' ; et le modifier en cochant l'identifiant de sa session dans la liste.
+  * En ligne de commande :<code bash> sudo usermod -G disk -a $USER</code>
+
+Attention, pour que le changement soit pris en compte, il faut redémarrer sa session.
+
+=== Création du fichier de mappage du disque ===
+On utilisera la ligne de commande :
+  * On se déplace dans le dossier où le fichier sera créé :<code bash>cd ~/.VirtualBox</code>
+  * On "mappe" le disque : (à adapter selon la situation)<code bash>VBoxManage internalcommands createrawvmdk -filename Fedora.vmdk -rawdisk /dev/sda -partitions 4 -relative</code>
+
+Ceci ne fait que créer le fichier Fedora.vmdk (de quelques Ko), et ne touche absolument pas au disque.
+
+<note tip>Dans le cas ou le disque serait inaccessible, il faut réessayer en supprimant l'option -relative.</note>
+<note important>
+Très important : dans le cas où le numéro de partition n'est pas spécifié, la machine virtuelle aura accès au disque dur entier.
+De ce fait, l'étape suivante, à savoir la configuration du gestionnaire de démarrage, n'est plus nécessaire.</note>
+
+==== Configuration du gestionnaire de démarrage ====
+
+VirtualBox n'a accès qu'à la partition contenant le système invité… Et donc pas au chargeur de démarrage ! Il faut donc en créer un.
+Pour résoudre ce problème, on va créer une image iso bootable de Grub.
+Il est pour le moment difficile de le faire pour Grub2, on le fera donc pour Grub1.
+
+=== Gestionnaire de démarrage : Grub1 ===
+
+a) On va commencer par créer un répertoire de travail et copier les fichiers nécessaires.
+Dans un Terminal, saisir les commandes suivantes :
+
+    # création d'un dossier de travail
+    mkdir ~/travail
+    cd ~/travail/
+
+    # création de l'arborescence
+    mkdir -p iso/boot/grub
+
+    # copie des fichiers nécessaires
+    cp /usr/lib/grub/*-pc/stage2_eltorito /boot/grub/menu.lst iso/boot/grub
+
+Ne pas fermer le Terminal tout de suite.
+
+b) Maintenant que nous avons récupéré la configuration de Grub, il va falloir la modifier. En effet, les instructions qui permettent de faire démarrer Ubuntu ne seront pas nécessaires ici.
+
+Pour éditer la configuration, un simple éditeur de texte fera l'affaire.
+Il faut ouvrir le fichier menu.lst contenu dans le répertoire ~/travail/iso/boot/grub/.
+
+À la fin du fichier, il devrait y avoir quelque chose de semblable :
+
+    title        Ubuntu 9.10, kernel 2.6.31-17-generic
+    uuid        bec46f24-aa91-4a42-a1e6-f34da429dfd6
+    kernel        /boot/vmlinuz-2.6.31-17-generic root=UUID=bec46f24-aa91-4a42-a1e6-f34da429dfd6 ro vga=791
+    initrd        /boot/initrd.img-2.6.31-17-generic
+
+    title        Ubuntu 9.10, kernel 2.6.31-17-generic (recovery)
+    lock
+    uuid        bec46f24-aa91-4a42-a1e6-f34da429dfd6
+    kernel        /boot/vmlinuz-2.6.31-17-generic root=UUID=bec46f24-aa91-4a42-a1e6-f34da429dfd6 ro single vga=791
+    initrd        /boot/initrd.img-2.6.31-17-generic
+
+    title        Fedora 12, kernel 2.6.30-17-generic
+    uuid        fgh4524-gslo-gskf-hgth-f34da42gdbki
+    kernel        /boot/vmlinuz-2.6.30-17-generic root=UUID=fgh4524-gslo-gskf-hgth-f34da42gdbki ro vga=791
+    initrd        /boot/initrd.img-2.6.30-17-generic
+
+    title        Fedora 12, kernel 2.6.30-17-generic (recovery)
+    lock
+    uuid        fgh4524-gslo-gskf-hgth-f34da42gdbki
+    kernel        /boot/vmlinuz-2.6.30-17-generic root=UUID=fgh4524-gslo-gskf-hgth-f34da42gdbki ro single vga=791
+    initrd        /boot/initrd.img-2.6.30-17-generic
+
+Il faut supprimer tous les blocs de texte faisant référence à Ubuntu, seul les blocs de texte qui parle de Fedora nous intéressent et doivent donc rester intact. Cependant, si en dessous des « title Fedora 12 », il y a l'option « savedefault », il faut impérativement la supprimer.
+
+c) Maintenant que notre Grub est configuré correctement, on va pouvoir créer l'image iso bootable :
+
+    # création de l'image iso
+    mkisofs -R -b boot/grub/stage2_eltorito -no-emul-boot -boot-load-size 4 -boot-info-table -o grub.iso iso
+
+    # déplacement de l'iso dans le répertoire de VirtualBox
+    mv grub.iso ~/.VirtualBox/
+
+    # suppression du répertoire de travail
+    cd ; rm -rv ~/travail/
+
+L'image créée se nomme grub.iso et se trouve maintenant dans le dossier caché de VirtualBox.
+Cette dernière fait à peine 500 ko tongue.
+
+
+     Gestionnaire de démarrage : Grub2
+
+Étant donné que Grub2 n'a rien à voir avec Grub1, la procédure précédente ne fonctionne pas.
+Cependant, le tutoriel n'en dit pas plus pour le moment...
+
+    Entre temps, j'ai trouvé ceci : http://ubuntuforums.org/showthread.php? … ost9232654
+
+    La commande proposée (grub-mkrescue --output=~/.VirtualBox/rescue.iso /boot/grub) fabrique bien une image iso bootable avec la bonne configuration. Cependant, le démarrage n'est pas automatique, il faut taper configfile /grub.cfg pour lancer le système.
+
+    J'ai pas trouvé comment lui dire de charger ce fichier automatiquement.
+
+Voir l'explication de Vaderflien.png.
+===== Utiliser un système Linux invité =====
+C'est la partie la plus simple, cet OS n'est pas très récalcitrant :)
+Il suffit de créer une nouvelle machine virtuelle :
+  * **Nom de la machine :** Fedora, par exemple,
+  * **Type de système d'exploitation :** Fedora par exemple.
+  * **Disque dur :** il faut utiliser le fichier Fedora.vmdk que nous précédemment créé !
+Puis dans la configuration de la machine, après sa création :
+  * **Ordre d'amorçage :** Disque optique / Disque dur
+  * **Activer l'ACPI :** doit être coché
+  * **Activer l'IO-APIC :** doit être décoché (à part si vous voulez du multi-cœur, mais une chute des performances est possible, poru ma part ça allait)
+  * **Stockage :** Ajoutez un Disque optique et sélectionnez le fichier Grub.iso précédemment créé
+
+Adaptez les autres paramètres à votre utilisation, et vous pouvez démarrer votre machine virtuelle !
+===== Utiliser un système Windows invité =====
+
+<note important>Lorsque Windows va redémarrer sous VirtualBox, l'environnement matériel va changer :
+  * Windows va réinstaller tout plein de pilotes, et rien ne l'empêchera de planter !
+  * L'environnement matériel change, la réactivation peut donc être nécessaire.
+ (Tout ça, contrairement à un système Linux :-) )</note>
+
+Il suffit de créer une nouvelle machine virtuelle :
+  * **Nom de la machine :** Windows8 Physique, par exemple,
+  * **Type de système d'exploitation :** Windows8.1 (64 bits) par exemple.
+  * **Disque dur :** il faut utiliser le fichier Windows.vmdk que nous avons précédemment créé !
+Puis dans la configuration de la machine, après sa création :
+  * **Ordre d'amorçage :** Disque optique / Disque dur
+  * **Activer l'ACPI :** doit être coché
+  * **Activer l'IO-APIC :** doit être coché !
+  * **Stockage :** Ajoutez un Disque optique et sélectionnez le fichier Grub.iso précédemment créé
+
+Adaptez les autres paramètres à votre utilisation, et vous pouvez démarrer votre machine virtuelle !
+(5) Premier lancement
+
+C'est parti, nous pouvons enfin lancer la machine virtuelle !
+Pour rappel, cette machine virtuelle va lancer un système physiquement installé grâce aux fichiers windows.vmdk et grub.iso (ou boot_xp.img).
+
+a) Les profils matériels sont de retour !
+Comme nous sommes en train de démarrer sous VirtualBox, il est très important de sélectionner le profil nommé « VirtualBox ».
+
+profils3.png
+
+Théoriquement, windows devrait démarrer... lol.
+
+Si ce n'est pas le cas, il va falloir :
+- soit redémarrer sous windows normalement (profil VirtualBox) pour faire des choseslien.png,
+- soit démarrer en mode sans échec,
+- soit vérifier le point précédent.
+
+b) Le bureau devrait s'afficher au bout d'un certain temps.
+Tu l'as sûrement déjà remarqué, mais comme prévu, le système est deux de tension...
+
+Windows installe en ce moment même ses nouveaux pilotes...
+Une fois qu'il a terminé, ne pas redémarrer.
+
+c) On va commencer par régler le problème de lenteur, donc clique droit sur Poste de Travail puis Propriétés.
+
+Dans l'onglet Matériel img.png, clique sur « Gestionnaire de périphériques ».
+Il va falloir réinstaller le pilote qui se trouve sous Ordinateur.
+
+Pour ce faire, clique droit sur PC Multiprocesseur ACPI, puis mettre à jour le pilote / installer à partir d'une liste / ne pas rechercher, je vais choisir le pilote à installer. Choisi le premier pilote dans la liste comme sur la capture d'écran suivante :
+
+apic1.png
+
+Si windows te propose d'interrompre l'installation, refuse !
+Une fois l'installation terminée img.png, il va te demander de redémarrer, refuse !
+
+d) Il est temps d'installer les « Additions invités » disponibles dans le menu Périphériques de VirtualBox.
+
+additions1.png
+
+Une fois l'installation terminée, le programme va te demander de redémarrer img.png, parce que c'est lui, accepte !
+Enfin non, refuse, éteins simplement l'ordinateur...
+
+(6) Re-configuration de la machine virtuelle
+
+Maintenant que nous avons réinstallé le pilote ordinateur, on va pouvoir désactiver l'IO-APIC responsable du problème de lenteur en toute sécurité. Pour rappel, cela va également désactiver la prise en charge du multi-cœur pour le système invité.
+
+Sur VitualBox, il faut modifier les préférences de la machine virtuelle.
+
+» Système, onglet carte mère :
+- Activer l'IO-APIC : doit maintenant être décoché
+Conclusion
+
+» Voilà, tu peux maintenant profiter pleinement du système Windows qui est installé physiquement dans VirtualBox (exemple en image img.png), ce tutoriel touche donc à sa fin.
+
+» Malheureusement il reste encore un dernier petit truc à faire lors du prochain démarrage que je te laisse deviner...
+Non ? pas d'idée ? alors un indice img.png pourra surement t'aider big_smile.
+
+Dans le cas ou tu aurais supprimé les fichiers contenus dans /windows/system32/oobe/, tu peux les télécharger ici.
+Enfin je dit ça, je dit rien...

@@ -1,0 +1,181 @@
+
+{{tag>tutoriel radio audio}}
+
+----
+
+====== Comment créer sa webradio ? ======
+
+Ce tutoriel a pour but d'expliquer le plus simplement possible l'installation d'une **[[:radio|Webradio]]** sous Ubuntu.
+
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>icecast2,mpd|icecast2 mpd]]**. (Les [[:depots#universe_et_multiverse|dépôts Universe/Multiverse]] doivent être activés.)
+
+===== Configuration de MPD =====
+
+Créer un fichier de configuration par défaut :
+
+  sudo dpkg-reconfigure mpd
+
+La configuration de MPD se fait par un fichier texte. [[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **/etc/mpd.conf**.
+Avant la première utilisation de **mpd** , il est nécessaire de charger des musique dans la collection, sinon mpd n'aura aucune musique à lire. ( voir [[:mpd|Lien externe]] )
+
+Voici un exemple du fichier /etc/mpd.conf (à modifier en fonction de votre configuration)
+
+<file>
+######################## REQUIRED PATHS ########################
+# You can put symlinks in here, if you like. Make sure that
+# the user that mpd runs as (see the 'user' config parameter)
+# can read the files in this directory.
+music_directory		"/home/pseudo/Musiques" #<----- LE CHEMIN VERS VOS FICHIERS DE MUSIQUE
+playlist_directory	"/var/lib/mpd/playlists"
+db_file			"/var/lib/mpd/tag_cache"
+log_file		"/var/log/mpd/mpd.log"
+error_file		"/var/log/mpd/errors.log"
+pid_file		"/var/run/mpd/pid"
+################################################################
+
+
+########################## PERMISSIONS #########################
+#
+# MPD can require that users specify a password before using it.
+# You may specify one ore more here, along with what users who
+# log in with that password are allowed to do.
+#
+password                        "VOTRE_MOT_DE_PASSE@read,add,control,admin"  #<----- REMPLACER 'VOTRE_MOT_DE_PASSE'
+#
+# Specifies what permissions a user who has not logged in with a
+# password has.  By default, all users have full access to MPD
+# if no password is specified above, or no access if one or
+# more passwords are specified.
+#
+#default_permissions             "read,add,control,admin"
+#
+################################################################
+
+
+########################## AUDIO OUTPUT ########################
+audio_output {
+        type                    "shout"
+        name                    "Mydoom666 Stream" #<----- NOM DE VOTRE WEBRADIO
+        host                    "127.0.0.1"
+        port                    "8000"
+
+        mount                   "/mydoom666" #<----- NOM DE LA PLAYLIST SANS L'EXTENSION
+        password                "VOTRE_MOT_DE_PASSE" #<----- REMPLACER 'VOTRE_MOT_DE_PASSE'
+        quality                 "5.0"
+#        bitrate                 "128"
+        format                  "44100:16:1"
+#        user                    "source"                # optional
+        description             "Mydoom666's Zik" #<----- LA DESCRIPTION DE VOTRE WEBRADIO
+        genre                   "MaZikaMoi"
+#        public                  "yes"                    # optional
+}
+#
+# Force all decoded audio to be converted to this format before
+# being passed to the audio outputs.
+#
+#audio_output_format             "44100:16:2"
+#
+################################################################
+
+
+############################# LIMITS ###########################
+#
+# These are various limits to prevent MPD from using too many
+# resources.  You should only change them if they start
+# restricting your usage of MPD.
+#
+connection_timeout              "60" 
+max_connections                 "5" #<----- NOMBRE DE CONNECTION MAXIMUM
+max_playlist_length             "16384"
+max_command_list_size           "2048"
+max_output_buffer_size          "8192"
+#
+################################################################
+</file>
+
+
+===== Configuration de Icecast2 =====
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/icecast2/icecast.xml**, fichier de configuration de Icecast2.
+Il y a peu de choses à modifier, mis à part les mots de passe.
+
+<file XML>
+    <limits>
+        <clients>5</clients>
+        <sources>5</sources>
+        <threadpool>5</threadpool>
+        <queue-size>524288</queue-size>
+        <client-timeout>30</client-timeout>
+        <header-timeout>15</header-timeout>
+        <source-timeout>10</source-timeout>
+        <burst-on-connect>1</burst-on-connect>
+        <burst-size>65535</burst-size>
+    </limits>
+
+    <authentication>
+        <!-- Sources log in with username 'source' -->
+        <source-password>VOTRE_MOT_DE_PASSE</source-password>
+        <!-- Relays log in username 'relay' -->
+        <relay-password>VOTRE_MOT_DE_PASSE</relay-password>
+
+        <!-- Admin logs in with the username given below -->
+        <admin-user>admin</admin-user>
+        <admin-password>VOTRE_MOT_DE_PASSE</admin-password>
+    </authentication>
+
+    <hostname>127.0.0.1</hostname>
+</file>
+
+Pour faire tourner Icecast2 en tache de fond, [[:tutoriel:comment_editer_un_fichier|éditez le fichier]] **/etc/default/icecast2** et modifiez à la fin du fichier pour obtenir :
+
+<file>ENABLE=true</file>
+
+Relancer les services mpd et icecast2 :
+
+  sudo /etc/init.d/mpd restart
+  sudo /etc/init.d/icecast2 restart
+
+<note>
+Vous pouvez maintenant accéder au serveur icecast2 à l’adresse http://adresse.com:8000/ (http://127.0.0.1:8000/ si vous êtes en local).
+
+La playlist se trouve à l’adresse : http://adresse.com:8000/nom_de_la_playlist.m3u.
+
+Vous avez choisi le nom de cette playlist lors de la configuration du fichier « mpd.conf ». (Que vous pouvez modifier a tout moment, il faudra juste penser a relancer les services pour que les modifications soient prises en compte.
+
+Bien entendu, il vous faut ensuite installer et démarrer un client MPD avant que icecast2 ne puisse jouer quoi que ce soit</note>
+
+===== Client de MPD =====
+
+==== PhpMp2 ====
+
+PhpMp2 est un client qui tourne sur un serveur web (avec php).
+Ainsi si vous avez un serveur web vous pouvez l'installer et contrôler MPD de n'importe quelle machine connectée sur le net ayant un navigateur.
+
+Vous pouvez le télécharger à http://www.musicpd.org/phpMp2.shtml
+Il faut décompresser l'archive dans un répertoire accessible sur votre serveur web.
+{{tutoriel:phpmp2-mpd.jpg|}}
+
+===== Ouvrir le port dans le pare-feu =====
+
+Dernière étape, ouvrir le port 8000 dans le [[:pare-feu]]. Le port 8000 (par défaut) est celui utilisé par Icecast2 pour envoyer les flux aux clients. Pour cela, utilisez [[:Gufw]].\\
+Il est possible d’administrer votre serveur a distance en ouvrant le port 6600 (par défaut). Il suffira ensuite dans GMPC de bien spécifier l’adresse distante du serveur.
+
+<note important>**ces ports doivent être ouverts** dans votre routeur et redirigés vers l’adresse IP de la machine serveur.</note>
+
+===== Ressources Supplémentaires =====
+
+==== Sites officiels ====
+  * http://www.icecast.org/
+  * http://www.musicpd.org/
+  * [[wpfr>Net_radio]]
+
+==== Pour aller plus loin ====
+
+  * http://benjamin.sansinteret.info/blog/post/2008/11/28/Tutorial-Creer-une-webradio-avec-MPD-et-Icecast-sous-Linux-Gentoo-ou-Debian
+  * [[http://www.generation-linux.fr/index.php?post/2009/01/17/Mise-en-place-d-une-webradio-avec-Icecast-et-Liquidsoap| Mise en place d'une webradio avec Icecast et Liquidsoap ]]
+
+----
+
+//Contributeurs : [[utilisateurs:Mydoom666]], [[utilisateurs:Ner0lph]].//

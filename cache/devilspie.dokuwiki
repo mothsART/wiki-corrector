@@ -1,0 +1,293 @@
+
+{{tag>Xenial personnalisation}}
+
+----
+====== Devil's Pie =====
+
+Devil's Pie est un logiciel ((de **Ross Burton**, [[http://www.burtonini.com|Site de l'auteur]], [[ross@burtonini.com|Contact]])) publié sous licence GNU GPL, 
+qui permet de détecter les caractéristiques des fenêtres et de leur appliquer des règles de comportement. Il permet donc d'ouvrir une fenêtre sur un bureau spécifique et / ou de lui définir une option d'affichage (taille de la fenêtre, transparence, focus, minimisation ...).\\ 
+Une fois paramétré pour un logiciel donné, Devil's Pie peut s'oublier (il doit cependant être lancé en mémoire au démarrage) : on se contente de lancer le programme sur lequel on souhaite une action, et celle-ci s'applique de façon totalement transparente.
+
+Devil's Pie marche normalement avec n'importe quel [[:gestionnaire de fenêtres]] (xfwm, metacity, compiz ...) X11, mais PAS avec [[wayland|Wayland]]. Devilspie ne fonctionne donc pas sous [[gnome-shell|Gnome-Shell]] pour Wayland.
+
+<note>Il existe une version avec interface graphique pour créer les règles de devilspie : [[http://code.google.com/p/gdevilspie/|gdevilspie]]. Ce logiciel était dans les dépôts jusqu'à la version 17.04 de Ubuntu, mais en a disparu depuis, faute de maintenance.</note>
+
+<note Important>Cet article porte sur **Devilspie**, mais il existe également un fork de Devilspie, nommé [[http://www.nongnu.org/devilspie2/|Devilspie2]], qui se configure différemment, via des scripts Lua simples. __Attention à ne pas les confondre__.</note>
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>devilspie]]**.
+
+Pour que Devilspie soit actif à chaque démarrage, il faudra ajouter 
+<code>devilspie</code> dans la liste des applications [[:tutoriel:application_demarrage|démarrées automatiquement]] par votre session.
+
+===== Configuration manuelle simple  =====
+L'utilisation la plus courante de devilspie, c'est d'affecter un logiciel à un bureau spécifique, ou de positionner sa fenêtre (mode "minimisé", centré, en haut à gauche, ...). Pour ce faire :
+
+  * Créer un [[:fichier_cache|répertoire caché]] **/.devilspie** dans votre //Dossier Personnel// (si vous préférez le terminal : **mkdir ~/.devilspie)**. \\ :!: Si les fichiers de règles ne sont pas placés dans le répertoire **~/.devilspie** mais dans  **/etc/devilspie**, les règles s'appliqueront alors à **tous** les utilisateurs. Mais les règles devront alors être manipulées en mode [[:sudo|administrateur]]. :!:
+  * Dans ce répertoire caché, créer avec un éditeur de texte quelconque ([[gedit|gedit]], [[mousepad|mousepad]], [[nano|nano]], ...) un fichier par logiciel qu'on souhaite manipuler. Le fichier est un fichier texte avec un extension **.ds**  Le nom n'a pas d'importance, mais il est logique de donner le nom du programme manipulé. Par exemple **Thunderbird.ds**.
+  * À l'intérieur du fichier, **on colle les commandes** pour engendrer le comportement souhaité. Voir les exemple ci-dessous.
+
+Gardons l'exemple de Thunderbird pour la suite :
+
+__**Démarrer Thunderbird sur le bureau 3.**__
+
+<file>
+(if 
+  (is (application_name) "Thunderbird")
+  (set_workspace 3)
+)
+</file>
+
+__**Démarrer Thunderbird en mode minimisé**__
+
+<file>
+(if 
+  (is (application_name) "Thunderbird")
+  (minimize)
+)
+</file>
+On peut remplacer (minimize) par (center) si on veut centrer la fenêtre.
+
+__**Démarrer Thunderbird avec la fenêtre positionnée en haut à gauche**__
+
+<file>
+(if 
+  (is (application_name) "Thunderbird")
+  (geometry "+1+0")
+)
+</file>
+Dans cet exemple,  "+1" positionne la fenêtre à 1 pixel du bord gauche de l'écran, et "+0" la positionne à 0 pixel du haut. La fenêtre n'a pas de dimension imposée.
+
+Pour démarrer en haut et à **droite** de l'écran : **(geometry "-1+0")**. En **bas** et à **droite** : **(geometry "-1-1")**. En **bas** et à **gauche** : **(geometry "+0-1")**.
+
+__**Démarrer Thunderbird avec la fenêtre positionnée en haut à gauche __ET__ avec une dimension imposée**__
+
+<file>
+(if 
+  (is (application_name) "Thunderbird")
+  (geometry "1200x1150+1+0")
+)
+</file>
+Dans cet exemple,  "1200x1150" est la taille imposée à la fenêtre ; "+1+0" est sa position (en haut à gauche).
+
+__**Démarrer Thunderbird sur le bureau 3 __ET__ en mode minimisé**__
+
+<file>
+(if 
+  (is (application_name) "Thunderbird") 
+  (begin (set_workspace 3) (minimize) )
+)
+</file>
+
+Dans cet exemple, il y a __2 actions__ (bureau 3 ET minimiser), et elles doivent être __encadrées__ par un **(begin ...)**. (begin) est inutile pour une seule action (cf. exemples 1et 2).
+
+__**Démarrer TOUS les logiciels avec une fenêtre centrée**__
+
+<file>
+(debug
+  (center)
+)
+</file>
+
+__**ASTUCE**__ : on peut avoir __un seul__ fichier de configuration pour tous ses logiciels, à condition de l'encadrer par une fonction (begin). Exemple :
+<file>
+(begin
+
+  (if 
+    (is (application_name) "Thunderbird") 
+    (set_workspace 3)
+  )
+
+  (if 
+   (is (application_name) "gmusicbrowser")
+      (begin (minimize) (set_workspace 2) )
+  )
+
+  (if 
+    (is (application_name) "Firefox")
+    (geometry "1200x1150+1+0")
+  )
+
+)
+</file>
+Ici, Thunderbird et gmusicbrowser sont envoyés sur 2 bureaux différents (et gmusicbrowser est en plus minimisé), Firefox est affiché en haut à gauche avec une fenêtre de taille 1200x1150. Comme le montrent 2 des exemples plus haut, **(begin)** permet soit de regrouper plusieurs programmes dans un seul fichier, soit de regrouper plusieurs options pour un même programme ; on peut tout à fait (cf. l'exemple avec gmusicbrowser) mettre un begin (fonction1 fonction2) __dans__ un begin (programme1 programme2).
+
+En fonction de votre besoin, créez le nombre de fichier nécessaire (1 fichier par programme, ou un fichier global) et adaptez le **nom du programme** et le N° de bureau (**set_workspace**) qu'on trouve dans les exemples précédents.
+
+
+__**Une fois un fichier de paramétrage créé, il faut démarrer devilspie pour que cela fonctionne :**__
+  * __ponctuellement__ : ouvrir une invite de commande via alt+F2, et y taper **devilspie**.
+  * __Démarrage automatique en mode graphique__ : 
+     - dans XFCE : "gestionnaire de paramètre > session et démarrage > démarrage automatique d'application > ajouter"  ; 
+     - dans Ubuntu gnome : "Applications > Applications au démarrage > ajouter"
+     * Puis dans la zone "**commande**", ajouter la commande "**devilspie**" (Devilspie se lancera alors à chaque démarrage de votre session Ubuntu).
+  * __Démarrage automatique via le terminal__ : 
+<code>ln -s -f /usr/share/applications/devilspie.desktop ~/.config/autostart/devilspie.desktop</code>
+Paramétrer votre démarrage automatique en mode graphique ou en mode texte est équivalent, mais ne faite pas les 2 méthode à la fois. 
+
+__**3 remarques importantes :**__
+  * Il ne faut pas faire de faute dans le nom du logiciel, ou cela ne marchera pas.
+  * Les noms de programmes sont sensibles à la casse : **F**irefox marche, mais pas firefox (sans majuscule). Certains logiciels demandent une majuscule (**F**irefox), et d'autres non (**g**musicbrowser).
+  * un fois lancé, devilspie __ne prend plus en compte__ les modifications ou ajouts des fichiers **.ds**. Pour que ces modifications / ajouts prennent effet, il faut donc redémarrer devilspie (rédémarrage de session, ou pour les adeptes du terminal : **pkill devilspie** [tue le processus], suivi d'un **devilspie** [redémarre le processus]).
+
+Pour d'autres fonctionnalités, voir les chapitres suivants.
+
+===== Configuration avancée =====
+
+==== Commentaires ====
+Une ligne de **commentaire** peut-être introduite dans le fichier. Elle commence par un **;**
+
+Par exemple :
+<file>
+; ceci est un commentaire
+( if 
+  ( is ( application_name ) "Thunderbird" )
+  ( set_workspace 3 )
+)
+</file>
+==== Les actions possibles ====
+
+<file>
+(debug)              # Renvoie les informations sur les fenêtres ouvertes
+
+(maximize) (maximize_horizontally) (maximize_vertically)
+
+(minimize)
+
+(fullscreen)         # Plein-écran
+
+(center)             # Centre la fenêtre sur l'écran
+
+(geometry largeur[x]hauteur[+]abcisse[+]ordonnée)
+
+  * (geometry "400x200+0+0") # Placera la fenêtre en 400 de large par 200 de haut en haut à gauche
+
+  * (geometry "400x200")
+
+  * (geometry "+10+10")
+
+(set_workspace 2)    # Déplace la fenêtre vers le bureau n° 2
+(set_viewport 2)     # Déplace la fenêtre vers le bureau n° 2 (Compiz)
+
+(change_workspace 2) # Affiche le bureau n°2
+
+(pin)                # Rend la fenêtre présente sur tous les bureaux
+(stick)              # Rend la fenêtre présente sur tous les bureaux (Compiz)
+
+(opacity 80)         # Donne une opacité à 80%
+
+(above)              # Met la fenêtre en avant-plan
+
+(focus)              # Met le focus sur la fenêtre
+
+(undecorate)         # Supprime les décorations du gestionnaire de fenêtres (Barre de titre et bordures)
+</file>
+
+Par exemple faire apparaître [[gedit|Gedit]] sur TOUS les bureaux (option **pin** - le contenu de chaque fenêtre sera identique aux autres) :
+<file>
+; Duplique la fenêtre Gedit sur chaque bureau
+( if 
+  ( is ( application_name ) "Gedit" )
+  ( pin )
+)
+</file>
+==== Syntaxe des règles ====
+
+La règle et ses éléments doivent être entre parenthèses : **//(règle)//**
+
+La règle peut être :
+
+  * une simple action (elle s'applique alors à toutes les fenêtres) : **//(debug)//** ou
+  * une condition : **//(if (condition) (action))//** : si la condition est vraie alors l'action est réalisée par devilspie.
+
+//(if (is (application_name) "gThumb") (maximize))//
+(si l'application qui ouvre la fenêtre est gThumb alors devilspie va maximiser la fenêtre).
+
+La condition peut être :
+  * **is** (identité)
+  * **contains** (contient) ou
+  * **matches** (indique que le second terme de la condition est une expression régulière).
+
+L'objet de la condition peut être :
+  * **application_name**
+  * **window_name** ou
+  * **window_role**
+
+Il peut être utile de combiner des conditions, par exemple traiter toutes les fenêtres de Firefox dont le titre contient ubuntu ; on peut à cet effet utiliser **and** et **or**.
+
+//(and (is (application_name) "Firefox") (contains (window_name) "Ubuntu"))//
+
+De la même façon, on peut faire appliquer plusieurs actions en faisant débuter la liste par **begin** :
+
+//(if (is (application_name) "gThumb") (begin (maximize) (set_workspace 4)))//
+
+Quand une action comporte un argument l'ensemble doit être entre parenthèses.
+
+==== Obtenir le nom d'une application ====
+
+Pour obtenir le nom exacte d'une application (à utiliser avec application_name) il vous suffit de créer un fichier ~/.devilspie/debug.ds et d'y ajouter :
+''(debug)''
+
+Ensuite, lancez "devilspie -d" dans une console et observez les lignes apparaissant à l'écran lorsque vous lancez une application. Exemple pour Firefox :
+''Window Title: 'Mozilla Firefox Beta 1'; Application Name: 'Firefox'; Class: 'Firefox-bin'; Geometry: 1014x692+5+46''
+
+La partie à retenir est : "Application Name: 'Firefox'".
+
+pour finir voici un exemple avec gajim qui associe and et or :
+
+<file>
+(if
+  (and (contains (application_name) "gajim.py") (or(contains(window_name) "salon 1") (contains(window_name) "salon 2")))
+   (begin
+    (set_workspace 1)
+    (below)
+    (undecorate)
+    (skip_pager)
+    (skip_tasklist)
+    (wintype "utility")
+    (geometry "900x450+375+55")
+  )
+)
+</file>
+
+===== Astuces =====
+
+Si vous désirez avoir une application sur tous les bureaux en utilisant Compiz, utilisez les éléments suivants :
+<file>
+(stick)
+(wintype "dock")
+</file>
+Pour Metacity :
+<file>
+(pin)
+(wintype "desktop")
+</file>
+
+Si vous voulez lancer une application sur un bureau précis en utilisant Compiz (__**X** est le numéro du bureau visé__) :
+<file>
+(set_viewport X)
+</file>
+Pour Metacity :
+<file>
+(set_workspace X)
+</file>
+
+<note tip>si set_viewport ne fonctionne pas il y a une autre solution, il suffit de savoir que compiz n'est en fait qu'un seul bureau exemple :
+pour un bureau de 800x600 compiz le considère comme un bureau de 3200x600, donc si je veux ouvrir mon application sur le second bureau (geometry "800x600+800+0").</note>
+
+===== Problèmes connus =====
+
+Si l'application graphique **Gdevilspie** ne se lance pas, [[:tutoriel:comment_modifier_un_fichier|ouvrez]] avec les [[:sudo|droits d'administrateur]] le fichier **/usr/bin/gdevilspie**.\\
+Commentez ((ajouter un # au début de ligne)) la ligne suivante:
+<file># self.UpdateAutostartStatus()</file>
+Enregistrer le fichier et relancer gdevilpsie. (Merci à [[http://community.linuxmint.com/user/view/73879|hrvooje]] de la communauté de Linux Mint)
+
+Un changement de paramétrage n'est pris en compte qu'après un redémarrage de devilspie. Le plus simple est de redémarrer la session.
+ 
+===== Liens =====
+  * [[http://live.gnome.org/DevilsPie|une présentation détaillée de Devilspie]]
+  * [[http://www.nongnu.org/devilspie2/|Le site officiel de Devilspie2]] (devilspie 2 est dans les dépôts, mais n'est __pas__ la version décrite dans cette page d'aide).
+
+----
+
+//Contributeur : [[utilisateurs:epictete]], [[utilisateurs:mcpeter|McPeter]], [[utilisateurs:ljere|ljere]], [[utilisateurs:Fenouille84]]//

@@ -1,0 +1,229 @@
+
+{{tag>matériel nvidia}}
+----
+
+====== nVidia Optimus : la vidéo hybride ======
+
+La technologie **Optimus** est développée par le fabricant de cartes graphiques nVidia, elle est à destination des ordinateurs portables. Elle a pour but de trouver le juste équilibre entre autonomie de la batterie et performances graphiques.
+
+<note important>Cette technologie est relativement récente, et tout aussi relativement mal supportée sous Linux. Cela dit, les choses ne peuvent aller que dans le sens du progrès, et la situation s'améliore avec le temps. Il est néanmoins recommandé de lire consciencieusement la documentation, car rien n'est automatique, et il faut être très attentif.</note>
+
+===== Avant-Propos =====
+
+Est-ce que votre PC est équipé d'Optimus ?
+
+Question importante, car si ce n'est pas le cas il n'est a priori pas utile de lire cette page.
+
+Tout d'abord, il faut savoir que cela ne concerne que les ordinateurs portables.
+
+Si votre portable est équipé d'un processeur Intel Core iX, que ce soit des générations Arrandale (Core i7 6xx, Core i5 xxx, Core i3 xxx), Sandy Bridge (Core iX 2xxx) ou Ivy Bridge (Core iX 3xxx), ainsi que d'une carte graphique nVidia des générations 200, 300, 400, 500 ou 600, alors vous êtes très certainement concerné. Attention, les Core i7 QM ne sont généralement pas concernés.
+
+De plus, les portables pré-Optimus (Asus ULx0Vt notamment) sont également concernés par Bumblebee bien que non Optimus.
+
+**De manière générale**, pour savoir facilement si vous êtes concerné, ouvrez un terminal et entrez cette commande :
+
+<code>lspci -vnn | grep '\''[030[02]\]'</code>
+
+S'il y a deux résultats, un portant la mention Intel, l'autre la mention nVidia, alors vous êtes concernés. S'il n'y a qu'un seul résultat, ce n'est a priori pas le cas. Cependant, certains modèles disposent d'une option dans le BIOS permettant de désactiver l'une des deux puces graphiques ne laissant plus que l'autre apparaître. A vous de voir si cette situation vous convient, sachant qu'alors tout se déroule comme sur un système non-hybride.
+
+Dans tous les autres cas, ou en cas de doute, postez le résultat dans [[http://forum.ubuntu-fr.org/viewtopic.php?id=565321|ce topic]], une réponse vous sera apportée peu de temps après.
+
+===== Présentation =====
+
+==== Explications générales ====
+
+Partant du constat que l'autonomie est un point crucial pour les ordinateurs portables, Intel inclut une carte graphique basse consommation dans quasiment tous ses processeurs mobiles depuis Janvier 2010, permettant ainsi de se passer d'une carte graphique dédiée plus performante mais également plus énergivore, du moins tant qu'il ne s'agit que de bureautique ou de films classiques (les Blu-Ray sont plus ou moins bien supportés).
+
+Cette puce graphique intégrée est en effet à ce jour bien en-deçà de ce que peuvent fournir des cartes dédiées en termes de performances, et dès que l'on veut utiliser des logiciels requérant des capacités 3D tels les jeux vidéos, le montage vidéo ou édition numérique lourde, la modélisation 3D, etc ..., on se retrouve très vite limité par celle-ci.
+
+Aussi, nVidia (suivi par ATI/AMD depuis) a réfléchi à un système permettant d'avoir les avantages des deux mondes : **une grande autonomie ET des performances graphiques relativement élevées**.
+
+C'est ainsi qu'est née la technologie Optimus, permettant de combiner la grande autonomie de la puce graphique intégrée avec les performances d'une carte dédiée. Cette technologie comporte donc une composante matérielle et une composante logicielle, ce qui explique en partie les difficultés rencontrées pour son support sous Linux.
+
+Dans la pratique, ce système est censé fonctionner de la manière suivante : en utilisation bureautique/légère, la carte graphique dédiée nVidia est éteinte électriquement, sa consommation est ainsi nulle et on se retrouve dans la situation classique ou la carte graphique intégrée s'occupe de tout. Si un programme demandant des performances 3D vient à être lancé, alors la carte nVidia s'allume et fait tourner le programme en question. Elle s'éteint lorsque celui-ci s'arrête. Ce fonctionnement est globalement transparent pour l'utilisateur, mais il s'agit ici de la théorie.
+
+La partie qui suit aborde cette technologie à un niveau plus technique et détaillé, que l'utilisateur normal n'a pas nécessairement besoin de connaître.
+
+==== Description technique ====
+
+Cette partie s'adresse avant tout à des utilisateurs avancés ou désireux de comprendre les choses en profondeur.
+
+La question de l'autonomie face aux performances dans le monde de l'informatique mobile n'est en réalité pas nouvelle, et nVidia n'en est pas à son premier essai.
+
+En fait, Intel développe depuis longtemps des contrôleurs graphiques intégrés, la nouveauté est que ceux-ci sont désormais directement intégrés dans les processeurs, tandis qu'avant il s'agit d'un chipset séparé.
+
+Là où il suffisait à nVidia de remplacer ce chipset externe par ses propres cartes graphiques, il faut maintenant nécessairement composer avec la présence de cette carte graphique intégrée.
+
+nVidia, avant Optimus, avait déjà développé une technologie hybride utilisant une puce graphique Intel combinée à l'une des siennes, cette technologie s'appelait Hybrid SLI. La partie matérielle était prépondérante dans ce système, les deux cartes étant complètement indépendantes l'une de l'autre et accédaient au contrôle de l'affichage via un multiplexeur graphique (Graphic Multiplexer). C'est un composant matériel qui permet de basculer l'écran d'une sortie vidéo à l'autre. Pour l'utilisateur, cela impliquait une certaine latence lors du transfert du contrôle (un écran blanc ou noir de quelques secondes), ce qui s'avérait assez pénible à l'usage. De plus, c'était à l'utilisateur de demander le switch. Et ce switch était intégral, ce qui signifie que certaines applications pouvaient planter si elles étaient entrain d'utiliser la carte graphique intégrée. La gestion de ce système sous Linux était inexistante, et en fait cet absence de support était la cause de plusieurs problèmes que l'on rencontre également avec Optimus, détaillés dans la seconde partie de cette documentation. Certaines solutions permettant de gérer la technologie Optimus sous Linux sont également fonctionnelles pour Hybrid SLI, ce support peut être amené à changer lorsque les différences matérielles entreront en ligne de mire (actuellement, ces solutions sont purement logicielles dans le sens où elles ne font pas intervenir les spécificités matérielles de ce système).
+
+Seulement, à partir du moment où Intel intègre directement ses contrôleurs graphiques dans ces processeurs des générations Core iX et Atom (à noter qu'il existe deux exceptions à cette règle pour le grand public : l'Atom Z560 et les Core i7 QM et XM de première génération sont dépourvus de partie graphique intégrée, et de manière plus générale pour les Atom, il ne s'agit que de ceux sortis depuis Janvier 2010), il n'est plus possible de mettre aisément en place un système utilisant un multiplexeur, d'autant plus que les problèmes intrinsèques à ce système ne sont pas négligeables. Aussi, il a fallu à nVidia une autre idée, et c'est là qu'entre en jeu Optimus.
+
+Techniquement, Optimus exploite deux cartes graphiques :
+  * l'IGP (Integrated Graphics Processor), chipset graphique intégré au processeur, peu consommateur d'énergie mais aussi moins performant ;
+  * le GPU (Graphics Processing Unit), la carte graphique dédiée (Discrete Card), puissante mais gourmande.
+
+Matériellement, seul l'IGP est connecté à l'écran, il est donc impossible de l'éteindre, car c'est lui qui gère l'affichage dans tous les cas. En fait, ce n'est pas exactement l'IGP qui est connecté, mais une unité appelée Display Controller. Cette unité fait néanmoins partie de l'IGP, mais elle accepte des connexions externes, et c'est ainsi que la carte nVidia est reliée au système.
+
+Ainsi, par défaut, la carte nVidia est éteinte électriquement, et tout est géré par l'IGP (les calculs graphiques et l'affichage). Ensuite, en théorie, le lancement d'un programme nécessitant des capacités 3D déclenche l'allumage de la carte nVidia, et tous les appels graphiques lancés par ce programme sont envoyés à la carte nVidia, qui les exécute et renvoie le résultat au Display Controller, qui les affiche alors à l'écran. Le reste du système (environnement du bureau, autres applications tournant durant le même laps de temps) continue à utiliser l'IGP pour les calculs graphiques et l'affichage. Lorsque le dernier (il peut y en avoir plusieurs à la fois) programme utilisant la carte nVidia est fermé, celle-ci est à nouveau éteinte pour préserver la batterie.
+
+Seulement, tout cela est pour la théorie.
+
+===== État des lieux =====
+
+==== Analyse ====
+
+Dans la pratique, si cela est un peu près fonctionnel sous Windows, **le support de cette technologie sous Linux par défaut est plutôt catastrophique**. Des solutions commencent néanmoins à émerger, elles sont présentées dans le troisième paragraphe de cette partie. Néanmoins, s'il s'agit de se renseigner pour l'achat d'un ordinateur portable, alors **cette technologie est à éviter** si l'on prévoit de se servir principalement de Linux.
+
+Le serveur d'affichage X.org se fait vieux, et il n'a pas été conçu pour gérer cette situation. Devant cette situation, une réécriture intégrale de celui-ci est en cours, mais c'est un projet à long terme tant cela est fastidieux. Pour les curieux, il s'agit de **Wayland**. Les problèmes techniques pour l'implémentation de cette technologie sous Linux sont détaillés dans le dernier paragraphe de cette partie.
+
+En l'état, sur les portables équipés de la technologie Optimus, à savoir quasiment tous les ordinateurs portables pourvu d'un processeur Intel Core iX ou Atom ainsi que d'une carte graphique dédiée nVidia (une étiquette Optimus est généralement présente sur ces modèles), de nombreux problèmes peuvent survenir par le simple manque de support (i.e. problèmes aggravant la situation par rapport à celle où la carte nVidia serait juste là pour décorer), parmi lesquels on compte notamment :
+  * l'**impossibilité de démarrer** un média d'installation (LiveCD, LiveUSB) et de manière plus générale, l'impossibilité de démarrer un Linux quelconque. Ce problème est généralement dû à un Kernel Panic provoqué par le pilote libre pour carte graphique nVidia, nouveau, qui supporte très mal cette technologie, d'autant plus qu'il s'agit souvent de cartes récentes. Une solution existe, c'est la suivante : s'il s'agit de faire démarrer un noyau quelconque, il faut ajouter ''nouveau.modeset=0'' aux options de démarrage de celui-ci (par fois également ''acpi=off'' ou encore ''pci=noacpi''), l'alternative pour un système installé est d'ajouter un fichier //blacklist-nouveau.conf// dans le dossier // /etc/modprobe.d/ // contenant la ligne suivante : ''blacklist nouveau'' ;
+  * problèmes de **surchauffe** et de **ventilateur tournant à plein régime en permanence** liés au fait que la carte nVidia est allumée et consomme en permanence par défaut ;
+  * sous Ubuntu, le gestionnaire de pilote propriétaires propose l'installation des pilotes propriétaires nVidia (en indiquant la mention "recommandé", ce qui induit l'utilisateur en erreur), **il NE faut surtout PAS procéder à l'installation de ces pilotes**, l'installation de ceux-ci résultera soit à un écran noir au prochain redémarrage, soit si on a de la chance, à une simple perte de l'accélération 3D fournie par la carte Intel, ce qui se verra par un basculement d'Unity vers Unity 2D et l'impossibilité d'utiliser un programme nécessitant des capacités 3D. La solution est de démarrer en mode de récupération si nécessaire pour accéder à un terminal, puis de lancer ceci : ''sudo apt-get purge nvidia-current'', et normalement, l'accélération graphique devrait fonctionner de nouveau.
+
+Ensuite, si l'on a de la chance, il ne reste plus que les deux problèmes suivants, qui sont eux présents pour tous en revanche, mais pour lesquels les solutions présentées ci-après existent :
+  * **la carte graphique nVidia (GPU) n'est pas utilisable par défaut**, seul la carte intégrée Intel est exploitable, offrant des performances décevantes au regard de celles de la plupart des GPU.
+  * pour autant, **elle reste alimentée en permanence** (et consommant plus que ce que devrait consommer cet état passif), **diminuant l'autonomie** tout en restant inutilisable.
+
+==== Pilotes ====
+
+<note important>Comme expliqué dans la partie précédente, l'installation des pilotes propriétaires nVidia, proposée automatiquement, provoque divers problèmes. Il vaut donc mieux s'abstenir d'effectuer cette action, il est plutôt conseillé de ce diriger vers l'une des solutions présentées dans le paragraphe suivant.</note>
+
+=== Pilotes propriétaires ===
+A l'heure actuelle, nVidia n'a développé aucun pilote pour Linux permettant le support d'Optimus. **La marque au caméléon a d'ailleurs indiqué qu'il n'était pas prévu de le faire.** Cependant, les récentes avancées autour de Wayland, le successeur de X.org, ont trouvé écho chez nVidia, qui envisage de supporter Optimus sous Wayland. Seulement, ce n'est pas pour aujourd'hui, ni pour demain d'ailleurs.
+
+=== Pilotes libres ===
+Optimus étant une technologie relativement récente (lancée début 2010), les travaux de la communauté sont encore expérimentaux. Pour l'instant, aucune solution fiable n'est applicable.
+
+Des travaux sont entrepris sur différents composants. Globalement, ils ne concernent pas uniquement Optimus mais plus généralement les technologies basées sur le même concept (AMD/ATI PowerXpress 4.0 étant également de la partie). Cela passe par la réécriture totale de X.org en le nouveau projet Wayland, ainsi que par un meilleur support au niveau du Kernel, et enfin dans le cas d'Optimus, un support par le pilote libre nouveau.
+
+==== Solutions existantes ====
+
+Il existe plusieurs projets tentant d'apporter le support d'Optimus sous Linux, mais aucun qui soit réellement abouti. Cependant, le simple fait qu'ils permettent de retrouver l'usage de son ordinateur et de s'affranchir des problèmes présentés plus haut mérite qu'on y jette un œil.
+
+=== Bumblebee ===
+<note important>Il ne faut pas confondre avec l'ancien **bumblebee** développé par **MrMEEE**. L'histoire de ces projets est expliquée plus loin.</note>
+**Bumblebee** est un projet indépendant géré par plusieurs développeurs réunis dans une équipe nommée **Bumblebee-Project**, et dont le but est de supporter la technologie Optimus (le support d'Hybrid SLI est aussi de la partie) sous Linux, que ce soit sous Ubuntu ou une autre distribution. Le support est néanmoins plus présent pour Ubuntu et ArchLinux que les autres distributions.
+
+**C'est la solution conseillée**, Bumblebee offre la possibilité d'utiliser la carte graphique nVidia lorsque nécessaire (via au choix le pilote propriétaire nvidia ou le pilote libre nouveau, le pilote propriétaire nvidia étant cependant fortement recommandé dans le cas de cette technologie, et c'est d'ailleurs le comportement par défaut actuellement), d'éteindre celle-ci le reste du temps. D'autre aussi, mais celle-ci à l'avantage d'être la plus stable, et ayant comme propriété non négligeable d'être en partie développée par un membre du forum Ubuntu-fr, ArchangeGabriel, qui pourra vous aider dans le [[http://forum.ubuntu-fr.org/viewtopic.php?id=565321|topic dédié]].
+
+Aussi, c'est la seule solution pour laquelle il existe une documentation, et même une version francophone de celle-ci.
+
+Toutes les informations nécessaire à son emploi sont disponibles sur la [[:bumblebee|page dédiée]].
+
+[[http://bumblebee-project.org/|Site officiel de l'organisation Bumblebee-Project]]
+
+[[https://github.com/Bumblebee-Project/|Page GitHub de l'organisation Bumblebee-Project]]
+
+[[https://launchpad.net/~bumblebee/|Page de l'organisation (et PPAs) sur Launchpad]]
+
+[[https://wiki.ubuntu.com/Bumblebee|Bumblebee Project sur le wiki anglophone Ubuntu]]
+
+=== IronHide ===
+Il s'agit d'un projet assez similaire à Bumblebee, celui-ci est néanmoins restreint au support d'Ubuntu. Il fut pendant un temps le projet développé le plus activement, mais n'a plus reçu de mises à jour depuis Septembre 2011. De plus, [[http://www.martin-juhl.dk/2012/01/ironhide-is-sleeping-but-not-forever/|ce projet n'est actuellement plus supporté par son unique développeur, celui-ci ayant annoncé sur son blog qu'il mettait ce projet en pause]].
+
+Celui-ci offrait globalement des fonctionnalités plus avancées, mais au prix d'une stabilité moindre et de nombreux problèmes potentiels.
+
+Les utilisateurs pouvant se débrouiller seuls peuvent néanmoins l'utiliser, celui-ci restant a priori à peu près fonctionnel.
+
+[[https://github.com/MrMEEE/ironhide|Page GitHub]]
+
+[[https://launchpad.net/~mj-casalogic/+archive/ironhide/|PPA sur Launchpad]]
+
+=== acpi_call ===
+Il s'agit d'un module noyau qui permet d’interagir avec le système au niveau électrique, notamment pour allumer/éteindre la carte graphique dédiée à la demande.
+
+Cependant, dans l'état actuel des choses, la version que l'on retrouve un peu partout est un simple //proof of concept// (programme permettant de montrer que l'on peut faire cela, sans être vraiment abouti, il s'agit principalement de faire une démonstration), et le développement a été repris par les développeurs de Bumblebee, le développeur original n'ayant pas le temps de s'en occuper, et les progrès sont lents.
+
+En réalité, ce module n'est qu'un messager, c'est-à-dire qu'il ne fait que transmettre les instructions qu'on lui donne au système, et rien de plus.
+
+Il faut donc des compétences assez avancées pour l'utiliser seul, il est néanmoins intégré dans IronHide, et on peut se reporter à ce projet pour de plus amples informations (note : il était également intégré dans Bumblebee jusqu'à la version 3.0, à partir de laquelle il a été remplacé par bbswitch). Pour l'installation en //stand-alone//, il faut soit le compiler soit même, soit utiliser le paquet disponible dans le PPA de Bumblebee.
+
+<note warning>**Attention !!!** Ce module est hautement expérimental et assez docile, dans le sens où il fera ce que vous lui demandez sans vérifications d'aucune sorte. Comme il agit au niveau matériel, une mauvaise utilisation peut entraîner une dégradation physique (même si peu probable), et en tout cas a de fortes chances d'occasionner des problèmes divers, parmi lesquels plantages du système, instabilité du matériel, surchauffe, ...</note>
+
+[[https://github.com/mkottman/acpi_call|Page GitHub du projet original]]
+
+[[https://github.com/Bumblebee-Project/acpi_call|Page GitHub du //fork// de l'équipe Bumblebee-Project]]
+
+=== asus/byo-switcheroo ===
+Il s'agit ici d'un projet destiné au support bas niveau de la technologie **Hybrid SLI**. Optimus n'est pas du tout supportée. Son fonctionnement est assez complexe, néanmoins une partie du travail effectué va se retrouver dans vga_switcheroo d'ici quelques temps. En attendant, les utilisateurs bidouilleurs peuvent toujours y jeter un œil.
+
+<note important>**Ce projet est plutôt expérimental, à réserver aux utilisateurs avertis.**</note>
+
+[[https://github.com/awilliam/asus-switcheroo|Page GitHub]]
+
+==== Points Divers ====
+
+Voici quelques points qu'il convient de signaler :
+
+  * Certains ordinateurs proposent dans leur BIOS de désactiver le mode hybride et de n'utiliser que la carte graphique nVidia et/ou Intel. Le cas échéant, l'utilisation d'un des projets présenté ci-dessus n'est pas nécessaire. Dans le cas où seule la carte Intel est active, tout est automatique, dans le cas où seule la carte nVidia est active, il suffit de procéder à l'installation du pilote nvidia comme on le ferait pour tout autre machine.
+  * La plupart des modèles équipés de cette technologie présentent un port de sortie vidéo de type HDMI. Celui-ci est malheureusement généralement relié à la carte nVidia, et il n'y a pour le moment aucun moyen de le faire fonctionner. Des travaux d'investigations sont en cours par les développeurs de Bumblebee à ce sujet.
+
+==== Histoire de Bumblebee et IronHide ====
+
+C'est un point assez confus pour l'utilisateur, d'où la présence de ce paragraphe. Il comporte néanmoins des détails un peu techniques.
+
+En résumé, il existait au début (à partir de Mai 2011) bumblebee de MrMEEE, puis depuis début Juillet 2011, bumblebee est devenu IronHide, toujours de MrMEEE, et un nouveau projet est reparti de zéro sous le nom de Bumblebee, développé par une équipe appelée The Bumblebee Project.
+
+bumblebee est le premier projet qui soit apparu pour apporter le support d'Optimus sous Linux. Initié par MrMEEE, alias Martin Juhl, il fut débuté en Mai 2011.
+
+Au début petit projet personnel, il prend rapidement de l'ampleur, et le nombre d'utilisateurs augmente rapidement. D'autres développeurs rejoignent le projet dans les mois qui suivent, mais la structure de développement est toujours celle d'un petit projet personnel.
+
+En effet, sur GitHub, il n'y a qu'une branche d'intégration, la //master//, et les mises à jours sont publiées à la va vite sur le PPA, sans tests, impactant de nombreux utilisateurs avec certains changements critiques, le paroxysme étant atteint lors d'un "bug" aux conséquences désastreuses, amenant plusieurs centaines de milliers de visiteurs sur le projet en l'espace de quelques jours, lors de la création du premier meme GitHub. [[https://github.com/MrMEEE/bumblebee/commit/a047be85247755cdbe0acce6f1dafc8beb84f2ac|C'est ici pour les curieux]].
+
+D'autres erreurs de développement créent des troubles, bien que moins graves, mais après quelques semaines la situation devient intenable, et l'absence fin juillet durant 2 semaines de MrMEEE fait prendre conscience de l'ampleur de la situation à toute l'équipe, car celui-ci est le seul ayant les droits d'accès au PPA, et le seul ayant les droits d'administration sur le projet GitHub, et cette absence arrive au moment même où deux des bugs les plus gênants font leur apparition.
+
+Les développeurs alors présents décident de repartir de zéro, en mettant en place une structure de développement pensée pour ce genre de projet, notamment en créant des pages pour l'organisation, plutôt que de passer par des pages personnelles, et en s'accordant sur des standards de développement et des méthodes assurant au projet une plus grande stabilité.
+
+MrMEEE décline l'invitation à rejoindre le projet à son retour, car il manque de temps, et préfère se concentrer sur une version Ubuntu avec les connaissances qu'il a acquises au cours du développement de bumblebee. N'étant cependant pas en mauvais terme avec les autres développeurs, il leur laisse le nom original, les droits (notamment pour la suppression des licences BEERWARE et 42, critiquées par les autres développeurs), ainsi que les images. Si pour certains, cette séparation n'est toujours pas finie, on peut désormais considérer les deux entités comme entièrement indépendantes.
+
+IronHide est donc la filiation directe de bumblebee, tandis que Bumblebee est un projet partant de zéro.
+
+A l'avenir, l'ensemble des mentions à l'ancien bumblebee devraient disparaître de l'Internet, seulement pour le moment le référencement par Google de l'ancien projet est beaucoup trop fort (écrasant souvent le personnage de Transformer au classement), notamment à cause du meme sus-cité, et cela crée une grande confusion chez la plupart des gens. D'autant plus que le projet bumblebee original est marqué comme "OUTDATED", mais ne redirige pas explicitement vers la nouvelle version.
+
+==== Problèmes techniques ====
+
+Cette partie s'adresse avant tout à des utilisateurs avancés ou désireux de comprendre les choses en profondeur.
+
+Pour comprendre les problèmes que connaît Linux avec cette technologie, il convient de faire un petit peu d'histoire.
+
+L'informatique, bien qu'elle soit une science/technologie relativement récente par rapport à d'autres, n'en est pas moins celle qui progresse le plus vite. Et en quelques décennies d'existence, les choses ont complètement changées, à un point qu'on était loin d'imaginer à l'époque.
+
+Depuis quelques années déjà, une partie fondamentale des ordinateurs commence à ressentir pleinement cela, c'est le BIOS.
+
+Inventé à une époque où les ordinateurs étaient moins puissants que la moindre console de jeu actuelle, ou que quasiment n'importe quel téléphone portable suffisamment récent, il fut créé pour les besoins de l'époque, et sans imaginer que tout irait aussi vite.
+
+Alors qu'un disque dur d'une taille de plusieurs méga-octets représentait la pointe de la technologie, comment imaginer que quelques années plus tard, les tailles de quelques téra-octets seraient le standard dans le grand public ? De même, alors que les puces graphiques avaient comme unique tâche d'afficher la sortie vidéo à l'écran, comment imaginer qu'on arriverait à une telle situation où de multiples cartes graphiques se partagent le travail de manière dynamique ? Ou encore, puisque le clavier était le seul moyen d'entrée, pourquoi auraient-ils codés un support pour les souris ?
+
+Aussi, bien que bidouillé au fur et à mesure de l'évolution des technologies, le BIOS est arrivé à ses limites (essayez de faire un château de cartes en commençant par le sommet et vous aurez une représentation de ce à quoi peut ressembler un BIOS dans le code aujourd'hui).
+
+Un remplaçant existe depuis des années, c'est l'EFI, et il commence enfin à faire son apparition massive dans l'informatique grand public. Il supporte la souris, les couleurs, ainsi que la plupart des technologies existantes si cela a un sens, et est prévu pour être évolutif pour s'adapter à l'avenir.
+
+Pourquoi raconter l'histoire du BIOS ? Parce que celle de X.org, le serveur gérant notamment l'affichage sous Linux, est quasiment la même, mais plus complexe au niveau des problèmes rencontrés et de leur description.
+
+Apparu un peu plus tard, il souffre aujourd'hui également de son grand âge, et bien qu'ayant subi de nombreuses modifications pour tenter de l'adapter aux nouvelles technologies développées, il a lui aussi atteint ses limites.
+
+Un projet a donc été initié pour le remplacer, se projet se nomme Wayland, et son développement est très actif. Seulement, cela nécessitera dans un premier temps d'écrire une couche de compatibilité pour que les applications X.org continuent de fonctionner, puis de transposer toutes ces applications vers Wayland.
+
+En ce qui concerne Optimus plus en détails, voici divers problèmes rencontrés :
+  * X.org ne supporte qu'une seule carte graphique à la fois, dans le cadre de SLI, c'est le pilote nvidia qui fait le reste, dans le cadre d'Optimus, les pilotes propriétaires ne supportant pas cette technologie, il n'y a pas grand chose à faire de ce point de vue là ;
+  * X.org ne peut pas changer de carte graphique liée sans être redémarré, c'est à dire sans fermer toute application l'utilisant ;
+  * nouveau, le pilote libre, est incapable d'utiliser la carte nvidia la plupart du temps, car il s'agit de cartes récentes qui ne sont pas supportées. Il peut provoquer de nombreux problèmes, notamment des Kernel Panic. Or il est intégré au noyau, ce qui peut entre autre empêcher le noyeau de se charger correctement ;
+  * X.org nécessite des librairies graphiques lui expliquant comment utiliser la carte graphique qui lui est liée, seulement un seul jeu de librairies peut être lié à X.org au niveau du système. C'est par défaut heureusement celles de la carte Intel qui le sont, mais l'installation des pilotes nVidia écrase cette liaison pour la remplacer par celle nécessaire à la carte nVidia ;
+  * sous Ubuntu, les pilotes nVidia sont installés de manière semi-automatique, ce qui pose problème avec le point précédant ;
+  * c'est une technologie propriétaire pour laquelle aucune spécifications n'est disponible, et comme peu de développeurs ayant des compétences machines avancées ne s'est penché sur le sujet, les progrès sont lents, car tout doit se faire par rétro-ingénierie.
+
+===== Voir aussi =====
+
+  * **(fr)** [[http://www.nvidia.fr/object/optimus_technology_fr.html|Page officielle de nVidia concernant Optimus]]
+  * **(en)** [[https://blueprints.launchpad.net/ubuntu/+spec/desktop-p-hybrid-graphics|Blue Prints Hybrid Graphics pour Precise]]
+  * **(en)** [[https://blueprints.launchpad.net/ubuntu/+spec/desktop-q-hybrid-graphics|Blue Prints Hybrid Graphics pour Quantal]]
+  * **(en)** [[https://launchpad.net/~hybrid-graphics-linux|Groupe Hybrid Graphics Linux]] sur Launchpad
+  * **(en)** [[http://linux-hybrid-graphics.blogspot.com/|Le blog Linux Hybrid Graphics]]
+  * **(en)** [[http://hybrid-graphics-linux.org/|Wiki résumant les solutions actuelles pour la vidéo hybride]]
+  * **(en)** [[https://bugs.launchpad.net/ubuntu/+source/xorg-server/+bug/312756|Rapport de bogue #312756 : « support graphics card hot switch »]] sur Launchpad, où vous pouvez signaler que ce bogue vous affecte
+  * **(en)** [[wp>Nvidia_Optimus]] sur Wikipédia
+  * **(en)** [[http://airlied.livejournal.com/]] blogue de David Airlie, développeur de nouveau, travaillant sur le support d'Optimus sous Linux
+-----
+
+// Contributeurs : [[:utilisateurs:archangegabriel]]//

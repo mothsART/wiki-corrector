@@ -1,0 +1,220 @@
+
+{{tag>unity programmation python À_RECYCLER}}
+
+====== Créer une loupe Unity ======
+<note warning>Quickly étant abandonné cette page est obsolète, il serait utile tout de même de la recycler pour proposer une autre methode pour créer des loupes</note>
+Le Dash Unity propose une manière simple et conviviale de visionner du contenu intéressant. À l'aide des Loupes, il est désormais possible de rechercher une information en local et sur le Web. Dans cet article, nous apprendrons à construire facilement une loupe permettant de chercher confortablement un article de Wikipédia, directement depuis votre Bureau.
+
+<note tip>Il est recommandé d'avoir des connaissances en Python pour suivre ce tutoriel.\\
+Vous pouvez suivre [[http://www.siteduzero.com/tutoriel-3-223267-apprendre-python.html|ce tutoriel sur le Site du Zéro]].</note>
+
+===== Prérequis =====
+Pour suivre ce tutoriel, vous aurez besoin de :
+  * [[precise|Ubuntu 12.04]] (ou version ultérieure: 12.10,13.04,...)
+
+===== Créer la loupe Wikipédia =====
+La création d'une loupe commence par une étape très simple. Ouvrez un terminal et invoquez les commandes suivantes :
+<code>quickly create unity-lens wikipedia
+cd wikipedia
+quickly edit</code>
+La dernière ligne de code ouvre Gedit avec trois fichiers. Nous ne nous occuperons que de ''<nowiki>__init__</nowiki>.py'', fermez les deux autres.
+
+Si vous préférez éditer votre projet avec votre éditeur préféré ou un IDE il vous suffit de remplacer les lignes ci dessus par les suivantes :
+
+<code> quickly create unity-lens wikipedia
+cd wikipedia/wikipedia
+emacs __init__.py</code>
+
+en remplaçant emacs par votre éditeur préféré .
+
+La première chose que nous verrons est la classe Meta. Elle définit le comportement de la loupe :
+<code=python>
+class Meta:
+    name = 'Wikipedia'
+    description = 'Wikipedia Lens'
+    search_hint = 'Search Wikipedia'
+    icon = 'wikipedia.svg'
+    search_on_blank=True
+</code>
+La plupart du temps, lorsque vous créez une loupe simple, il n'est pas nécessaire d'y changer quoi que ce soit. C'est le cas ici.
+
+Une loupe doit faire partie d'une ou plusieurs catégories, qui sera utilisée ensuite pour séparer les différents résultats. Dans le cas de Wikipédia, nous aurons besoin d'une seule catégorie. Appelons-la "Articles".
+
+En-dessous de la classe Meta, vous pouvez voir ceci :
+<code=python>
+example_category = ListViewCategory("Examples", 'help')
+</code>
+Modifions-la pour qu'elle corresponde à nos besoins.
+  - Renommez la variable en ''articles_category'', pour plus de clarté dans le code
+  - Nous devons choisir entre ''ListView'' et ''IconView'', qui sont deux manières différente de présenter les résultats. La première est une vue en liste, la deuxième une vue en icône. Nous garderons la vue par défaut : ''ListView''.
+  - Nous devons donner à notre catégorie un nom d'affichage. Ce sera ''Articles''.
+  - Pour finir, il faudra une icône pour l'en-tête, nous allons utiliser une icône déjà existante sur votre system : ''dialog-information-symbolic''
+
+<code=python>
+articles_category = ListViewCategory("Articles", "dialog-information-symbolic")
+</code>
+
+Maintenant que l'architecture de la loupe est prête, nous allons ajouter la fonction qu'elle est supposée remplir : la recherche. Le code par défaut illustre comment faire cela...
+<code=python>
+def search(self, search, results):
+    # TODO: Add your search results
+    results.append('https://wiki.ubuntu.com/Unity/Lenses/Singlet',
+                'ubuntu-logo',
+                self.example_category,
+                "text/html",
+                'Learn More',
+                'Find out how to write your Unity Lens',
+                'https://wiki.ubuntu.com/Unity/Lenses/Singlet')
+    pass
+</code>
+...sauf que nous, on veut des résultats provenant de Wikipédia !
+===== Chercher sur Wikipédia =====
+Créons une nouvelle fonction permettant la recherche Wikipédia, que nous incorporerons ensuite dans le code.
+
+Nous la nomerons ''wikipedia_query'', ce qui semble approprié dans notre cas. Elle prendra en argument la chaîne tapée par l'utilisateur dans la barre de recherche du Dash. Nous aurons également besoin de modules Python pour la recherche : ''urllib2'' pour la requête HTTP et ''simplejson'' pour parser les données renvoyées par Wikipédia.
+
+Au début du fichier, ajoutez ceci :
+<code=python>
+import urllib2
+import simplejson
+</code>
+Ensuite, dans la classe ''WikipediaLens(SingleScopeLens)'', créez une variable ''wiki'', qui permettra de simplifier le code :
+<code=python>
+wiki = "http://en.wikipedia.org"
+</code>
+Puis créez la fonction :
+<code=python>
+def wikipedia_query(self, search):
+</code>
+L'argument ''search'' est la chaîne tapée par l'utilisateur dans la barre de recherche du Dash. Nous aurons besoin de la changer un peu avant de l'envoyer à Wikipédia, en remplaçant les espaces par le caractère ''|'' (barre verticale, en **''Alt Gr + 6''** sur un AZERTY et en **''Alt Gr + B''** sur un BÉPO), afin que Wikipédia comprenne la requête.
+<code=python>
+search = search.replace(" ", "|")
+</code>
+Créons maintenant la requête en utilisant l'API Opensearch de Wikipédia :
+<code=python>
+url = ("%s/w/api.php?action=opensearch&limit=25&format=json&search=%s" % (self.wiki, search))
+</code>
+Et stockons les résultats renvoyés dans une variable ''results''. Ces résultats sont envoyés en JSON, nous utiliserons doncle module simplejson pour le transformer en liste.
+<code=python>
+results = simplejson.loads(urllib2.urlopen(url).read())
+</code>
+Insérons une ligne de debug. Il s'agit d'un texte qui sera lisible si le script est ouvert dans une console.
+<code=python>
+print "Recherche de %s sur Wikipédia..." % (search)
+</code>
+Nous finissons la fonction en lui faisant retourner quelque chose :
+<code=python>return results[1]</code>
+
+Notre fonction ''wikipedia_query'' devrait ressembler au code ci-dessous. On a ici ajouté un ''try'' et un ''except'' afin de prendre en compte des éventuelles erreurs qui pourraient survenir (erreur de réseau, erreur de transmission des résultats, etc.). S'il y a une erreur, un message s'affichera dans la console et une liste de résultats vide sera renvoyée:
+<code=python>def wikipedia_query(self,search):
+    try:
+        search = search.replace(" ", "|")
+        url = ("%s/w/api.php?action=opensearch&limit=25&format=json&search=%s" % (self.wiki, search))
+        results = simplejson.loads(urllib2.urlopen(url).read())
+        print "Searching Wikipedia"
+        return results[1]
+    except (IOError, KeyError, urllib2.URLError, urllib2.HTTPError, simplejson.JSONDecodeError):
+        print "Error : Unable to search Wikipedia"
+        return []</code>
+
+**Dès lors, tout ce que nous aurons à faire est de « brancher » cette nouvelle fonction à la fonction ''search'' définie plus haut.**
+<code=python>
+def search(self, search, results):
+    for article in self.wikipedia_query(search):
+        results.append("%s/wiki/%s" % (self.wiki, article),
+                    "http://upload.wikimedia.org/wikipedia/commons/6/63/Wikipedia-logo.png",
+                    self.articles_category,
+                    "text/html",
+                    article,
+                    "Articles Wikipédia",
+                    "%s/wiki/%s" % (self.wiki, article))
+    pass
+</code>
+On pourrait traduire ce code par : « À chaque résultat renvoyé par la fonction ''wikipedia_query'', ajouter un article à la loupe ».
+Ce qui se passe dans ''results.append'' est très important pour comprende ce que nous pourront afficher dans une loupe. Voici ce dont nous avons besoin pour passer les résultats à Unity (**ne copiez pas ce code, il ne fonctionnera pas !**) :
+<code=python>
+results.append (url,
+            icon,
+            category,
+            mime-type,
+            text,
+            comment,
+            drag and drop url)
+</code>
+C'est tout, votre loupe est prête !
+
+===== Utiliser votre loupe =====
+Vous pouvez maintenant faire apparaître votre loupe dans le Dash en tapant la commande suivante dans le Terminal :
+<code>sudo quickly install</code> (l'écran devrait clignoter 2-3 fois, ne pas s'inquiéter, c'est juste Unity qui se relance pour prendre en compte la nouvelle loupe fraîchement crée)
+...et le démarrer en tapant :
+<code>quickly run</code><note>Il est possible que vous obteniez cette erreur en lançant cette commande:<code>Traceback (most recent call last):
+  File "bin/wikipedia", line 30, in <module>
+    from wikipedia import WikipediaLens
+  File "/home/user/wikipedia/wikipedia/__init__.py", line 41
+SyntaxError: Non-ASCII character '\xc3' in file /home/user/wikipedia/wikipedia/__init__.py on line 41, but no encoding declared; see http://www.python.org/peps/pep-0263.html for details</code>Pour y remedier, il suffit juste d'ajouter la ligne suivante au début du fichier (juste avant les 'import'):<code=python># -*- coding:utf-8 -*-</code>... et de relancer la commande suivante: <code>sudo quickly install && quickly run</code></note>
+{{http://developer.ubuntu.com/wp-content/uploads/2012/04/Screenshot-from-2012-03-30-172604-700x359.png}}\\
+Il fait ce qu'il a à faire, c'est bien, voyons maintenant comment l'améliorer…
+
+===== Installer Définitivement votre loupe =====
+L'installation définitive de votre loupe se fait en 2 étapes :
+  * Allez dans le répertoire contenant votre loupe et tapez  :
+<code>quickly package</code>
+Si tout ce passe bien vous devriez voir afficher :
+<code>....Paquet Ubuntu créé dans le répertoire debian/
+.......................................................................................................................................Le paquet Ubuntu a été crée avec succès en tant que ../wikipedia_0.1_all.deb
+</code>
+Si vous avez l'erreur suivante :
+<code>....
+Command returned some WARNINGS:
+----------------------------------
+WARNING: the following files are not recognized by DistUtilsExtra.auto:
+ -fichier.ext
+----------------------------------
+Do you want to continue (this is not safe!)? y/[n]: y
+</code>
+Il vous suffit de retirer tous les fichiers (ici "fichier.ext") de votre répertoire .
+  *La seconde étape est d'installer votre projet .
+L'étape précédente créer un package "wikipedia_0.1_all.deb" pour l'installer il suffit de se placer dans le repertoire ou est situer "wikipedia_0.1_all.deb" et de taper la commande :
+<code>dpkg -i wikipedia_0.1_all.deb</code>
+ 
+Et voila votre loupe est installer dans le dash unity.
+
+
+===== Améliorons notre loupe ! =====
+==== Changer la méthode d'affichage des résultats ====
+D'abord, la manière d'afficher les résultats n'est pas appropriée pour des résultats Wiki, nous n'avons pas besoin de voir  « Article Wikipédia » sur chaque résultat. Changeons la catégorie en ''IconView'' :
+<code python>
+articles_category = IconViewCategory("Articles", "dialog-information-symbolic")
+</code>
+==== Rendre la loupe multilingue ====
+Ensuite, vous aurez remarqué que seuls les résultats francophones sont affichés (du moins si ce tutoriel a été correctement adapté :P), ce qui est bien… si vous êtes sûr(e) que tous les utilisateurs de votre loupe parlent français ! Essayons de corriger cela en récupérant la langue de la session de l'utilisateur et demandons à Wikipédia à avoir des résultats dans cette langue uniquement.\\
+En haut de votre fichier, commencer par ajouter cette ligne :
+<code python>
+import locale
+</code>
+Ensuite, dans la classe main, au-dessus de la variable ''wiki'', nous avons besoin de trouver la langue de l'utilisateur :
+<code python>
+locale.setlocale(locale.LC_MESSAGES, '')
+loc = locale.getlocale(locale.LC_MESSAGES)[0].split("_")[0]
+</code>
+''loc'' est maintenant une variable contenant une chaîne comme « en », « fr », « de », etc.
+Modifions notre variable ''wiki'' pour qu'elle utilise ''loc''.
+<code python>
+wiki = "http://%s.wikipedia.org" % (loc)
+</code>
+Et si nous redémarrons notre loupe...
+
+{{http://developer.ubuntu.com/wp-content/uploads/2012/04/Localized-Lens.png}}\\
+Les résultats traduits dans votre langue, comme on l'attend dans un OS pour les êtres humains !
+
+===== Conclusion =====
+Ce tutoriel a permis de montrer la facilité avec laquelle on peut créer une loupe pour le Dash Unity, enrichissant ainsi l'expérience utilisateur d'Ubuntu et proposant une possibilité de chercher un article sur Wikipédia, depuis le Bureau !
+
+===== Crédits =====
+Ce tutoriel est traduit et adapté de l'anglais depuis la page [[http://developer.ubuntu.com/2012/04/how-to-create-a-wikipedia-unity-lens-for-ubuntu/|How to create a Wikipedia Unity lens for Ubuntu]] du site [[http://www.ubuntu.com|ubuntu.com]].
+
+Si vous remarquez une erreur, n'hésitez pas à la rectifier. De plus, les codes donnés sur cette page devraient donner les résultats de Wikipédia en français.
+
+===== Voir aussi =====
+  * [[unity|Unity : la nouvelle interface de bureau d'Ubuntu]]
+  * [[unity-lens|Unity lens : les loupes (ou lentilles) de Unity]]

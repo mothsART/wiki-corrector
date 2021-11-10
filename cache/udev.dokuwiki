@@ -1,0 +1,585 @@
+
+{{tag>système matériel}}
+
+----
+
+
+======UDEV : Comment ça marche ?======
+
+=====Préambule=====
+
+Comme vous l'aurez compris, ceci est un tutoriel sur UDEV. Il est très complet, il explique en détail le fonctionnement de la bête. Je vous conseille de ne pas le lire en diagonale: il contient beaucoup d'informations, toutes nécessaires pour faire fonctionner correctement vos règles.
+
+En général une règle s'écrit en quelques lignes dans un fichiers ''.rules'' qui se trouve dans  /etc/udev/rules.d, mais nécessite beaucoup de rigueur pour qu'elle fonctionne. 
+
+**Donc prenez votre temps pour tout lire jusqu'au bout et comprendre ce que vous faites** !
+
+=====Les concepts=====
+
+====Terminologie: devfs, sysfs, nodes, etc.====
+
+Voici une introduction basique. 
+
+Sur les systèmes à base de Linux, le répertoire ''/dev'' sert à contenir les périphériques sous forme de fichier, les "nodes", qui se rapportent aux périphériques système. Chaque "node" se réfère à un périphérique, qui peut -ou pas- exister. Les applications utilisateur peuvent utiliser ces "nodes" pour interagir avec le périphérique. Par exemple, le serveur graphique X va "écouter" ''/dev/input/mice'' qui se réfère à la souris et faire bouger le pointeur à l'écran.
+
+Le répertoire original ''/dev'' contenait tous les fichiers correspondant à tous les périphériques possibles et imaginables que l'on pouvait trouver dans une configuration matérielle. De ce fait, il était très volumineux. **Devfs** a été créé pour simplifier cette utilisation, mais ce système a montré ses limites lorsqu'il y a des problèmes compliqués à résoudre. 
+
+//**Udev**// est le nouveau système pour gérer le répertoire ''/dev'', conçu pour repousser les limites mises en avant par les précédentes versions de ''/dev'', et fournir un lien robuste. Dans le but de créer et nommer les périphériques dans ''/dev'', les "nodes" qui correspondent aux périphériques système, //udev// fait le lien entre les informations données par //sysfs// et les règles données par l'utilisateur. Ce wiki a pour but d'expliquer comment écrire les règles //udev//.
+
+//**Sysfs**// a été officialisé avec les noyaux de la série 2.6. Il est géré par le noyau pour exporter les informations basiques sur les périphériques actuellement connectés au système. //Udev// utilise ces informations pour créer les 'nodes' correspondant aux périphériques de votre ordinateur. //Sysfs// est monté sur ''/sys'' et vous pouvez le parcourir: vous pouvez regarder ces fichiers avant de vous plonger dans //udev//. Dans ce wiki, j'utiliserai ''/sys'' et //sysfs//, qui signifient la même chose. 
+
+====Pourquoi ?====
+
+Les règles //udev// sont flexibles et très puissantes. Voici quelques exemples de ce que vous pouvez faire : 
+
+  * changer le nom assigné par défaut à un périphérique;
+
+  * donner un nom alternatif ou permanent à un périphérique en créant un lien symbolique;
+
+  * nommer un périphérique en fonction de la sortie d'un programme;
+
+  * changer les permissions et les propriétés d'un périphérique;
+
+  * lancer un script quand un périphérique est créé ou supprimé (en général pour un périphérique qui se branche à chaud, comme l'USB);
+
+  * renommer les interfaces réseaux 
+
+
+L'écriture de règles n'est pas une solution s'il n'existe pas du tout de périphérique "node" pour votre périphérique particulier. S'il n'y a pas de règle, //udev// va créer le périphérique "node" avec le nom donné par défaut par le noyau.
+
+Il y a plusieurs avantages à avoir un nom de périphérique constant. Supposons que vous ayez deux périphériques USB : une webcam et une clé USB. Ces périphériques sont normalement assignés aux périphériques "nodes" ''/dev/sda'' et ''/dev/sdb'', mais cela dépend de l'ordre dans lequel ils ont été connectés. C'est pourquoi il est plus pratique de nommer les périphériques à chaque fois de la même manière, par exemple ''/dev/camera'' et ''/dev/flashdisk''. 
+
+====Donner un nom persistant à un périphérique====
+
+//Udev// fournit un nom persistant pour certains types de périphériques. C'est un dispositif très pratique, qui signifie que vous n'avez pas besoin d'écrire de règle pour ceux-ci.
+
+Par exemple, //Udev// fournit des noms persistants pour les périphériques de stockage dans le répertoire ''/dev/disk''. Pour les voir, vous pouvez utiliser la commande suivante : 
+
+<code>ls -lR /dev/disk</code>
+
+Cela fonctionne pour tous les types de périphériques de stockage. __Par exemple__, //udev// a créé ''/dev/disk/by-id/scsi-SATA_ST3120827AS_4MS1NDXZ-part3'' qui est un lien symbolique vers le nom persistant de ma partition root. //Udev// crée ''/dev/disk/by-id/usb-Prolific_Technology_Inc._USB_Mass_Storage_Device-part1'' quand on branche une clé USB, qui est aussi un nom persistant. 
+
+
+=====Rédigez vos règles =====
+====Fichiers de règles et syntaxes====
+
+Pour décider comment nommer un périphérique et quelles actions a faire, //udev// utilise une série de fichiers de règles. Ces fichiers se trouvent dans le répertoire ''/etc/udev/rules.d'', et doivent tous avoir l'extension ''.rules''. 
+Les règles //udev// créées par défaut sont dans le fichier ''/lib/udev/rules.d/50-udev-default.rules''. Il pourrait être intéressant d'y jeter un œil – il contient quelques exemples -, et certaines règles contiennent un exemple de sortie de //devfs// que vous trouverez dans ''/dev'' par défaut. Cependant, il est conseillé de ne pas écrire de règle directement dedans.
+
+Les fichiers de ''/lib/udev/rules.d/'' sont triés par ordre **alphabétique**, et dans certaines circonstances, l'ordre dans lequel ils sont analysés est important. En général, vous voulez que vos propres règles soient prises en compte avant les règles créées par défaut, donc créez votre fichier comme ceci: ''/etc/udev/rules.d/10-local.rules'' (le nombre 10 influe sur l'ordre de prise en compte) et écrivez vos propres règles dans ce fichier. 
+
+Dans un fichier de règles, les lignes commençant par "''#''" sont traitées comme des commentaires. Toutes les autres lignes sont donc considérées comme des règles. Les règles s'écrivent sur une seule ligne (on ne les coupe pas par un passage à la ligne avec //ENTRÉE//).
+
+Un périphérique peut être contrôlé par plusieurs règles. Ceci peut être avantageux lorsque par exemple, nous écrivons deux règles pour un périphérique, qui donnent un nom différent pour le même périphérique. Les deux règles seront appliquées même si ces règles sont dans des fichiers séparés. Il est important de comprendre que //udev// ne s'interrompt pas quand il trouve une règle, il continue sa recherche et tente d'appliquer chaque règle trouvée.
+
+====Syntaxe d'une règle====
+
+Chaque règle est faite d'un ensemble de //clefs de correspondances// et de //clefs d'assignation//, séparées par des virgules. Les //clefs de correspondances// sont les conditions utilisées pour identifier le périphérique sur lequel la règle agit. **Quand toute la série de ces clefs de correspondance correspond bien au périphérique, alors la règle est appliquée et les actions des clefs d'assignation sont appliquées**. Chaque règle doit se composer d'au moins une clef de correspondance et d'une clef d'assignation. 
+
+Prenons par exemple :
+<code>KERNEL=="hdb", NAME="my_spare_disk"</code>
+
+Cette règle inclut une clef de correspondance (''KERNEL'') et une clef d'assignation (''NAME''). La sémantique de ces clefs et leurs propriétés seront détaillées par la suite. Il est important de noter que la clef de correspondance est liée à sa valeur par un double égal (''==''), alors que la clef d'assignation est liée à sa valeur par un simple égal (''=''). 
+
+====Règles basiques====
+
+Dans une règle, //Udev// peut utiliser plusieurs clefs pour identifier un périphérique de manière très précise. Les clefs les plus communes sont présentées ci-dessous, les autres seront traitées plus loin. Pour la liste complète, consultez l'aide de //udev// avec la commande ''man udev''. 
+
+   * ''KERNEL'' – le nom du périphérique donné par le noyau;
+   * ''SUBSYSTEM'' - le nom du sous système contenant le périphérique;
+   * ''DRIVER'' - le nom du pilote du périphérique.
+
+Après avoir utilisé une série de clefs pour définir précisément le périphérique, //udev// vous donne le contrôle, grâce aux clefs d'assignation. Pour la liste complète de ces clefs, consultez l'aide de //udev// avec la commande ''man udev''. Les clefs d'assignation les plus fréquentes se trouvent ci-dessous, les autres seront traités plus loin. 
+
+  * ''NAME'' – nom du périphérique "node";
+  * ''SYMLINK'' - **liste** des liens symboliques, ceux-ci étant les noms alternatifs pour le périphérique.
+
+Comme il a été dit au début, //udev// crée un seul vrai périphérique "node" pour un périphérique. Si vous souhaitez fournir plusieurs noms pour ce périphérique, utilisez le lien symbolique. Avec l'assignation ''SYMLINK'', vous créez une liste de liens symboliques, qui pointent vers le périphérique "node". Pour utiliser cette liste de liens, nous introduisons un nouvel opérateur ''+='', qui permet d'ajouter des éléments à la liste. Vous pouvez utiliser plusieurs noms sur la liste quelle que soit la règle en les séparant par un espace.
+
+<code>KERNEL=="hdb", NAME="my_spare_disk"</code>
+Soit la règle : «//pour le périphérique que le noyau a appelé ''hdb'', le renommer en ''my_spare_disk''//». Le périphérique "node" apparaîtra maintenant comme ''/dev/my_spare_disk''.
+
+<code>KERNEL=="hdb", DRIVER=="ide-disk", SYMLINK+="sparedisk"</code>
+Soit la règle : «//pour le périphérique que le noyau à appelé ''hdb''» **et**
+«//quand le pilote est ''ide-disk''», alors «//créer un lien symbolique (de plus) nommé ''sparedisk''//». Notez que nous n'avons pas spécifié de nom au périphérique "node", donc //udev// gardera celui par défaut. Afin de préserver la disposition standard dans ''/dev'', il est conseillé d'écrire vos propres règles sans ''NAME'', et de préférer ajouter des ''SYMLINK''s et/ou donner d'autres assignations.
+
+<code>KERNEL=="hdc", SYMLINK+="cdrom cdrom0"</code>
+Cette règle est probablement la plus commune que vous écrirez. Cela crée deux liens symboliques, ''/dev/cdrom'' et ''/dev/cdrom0'', qui pointeront tous deux sur ''/dev/hdc''. Une fois de plus, pas d'assignation ''NAME'' spécifiée, donc le nom par défaut donné par le kernel (''hdc'') sera utilisé.
+
+====Les attributs de sysfs====
+
+Les clefs introduites précédemment semblent avoir des possibilités limitées. Cependant, vous pouvez avoir besoin d'un contrôle plus précis : pour identifier un périphérique par le numéro du //vendor//, le nom exact du produit, le numéro de série, la capacité de stockage, le nombre de partitions, etc.
+Certains pilotes exportent ces informations dans le //sysfs//, et //udev// vous permet d'utiliser ces informations pour vos propres règles, à l'aide de la clé ''ATTR'' par syntaxe particulière. 
+
+Voici plusieurs exemples utilisant //sysfs//, plus de détails par la suite.
+<code>
+KERNEL=="sda", ATTR{model}=="ST3120827AS", SYMLINK+="my_hard_disk"
+
+SUBSYSTEM=="block", ATTR{size}=="234441648", SYMLINK+="my_disk"
+
+BUS=="usb", ATTR{manufacturer}=="OLYMPUS", ATTR{product}=="X250,D560Z,C350Z", SYMLINK+="camera"
+</code>
+
+
+====Substitution simple de caractères====
+
+Pour écrire des règles agissant sur plusieurs périphériques similaires, les opérateurs de substitution de //udev// (à la manière de ''printf'') sont très utiles. Vous pouvez inclure simplement ces opérateurs dans n'importe quel assignement dans vos règles, et //udev// les évaluera quand ils seront exécutés. 
+
+Les opérateurs les plus communs sont ''%k'' et ''%n''. ''%k'' est remplacé par le nom que le noyau avait assigné au périphérique, e.g. ''sda3'' pour le périphérique qui apparaîtra par défaut sur ''/dev/sda3''. ''%n'' est remplacé par le numéro que le noyau a assigné au périphérique (pour le périphérique de stockage, c'est le numéro de partition), e.g. ''3'' pour ''/dev/sda3''.
+
+//Udev// fournit d'autres opérateurs de substitution pour créer des fonctions plus avancées que vous pourrez consulter dans l'aide de //udev// (dans une console, tapez ''man udev''). Il y a une syntaxe alternative pour ces opérateurs - ''$kernel'' et ''$number'' pour les exemples précédents. Et si vous voulez utiliser un ''%'' littéral dans une règle, il vous suffira de mettre ''%%''; si vous voulez utiliser un ''$'' littéral dans une règle, mettez ''$$''.
+
+__Par exemple :__
+<code>
+KERNEL=="mice", NAME="input/%k"
+KERNEL=="loop0", NAME="loop/%n", SYMLINK+="%k"
+</code>
+La première règle assure que le périphérique "node" appelé ''mice'' (pour une souris) apparaîtra exclusivement dans le répertoire ''/dev/input'' (donc ''/dev/input/mice'', au lieu du défaut ''/dev/mice''). La deuxième règle assure que le périphérique "node" ''loop0'' soit créé comme ''/dev/loop/0'', mais crée aussi un lien symbolique ''/dev/loop0'' pour être compatible.
+
+On peut se demander quel est le véritable intérêt dans le cas de ces deux règles, car elles peuvent être utilisées sans aucun opérateur de substitution. Le véritable intérêt des substitutions va être expliqué dans la section suivante. 
+
+====Reconnaissance évoluée de noms====
+
+Lorsque vous précisez un nom dans une clef d'identification, il est possible d'utiliser une expression, similaire à celles proposées par le //shell//. Les caractères spéciaux sont:
+
+   * ''?'' - signifie n'importe quel caractère (ex: "''d?v''" correspondra pour ''dev'', ''duv'', ''d_v'' mais pas ''dv'');
+
+   * ''*'' - signifie plusieurs caractères (ex: "''d*''" correspondra pour ''dev'', mais aussi pour ''d'', alors que ''edev'' n'ira pas);
+
+   * ''[//liste//]'' - signifie un caractère, de la liste (ex: "''d[aei]v''" correspondra pour ''dev'' et ''dav'', mais pas ''dov'')
+
+Voici quelques exemples, notez l'utilisation des opérateurs de substitution:
+<code>
+KERNEL=="fd[0-9]*", NAME="floppy/%n", SYMLINK+="%k"
+KERNEL=="hiddev*", NAME="usb/%k"
+</code>
+La première règle est pour les lecteurs de disquette, elle assure que tous les périphériques "nodes" seront placés par leur numéro dans le répertoire ''/dev/floppy'' et ajoute un lien avec le nom par défaut dans ''/dev/''.
+
+La seconde règle place tous les périphériques dont le nom commence par ''hiddev'' dans le répertoire ''/dev/usb'' sans modifier le nom que le noyau leur a donné.
+
+=====Utilisation de sysfs=====
+
+
+====Organisation de sysfs====
+
+L'utilisation de //sysfs// a été brièvement évoquée précédemment. Dans le but d'écrire des règles basées sur ces informations, il vous faut connaître le nom des attributs et leurs valeurs. 
+//Sysfs// a une structure très simple. Il est logiquement divisé en répertoires, chacun comportant un certain nombre de fichiers (//attributs//) qui contiennent en général une seule valeur. Certains liens symboliques sont présents, parcourant plusieurs branches de "l'arbre" //sysfs//. 
+
+Certains répertoires sont situés sur les niveaux supérieurs du dispositif. Le niveau supérieur lie d'autres parties de //sysfs// vers le périphérique en question. Les chemins des périphériques du niveau supérieur sont classifiés dans le répertoire //sysfs//, contenant un fichier ''dev''. La commande suivante permet de les lister :
+
+<code>find /sys -name dev</code>
+
+Par exemple, sur un système, le répertoire ''/sys/block/sda'' peut être le chemin du périphérique du disque dur (fourni par la commande "udevadm info -q path -n /dev/sda"). Il est lié au contrôleur sur lequel celui-ci est connecté avec le lien symbolique ''/sys/block/sda/device/'', qui en même temps est lié au pilote du périphérique avec le lien symbolique ''/sys/block/sda/device/driver/''.
+
+Quand vous écrivez des règles basées sur les informations de //sysfs//, vous devez simplement remplacer les attributs par ceux trouvés dans ces fichiers. Par exemple, on peut lire la taille du disque dur avec :
+
+<code>cat /sys/block/sda/size
+234441648</code>
+
+On peut donc utiliser dans une règle //udev// ''ATTR{size}=="234441648"'' pour identifier ce disque. Comme //udev// fait une recherche dans toute la branche du périphérique, on peut aussi choisir d'afficher une autre partie de cette branche (e.g. ''attributes'' dans ''/sys/class/block/sda/device/''). Cependant il y a d'autres choses à prendre en considération quand on utilise d'autres parties de la branche, comme cela est décrit plus loin. 
+
+Bien que cela serve d'introduction utile pour la structure du //sysfs// et pour comprendre le fonctionnement de //udev//, le changement avec //sysfs// est souvent une perte de temps qui n'est donc pas nécessaire.
+
+====udevadm info====
+
+//udevadm info// est probablement l'outil le plus puissant pour aider dans la construction des règles. Tout ce que vous devez connaître est la dénomination //sysfs// du périphérique en question. Par exemple :
+
+<code>udevadm info -a -p /sys/block/sda
+
+------------------**INFORMATIONS DE TYPE 1**------------------
+  looking at device '/block/sda':
+    KERNEL=="sda"
+    SUBSYSTEM=="block"
+    ATTR{stat}=="  128535     2246  2788977   766188    73998   317300  3132216  5735004        0   516516  6503316"
+    ATTR{size}=="234441648"
+    ATTR{removable}=="0"
+    ATTR{range}=="16"
+    ATTR{dev}=="8:0"
+
+------------------**INFORMATIONS DE TYPE 2**------------------
+  looking at device '/devices/pci0000:00/0000:00:07.0/host0/target0:0:0/0:0:0:0':
+    ID=="0:0:0:0"
+    BUS=="scsi"
+    DRIVER=="sd"
+    ATTR{ioerr_cnt}=="0x0"
+    ATTR{iodone_cnt}=="0x31737"
+    ATTR{iorequest_cnt}=="0x31737"
+    ATTR{iocounterbits}=="32"
+    ATTR{timeout}=="30"
+    ATTR{state}=="running"
+    ATTR{rev}=="3.42"
+    ATTR{model}=="ST3120827AS     "
+    ATTR{vendor}=="ATA     "
+    ATTR{scsi_level}=="6"
+    ATTR{type}=="0"
+    ATTR{queue_type}=="none"
+    ATTR{queue_depth}=="1"
+    ATTR{device_blocked}=="0"
+</code>
+
+Comme vous pouvez le voir, ''udevadm info'' renvoie une liste d'informations que vous pouvez utiliser dans vos règles //udev//. Avec l'exemple précédant on peut créer deux règles pour ce périphérique :
+
+<code>
+SUBSYSTEM=="block", ATTR{size}=="234441648", NAME="my_hard_disk"
+
+BUS=="scsi", ATTR{model}=="ST3120827AS", NAME="my_hard_disk"
+</code>
+
+Dans ces exemples, vous avez pu voir la **séparation des informations** (''type 1'' et ''type 2''), car vous **ne** pouvez **pas** mélanger ces informations dans une règle, sinon elle ne fonctionnera pas. En effet, ils sont considérés comme des périphériques différents (''looking at device '/block/sda''' et ''looking at device '/devices/pci0000:00/0000:00:07.0/host0/target0:0:0/0:0:0:0''' sont **deux** périphériques **distincts**).
+
+Par exemple, cette règle est **invalide** :
+
+<code>
+# **règle fausse**
+SUBSYSTEM=="block", ATTR{size}=="234441648", ATTR{model}=="ST3120827AS", NAME="my_hard_disk"
+</code>
+
+Normalement vous aurez beaucoup d'attributs, et vous devrez en choisir quelques uns (de la même section) pour construire votre règle. En général, vous voudrez choisir les attributs qui identifient votre périphérique de façon unique et persistante. Dans ces exemples on choisit la taille et le numéro de série de son disque. On n'a pas utilisé les nombres sans signification comme ''ATTR{iodone_cnt}=="0x31737"''.
+
+Notez aussi que les attributs donnés par ''udevadm info'' sont séparés par des espaces (voyez ''ST3120827AS'' dans l'exemple précédent). Dans vos règles, vous pouvez spécifier les espaces supplémentaires, ou les couper comme précédemment.
+
+Là où ''udevadm info'' se complique, c'est que vous devez connaître les branches supérieures (''/sys/block/sda'' dans l'exemple précédant), ce qui n'est pas toujours évident. Cependant, comme en général vous écrivez des règles pour les périphériques "nodes" existants, vous pouvez utiliser //udev// pour trouver la branche supérieure :
+
+<code>udevadm info -a -p $(udevadm info -q path -n /dev/sda)</code>
+
+Apparement, il y a beaucoup plus simple :
+<code>udevadm info -a -n /dev/sda</code>
+voire même :
+<code>udevadm info -a -n sda</code>
+
+====Trouver un périphérique tout juste branché====
+Pour un périphérique USB, tapez la commande suivante :
+  find /dev/bus/usb/ ! -type d -mmin -5
+ou bien la commande :
+  find /sys/devices/ -type d -mmin -5 | grep net/usb.$
+puis faire un **''udevadm info''** sur le résultat :
+<code>$ udevadm info /sys/devices/pci0000:00/0000:00:12.0/usb1/1-1/1-1.3/1-1.3:1.0/net/usb0 
+P: /devices/pci0000:00/0000:00:12.0/usb1/1-1/1-1.3/1-1.3:1.0/net/usb0
+E: DEVPATH=/devices/pci0000:00/0000:00:12.0/usb1/1-1/1-1.3/1-1.3:1.0/net/usb0
+E: ID_BUS=usb
+E: ID_MM_CANDIDATE=1
+E: ID_MODEL=Sailfish
+E: ID_MODEL_ENC=Sailfish
+E: ID_MODEL_ID=0a02
+E: ID_NET_NAME_MAC=enx827fe191698f
+E: ID_NET_NAME_PATH=enp0s18u1u3
+E: ID_REVISION=0228
+E: ID_SERIAL=Jolla_Sailfish_0123456789
+E: ID_SERIAL_SHORT=0123456789
+E: ID_TYPE=generic
+E: ID_USB_DRIVER=rndis_host
+E: ID_USB_INTERFACES=:e00103:0a0000:
+E: ID_USB_INTERFACE_NUM=00
+E: ID_VENDOR=Jolla
+E: ID_VENDOR_ENC=Jolla
+E: ID_VENDOR_FROM_DATABASE=Advanced Micro Devices, Inc.
+E: ID_VENDOR_ID=2931
+E: IFINDEX=29
+E: INTERFACE=usb0
+E: SUBSYSTEM=net
+E: USEC_INITIALIZED=275352985
+</code>
+Autre méthode plus rapide mais plus compliquée à comprendre, tapez la commande suivante puis brancher et débrancher le périphérique :
+<code>
+$ udevadm monitor --prop --udev | egrep "DEVNAME=|DEVPATH=|ID_MODEL=|ID_SERIAL|ID_VENDOR=|SUBSYSTEM="
+DEVNAME=/dev/bus/usb/001/004
+DEVPATH=/devices/pci0000:00/0000:00:12.0/usb1/1-1/1-1.3
+ID_MODEL=Sailfish
+ID_SERIAL=Jolla_Sailfish_0123456789
+ID_SERIAL_SHORT=0123456789
+ID_VENDOR=Jolla
+SUBSYSTEM=usb
+DEVPATH=/devices/pci0000:00/0000:00:12.0/usb1/1-1/1-1.3/1-1.3:1.0
+SUBSYSTEM=usb
+DEVPATH=/devices/pci0000:00/0000:00:12.0/usb1/1-1/1-1.3/1-1.3:1.1
+SUBSYSTEM=usb
+DEVPATH=/devices/pci0000:00/0000:00:12.0/usb1/1-1/1-1.3/1-1.3:1.0/net/usb0
+ID_MODEL=Sailfish
+ID_SERIAL=Jolla_Sailfish_0123456789
+ID_SERIAL_SHORT=0123456789
+ID_VENDOR=Jolla
+SUBSYSTEM=net
+DEVPATH=/devices/pci0000:00/0000:00:12.0/usb1/1-1/1-1.3/1-1.3:1.0/net/usb0/queues/tx-0
+SUBSYSTEM=queues
+DEVPATH=/devices/pci0000:00/0000:00:12.0/usb1/1-1/1-1.3/1-1.3:1.0/net/usb0/queues/rx-0
+SUBSYSTEM=queues
+DEVPATH=/devices/pci0000:00/0000:00:12.0/usb1/1-1/1-1.3/1-1.3:1.0/net/usb0/queues/rx-0
+SUBSYSTEM=queues
+DEVPATH=/devices/pci0000:00/0000:00:12.0/usb1/1-1/1-1.3/1-1.3:1.0/net/usb0/queues/tx-0
+SUBSYSTEM=queues
+DEVPATH=/devices/pci0000:00/0000:00:12.0/usb1/1-1/1-1.3/1-1.3:1.1
+SUBSYSTEM=usb
+DEVPATH=/devices/pci0000:00/0000:00:12.0/usb1/1-1/1-1.3/1-1.3:1.0/net/usb0
+ID_MODEL=Sailfish
+</code>
+====Méthodes Alternatives====
+
+Bien que ''udevadm info'' soit la méthode la plus sûre pour lister les attributs exacts pour construire vos règles, certains utilisateurs préféreront utiliser d'autres outils. Les outils comme ''usbview'' montrent des informations similaires, pouvant être utilisées pour créer des règles.
+
+
+=====Le coin du geek=====
+
+====Créer des permissions et des propriétés====
+
+//Udev// vous permet de gérer dans vos règles les propriétés et les permissions de chaque périphérique.
+
+La clef d'assignation ''GROUP'' vous permet de définir à quel groupe appartient un périphérique "node". Dans cet exemple, les périphériques //framebuffer// appartiennent au groupe ''Video'' :
+
+<code>KERNEL=="fb[0-9]*", NAME="fb/%n", SYMLINK+="%k", GROUP="video"</code>
+
+La clef ''OWNER'', peut-être moins intéressante, vous permet de définir le propriétaire du périphérique "node". Dans cet exemple, l'utilisateur //John// sera mis comme propriétaire pour les lecteurs de disquettes :
+
+<code>KERNEL=="fd[0-9]*", OWNER="john"</code>
+
+Par défaut, //udev// crée les permissions pour "node" avec les droits ''0660'' (lire/écrire pour tous les utilisateurs/groupes, vous pouvez trouver quelques informations sur ces chiffres dans la documentation de //chmod//, avec la commande ''man chmod''). Si c'est nécessaire, vous pouvez les modifier pour certains périphériques en utilisant les règles avec la clef d'assignation ''MODE''. Cet exemple définit que le périphérique peut être utilisé par tout le monde :
+
+<code>KERNEL=="inotify", NAME="misc/%k", SYMLINK+="%k", MODE="0666"</code>
+
+
+
+====Utiliser des programmes pour nommer les périphériques====
+
+Dans certaines circonstances, vous pouvez avoir besoin de plus de flexibilité que les règles //udev// en donnent. Dans ce cas vous pouvez demander à //udev// de lancer un programme, afin d'utiliser ce qui est sorti par ce programme pour créer le nom de périphérique.
+
+Pour utiliser cette fonction, vous devez simplement spécifier la ligne de commande entière du programme à utiliser (ainsi que ses paramètres) dans la clef d'assignation ''PROGRAM'', vous pouvez trouver des variantes d'utilisation du ''%c'' dans les sections //NAME/SYMLINK//. 
+
+Les exemples suivants se référent a un programme fictif appelé ''/bin/device_namer''. Ce ''device_namer'' prendrait un argument en ligne de commande, qui est le nom donné par le noyau au périphérique. À partir de ce nom, ''device_namer'' donnerait les informations sur sa sortie (''stdout''), séparées en plusieurs parties. Chaque partie est un seul mot et les parties sont séparées par un seul espace. 
+
+Dans ce premier exemple, nous considérons que les informations en sortie de ''device_namer'' sont un nombre de parties, chacune forme un lien symbolique pour le périphérique en question.
+
+<code>KERNEL=="hda", PROGRAM="/bin/device_namer %k", SYMLINK+="%c"</code>
+
+L'exemple suivant considère que les informations en sortie de ''device_namer'' contiennent deux parties, la première est le nom du périphérique, et la seconde est le nom pour un lien symbolique additionnel. Nous introduisons maintenant la substitution ''%c{//N//}'', en référence au nombre de parties des informations en sortie :
+
+<code>KERNEL=="hda", PROGRAM="/bin/device_namer %k", NAME="%c{1}", SYMLINK+="%c{2}"</code>
+
+Le prochain exemple considère que ''device_namer'' retourne le nom du périphérique, suivi par un nombre variable de liens symboliques. Pour accéder à ces derniers, nous introduisons la substitution ''%c{//N//+}'', qui sera remplacé par les parties //N//, //N//+1, //N//+2... jusqu'à la dernière.
+
+<code>KERNEL=="hda", PROGRAM="/bin/device_namer %k", NAME="%c{1}", SYMLINK+="%c{2+}"</code>
+
+Les réponses créées à partir de la sortie du programme peuvent être utilisées dans n'importe quelle clef d'assignation et pas seulement avec ''NAME'' et ''SYMLINK''. L'exemple suivant utilise un programme fictif qui déterminerait le groupe qui doit avoir les droits de ce périphérique :
+
+<code>KERNEL=="hda", PROGRAM="/bin/who_owns_device %k", GROUP="%c"</code>
+
+====Exécuter des programmes sur des événements====
+
+Une autre raison d'écrire des règles //udev// est de lancer un programme quand un périphérique est connecté ou déconnecté. Par exemple, vous voulez lancer un script qui va télécharger automatiquement les photos de votre appareil photo lorsque vous le connectez.
+
+**Ne confondez pas** ceci avec la fonction ''PROGRAM'' décrite précédemment. ''PROGRAM'' sert à lancer des programmes qui génèrent des noms de périphériques et rien d'autre. Quand ces programmes sont exécutés, le périphérique "node" n'a pas encore été créé, donc faire une action sur ce périphérique n'est pas possible.
+
+La fonction introduite ici vous permet de lancer un programme après la mise en place du périphérique. Ce programme peut interagir avec le périphérique, cependant il doit s'exécuter rapidement car //udev// est mis en pause quand ces programmes sont lancés. Il ne faut donc pas négliger de s'assurer que le programme s'arrête de lui même.
+
+Voici un exemple de règle qui utilise l'assignation ''RUN'' :
+
+<code>KERNEL=="sdb", RUN+="/usr/bin/my_program"</code>
+
+Quand ''/usr/bin/my_program'' est exécuté, plusieurs informations de //udev// sont accessibles par les variables d'environnement. Ceci inclut les clefs comme ''SUBSYSTEM''. Vous pouvez aussi utiliser la variable d'environnement ''ACTION'' pour détecter si le périphérique est connecté (valeur "''add''") ou déconnecté (valeur "''remove''"). 
+
+====Interactions avec l'environnement====
+
+//Udev// fournit une clef ''ENV'' pour les variables d'environnement qui peut être utilisée à la fois pour //trouver// et //assigner// des variables.
+
+Dans le cas d'une assignation, vous pouvez placer des variables d'environnement que vous pourrez retrouver par la suite. Vous pourrez aussi y accéder depuis les programmes externes lancés à l'aide des techniques décrites précédemment. Voici un exemple de syntaxe de règle pour créer une variable d'environnement :
+
+<code>KERNEL=="fd0", SYMLINK+="floppy", ENV{some_var}="value"</code>
+
+Dans le cas de la //recherche//, vous pouvez vous assurer que les règles se lancent seulement selon une variable d'environnement. Notez que l'environnement que //udev// voit ne sera pas le même que celui que l'utilisateur voit en console. Voici un exemple de règle :
+
+<code>KERNEL=="fd0", ENV{an_env_var}=="yes", SYMLINK+="floppy"</code>
+
+Cette règle ne crée le lien ''/dev/floppy'' que si ''$an_env_var'' est égal à "''yes''" dans l'environnement //udev//.
+
+====Options additionnelles====
+
+La clef ''OPTIONS'' est une liste d'options supplémentaire pour le traitement de la règle :
+
+   * ''all_partitions'': crée autant de partitions que possible pour un disque, plutôt que seulement celles créées au démarrage;
+
+   * ''ignore_device'': ignore complétement l'événement;
+
+   * ''last_rule'': empêche l'éxécution des règles suivantes.
+
+Par exemple, cette règle place un disque dur dans le groupe ''disk'' et s'assure qu'aucune règle qui suit n'aura d'effet dessus :
+
+<code>KERNEL=="sda", GROUP="disk", OPTIONS+="last_rule"</code>
+
+=====Exemples pratiques=====
+
+====Imprimante USB====
+
+Lorsque on allume son imprimante, elle se voit assignée au périphérique ''/dev/lp0''. Non satisfait de ce nom, on décide de créer une règle //udev// pour le changer. Pour commencer, on cherche les informations sur celle-ci :
+<code>udevadm info -a -p $(udevadm info -q path -n /dev/lp0)
+
+looking at the device chain at '/sys/devices/pci0000:00/0000:00:02.1/usb3/3-3':
+BUS=="usb"
+ATTR{manufacturer}=="EPSON"
+ATTR{product}=="USB Printer"
+ATTR{serial}=="L72010011070626380"
+</code>
+
+On peut maintenant faire une règle comme celle-ci : 
+
+<code>BUS=="usb", ATTR{serial}=="L72010011070626380", SYMLINK+="epson_680"</code>
+
+(si //udev// trouve, sur le bus //USB//, un périphérique dont le numéro de série est ''L72...'', alors il ajoute un lien symbolique sous le nom ''epson_680'')
+
+====Appareil photo USB====
+
+Comme la plupart des appareils photo, mon appareil photo est identifié comme un disque dur externe branché en USB, utilisant le transport SCSI. Pour accéder à ses photos, on monte le périphérique et on copie les images sur son disque dur. 
+
+Tous les appareils photo ne fonctionnent pas forcément avec cette méthode : certains utilisent un protocole non-storage comme les appareils photo supportés par [[http://www.gphoto.org/|gphoto2]].
+Dans le cas de [[http://www.gphoto.org/|gphoto]], vous n'avez pas à faire de règle pour votre appareil, car le contrôle est fait par un programme en espace utilisateur, à l'opposé d'un pilote spécifique dans le noyau.
+
+Pour identifier le périphérique:
+<code>udevadm info -a -p $(udevadm info -q path -n /dev/sdb1)
+  looking at device '/devices/pci0000:00/0000:00:02.0/usb2/2-1/2-1:1.0/host6/target6:0:0/6:0:0:0':
+    ID=="6:0:0:0"
+    BUS=="scsi"
+    DRIVER=="sd"
+    ATTR{rev}=="1.00"
+    ATTR{model}=="X250,D560Z,C350Z"
+    ATTR{vendor}=="OLYMPUS "
+    ATTR{scsi_level}=="3"
+    ATTR{type}=="0"
+</code>
+
+Un problème avec les appareils photo USB est qu'ils sont identifiés comme des disques contenant une seule partition, dans ce cas le disque ''/dev/sdb'' avec la partition ''/dev/sdb1''. Le périphérique ''sdb'' est inutile pour moi, mais ''sdb1'' est intéressant: c'est celui que je veux monter. Il y a un problème car //sysfs// est attaché aux deux de manière identique, les attributs utiles produits par //udevadm info// pour ''/dev/sdb1'' sont identiques que ceux de ''/dev/sdb''.
+
+Notre règle va donc devoir différencier les deux. Pour résoudre ceci, vous devez chercher ce qui diffère entre ''sdb'' et ''sdb1''. C'est étonnement simple : seul le nom diffère, donc nous pouvons utiliser une règle simple sur le champ ''NAME''.
+
+Ma règle est alors : 
+
+<code>KERNEL=="sd?1", BUS=="scsi", ATTR{model}=="X250,D560Z,C350Z", SYMLINK+="camera"</code>
+
+(pour les périphériques auxquels  le noyau a attribué un nom du type "''sd?1''"", qui sont sur le bus SCSI, et dont le modèle est "''X250,...''", ajouter un lien nommé ''camera'')
+
+
+====Disque Dur USB====
+
+Pour un Disque Dur USB, c'est comparable à l'exemple de l'appareil photo USB que l'on vient de décrire, cependant le modèle à utiliser est différent. Pour l'appareil photo, le périphérique ''sdb'' ne nous intéressait pas, mais si vous avez un disque dur USB de 100Go, c'est très compréhensible de vouloir le partitionner, et vous aurez besoin de ''sdb''. Dans ce cas nous pouvons tirer avantage de la substitution par //udev// :
+
+<code>BUS=="usb", KERNEL=="sd*", ATTR{product}=="USB 2.0 Storage Device", NAME="%k", SYMLINK+="usbhd%n"</code>
+
+Cette règle crée des liens symboliques comme ceci : 
+
+   * ''/dev/usbhd'' – Le périphérique pour ''fdisk'';
+   * ''/dev/usbhd1'' – La première partition (montable);
+   * ''/dev/usbhd2'' – La seconde partition (montable).
+
+====Lecteurs de carte USB====
+
+Les Lecteurs de carte USB (//CompactFlash//, //SmartMedia//, etc.) sont encore un autre type de périphériques de stockage USB, avec un usage différent. 
+
+Ces périphériques n'informent pas l'ordinateur hôte lors d'un changement de média. Ainsi, si vous connectez le périphérique sans carte, puis que vous y insérez une carte, l'ordinateur ne va pas le détecter et vous n'aurez pas accès à la partition de votre carte.
+
+La seule solution est de tirer avantage de l'option ''all_partitions'', qui va créer 16 partitions pour chaque périphérique, comme illustré dans cet exemple :
+
+<code>BUS=="usb", ATTR{product}=="USB 2.0 CompactFlash Reader", SYMLINK+="cfrdr%n", OPTIONS+="all_partitions"</code>
+
+Vous aurez donc les périphériques : ''cfrdr'', ''cfrdr1'', ''cfrdr2'', ''cfrdr3'', ..., ''cfrdr15''. 
+====Palm USB====
+
+Ces périphériques se déclarent comme des ports série USB, donc par défaut vous n'aurez que le périphérique ''ttyUSB1''. Les utilitaires pour //palm// cherchent en général ''/dev/pilot'', nombre d'utilisateurs apprécieront q'une règle gère cela. [[http://www.clasohm.com/blog/one-entry?entry%5fid=12096|Le post du blog de Carsten Clasohm]] propose une solution, voici la règle qu'il suggère :
+
+<code>BUS=="usb", ATTR{product}=="Palm Handheld*", KERNEL=="ttyUSB[1359]", SYMLINK+="pilot"</code>
+
+Faites attention au ''ATTR{product}'' qui est différent selon le matériel, pensez à le vérifier avec //udevadm info//.
+
+====Lecteurs CD/DVD====
+
+Par exemple on a deux lecteurs optiques : un lecteur de DVD (''hdc''), et un graveur de DVD (''hdd''). Inutile de les modifier, à moins de les bouger physiquement. Cependant certains utilisateur souhaiteront qu'ils soient détectés en tant que ''/dev/dvd'' pour plus de facilité. 
+
+Comme nous savons les noms donnés par le noyau pour ces périphériques, l'écriture de règles est très simple :
+<code>
+BUS=="ide", KERNEL=="hdc", SYMLINK+="dvd", GROUP="cdrom"
+BUS=="ide", KERNEL=="hdd", SYMLINK+="dvdrw", GROUP="cdrom"
+</code>
+====Interfaces Réseau====
+
+Etant référencées par leur noms, les interfaces réseau n'ont par défaut pas de périphérique "node" attribué. L'écriture de règles reste cependant identique.
+
+Il est logique d'utiliser simplement l'adresse MAC de votre interface dans la règle, puisque celle-ci est unique. Cependant, soyez certain d'utiliser l'adresse MAC exacte, telle que montrée par //udevadm info//, sinon votre règle ne fonctionnera pas. 
+
+<code> udevadm info -a -p /sys/class/net/eth0
+  looking at class device '/sys/class/net/eth0':
+    ATTR{address}=="00:52:8b:d5:04:48"
+</code>
+
+Voilà la règle correspondante :
+ 
+<code>KERNEL=="eth*", ATTR{address}=="00:52:8b:d5:04:48", NAME="lan"</code>
+
+Une fois le fichier de //udev// modifié, vous devrez recharger le pilote pour faire appliquer cette règle. Vous pouvez soit décharger et recharger le module du noyau correspondant, soit redémarrer votre ordinateur. Vous devrez aussi reconfigurer votre système pour utiliser «''lan''» à la place de «''eth0''». 
+
+//Note//: Il peut y avoir quelques problèmes pour le faire fonctionner (l'interface n'est pas renommée) tant que l'on n'a pas **complètement** retiré toutes les références à «''eth0''». Après ça, vous pourrez utiliser «''lan''» à la place de «''eth0''» dans n'importe quel utilitaire, comme ''ifconfig''.
+
+===Fixer son adresse MAC===
+
+Certaines cartes réseaux changent d’adresse MAC à chaque redémarrage ; on peut lire dans les messages kernel :
+
+<code>
+dmesg
+
+forcedeth 0000:00:07.0: Invalid MAC address detected: ff:ff:ff:ff:ff:ff - Please complain to your hardware vendor.
+forcedeth 0000:00:07.0: Using random MAC address: 26:f1:b2:e5:d5:24
+</code>
+
+Si l'on souhaite avoir une adresse MAC fixe, on peut la configurer avec //udev// de la façon suivante :
+
+<code>
+KERNEL=="eth*", DRIVERS=="forcedeth", PROGRAM="/sbin/ip link set dev %k address xx:xx:xx:xx:xx:xx"
+</code>
+
+Dans cette illustration  le driver est "forcedeth" : il vous faudra peut-être le remplacer par le vôtre. Il faut également renseigner une adresse MAC valide.
+====Manettes de jeu====
+
+Les manettes de jeu apparaissent comme ''/dev/input/jsX'' voire ''/dev/input/eventX''. Certaines applications (//Wine// par exemple) veulent accéder aux manettes par ''/dev/input/eventX'', mais cela n'est pas forcément possible du fait des droits de ces fichiers :
+
+On peut ajouter la règle :
+<code>KERNEL=="event[0-9]*", ENV{ID_CLASS}=="joystick", MODE="0666"</code>
+
+ou
+<code>KERNEL=="event[0-9]*", ENV{ID_CLASS}=="joystick", GROUP="SOMEGROUP", MODE="0660"</code>
+
+qui donnent les droits de lecture/écriture à tout le monde dans le premier cas, ou à toutes les personnes du groupe ''SOMEGROUP'' dans le deuxième cas.
+=====Essais et deboggage=====
+
+====Activez vos règles====
+
+Si vous êtes sur un noyau avec le support //inotify//, //udev// surveillera votre répertoire de règles et prendra en compte automatiquement les modifications faites dans vos règles.
+
+A l'encontre de ceci, **//udev// ne remontera pas automatiquement les périphériques, mais tentera d'appliquer les règles**. Par exemple, si vous écrivez une règle pour ajouter un lien symbolique pour votre appareil photo alors que celui-ci est déjà branché au PC, ne vous attendez pas à ce que le lien symbolique soit créé. 
+Pour créer le lien symbolique, vous pouvez simplement débrancher et rebrancher votre appareil photo. Si le périphérique ne peut pas être débranché, vous pouvez lancer dans une console la commande ''udevadm trigger''.
+
+Si votre noyau n'a pas le support //inotify//, les nouvelles règles ne seront pas détectées automatiquement. Dans ce cas, vous devrez demander la relecture de celles-ci en lançant dans une console la commande ''sudo udevadm control --reload'' après avoir créé ou modifié une règle pour que cela prenne effet.
+====udevtest====
+
+Si vous connaissez la branche qui gère votre périphérique dans //sysfs//, vous pouvez utiliser //udevtest// pour voir les actions que //udev// va faire. Cela pourra vous aider pour corriger vos règles. Par exemple, vous voulez vérifier une règle qui agit sur ''/sys/class/sound/dsp'' :
+
+<code> udevtest /class/sound/dsp
+main: looking at device '/class/sound/dsp' from subsystem 'sound'
+udev_rules_get_name: add symlink 'dsp'
+udev_rules_get_name: rule applied, 'dsp' becomes 'sound/dsp'
+udev_device_event: device '/class/sound/dsp' already known, remove possible symlinks
+udev_node_add: creating device node '/dev/sound/dsp', major = '14', minor = '3', mode = '0660', uid = '0', gid = '18'
+udev_node_add: creating symlink '/dev/dsp' to 'sound/dsp'
+</code>
+
+Notez que le préfixe ''/sys'' a été supprimé des arguments de la ligne de commande de ''udevtest'', la raison étant que //udev// opère sur le chemin du périphérique. Notez aussi que //udevtest// est juste un outil de test/debug, cela ne créera pas de périphérique, contrairement à ce que //udevtest// vous dit (c'est une simulation) ! 
+
+Dans le cas où //udevtest// ne fonctionnerait pas, il est aussi possible d'utiliser //udevadm// comme dans l'exemple suivant (où le périphérique est un disque dur externe qui se nomme sdb) :
+<code>
+udevadm test /sys/block/sdb
+</code>
+=====Auteur et contact=====
+
+[[http://www.reactivated.net/writing_udev_rules.html|Ce document a été rédigé originellement en anglais]] par Daniel Drake <dan@reactivated.net> et traduit par [[utilisateurs:Acp]]. Les retours en anglais sont appréciés par Daniel Drake :) et modifié par la suite.
+
+Pour le support, envoyez un mail (en anglais) à la mailing liste de linux hotplug : <linux-hotplug-devel@lists.sourceforge.net>. 
+
+Copyright (C) 2003-2006 Daniel Drake.
+[[http://www.gnu.org/licenses/gpl.html|Ce document est sous licence GNU General Public License, Version 2]]
+
+----
+
+//Contributeurs : [[utilisateurs:Acp]], [[utilisateurs:Lobotomy]], [[utilisateurs:Ignace72]], [[utilisateurs:daeavelwyn]]//

@@ -1,0 +1,157 @@
+
+{{tag>Xenial programmation}}
+
+----
+====== OpenCV ======
+
+OpenCV(( Pour Open Computer Vision)) est une bibliothèque libre d'analyse d'images et de vision par ordinateur sous licence BSD en langage C/C++. Elle a été développée à l'origine par Intel.
+
+===== Pré-requis =====
+
+  * Avoir les [[:sudo|droits d'administration]]
+
+
+===== Installation ===== 
+
+Il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] [[apt>libopencv-dev]].
+
+===== Compatibilité Webcams =====
+
+Il existe un certain nombre de webcam non compatibles avec Opencv. Voici une technique permettant de rendre compatible sous Intrepid (Non testé avec les versions supérieures) votre webcam à partir du moment où elle fonctionne sous Ubuntu (avec un programme tel que [[:cheese|Cheese]]).
+Commencez par télécharger une version spéciale d'Opencv (malheureusement il s'agit de la version 1.0, la version 1.1pre n'est pas disponible) [[http://github.com/nzjrs/opencv/tree/master|sur ce site]]
+
+Décompressez l'archive d'OpenCV que vous avez téléchargé dans un répertoire de travail.
+Puis faîtes :
+<code>./configure
+make
+make install</code>
+
+Vous pouvez compiler votre programme comme d'habitude.
+Pour exécuter le programme, faites:
+<code>
+ LD_PRELOAD=/usr/lib/libv4l/v4l1compat.so ./example
+</code>
+
+==== Webcams testées et compatibles ====
+
+  * Logitech QuickCam pro 4000
+  * Logitech QuickCam pro 9000
+  * Hercules Webcam Dualpix HD (600*480 : ne fonctionne pas en mode HD dans openCV)
+  * Logitech C930e
+.
+==== Webcams testées et non compatibles ====
+
+  * Aucune (pour le moment)
+
+
+===== Autres caméras =====
+==== Caméras à la norme PAL ====
+
+Les caméras de ce type sont analogiques. Le signal de sortie est à la norme CCIR et elles s'interfaçent avec une carte PCI -- ou autre -- que l'on peut trouver sur internet pour quelques euros (vous aurez plus cher de frais de transport que de carte...). Malheureusement, elle ne fonctionnent pas directement sous OpenCV. Vous pouvez vous en rendre compte en créant un programme minimum d'acquisition. Si cette dernière est très (très) lente et que l'image créée est déformée, il y a de fortes chances que votre caméra ne soit pas à la norme par défaut (NTSC, je crois). Vous pouvez aussi vérifier la norme utilisée avec [[:tvtime|tvtime]]. Ce logiciel permet de configurer facilement la norme du codage (NTSC, PAL, SECAM, etc.).
+
+Pour avoir la norme PAL, il faut recompiler OpenCV. Voici comment procéder :
+  * Suivez la précédure décrite au paragraphe [[Opencv#Par compilation|Par compilation]]
+  * Modifiez les lignes 231/232 du fichier '''cvcap_v4l.cpp'' qui se trouve dans ''OpenCV-2.0.0/src/highgui'' :
+<code>
+#define DEFAULT_V4L_WIDTH  704
+#define DEFAULT_V4L_HEIGHT 576
+</code>
+  * Décommentez la ligne 1041 et modifiez la ainsi :
+<code>
+           selectedChannel.norm = VIDEO_MODE_PAL;
+</code>
+
+Voilà, recompilez ensuite OpenCV. Positionnez vous dans le répertoire opencv.build puis :
+<code>
+make -j 2
+sudo make install
+sudo ldconfig
+</code>
+
+À noter :
+   - Je n'ai pas réussi à compiler OpenCV 2.1 sous Ubuntu Lucid.
+   - Je ne crois pas que l'on puisse utiliser 2 caméras de normes différentes (à confirmer)
+   - Je n'ai pas de caméra SECAM sous la main, mais je pense que la procédure est la même...
+
+===== Exemple d'utilisation =====
+Ecrivez le code ''ex_opencv.cpp'' suivant :
+<code>
+#include <stdio.h> // Pour le printf()...
+
+/* Les deux bibliothèques nécessaires d'opencv :
+	- cv.h contient les structures et fonctions de manipulation d'images
+	- highgui.h contient les fonctions d'affichage des images
+*/
+#include <cv.h>
+#include <highgui.h>
+
+int main(int argc, char *argv[])
+{
+  /* On initialise la 'capture' depuis la WebCam, une adresse,
+     représentative de la ressource est retournée
+   */
+  CvCapture* capture = cvCaptureFromCAM(-1);
+  if(capture) // Si la caméra est reconnu
+  {
+	if(!cvGrabFrame(capture)) // On prend une image et une seule !
+	{
+  		printf("Could not grab a frame\n\7"); // Si la prise d'image n'est pas possible, on sort !
+  		exit(0);
+	}
+  }
+  else // Si la caméra n'est pas reconnu ou si elle n'existe pas, on sort...
+  {
+  	printf("Could not open video device\n");
+  	exit(0);
+  }
+	IplImage *img=cvRetrieveFrame(capture); // On rapatrie l'image que l'on 'stocke' dans img avec ses propriétés.
+
+  printf("L'image fait %dx%d pixels et possède %d canaux (couleurs)\n",img->width,img->height,img->nChannels); 
+
+  // On crée une fenètre dans laquelle on affichera l'image
+  cvNamedWindow("Fenetre_test", CV_WINDOW_AUTOSIZE); 
+
+  // C'est ce que l'on fait ici :
+  cvShowImage("Fenetre_test", img );
+
+  // Appuyez sur une touche pour sortir
+  cvWaitKey(0);
+
+  // On libère ensuite, la mémoire de l'image et de la ressource
+  cvReleaseImage(&img );
+  cvReleaseCapture(&capture);
+  return 0;
+}
+</code>
+
+Créez aussi le fichier ''Makefile'' suivant :
+
+<code>
+all:
+	g++ -O2 -Wall -o exemple ex_opencv.cpp `pkg-config --cflags --libs opencv`
+clean:
+	rm -rf exemple
+</code>
+
+Pour compiler :
+<code>
+make
+</code>
+
+Pour exécuter :
+<code>
+./exemple
+</code>
+
+Voilà, c'est tout...
+
+===== Liens utiles =====
+
+  * **(en)** [[http://sourceforge.net/projects/opencvlibrary/|OpenCV @ Sourceforge]]
+  * **(en)** [[http://opencv.willowgarage.com/wiki/|OpenCV @ WillowGarage (wiki)]] 
+
+
+
+----
+
+//Contributeurs : [[utilisateurs:Julien Bossut]] [[utilisateurs:Myrkvid]], [[utilisateurs:damien200]], [[utilisateurs:volfoni54]]//

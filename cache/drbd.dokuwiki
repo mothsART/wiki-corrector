@@ -1,0 +1,74 @@
+
+{{tag>trusty système sécurité serveur haute_disponibilité}}
+
+----
+
+====== DRBD : Synchronisation de données via le réseau ======
+
+**DRBD** //(Distributed Replicated Block Device)// est un outil qui permet de synchroniser (par réplication) des périphériques de stockage (disque dur, partition, volume logique, etc.) entre deux nœuds via le réseau. Pour simplifier, il s'apparente à du RAID-1 sur IP. Quand une écriture a lieu sur le disque du serveur maître, l'écriture est simultanément réalisée sur le serveur esclave. La synchronisation est faite au niveau de la partition. Tout comme le RAID-1, DRBD assure une consistance des données au niveau du périphérique. C'est à charge du système de fichiers de s'assurer, conserver et retrouver l'intégrité des données au niveau des fichiers. De même, c'est à charge des applications de retrouver un état cohérent si un problème survient. Il est important de noter que DRBD n'assure aucune fonction relative à la sécurité. Il n'y a ainsi pas de mécanisme d'authentification, de contrôle d'accès, de confidentialité ou d'intégrité des données échangées sur le réseau.
+
+<note tip>
+La société [[http://www.linbit.com/en/|Linbit]] à l'origine de cette solution propose une interface java permettant de configurer ce service d'une manière graphique. Il est possible de la télécharger [[http://oss.linbit.com/drbd-mc/|ici]]. Si vous devez utiliser cette solution je vous conseille aussi de vous intéresser au logiciel [[:pacemaker]].
+</note>
+<note tip>Drbd est intégré dans le noyau depuis la version 2.6.33 (février 2010)</note>
+
+===== Fonctionnalités =====
+  * **Gestion de 2 noeuds maximum** (La gestion de n noeuds est prévu pour la version 9.x voir la [[http://www.drbd.org/home/roadmap/|roadmap]]).
+  * **Synchronisation en temps réel** : elle se fait à la volée, pendant que les données sont modifiées.
+  * **Utilisation transparente** : les applications, qui enregistrent leurs données sur le périphérique de stockage répliqué, le font sans même savoir qu'il s'agit d'une unité de stockage spéciale.
+
+==== Plusieurs modes de synchronisation ====
+  * Fonctionnement asynchrone (mode A), les opérations d'écriture en local sur le nœud principal sont considérées comme achevées dès que l'écriture sur le disque local a eu lieu, et le paquet de réplication a été placé dans le buffer TCP local. En cas de fail-over, une perte de données pourrait se produire. Les données sur le noeud de secours sont cohérentes après le basculement, cependant, les mises à jour plus récentes effectuées avant l'accident pourrait être perdues.
+  * Fonctionnement semi-synchrone (mode B) les opérations d'écriture en local sur le nœud principal sont considérées comme achevées dès que l'écriture sur le disque local a eu lieu, et le paquet de réplication a atteint les nœuds pairs. Normalement, aucune donnée n'est perdue en cas de fail-over. Toutefois, une panne de courant simultanée sur les deux nœuds peut provoquer la destruction irréversible des données stockées sur le primaire, les écrits les plus récents sur le primaire peuvent être perdus.
+  * En fonctionnement synchrone (mode C), les opérations d'écriture en local sur le nœud principal sont considérées comme achevées lorsque les écritures sur le disque local et le disque distant ont été confirmées. En conséquence, la perte d'un seul nœud garanti de ne pas conduire à une perte de données. La perte de données est, bien sûr, inévitable, même avec ce protocole de réplication si les deux nœuds (ou leurs sous-systèmes de stockage) sont irréversiblement détruits en même temps.
+
+<note tip>Le protocole C étant le mode conseillé par la documentation [[http://www.drbd.org/users-guide-emb/s-replication-protocols.html|officielle]]</note>
+
+===== Pré-requis =====
+
+Les noyaux « server » disposent du module DRBD au moins depuis [[:hardy|Ubuntu 8.04 LTS]]. Il est donc préférable d'utiliser cette version du noyau, disponible par défaut dans la version « server » de Ubuntu.
+
+===== Installation =====
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt://drbd8-utils|drbd8-utils]]**.
+
+[[http://www.system-linux.eu/index.php?post/2010/06/01/Installation-de-Drbd-pour-de-la-haute-disponibilit%C3%A9|Installation à la main et Administration]]
+
+===== Configuration et utilisation =====
+
+Il est conseillé de lire et de suivre la documentation du site officiel : 
+  * configuration : http://www.drbd.org/users-guide-emb/ch-configure.html
+  * utilisation : http://www.drbd.org/users-guide-emb/p-work.html
+  * documentation officielle de ubuntu : https://help.ubuntu.com/9.04/serverguide/C/drbd.html
+
+Un exemple de configuration est proposé dans ce [[:tutoriel:mirroring_sur_deux_serveurs#configuration_et_mise_en_place_de_drbd|tutoriel]].\\
+Sinon, [[:tutoriel:comment_modifier_un_fichier|ouvrez le fichier]] **/etc/drbd.conf**, il est relativement bien auto-documenté.
+
+==== État d'un volume drbd ====
+<code>
+cat /proc/drbd
+version: 8.0.11 (api:86/proto:86)
+GIT-hash: b3fe2bdfd3b9f7c2f923186883eb9e2a0d3a5b1b build by phil@mescal, 2008-02-12 11:56:43
+ 0: cs:Connected st:Primary/Secondary ds:UpToDate/UpToDate C r---
+    ns:1274247468 nr:4652 dw:1033086960 dr:1709332874 al:325498845 bm:15409 lo:2 pe:2 ua:0 ap:2
+        resync: used:0/31 hits:15058152 misses:14731 starving:0 dirty:0 changed:14731
+        act_log: used:1/127 hits:969493732 misses:558931063 starving:402269 dirty:233241813 changed:325498845
+</code>
+
+==== Activation primaire/secondaire ====
+<code>drbdadm primary notrevolume</code>
+sinon
+<code>drbdadm secondary notrevolume</code>
+
+===== Désinstallation =====
+
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. La configuration de l'application sera conservée ou supprimée selon la méthode de désinstallation que vous choisirez.
+
+===== Voir aussi =====
+
+  * **(en)** [[http://www.drbd.org/|Site officiel de DRBD]]
+  * **(en)** [[http://www.drbd.org/docs/about/|Site officiel de DRBD, documentation]]
+  * **(fr)** [[:tutoriel:mirroring_sur_deux_serveurs|Tutoriel d'utilisation conjointe avec Heartbeat et Samba]]
+
+----
+
+//Contributeur principal : [[:utilisateurs:mrwaloo|MrWaloo]] / Contributeur : [[:utilisateurs:herrleiche|Herrleiche]].//

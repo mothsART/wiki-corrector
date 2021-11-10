@@ -1,0 +1,80 @@
+
+{{tag>dépôts apt serveur}}
+----
+====== Comment créer votre propre dépôt Ubuntu ? ======
+
+Cette courte documentation explique comment utiliser **debarchiver** pour créer et maintenir un dépôt Ubuntu et ainsi mettre à disposition vos propres paquets Ubuntu. 
+Voir aussi: [[:tutoriel:comment_creer_depot|Comment créer un dépôt de paquets Ubuntu avec reprepro]].
+
+===== Installation =====
+On commence par [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>apache2]]**. Puis [[:tutoriel:comment_installer_un_paquet|les paquets]] **[[apt>debarchiver]]** et la commande "dpkg-scanpackages" avec le paquet **[[apt>devscripts]]**.
+
+===== Configuration =====
+
+Ensuite il faut créer les dossiers qui accueilleront les paquets:<code>sudo mkdir -p /var/www/ubuntu
+sudo mkdir /var/www/ubuntu/dists/
+sudo mkdir /var/www/ubuntu/_incoming/</code>
+
+Le dossier dists contiendra l'arborescence du dépôt et _incoming sera le dossier où //debarchiver// viendra chercher les nouveaux paquets pour les placer au sein de l'arborescence.
+Enfin il suffit [[:tutoriel:comment_editer_un_fichier|d'éditer le fichier]] **/etc/debarchiver.conf** avec les [[:sudo|droits d'administration]] et de modifier les paramètres suivants :<file>
+$destdir = "/var/www/ubuntu/dists";
+$inputdir = "/var/www/ubuntu/_incoming";
+@distributions = ('trusty');
+@sections = ('main', 'universe', 'multiverse');
+</file>
+
+
+Si vous souhaitez recevoir un message lorsqu'un paquet est ajouté, remplissez la section :<file>
+  # @mailtos = ('Maintainer',          The Maintainer field in control file
+  #             'Uploaders',           The Uploaders field in control file
+  #             '@bar.com',            User id @bar.com that own the changes file
+  #             'installer@foo.com',   An explicit email address
+  #             'Changed-By');         The email in the changelog file
+</file>
+
+===== Initialisation =====
+Il faut maintenant créer l'arborescence du dépôt :<code>sudo debarchiver</code>
+Vérifier le résultat :<code>ls -lR /var/www/ubuntu/dists</code>
+
+Un script cron se trouve dans ///etc/cron.d/debarchiver//. Par défaut debarchiver est executé toutes les 5 minutes. Le répertoire _incoming est alors scanné à la recherche de nouveaux paquets à ajouter sur le dépôt. 
+
+===== Publier le dépôt =====
+
+L'arborescence peut être rendue publique par HTTP ou FTP.
+Nous prenons ici l'exemple d'un serveur apache2.
+Voici la configuration d'un virtual host (ubuntu.votredomaine.com):
+<file>
+  <VirtualHost *:80>
+    ServerName ubuntu.votredomaine.com
+    ServerAlias ubuntu.votredomaine.com
+    
+    ServerAdmin webmaster@votredomaine.com
+    DocumentRoot /var/www/ubuntu
+    ErrorLog /var/log/apache2/ubuntu-error.log
+    CustomLog /var/log/apache2/ubuntu-access.log combined
+  </VirtualHost> 
+   
+  <Directory "/var/www/ubuntu">
+    Options Indexes Includes FollowSymLinks MultiViews
+    IndexOptions FancyIndexing SuppressHTMLPreamble NameWidth=*
+    IndexIgnore _incoming _style
+    HeaderName /_style/HEADER.html
+    ReadmeName /_style/README.html
+  </Directory>
+</file>
+La commande IndexIgnore permet de cacher le répertoire _incoming.
+
+HEADER.html et README.html permettent d'améliorer le rendu visuel de l’arborescence. 
+
+===== Ajouter un paquet =====
+ Placer tous les fichiers générés pendant la création du paquet (par exemple, le .deb, le .changes, et le .dsc) dans le répertoire _incoming et attendre 5 minutes.
+
+Si vous êtes pressé exécuter directement la commande :<code>sudo debarchiver -so</code>
+===== Utiliser le dépôt =====
+
+[[tutoriel:comment modifier sources maj|Ajouter les dépôts]] créés :
+<file>deb http://ubuntu.votredomaine.com/ lucid main universe multiverse
+deb-src http://ubuntu.votredomaine.com lucid main universe multiverse
+</file>
+----
+//Contributeurs: [[utilisateurs:Fabien26]], [[:utilisateurs:l_africain|L'Africain]].//

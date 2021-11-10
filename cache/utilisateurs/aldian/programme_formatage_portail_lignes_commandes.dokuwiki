@@ -1,0 +1,632 @@
+
+====== Programme de formatage de la page portail sur les lignes de commandes ======
+
+En relation avec la rédaction en cours de la page [[:portail_lignes_commandes|portail lignes de commande]] qui est en projet, et avec la page [[:utilisateurs:aldian:participer_portail_lignes_commandes|participer au portail sur les lignes de commandes]] qui vient en appoint pour décharger les contributeurs de la lourde tache du formatage, un programme java a été créé pour générer automatiquement le formatage. Le programme est particulièrement long (400 lignes), mais il a été conçu dans l'optique de la fiabilité et de l'ergonomie. Et plus un programme est ergonomique, plus il est long ;).
+
+===== Utilisation =====
+
+Copiez-collez le code source dans un fichier texte que vous nommerez "CommandArray.java". Vous avez besoin d'avoir installé le paquet [[:tutoriel:comment_installer_un_paquet|gcj]] pour pouvoir compiler du java en ligne de commande.
+
+Compilez le programme avec la commande suivante:
+<code>javac CommandArray.java</code>
+
+Ensuite en admettant que vous ayez copié collé tous les modèles renseignés de la page [[:utilisateurs:aldian:participer_portail_lignes_commandes|participer au portail sur les lignes de commandes]] dans un fichier nommé commandes.txt, exécutez la commande: <code>java CommandArray commandes.txt</code> Le résultat s'affiche à l'écran et est stocké dans le fichier commandes.txt_format.txt
+
+
+===== Le code source =====
+
+Ce code source est en version 0.1.1. Il n'a pas encore été beaucoup testé et pourra être sujet à modifications.
+
+<code>
+/*   CommandArray: This program create the formating for the page 
+ *   portail_lignes_de_commande of site http://doc.ubuntu-fr.org/
+ *  
+ *   Copyright (C) 2009  Aldian (Administrator of Ubuntu French Documentation)
+ *
+ *   This program is free software: you can redistribute it and/or modify
+ *   it under the terms of the GNU General Public License as published by
+ *   the Free Software Foundation, either version 3 of the License, or
+ *   (at your option) any later version.
+ *
+ *   This program is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU General Public License for more details.
+ *
+ *   You should have received a copy of the GNU General Public License
+ *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * 
+ */
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.LinkedList;
+
+
+/**
+ * @author Aldian (Administrator of Ubuntu French Documentation)
+ * 
+ * génère le formatage correspondant à l'ensemble des commandes fournies dans le  
+ * fichier passé en paramètre: 
+ *  
+ * paramètre obligatoire: nom du fichier 
+ * le résultat est stocké dans le fichier NOM_FICHIER_format.txt 
+ * le fichier source doit contenir au moins une fois le motif suivant: 
+ *  
+ * NOM: 
+ * DESCRIPTION: 
+ * LIEN_SYNOPSIS: 
+ * LIEN: 
+ * LIEN_MANPAGE: 
+ * LIEN_FORUM: 
+ *  
+ * Le nombre de LIEN est indifférent. Une entrée valide doit contenir au moins 
+ * une DESCRIPTION et un NOM. Si vous ne disposez pas par exemple du LIEN_MANPAGE, 
+ * vous pouvez indifféremment mettre la ligne vide ou pas. 
+ *
+ */
+public class CommandArray {
+	protected static boolean DEBUG = true;
+	String nom = null;
+	String description = null;
+	String lien_synopsys = null;
+	LinkedList<String> liens = new LinkedList<String>();
+	String lien_manpage = null;
+	String lien_forum = null;
+	
+	public CommandArray(String nom, String description){
+		this(nom);
+		this.description= description;
+	}
+	private CommandArray(String nom){
+		this.nom=nom;
+	}
+
+	/**
+	 * Cette méthode ouvre les fichiers et s'assure de l'absence d'erreurs à l'ouverture.
+	 * Le travail réel de gestion du formatage est sous traité à la fonction performFormat
+	 * 
+	 * @param args le nom du fichier à traiter
+	 */
+	public static void main(String[] args) {
+		printLicense();
+		BufferedReader in;
+		BufferedWriter out;
+		
+		// check nombre arguments
+		if(args.length!=1){
+			printUsage();
+			return;
+		}
+		
+		// check help
+		if(args[0].equals("-h") || args[0].equals("-help") || args[0].equals("-u") || args[0].equals("-usage")){
+			printUsage();
+			return;
+		}
+		
+		// check ouverture fichier input
+		try {
+			in = new BufferedReader(new FileReader(args[0]));
+		} catch (FileNotFoundException e) {
+			println("erreur: nom de fichier incorrect: "+args[0]);
+			if(DEBUG)
+				e.printStackTrace();
+			return;
+		}
+		
+		// check ouverture fichier output
+		String outputFileName = args[0]+"_format.txt";
+		try {
+			out = new BufferedWriter(new FileWriter(outputFileName));
+		} catch (IOException e) {
+			println("erreur: impossible de créer le fichier d'output: "+outputFileName);
+			if(DEBUG)
+				e.printStackTrace();
+			return;
+		}
+		
+		//exécution formatage
+		println("formating content file: "+args[0]+" to file "+outputFileName+"...");
+		try {
+			performFormat(in, out);
+		} catch (Exception e1) {
+			println("Une erreur est survenue durant l'exécution");
+			if(DEBUG)
+				e1.printStackTrace();
+		}
+		finally {
+			// fermeture des flux
+			try {
+				in.close();
+				out.close();
+			} catch (IOException e) {
+				println("Warning: une erreur est survenue pendant la fermeture des fichiers");
+				if(DEBUG)
+					e.printStackTrace();
+			}
+		}
+		println("Le programme s'est terminé sans erreurs");
+	}
+	
+	/**
+	 * Lit le fichier source, génère la liste des commandes, effectue le formatage, écrit le fichier de destination
+	 * 
+	 * @param in le buffer vers le fichier d'entrée
+	 * @param out le buffer vers le fichier de sortie
+	 * @throws IOException
+	 * @throws ParseException
+	 */
+	public static void performFormat(BufferedReader in,BufferedWriter out) throws IOException, ParseException{
+		LinkedList<CommandArray> commandListe = readFile(in);
+		
+		
+		//vérifications d'intégrité
+		if(!checkCommandListValidity(commandListe))
+			return;
+		
+		/**
+		 * A partir de maintenant on dispose d'une liste d'objets ayant au moins un nom et une description probablement valides.
+		 * Les urls sont forcément correctement constituées.
+		 */
+		String formatedLine = null;
+		for(int i=0;i<commandListe.size();i++){
+			formatedLine = makeFormattedLine(commandListe.get(i));
+			out.write(formatedLine+"\n");
+			println(formatedLine);
+		}
+			
+		
+			
+	}
+	/************************************************
+	 *           FONCTIONS DE FORMATAGE             *
+	 ************************************************/
+	
+	/**
+	 * Cette fonction crée le formatage pour une commande donnée
+	 * 
+	 * @param commandArray :  La commande à formatter
+	 * @return ligne contenant le code formatée pour la commande donnée.
+	 */
+	public static String makeFormattedLine(CommandArray commandArray){
+		StringBuilder result = new StringBuilder();
+		int i;
+		//String link = null;
+		result.append("| ");
+		result.append(commandArray.description);
+		result.append(" | ");
+		result.append(makeDocLinkString(commandArray.lien_synopsys,commandArray.nom));
+		result.append(" | ");
+		if(commandArray.liens!=null){
+			for(i=0;i<commandArray.liens.size()-1;i++)
+				result.append(makeUndiferrentiateLinkString(commandArray.liens.get(i),null)+", ");
+			result.append(makeUndiferrentiateLinkString(commandArray.liens.get(i),null));
+		}
+		result.append(" | ");
+		result.append(makeExternLink(commandArray.lien_manpage,"manpage"));
+		result.append(" | ");
+		result.append(makeExternLink(commandArray.lien_forum,"forum"));
+		result.append(" |");
+
+		return result.toString();
+	}
+	
+	/**
+	 * Appelle la méthode corespondante selon que le lien est interne ou externe à la documentation.
+	 * 
+	 * @param link lien à formatter
+	 * @param nom du lien à formatter
+	 * @return code correspondant au lien
+	 */
+	public static String makeUndiferrentiateLinkString(String link, String nom){
+		if(link.indexOf("http://doc.ubuntu-fr.org")==-1)
+			return makeExternLink(link,nom);
+		else
+			return makeDocLinkString(link,nom);
+	}
+	
+	
+	/**
+	 * Crée le formattage pour un lien interne à la documentation. 
+	 * Si le nom n'est pas spécifié, un nom par défaut est généré.
+	 * 
+	 * @param link lien à formatter
+	 * @param nom du lien à formatter
+	 * @return code correspondant au lien
+	 */
+	public static String makeDocLinkString(String link, String nom){
+		String result = null;
+		URL url = null;
+		String name = null;
+		
+		//si le champ correspondant n'a pas été renseigné
+		if(link==null)
+			return "";
+		
+		// devrait pas y avoir de problème
+		try {url = new URL(link);} catch (MalformedURLException e) {return null;}
+		
+		//gestion du nom (si le nom donné est invalide, construit un nom par défaut
+		if(nom!=null)
+			if(checkValidity(nom))
+				name=nom;
+		if(name==null){
+			name=url.getPath();
+			int slash = name.lastIndexOf("/");
+			if(slash!=-1){
+				name=name.substring(slash+1);
+			}
+		}
+		
+		//gestion du chemin
+		String path = url.getPath();
+		char [] pathChar = path.toCharArray();
+		for(int i=0;i<pathChar.length;i++)
+			if(pathChar[i]=='/')
+				pathChar[i]=':';
+		path = new String(pathChar);
+		
+		//gestion de l'ancre
+		String ancre = url.getRef();
+		if(ancre==null)
+			ancre="";
+		if(ancre.indexOf('?')!=-1){
+			ancre=ancre.substring(0, ancre.indexOf('?')-1);
+		}
+		
+		//construction de la représentation de la doc:
+		result = "[["+path;
+		if(!ancre.equals(""))
+			result+="#"+ancre;
+		result+="|"+name+"]]";
+		
+		return result;
+	}
+	
+	/**
+	 * Crée le formattage pour un lien externe à la documentation.
+	 * Si le nom est omis, un nom par défaut est généré.
+	 * 
+	 * @param link lien à formatter
+	 * @param nom du lien à formatter
+	 * @return code correspondant au lien
+	 */
+	public static String makeExternLink(String link,String nom){
+		URL url = null;
+		String name = null;
+		
+		//gestion du nom (si le nom donné est invalide, construit un nom par défaut
+		if(nom!=null)
+			if(checkValidity(nom))
+				name=nom;
+		if(name==null){
+			try {url = new URL(link);} catch (MalformedURLException e) {return "";}
+			name=url.getPath();
+			
+			//élimine le chemin d'accès
+			int slash = name.lastIndexOf("/");
+			if(slash!=-1){
+				name=name.substring(slash+1);
+			}
+			
+			//élimine l'extension
+			int dot = name.lastIndexOf(".");
+			if(dot>1){
+				name=name.substring(0,dot);
+			}
+		}
+		
+		
+		//si le champ correspondant n'a pas été renseigné
+		if(link==null)
+			return "";
+		else
+			return "[["+link+"|"+name+"]]";
+	}
+	
+	
+	/************************************************
+	 *    FONCTIONS DE VERIFICATION DE VALIDITE     *
+	 ************************************************/
+	
+	/**
+	 * Vérifie l'ensemble d'une liste de commandes pour voir si elles sont acceptables et s'il n'y a pas d'erreurs.
+	 * En fait cette fonction fait plus qu'un test, en effet les objets invalides sont retirés de la liste.
+	 * 
+	 * @param commandListe
+	 * @return vrai si à l'issue du test la liste contient au moins une commande valide, non sinon
+	 */
+	public static boolean checkCommandListValidity(LinkedList<CommandArray> commandListe){
+		boolean  validity =  true;
+		CommandArray commandArray=null;
+		
+		//taille
+		if(commandListe.size()==0){
+			println("erreur, pas d'objet valide trouvé.");
+			return false;
+		}
+		
+		//validité objets
+		for(int i=0;i<commandListe.size();i++){
+			commandArray=commandListe.get(i);
+			if(!checkCommandValidity(commandArray)){
+				debug("performFormat","warning, lien_forum {"+commandArray.lien_forum+"} incorrect >> Réinitialisé");
+				commandListe.remove(commandArray);
+			}
+		}
+		
+		//taille
+		if(commandListe.size()==0){
+			println("erreur, pas d'objet valide trouvé après check de validité.");
+			return false;
+		}
+		
+		return validity;
+	}
+	
+	/**
+	 * Vérifie la validité d'une commande simple. La présence d'un nom et d'une description valide sont obligatoires pour avoir un résultat true.
+	 * Les autres champs sont testés aussi, et en cas de problèmes, réinitialisés.
+	 * 
+	 * @param commandArray
+	 * @return
+	 */
+	public static boolean checkCommandValidity(CommandArray commandArray){
+		boolean result = true;
+		String lien = null;
+		if(!checkValidity(commandArray.nom)){
+			result = false;
+			debug("checkCommandValidity","erreur, nom {"+commandArray.nom+"} incorrect");
+		}
+		if(!checkValidity(commandArray.description)){
+			result = false;
+			debug("checkCommandValidity","erreur, description {"+commandArray.description+"} incorrect");
+		}
+		if(!checkLinkValidity(commandArray.lien_synopsys)){
+			commandArray.lien_synopsys=null;
+			debug("checkCommandValidity","warning, lien_synopsys {"+commandArray.lien_synopsys+"} incorrect >> Réinitialisé");
+		}
+		if(!checkLinkValidity(commandArray.lien_manpage)){
+			commandArray.lien_manpage=null;
+			debug("checkCommandValidity","warning, lien_manpage {"+commandArray.lien_manpage+"} incorrect >> Réinitialisé");
+		}
+		if(!checkLinkValidity(commandArray.lien_forum)){
+			commandArray.lien_forum=null;
+			debug("checkCommandValidity","warning, lien_forum {"+commandArray.lien_forum+"} incorrect >> Réinitialisé");
+		}
+		if(commandArray.liens.size()==0)
+			commandArray.liens = null;
+		else {
+			for(int i=0;i<commandArray.liens.size();i++){
+				lien = commandArray.liens.get(i);
+				if(!checkLinkValidity(lien)){
+					debug("checkCommandValidity","warning, lien {"+lien+"} incorrect >> Réinitialisé");
+					commandArray.liens.remove(lien);
+				}
+			}
+			if(commandArray.liens.size()==0)
+				commandArray.liens = null;
+		}
+		return result;
+	}
+	
+	/**
+	 * Teste la validité d'une String suivant les critèrs suivants:
+	 * Ne doit pas être nulle, ne doit pas être vide, mono caractère ou constituée seulement d'espaces.
+	 * A noter qu'on ne s'est pas donner la peine de tester proprement les espaces, 
+	 * si vous voulez faire planter le programme mettez en un grand nombre.
+	 * 
+	 * @param arg la chaine à tester
+	 * @return un booléen qui indique si la chaine est correcte ou non.
+	 */
+	public static boolean checkValidity(String arg){
+		if(arg==null)
+			return false;
+		//pas envie de me prendre la tête à faire "si ya que des espaces" ;)
+		if(arg.equals("") || arg.equals(" ") || arg.equals("  ") || arg.equals("   "))
+			return false;
+		if(arg.length()<2)
+			return false;
+		return true;
+	}
+	
+	/**
+	 * Teste la validité d'un lien de la manière suivante:
+	 * Construit un objet URL basé sur ce lien. S'il n'y a pas de MalformedURLException, c'est bon.
+	 * 
+	 * @param arg le lien à tester 
+	 * @return un booléen qui indique si le lien est correct ou non.
+	 */
+	public static boolean checkLinkValidity(String arg){
+		@SuppressWarnings("unused")
+		URL url = null;
+		try {
+			url = new URL(arg);
+		} catch (MalformedURLException e) {
+			return false;
+		}
+		return true;
+	}
+	
+	/************************************************
+	 *    FONCTIONS DE LECTURE DU FICHIER SOURCE    *
+	 ************************************************/
+	
+
+	/**
+	 * Crée la liste des commandes à formater à partir du fichie source
+	 * @param in
+	 * @return LinkedList<CommandArray>
+	 * @throws IOException
+	 * @throws ParseException
+	 */
+	public static LinkedList<CommandArray> readFile(BufferedReader in) throws IOException, ParseException{
+		LinkedList<CommandArray> commandListe = new LinkedList<CommandArray>();
+		
+		
+		/****
+		 * Initialisation. Pour l'initialisation on fait tous les tests de validité possibles, on sera moins strict par la suite.
+		 */
+		String [] firstValidLine = searchForValidLine(in);
+		if(firstValidLine==null)
+			throw new CommandArray.ParseException("Erreur, aucune ligne valide trouvée dans le fichier.");
+		if(!firstValidLine[0].equals("NOM"))
+			throw new CommandArray.ParseException("Erreur, le NOM doit venir en premier " +
+					"(vérifiez si vous n'avez pas une ligne comportant un ':' précédent " +
+					"votre première ligne commençant par NOM");
+		String [] secondValidLine = searchForValidLine(in);
+		if(!secondValidLine[0].equals("DESCRIPTION"))
+			throw new CommandArray.ParseException("Erreur, la DESCRIPTION doit venir juste" +
+					" après le NOM");
+		
+		if(!checkValidity(firstValidLine[1]))
+			throw new CommandArray.ParseException("Erreur, nom invalide: {"+firstValidLine[1]+"}");
+		if(!checkValidity(secondValidLine[1]))
+			throw new CommandArray.ParseException("Erreur, description invalide: {"+firstValidLine[1]+"}");
+		
+		CommandArray commandArray = new CommandArray(firstValidLine[1],secondValidLine[1]);
+		
+		/*******
+		 * Boucle. On ne se soucie pas trop des éventuels problèmes d'objet mal rempli, ce sera checké en aval
+		 */
+		String [] line = null;
+		String arg = null, key = null;
+		while((line=searchForValidLine(in))!=null){
+			key = line[0];
+			arg = line[1];
+			if(key.equals("NOM")){
+				commandListe.add(commandArray);
+				commandArray=new CommandArray(arg);
+			}
+			if(key.equals("DESCRIPTION"))
+				commandArray.description=arg;
+			if(key.equals("LIEN_SYNOPSIS"))
+				commandArray.lien_synopsys=arg;
+			if(key.equals("LIEN"))
+				commandArray.liens.add(arg);
+			if(key.equals("LIEN_MANPAGE"))
+				commandArray.lien_manpage=arg;
+			if(key.equals("LIEN_FORUM"))
+				commandArray.lien_forum=arg;
+			
+		}
+		commandListe.add(commandArray);
+		
+		
+		return commandListe;
+	}
+	
+	/**
+	 * Retrouve la ligne valide suivante dans le fichier source.
+	 * Une ligne est considérée comme valide si elle comporte un ':' 
+	 * @param in
+	 * @return ligne valide
+	 * @throws IOException
+	 */
+	public static String [] searchForValidLine(BufferedReader in) throws IOException{
+		String line = null;
+		//String key = null;
+		String [] splitedLine = new String[2];
+		int doubledotindex=-1;
+		while((line=in.readLine())!=null){
+			doubledotindex=line.indexOf(':');
+			if(doubledotindex!=-1)
+			{
+				splitedLine[0]=line.substring(0, doubledotindex);
+				if(doubledotindex<line.length())
+					splitedLine[1]=line.substring(doubledotindex+1);
+				else
+					splitedLine[1]="";
+				/*splitedLine =  line.split(":");
+				if(splitedLine.length==2)
+					return splitedLine;
+				else {
+					key = splitedLine[0];
+					splitedLine=new String[2];
+					splitedLine[0]=key;
+					splitedLine[1]="";
+					return splitedLine;
+				}*/
+				return splitedLine;
+			}
+		}
+		return null;
+	}
+	
+
+	/*******************************
+	 *    println & debug stuff    *
+	 *******************************/
+    public static void println(String s){
+    	System.out.println(s);
+    }
+    public static void println(String [] s){
+    	for(int i=0;i<s.length;i++)
+    		System.out.println(s[i]);
+    }
+    
+    public static void debug(String origin,String s){
+    	if (DEBUG) {
+			System.out.println("DEBUG(FormatArray."+origin+"): "+s);
+		}
+    }
+    public static void debug(String origin,String [] s){
+    	if (DEBUG) {
+			for (int i = 0; i < s.length; i++)
+				System.out.println("DEBUG(FormatArray."+origin+"): "+s[i]);
+		}
+    }
+    public static void printUsage(){
+    	println("***************************************************************************");
+    	println("*                           FormatArray                                   *");
+    	println("***************************************************************************");
+    	println("");
+    	println("génère le formatage correspondant à l'ensemble des commandes fournies dans le ");
+    	println("fichier passé en paramètre:");
+    	println("");
+    	println("paramètre obligatoire: nom du fichier");
+    	println("le résultat est stocké dans le fichier NOM_FICHIER_format.txt");
+    	println("le fichier source doit contenir au moins une fois le motif suivant:");
+    	println("");
+    	println("NOM:");
+    	println("DESCRIPTION:");
+    	println("LIEN_SYNOPSIS:");
+    	println("LIEN:");
+    	println("LIEN_MANPAGE:");
+    	println("LIEN_FORUM:");
+    	println("");
+    	println("Le nombre de LIEN est indifférent. Une entrée valide doit contenir au moins");
+    	println("une DESCRIPTION et un NOM. Si vous ne disposez pas par exemple du LIEN_MANPAGE,");
+    	println("vous pouvez indifféremment mettre la ligne vide ou pas.");
+    }
+    
+    public static void printLicense(){
+    	println("FormatArray  Copyright (C) 2009 Aldian (Administrator of Ubuntu French Documentation)");
+    	println("This program comes with ABSOLUTELY NO WARRANTY; for details visit site http://www.gnu.org/licenses/gpl.html.");
+    	println("This is free software, and you are welcome to redistribute it");
+    	println("under certain conditions; visit site http://www.gnu.org/licenses/gpl.html for details.");
+    	println("");
+    }
+    
+    /**
+     * @author aldian
+     * Exception dédiée aux problèmes survenus dans l'interprétation du contenu du fichier source.
+     */
+    static class ParseException extends Exception {
+		private static final long serialVersionUID = -1172968771252448754L;
+
+		public ParseException(String erreur){
+    		super (erreur);
+    	}
+    }
+
+}
+</code>
+

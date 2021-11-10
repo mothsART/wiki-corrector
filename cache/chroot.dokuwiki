@@ -1,0 +1,110 @@
+
+{{tag>système BROUILLON sécurité}}
+----
+
+====== Chroot : changement de dossier racine ======
+
+La commande **chroot** permet de changer le répertoire racine vers un nouvel emplacement.
+
+Cette opération peut être utilisée dans divers cas :
+  * prison : empêche un utilisateur ou un programme de remonter dans l'arborescence et le cantonne à une nouvelle arborescence restreinte.
+  * changement d'environnement : permet de basculer vers un autre système linux (autre architecture, autre distribution, autre version). Nous détaillerons ici cette technique.
+
+===== Utilisation =====
+
+
+
+
+
+==== Changer de système ====
+
+Cette technique est le plus souvent utilisée pour récupérer une installation endommagée.
+
+Ici le chroot sera utilisé après le démarrage sur un système sain pour se retrouver dans l'environnement endommagé et faire des modifications directement dans ce dernier environnement.
+
+Astuce : Vous pouvez taper <code>sudo -i</code> avant de faire les opérations suivantes pour devenir "root" et ne pas devoir entrer "sudo".
+  - Démarrez sur un système sain. Par exemple : un live CD
+  - Montez la partition racine du système endommagé : <code>sudo mkdir /media/system
+sudo mount </dev/partition> /media/system</code> par exemple, si sda2 est la partition racine, la commande sera : "sudo mount /dev/sda2 /media/system"
+  - Préparez les dossiers spéciaux /proc et /dev : <code>sudo mount --bind /dev /media/system/dev
+sudo mount -t proc /proc /media/system/proc</code>
+  - Dans certains cas (réparation de Grub avec update-grub par exemple) vous devrez lier le /run : <code>sudo mount --bind /run  /media/system/run</code>
+
+**Note : ** Vous pourriez aussi avoir besoin de monter /sys : <code>sudo mount -t sysfs /sys /media/system/sys</code>
+
+  - Pour démarrer la connexion internet: <code> net-setup eth0 </code>
+  - Copiez le /etc/resolv.conf pour la connexion internet (à faire seulement si votre connexion internet ne marche pas directement sans rien faire dans l'environnement chrooté) : <code>sudo cp /etc/resolv.conf /media/system/etc/resolv.conf</code>
+  - Changez d'environnement : <code>sudo chroot /media/system</code>
+  - En cas d'erreur à propos de "/bin/zsh" remplacer cette commande par<code>sudo chroot /media/system /bin/bash </code>.
+
+Maintenant vous êtes sur l'installation endommagée et vous pouvez travailler dessus pour y corriger les problèmes.
+
+
+Pour quitter l'environnement, il suffit d'un : <code>exit</code>
+
+Pour démonter la partition racine du système endommagé : <code>sudo umount /media/system/dev
+sudo umount /media/system/proc
+sudo umount /media/system/sys
+sudo umount /media/system/run
+sudo umount /media/system</code>
+==== Exemple pratique avec une version 17.10 , 18.04 , 20.04 et 21.04====
+Le plus souvent, cette utilisation est faite à partir d'une clé USB d'installation de ubuntu.  Ceci est  un cas pratique fait en EFI sur partition  système non chiffrée.
+Les commandes de préparation sont
+<code>setxkbmap fr       ### afin d'avoir un clavier français.
+sudo -i            ### afin d'éviter de passer son temps à frapper cette commande</code>
+L'identification de la partition système à cibler sera plus aisée en frappant la commande
+<code>fdisk -l</code>
+Le montage de la partition système à cibler se fera  en frappant la commande (pensez à remplacer XXXX par la bonne valeur).
+<code>mount   /dev/XXXX /mnt</code>
+Le montage des répertoires se fera avec ces commandes (copier/coller).
+<code>   mount -t proc  /proc              /mnt/proc
+   mount -t sysfs /sys               /mnt/sys
+   mount --bind   /dev               /mnt/dev
+   mount --bind   /run               /mnt/run
+   mount --bind   /sys               /mnt/sys
+   mount --bind   /etc/resolv.conf   /mnt/etc/resolv.conf
+   modprobe efivars     </code>  
+ Le changement d'environnement se fera avec cette commande
+<code>  chroot /mnt</code>
+Quelques contrôles seront à faire par exemple
+<code>mount -t devpts devpts /dev/pts 
+df -h && df -i
+ping -c4 8.8.8.8  && ping -c4 google.fr
+ls   -ls /home </code>
+Vous pouvez alors passer à la réparation proprement dite qui a justifié cette opération. 
+Espérons simplement que ce message d'erreur "//Running in chroot, ignoring request.//" n'empêchera pas votre réparation.
+Lorsque cela sera fini, le plus simple est de rebooter pour vérifier. La commande suivante s'occupe de toutes les déconnexions.
+<code>reboot</code>
+
+
+
+==== Pour un ubuntu installé dans une partition  BTRFS====
+
+[[https://forum.ubuntu-fr.org/viewtopic.php?pid=22031607#p22031607|c'est là]]
+
+==== Utiliser un environnement 32 bits sur une installation 64 bits ====
+
+Cette option devient de plus en plus désuète puisque la plupart des machines sont maintenant en 64 bits.
+Préférez toujours utiliser 'chroot' entre deux systèmes de même architecture.\\
+CD Live 32bit pour une installation système 32bits et de même pour 64bits.
+
+Sinon, voir le tutoriel [[tutoriel:chroot32bits]]
+==== Convertir un environnement 32 bits en  environnement 64 bits ==== 
+Il faut d'abord  faire la fonctionnalité "chroot" telle que décrite ci-dessus.
+
+Il est préférable  de mettre à jour le logiciel de façon classique.
+<code>apt update && apt upgrade</code>
+Puis de procéder à l'installation des modules 64 bits absents avec ces commandes:
+<code>dpkg --add-architecture amd64
+apt-get update
+apt-get install linux-image-amd64:amd64 </code>
+
+===== Liens =====
+
+  * [[schroot|schroot]]
+  * [[http://linuxfr.org/news/care-et-la-reproductibilite-des-executions|care]]
+  * [[http://linuxfr.org/tags/cde/public|cde]]
+
+----
+
+//Contributeurs : [[utilisateurs:Id2ndR]].//

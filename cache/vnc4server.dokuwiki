@@ -1,0 +1,181 @@
+
+{{tag>Trusty bureau_à_distance vnc}}
+----
+
+====== vnc4server ======
+
+**vnc4server** est un outil permet de lancer un serveur VNC. Autrement dit, pouvoir créer plusieurs "bureaux" accessibles depuis le réseau, chaque bureau étant attitré à un utilisateur.
+
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+
+
+===== Installation =====
+
+Pour installer ce logiciel, il suffit d'[[:tutoriel:comment_installer_un_paquet#installer_un_paquet_present_dans_les_depots_recommande|installer le paquet]] **[[apt>vnc4server]]**.
+
+===== Détail du réseau =====
+
+Soit deux machines sous Ubuntu :
+  * Machine serveur : 192.168.0.9
+  * Machine cliente : 192.168.0.10
+
+===== Configuration classique =====
+
+Il est possible de simplement lancer le serveur vnc pour un utilisateur. 
+Pour ce faire, identifiez-vous en tant que l'utilisateur concerné (dans notre exemple 'vnc')
+  sudo login vnc
+Et lancez le serveur grâce à la commande
+  vnc4server :0
+Un mot de passe vous sera demandé. Il s'agit du mot de passe qui sera requis pour la connexion sur le bureau de l'utilisateur 'vnc'.
+  
+Et voilà, votre nouveau bureau est accessible depuis le réseau.
+Pour s'y connecter, lancez depuis la machine cliente :
+  xtightvncviewer 192.168.0.9:0
+
+Cette méthode reste cependant assez simpliste. 
+En effet, chaque création de 'bureau vnc' doit se faire __manuellement__ et ce, pour __chaque utilisateur__.
+Ce qui nous amène donc à la deuxième méthode, un petit peu plus complexe mais nettement plus paramétrable.
+En outre, elle ne prend pas en compte la présence par défaut sur Ubuntu Desktop 16.04 de l'outil de partage d'écran [[:vnc|vino]]  qui rentre en __conflit__ sur l'écran identifié lui aussi par __:0__  .
+
+===== Configuration avancée =====
+
+Le principe reste relativement le même. Nous allons lancer le serveur vnc pour un utilisateur mais de façon automatique cette fois.
+
+Il nous faut donc au préalable, avoir autant d'utilisateurs que nous souhaitons avoir de 'bureaux vnc'.
+Dans cet exemple, nous n'utiliserons que les utilisateurs 'vnc' et 'vnc1'.
+
+
+Tout d'abord, [[:tutoriel:comment_modifier_un_fichier|ouvrez le fichier]] **/etc/init.d/vnc4server** en modification. Si il n'existe pas, créez-le, et copiez-y le script suivant :
+<file>
+
+#!/bin/sh -e
+#
+# start/stop vnc4server daemon
+#
+### BEGIN INIT INFO
+# Provides:          vnc4server
+# Required-Start:    $network $remote_fs
+# Required-Stop:     $network $remote_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Start vnc4server daemon
+# Description:       a VNC server .
+### END INIT INFO
+# /etc/init.d/vnc4server
+#
+
+# Enregistrement du log
+touch /var/lock/vnc4server
+
+# Gestion des paramètres de la commande vnc4server
+case "$1" in
+start)
+echo "Starting script vnc4server "
+#su vnc -c 'vnc4server :0'
+su vnc1 -c 'vnc4server :1'
+;;
+stop)
+echo "Stopping script vnc4server"
+#su vnc -c 'vnc4server -kill :0'
+su vnc1 -c 'vnc4server -kill :1'
+;;
+*)
+echo "Usage: /etc/init.d/vnc4server {start|stop}"
+exit 1
+;;
+esac
+  
+exit 0
+</file>
+Dans ce script, nous créons un seul bureau vnc. 
+  * Le premier celui de l'utilisateur 'vnc' identifié sous le numéro **:0** est commenté et désactivé car il rentre en conflit avec l'outil partage d'écran de session interactive locale fourni par vino.
+  * Le second est celui de l'utilisateur 'vnc1' identifié sous le numéro **:1**
+
+
+**N'oubliez pas de donner les droits d'exécution sur ce script :**
+  sudo chmod +x /etc/init.d/vnc4server
+  
+Le script de lancement auto est créé. Maintenant il faut l'ajouter au démarrage par la commande :
+  sudo update-rc.d vnc4server defaults
+  
+Il ne vous reste plus qu'à redémarrer et deux bureaux vnc seront lancés automatiquement au démarrage du serveur.
+  
+
+===== Personnalisation =====
+Lors de votre connexion à l'un de ces bureaux, ils seront (normalement) gris et inesthétiques avec une croix noire en guise de curseur.
+
+Ceci peut être facilement corrigé.
+
+Chaque bureau est configuré dans le fichier **/home/$USER/.vnc/xstartup**.
+
+Bien entendu, vous devez changer la variable $USER par l'utilisateur concerné (vnc, vnc1...)
+
+Il devrait ressembler à ceci :
+<code bash>
+#!/bin/sh
+  
+# Uncomment the following two lines for normal desktop:
+#unset SESSION_MANAGER
+#exec /etc/X11/xinit/xinitrc
+
+[ -x /etc/vnc/xstartup ] && exec /etc/vnc/xstartup
+[ -r $HOME/.Xresources ] && xrdb $HOME/.Xresources
+xsetroot -solid grey
+vncconfig -iconic &
+xterm -geometry 80x24+10+10 -ls -title "$VNCDESKTOP Desktop" &
+twm &
+</code>
+
+Pour lancer gnome par exemple, vous devez ajouter une nouvelle ligne après les quatre premières lignes commentées en y ajoutant la commande suivante : **'gnome-session &'** & et décommenter la ligne :
+<file>
+#unset SESSION_MANAGER
+</file>
+et commenter la ligne suivante :
+<file>
+xterm -geometry 80x24+10+10 -ls -title "$VNCDESKTOP Desktop" &
+</file>
+
+Un modèle de fichier xstartup testé et fonctionnel 
+<file>
+#!/bin/sh
+
+# Uncomment the following lines for normal desktop:
+export XKL_XMODMAP_DISABLE=1
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+
+[ -x /etc/vnc/xstartup ] && exec /etc/vnc/xstartup
+[ -r $HOME/.Xresources ] && xrdb $HOME/.Xresources
+xsetroot -solid grey
+vncconfig -iconic &
+gnome-session &
+gnome-panel &
+gnome-settings-daemon &
+metacity &
+nautilus &
+gnome-terminal &
+
+</file>
+===== Désinstallation =====
+
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée. Les journaux du système, et les fichiers de préférence des utilisateurs dans leurs dossiers personnels sont toujours conservés.
+
+
+===== Voir aussi =====
+
+  * [[:vnc|documentation VNC]] sur la doc Ubuntu-fr
+  * [[http://pwet.fr/man/linux/commandes/vnc4server|Man de vnc4server]] sur http://pwet.fr
+
+----
+//Contributeurs principaux : [[:utilisateurs:purei]].//
+
+//Basé sur [[http://www.isnull.com.ar/2010/03/vnc4server-boot-script-working-in.html|« vnc4server boot script (working in Debian/Ubuntu/Kubuntu) »]].//
+
+//L'adaptation pour la cohabitation avec VINO sur 16.04 faite par [[:utilisateurs:scanlegentil]].//
+
+//l'exemple de fichier xstatup est tiré de [[https://gist.github.com/Musinux/8e6c4752ed3c143d49764311a504c1e9#file-install-packages-sh-L3|« VNC xstartup for unity (but launch gnome desktop not Unity :)) »]].//
+

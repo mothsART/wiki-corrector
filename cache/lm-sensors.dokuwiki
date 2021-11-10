@@ -1,0 +1,372 @@
+
+{{tag>énergie matériel système personnalisation }}
+----
+
+====== lm-sensors : utiliser les capteurs matériels ======
+
+{{  http://www.mon-club-elec.fr/mes_images/javascript/javascript_canva_rgraph_testx6.png?100}}
+
+Ubuntu peut suivre la température de votre processeur ou d'autres composants de votre ordinateur, la vitesse des ventilateurs, et d'autres données systèmes, en utilisant un programme nommé **lm-sensors** et une autre application permettant de visualiser les données fournies par ce dernier sur votre bureau.
+
+Si vous êtes pressé ou si vous n'aimez pas utiliser le [[:terminal]], reportez vous à la rubrique [[:lm-sensors#afficher_les_informations_des_capteurs_sur_le_bureau|afficher les informations des capteurs sur le bureau]]. \\
+Idéalement, installez et configurez **lm-sensors** pour obtenir plus d'informations sur votre matériel.
+
+<note tip>
+Pour connaître simplement la température du CPU, il est aussi possible d'utiliser la commande dans un [[:terminal]]: 
+
+<code bash>
+cat /sys/class/thermal/thermal_zone0/temp
+</code> 
+
+</note>
+===== Installation et configuration de lm-sensors =====
+
+Il vous suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>lm-sensors]]**.
+
+
+==== Configuration automatique ====
+
+  * Tapez la commande suivante dans un **[[:terminal]]**, ceci permet de détecter les sondes : <code bash>
+sudo sensors-detect</code>
+
+  * Répondez positivement à toutes les questions ; 
+
+À un certain moment //sensors-detect// vous demande s'il doit ajouter lui même la configuration des capteurs au lancement d'Ubuntu en affichant ceci : 
+<code bash>
+''To load everything that is needed, add this to /etc/modules:\\
+#----cut here----\\
+# Chip drivers\\
+lm90\\
+#----cut here----\\
+If you have some drivers built into your kernel, the list above will contain too many modules. \\
+Skip the appropriate ones!\\
+
+Do you want to add these lines automatically to /etc/modules? (yes/NO)'' \\
+</code>
+
+  * Tapez **yes**, puis faites Entrée.
+<note important>important</note>
+//possibilité de message d'erreur au démarrage du type "Failed to start load modules", dans ce cas [[:tutoriel:comment_modifier_un_fichier|éditez le fichier]] ///etc/modules// en mode administrateur et commenter avec un "#" les derniers modules ajoutés, puis recommencer la manipulation en laissant le choix par défaut à toutes les questions !//
+
+  * Redémarrez l'ordinateur afin de charger les modules que lm-sensors a rajoutés si vous ne voulez pas les charger à la main. \\
+Ou bien lancer la commande :
+<code bash>
+sudo service kmod restart
+</code> 
+pour les charger.
+
+PS: ... Si certaines sondes ne sont pas encore  reconnues ou dans l'éventualité où la détection se ferait de manière incorrecte — dans le cas d'un matériel récent — il est possible d'exécuter [[http://www.lm-sensors.org/wiki/Devices|la dernière version du script de sensors-detect]] « latest version of sensors-detect » : 
+
+===== Test et configuration des capteurs =====
+
+==== Test ====
+
+Maintenant, testez les capteurs avec la commande « sensors » :
+
+<code bash>
+sensors
+</code>
+
+Ce qui devrait afficher :
+
+<code bash>
+''%%*******************************************************************%%'' \\
+''it87-isa-0290\\
+Adapter: ISA adapter\\
+VCore 1: +1.57 V (min = +1.42 V, max = +1.57 V) ALARM\\
+VCore 2: +2.66 V (min = +2.40 V, max = +2.61 V) ALARM\\
++3.3V: +6.59 V (min = +3.14 V, max = +3.46 V) ALARM\\
++5V: +5.11 V (min = +4.76 V, max = +5.24 V)\\
++12V: +11.78 V (min = +11.39 V, max = +12.61 V)\\
+-12V: -19.14 V (min = -12.63 V, max = -11.41 V) ALARM\\
+-5V: +0.77 V (min = -5.26 V, max = -4.77 V) ALARM\\
+Stdby: +5.00 V (min = +4.76 V, max = +5.24 V)\
+VBat: +3.12 V\\
+fan1: 3668 RPM (min = 0 RPM, div = \\
+fan2: 0 RPM (min = 664 RPM, div =  ALARM\\
+fan3: 0 RPM (min = 2657 RPM, div = 2) ALARM\\
+M/B Temp: +39°C (low = +15°C, high = +40°C) sensor = thermistor\\
+CPU Temp: +36°C (low = +15°C, high = +45°C) sensor = thermistor\\
+Temp3: +96°C (low = +15°C, high = +45°C) sensor = diode  \\ 
+
+ %%***********************************************************************' %%''  \\
+</code>
+
+Redémarrez Ubuntu et les capteurs devraient maintenant être détectés pendant la phase de démarrage.
+
+Pour des détails à propos de la configurations des capteurs, consultez la documentation spécifique au fichier ''sensors.conf'' :
+
+<code bash>
+man sensors.conf
+</code>
+
+==== Configuration ====
+
+__Un peu de configuration est nécessaire__ si vous voulez : 
+  -  __afficher des noms compréhensibles pour vos capteurs__ à la place de "temp1", "fan3", etc... \\
+  -  __corriger les informations__ données par les capteurs. \\
+
+
+<note>
+Le fichier ''///etc/sensors3.conf//'' est le fichier de configuration de **Sensor**. \\
+Il permet d'ajouter des fichiers de configuration spécifiques à votre matériel dans le dossier ''///etc/sensors.d//''.
+</note>
+
+<note warning>
+**Il est préférable de __ne pas modifier le fichier__** ''///etc/sensors3.conf//''.
+</note>
+
+  * Il faut d'abord vérifier l'existence d'un [[https://github.com/lm-sensors/lm-sensors/tree/master/configs|fichier de configuration pour votre carte-mère]]
+  * puis le placer dans le dossier ''//etc/sensors.d//'',
+  * allez faire un tour dans le BIOS et notez les valeurs indiquées pour retrouver celles indiquées par **sensors**,
+  * créez un fichier dans le répertoire ''///etc/sensors.d//'' , le fichier de configuration est assez simple, Il faut d'abord :
+    * __définir le module__ auquel s'appliquent les modifications avec **chip**,
+    * __modifier la configuration__ des capteurs, 
+
+Par exemple :
+
+ ☛ ''//label//'' pour __changer le nom__ ;\\
+ ☛ ''//ignore//'' pour __ignorer un capteur__ qui n'est pas connecté sur votre système.
+
+ <note tip>
+Pour une liste complète des commandes et options, consulter le __manuel__ de ''sensors.conf''). 
+<code bash>man sensors.conf</code></note>
+
+Un petit exemple ci-dessous :
+
+<file xorg_conf exemple.conf>
+chip "it87-isa-0290"
+   label fan1 "ventilateur CPU"
+   ignore fan2
+   ignore fan3
+</file>
+
+<note tip>
+Inspirez vous des exemples de fichiers existants sur le site du lien précédent ((Exemples de [[https://github.com/lm-sensors/lm-sensors/tree/master/configs|fichiers de configuration pour votre carte-mère]] ))
+</note>
+===== Contrôle des ventilateurs =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>fancontrol]]**.
+
+Voici comment contrôler la "vitesse du ventilateur" ((indicateur //fanspeed//)) :
+
+  * Effectuez __la configuration de la vitesse de vos ventilateurs__ avec cette commande:
+
+<code bash>
+sudo pwmconfig
+</code>
+
+Si la liste de quelques ventilateurs apparaît sans erreur, cela signifie que votre script est fonctionnel. \\
+Le script teste vos ventilateurs ((fan)) et 
+
+ ☝ vous __donne plusieurs éléments d'informations__ sur la vitesse maximum et minimum de vos ventilateurs, 
+
+puis 
+
+ ☝ vous demande de __valider chaque choix__ 
+
+ ☛ seuil de température minimum, \\
+ ☛ seuil de température maximum, \\
+ ☛ etc…
+  
+Afin de lancer **fancontrol** au démarrage, \\
+
+  * [[:tutoriel:comment_editer_un_fichier|créez le fichier]] ''/etc/init.d/fancontrol'' 
+
+puis 
+
+  * copiez-collez le contenu suivant : 
+
+
+<file xorg_conf fancontrol>
+#!/bin/sh
+#
+# Fancontrol start script.
+#
+
+set -e
+
+# Defaults
+DAEMON=/usr/sbin/fancontrol
+CONF=/etc/fancontrol
+PIDFILE=/run/fancontrol.pid
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+
+test -f $DAEMON || exit 0
+
+. /lib/lsb/init-functions
+
+case "$1" in
+       start)
+               log_begin_msg "(en) : Starting fancontrol daemon... ; (fr) : Démarrage du service fancontrol…"
+               start-stop-daemon --start -o -q -m -b -p $PIDFILE -x $DAEMON $CONF
+               log_end_msg $?
+               ;;
+       stop)
+               log_begin_msg "(en) : Stopping fancontrol daemon... ; (fr) : Arrêt du service fancontrol…"
+               start-stop-daemon --stop -o -q -p $PIDFILE
+               log_end_msg $?
+               rm -f $PIDFILE
+               ;;
+       force-reload|restart)
+               sh $0 stop
+               sh $0 start
+               ;;
+       *)
+               log_success_msg "  (en) : Usage: /etc/init.d/fancontrol {start|stop|restart|force-reload} — (fr) : Usage : /etc/init.d/fancontrol {démarrage|arrêt|redémarrage|chargement-mémoire}"
+               log_success_msg "  (en) : start - starts system-wide fancontrol service — (fr) :  démarrage - démarre un service fancontrol de type système global"
+               log_success_msg "  (en) : stop  - stops system-wide fancontrol service — (fr) :  arrêt - stoppe le service fancontrol de type système global"
+               log_success_msg "  (en) : restart, force-reload - starts a new system-wide fancontrol service — (fr) :  redémarrage, chargement mémoire - démarre un nouveau service fancontrol de type système global"
+               exit 1
+               ;;
+esac
+
+exit 0
+
+</file>
+
+  * Rendez le __script exécutable__ grâce à cette commande : 
+
+<code bash>
+sudo chmod +x /etc/init.d/fancontrol
+</code>
+
+Puis
+
+  * testez le script :
+
+<code bash>
+sudo service fancontrol start
+</code>
+
+ puis:
+
+<code bash>
+sudo service fancontrol stop
+</code>
+
+Si tout marche bien, le script de démarrage du service sera automatiquement lancé au prochain démarrage d'Ubuntu. 
+
+Sinon, il ne reste plus qu'à [[:tutoriel:comment_editer_un_fichier|éditer]] avec les [[:sudo|droits d'administration]] le fichier ''///etc/rc.local//'' pour que __le script se lance au démarrage__, avant la ligne :
+
+<file xorg_conf>
+exit 0
+</file>
+
+insérez la ligne suivante :
+
+<file bash>
+sudo service fancontrol start
+</file>
+====Gerer la surchauffe====
+Le ventilateur du processeur ne fonctionne plus après quelques minutes, l'ordinateur portable surchauffe et s'arrête.
+Pour éviter cela, [[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/etc/default/grub** avec les [[sudo|droits d'administration]] et modifier cette ligne :
+<file>GRUB_CMDLINE_LINUX="acpi.power_nocheck=1"</file>
+[[:grub|Mettez à jour grub]]
+Voir la page [[:grub]] pour plus d'information sur la modification du fichier.
+=====Munin=====
+
+Si vous utilisez [[:Munin]], vous pouvez inclure un graphe des capteurs dans votre page de surveillance munin.\\
+Il vous faut créer un lien de /usr/share/munin/sensors_ (plugin générique sensors) vers /etc/munin/plugins/sensors_fan sensors_temp :
+
+<code bash>
+sudo ln -s /usr/share/munin/plugins/sensors_   /etc/munin/plugins/sensors_temp
+</code>
+ou sensors_volt ((plugin spécifique à la fonction)). 
+
+<note>
+Vous devrez bien sûr vérifier que le capteur peut récupérer une valeur de vitesse de ventilateur ((fan)), de tension ((volt)) ou de température((temp)).
+</note>
+
+===== Afficher les informations des capteurs sur le bureau ou le tableau de bord =====
+
+====Par environnement====
+
+=== Unity ===
+
+Pour afficher graphiquement les données des capteurs sous Unity vous pouvez [[tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>indicator-multiload]]**.
+
+=== GNOME Shell ===
+
+Pour afficher graphiquement les données des capteurs sous GNOME, vous pouvez installer l'extension FREON : **https://extensions.gnome.org/extension/841/freon/**
+
+=== MATE (et Gnome Flashback) ===
+[[http://linux.softpedia.com/get/Desktop-Environment/Gnome/GNOME-Sensors-Applet-5463.shtml|Gnome Sensors Applet]] est un applet pour tableau de bord qui devrait convenir. {{ :sensors-applet.png }}
+Pour l'utiliser [[tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>sensors-applet]]**.
+
+Après installation, il faut ajouter l'applet au tableau de bord voulu, pour cela, consultez les pages respectives :
+  * pour [[:MATE]] ;
+  * pour[[:gnome-session-fallback|Flashback]]
+
+Vous pouvez aussi [[:tutoriel:comment_installer_un_paquet|installer]] **[[apt>hddtemp]]** pour ajouter le contrôle de la température des disques durs. 
+
+<note>
+Il faut activer le daemon, soit à l'installation du package, soit en tapant :
+
+<code bash>
+sudo dpkg-reconfigure hddtemp
+</code>
+</note>
+Hddtemp n'est pas indispensable à **sensors-applet**, mais il est préférable de l'installer pour avoir un support plus étendu des capteurs.
+
+=== KDE ===
+
+Sous Kubuntu, pour obtenir l'affichage graphique des capteurs ajoutez le composant "Température du matériel" dans votre tableau de bord.\\
+Cette application est recommandée pour les environnement [[:KDE]].
+
+=== Xfce ===
+**Xfce** dispose d'un logiciel permettant de voir les températures de son ordinateur. Pour cela, [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>xfce4-sensors-plugin]]** présent dans le dépôt universe. Ensuite, on peut l'utiliser en ajoutant un élément à un panneau XFCE. Il faut alors choisir l'élément appelé « //Sensor plugin// ». Pour le configurer, effectuez un clic droit sur l'élément du panneau puis aller dans le menu « Propriétés ».
+====Pour tous les environnements====
+
+=== Indicator-sensors ===
+Une autre possibilité est d'utiliser le paquet **indicator-sensors**. \\
+
+<note important>
+Ce logiciel n'est pas disponible dans les dépôts officiels.
+</note> 
+
+Il peut être installé depuis __[[:PPA|un dépôt PPA]]__ :
+
+  * [[:PPA|Ajoutez le PPA]] **ppa:alexmurray/indicator-sensors**(([[https://launchpad.net/~alexmurray/+archive/indicator-sensors|indicator sensors sur Launchpad]])) dans vos sources de logiciels.
+  * [[:tutoriel:comment_modifier_sources_maj#recharger_la_liste_des_paquets|Rechargez la liste des paquets]].
+  * [[:tutoriel:comment_installer_un_paquet#paquet_present_dans_les_depots|Installez le paquet]] **[[apt>indicator-sensors]]**.
+
+Pour l'activer :
+
+  * Faites une recherche dans [[:unity#tableau_de_bord_dash|le tableau de bord Unity]] avec les mots clé "indicateur de capteurs matériel".\\
+Il apparaît dans la zone de notification, 
+  * Faites un clic droit dessus, \\
+dans la fenêtre qui s'ouvre vous pouvez
+  * renommer les capteurs en cliquant sur l'étiquette et 
+  * l'activer en cochant la case "Activé" pour afficher les capteurs désirés(([[https://launchpad.net/~alexmurray/+archive/indicator-sensors|indicator sensors sur Launchpad]])).
+
+Plus d'infos sur **(en)** [[http://www.noobslab.com/2012/06/install-hardware-sensors-indicators-in.html|Installation des indicateurs de sondes matérielles]].
+
+=== PSensor ===
+
+**PSensor** ressemble à ceci en indicateur pour [[:Unity]] : {{:administration:psensor1_trusty.png}}
+
+Il offre aussi une interface séparée qu'on peut lancer à la demande :
+{{ :administration:psensor2_trusty.png }}
+
+**PSensor** est inclus dans la logithèque.\\
+Il vous faut simplement [[:tutoriel:comment_installer_un_paquet#paquet_present_dans_les_depots|installer le paquet]] **[[apt>psensor]]**.
+
+Vous trouverez une présentation plus complète sur **(en)** [[http://www.omgubuntu.co.uk/2011/05/psensor-a-graphical-temperature-monitor-for-ubuntu/|PSensor lets you easily monitor hardware temperature in Ubuntu]].
+
+=== Screenlets ===
+
+L'application [[:Screenlets]] peut aussi afficher les données des capteurs thermiques.
+
+===== Voir aussi ====
+
+  * **(en)** [[http://www.noobslab.com/2012/06/install-hardware-sensors-indicators-in.html|Installation des indicateurs de sondes matérielles]] ,
+  * **(en)** [[https://help.ubuntu.com/community/SensorInstallHowto|Manuel d'installation des capteurs de température]].
+  
+----
+
+//Contributeurs: [[utilisateurs:kmeleon|Kmeleon]] et [[utilisateurs:ronan|Ronan]], \\
+Modifié par [[utilisateurs:Fabien26]], [[:utilisateurs:stephaneguedon|stephaneguedon]], [[:utilisateurs:mcpeter|McPeter]], [[:utilisateurs:l_africain|L'Africain]] //\\
+//Autres contributeurs : [[utilisateurs:eagle08|René Stoecklin]] : Mise en page, traduction, corrections rédactionnelles, conformation à la norme W3C (interface Lynx Braille).//
+
+//Page mise à jour le 26 juin 2016//.

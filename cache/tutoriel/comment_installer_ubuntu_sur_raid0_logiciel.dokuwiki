@@ -1,0 +1,174 @@
+
+{{tag>raid installation tutoriel VÉTUSTE}}
+----
+====== Comment installer Ubuntu sur RAID-0 logiciel ? ======
+
+===== Introduction =====
+
+
+Le but de cet article est de présenter l'installation d'Ubuntu sur un RAID-0     logiciel créé à l'aide du CD Alternate d'Edgy Eft.
+
+(compatible également pour les versions antérieures supportant ''mdadm'')
+
+ 
+
+===== Pré-requis =====
+
+  * - **1 CD-ROM d'UBUNTU** dans sa version d'installation **"ALTERNATE"**
+  * - **2 Disques Durs** (__au minimum__) et de tailles identiques de préférence (mais pas obligatoire)
+
+
+
+===== Description du RAID 0 logiciel (striping) =====
+
+Le RAID 0 permet de bénéficier de toute la capacité des disques et de découper les fichiers de manière à répartir la charge sur les 2 disques.
+
+  * __Avantages__
+
+  - Utilisation de disques de tailles différentes ou non.
+  - 100% de l'espace disque est disponible.
+  - Amélioration des performances en lecture/écriture.
+  - Ne dépend pas des "pseudo" RAID semi-matériels des cartes mères actuelles.
+
+  * __Inconvénient__
+
+  - __**En cas de perte d'un disque, toutes les données de l'ensemble des disques composant le RAID sont perdues**__.
+  - Si les 2 disques n'ont pas la même capacité, la différence de taille sur le disque le plus grand est perdue.
+
+
+
+
+
+
+===== Préparation =====
+
+Pour les utilisateurs d'une carte mère avec chipset nforce4 (et surement les autres). Il est **impératif** de désactiver **toutes** les options liées au RAID dans le BIOS. Linux va gèrer très bien tout seul le RAID logiciel sans celui de la carte mère.
+
+Si vous ne désactivez pas les options RAID de la carte mère, l'OS ne se lancera tout simplement pas.
+===== Installation =====
+
+**L'agencement des partitions n'est ici qu'à titre d'exemple, libre à vous de faire comme bon vous semble...**
+
+**L'installation se fera sur 2 HDD Sata2 de 250Go chacun**
+
+Une fois le CD booté et le réseau configuré, vous arrivez dans le menu "Partitionner les disques"
+
+**__1. Modifier manuellement la table des partitions__**
+
+Ici nous retrouvons les deux disques de 250 Go
+
+    * - Sda > 250 Go
+    * - Sdb > 250 Go
+
+Nous allons commencer par **SDA** ( __le premier Disque__ )
+
+**__2. Créer une nouvelle partition__**
+
+    * Seules les Options que je citerai devront être changées, le reste devra garder les valeurs par défaut.
+    * Bien sûr, les plus expérimentés choisiront la valeur qui leur semblera la meilleure.
+
+/boot (Ici 1 Go), DEBUT DE L'ESPACE LIBRE ( Je suppose que le disque est vierge et que les partitions vont se suivre ).
+
+La taille de cette partition peut être réduite jusqu'à 100 Mo environ, cependant, il faudrait faire attention à surveiller cet espace à chaque mise à jour du noyau.
+
+Attention, sur certains disque, il sera obligatoire de laisser un espace non raid en fin de disque.
+Pour cette raison, on pourra positionner la partition boot en fin de disque.
+[[https://bugs.launchpad.net/ubuntu/+source/mdadm/+bug/569900|Bug Report correspondant]]
+
+    * SYSTEME DE FICHIER JOURNALISE : ext3
+    * POINT DE MONTAGE : /boot
+    * **INDICATEUR D'AMORCAGE : Présent**
+=== (Très important: si vous ne sélectionnez pas l'option PRESENT dans l'indicateur d'amorçage pour la partition /boot, Grub ne pourra pas s'installer, et Ubuntu ne pourra démarrer) ===
+
+
+
+**__3. Créer une nouvelle partition__**
+
+Ici nous allons créer une partition de 1 Go qui sera utilisée pour la partition d'échange appelée **SWAP**.
+
+    * UTILISER COMME : espace d'échange SWAP
+    * INDICATEUR D'AMORCE : absent 
+(Seule la partition /boot a besoin d'un indicateur d'amorce pointant sur PRESENT).
+
+**__4.Créer un nouvelle partition__**
+
+Ici, nous allons créer notre **VOLUME RAID** (toujours pour le 1er HDD).
+
+Taille : 248 Go
+
+    * UTILISE COMME : Volume physique RAID INDICATEUR D'AMORCE : absent
+
+
+
+
+**PARTITIONNEMENT DU SECOND DISQUE __SDB__**
+
+
+Pour ne pas créer un gros décalage entre les deux disques durs, nous allons créer une partition de 2 Go que l'on ne va pas formater afin d'équilibrer les partitions...
+
+**__5. Créer une nouvelle partition__**
+
+Ici nous allons créer une partition de 2 Go qui ne sera pas utilisée
+
+    * UTILISER COMME : Ne pas utiliser
+
+**__6.Créer un nouvelle partition__**
+
+Ici également, nous allons créer un **VOLUME RAID**
+
+Taille : 248 Go
+
+    * UTILISE COMME : Volume physique RAID INDICATEUR D'AMORCE : absent
+
+**__7.MENU PRINCIPAL__**
+
+    * - Configurer le RAID LOGICIEL > oui
+    * - Créer un périphérique Multidisque > RAID 0
+
+__Maintenant sélectionner__ :
+
+**/dev/sda3** et **/dev/sdb1** ( qui représente les 248 Go du premier disque et les 248 Go du second disque )
+
+**__TERMINER__**
+
+Dans le menu principal vous pouvez vous apercevoir qu'il existe maintenant un :
+
+    * - Périphérique RAID0 de 2x248 soit 496 Go
+
+Considérez que ce PERIPHERIQUE RAID 0 est un DISQUE DUR de 496 Go et créez par exemple un point de montage / en ext3 puis démarrez l'installation....
+
+
+Voilà, Ubuntu est maintenant installé sur un RAID 0 LOGICIEL.
+
+
+Voila un SCREENSHOT qui démontre la différence de VITESSE sda1 étant non RAID 0 et md1 étant en RAID 0.
+
+
+{{installation:hdparm.jpg|}}
+
+
+__Pour connaitre le détail de votre RAID ex: md0__
+dans une console : <code>sudo mdadm --detail /dev/md0</code>
+
+===== Note(s) =====
+
+Un **périphérique Multidisque** ne peut être partitionné une fois créé,
+si vous avez l'intention de séparer **/** et **home**, il vous faudra créer **4 volumes RAID** puis ** 2 périphériques Multidisques**.
+
+__Par exemple__ :
+
+- Volume RAID n°1 : /dev/sda3
+
+- Volume RAID n°2 : /dev/sdb1
+  * Premier périphérique multidisque RAID 0 (md0) : **/**
+---------------------------------------------------------
+
+- Volume RAID n°3 : /dev/sda4
+
+- Volume RAID n°4 : /dev/sdb2
+  * Deuxième périphérique multidisque RAID 0 (md1) : **/home**
+
+Il existe aussi la possibilité de placer un **LVM** sur le périphérique MD ce qui permet de le partitionner sans avoir à créer **4** Volumes RAID
+ 
+----
+//Contributeurs : [[utilisateurs:seppi|$ePpI]] //

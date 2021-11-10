@@ -1,0 +1,201 @@
+
+{{tag> tutoriel}}
+----
+
+====== Qu'est ce qu'un EBR ? ======
+
+Au cours de vos lectures fructueuses dans la doc ou dans le forum, vous êtes peut être tombés sur des gourous parlant un jargon incompréhensible de partitions, de [[:mbr|mbr]] voir même - soyons fou - d'ebr. Vous vous êtes alors demandés "Qu'est ce que c'est-y que ce bestiau là" 8-O
+\\
+Ce tuto a pour but d'essayer de clarifier la chose. Il s'adresse néanmoins aux utilisateurs avertis ou curieux.
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]]
+  * Connaitre la numération hexadécimale.
+  * Utiliser la calculatrice gcalctool en mode programmation (pour faire facilement des conversions hexadécimal/décimal)
+  * Connaitre la structure des tables des partitions du [[:mbr|mbr]]
+ 
+===== Qu'est ce qu'un ebr =====
+
+
+
+Alors que le [[:mbr|mbr]], premier secteur d'un disque dur (ou d'une clé usb) renferme les caractéristiques des **partitions principales**, l'EBR (extended boot record) concerne les **partitions logiques**. 
+\\
+Pour qu'il y ait des partitions logiques il faut que le disque contienne une **partition étendue** (une seule est possible). Elle sera un **contenant à partitions logiques**.
+\\
+\\
+Contrairement au mbr, les ebr - oui il peut y en avoir plusieurs - ne contiennent pas de partie exécutable mais seulement une table de partitions concernant les partitions logiques.
+
+===== Comment accéder aux EBR ? =====
+
+L'accès aux ebr s'effectue en lisant directement des secteurs du disque ; de ce fait les accès ne peuvent s'effectuer qu'en mode superutilisateur (sudo). \\ 
+\\
+Pour y accéder nous aurons de nouveau besoin de la fonction [[:dd|dd]] - pour ceux qui ont lu le tuto sur le [[:mbr|mbr]]. 
+\\
+Pour les autres la fonction [[:dd|dd]] permet d'accéder directement à un contenu présent sur le disque en s'affranchissant de tout système de fichiers.
+
+Le disque est considéré comme un espace linéaire constitué de blocs de données, appelés secteurs, de 512 octets chacun, et dont la position est repérée par la LBA (Logical block addressing).
+La première adresse commence en zéro (mbr) et la dernière (pas forcément utilisable) peut être calculée en divisant la taille du disque en octets par 512 et en retirant 1.
+\\
+Contrairement au mbr, dont le numéro du secteur est connu (secteur d'adresse 0), la position des ebr nécessite d'effectuer un travail préalable qui commence par la recherche du début de la partition étendue.
+
+\\
+Nous y accèderons en utilisant une commande similaire à celle nécessaire pour afficher le mbr à une différence près :
+Il faut sauter des secteurs avant de pouvoir afficher ce qui nous intéresse.
+\\
+
+Nous devrons commencer par afficher la table des partitions du mbr, par exemple avec
+<code>sudo dd if=/dev/sda bs=1 count=64 skip=446 | hexdump -C</code>
+Ici on affiche les 64 octets à partir de la position 446 (table des partitions du mbr). Ce qui donne par exemple
+<code>00000000  80 01 01 00 07 fe ff ff  3f 00 00 00 d6 24 c2 03  |........?....$..|
+00000010  00 00 c1 ff 07 fe ff ff  15 25 c2 03 86 8c e8 04  |.........%......|
+00000020  00 fe ff ff 83 fe ff ff  9b b1 aa 08 78 b1 d4 01  |............x...|
+00000030  00 fe ff ff 05 fe ff ff  50 63 7f 0a 71 27 22 08  |........Pc..q'".|</code>
+Le début de la partition étendue (type **05**) en dernière ligne est indiqué par les 4 octets **50 63 7f 0a**, soit le secteur 0xa7f6350 (en hexadécimal) ou  **176120656** en décimal.
+\\
+Nous retiendrons cet emplacement qui sera un point de référence pour localiser les ebr.
+\\
+\\
+Nous pouvons alors afficher le contenu du premier ebr (confondu avec le début de la partition étendue) en sautant (skip) les **176120656** premiers secteurs du disque, soit
+<code>sudo dd if=/dev/sda bs=512 count=1 skip=176120656 | hexdump -C</code>
+Ceci donne, dans le cas de mon disque
+<code>00000000  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+000001b0  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 fe  |................|
+000001c0  ff ff 82 fe ff ff 02 00  00 00 cd b1 41 00 00 fe  |............A...|
+000001d0  ff ff 05 fe ff ff cf b1  41 00 a2 75 e0 07 00 00  |........A..u....|
+000001e0  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+000001f0  00 00 00 00 00 00 00 00  00 00 00 00 00 00 55 aa  |..............U.|
+00000200</code>
+
+
+<note tip>Pour le premier ebr (ici sda4) on peut afficher directement son contenu en commençant, non pas au début du disque, mais au début de la partition étendue avec<code>sudo dd if=/dev/sda4 bs=512 count=1 | hexdump -C</code>
+</note>
+
+
+
+
+===== Analyse d'un ebr =====
+
+\\
+
+La structure d'un ebr est calquée sur celle du mbr concernant les partitions. Les entrées commencent toujours à l'adresse **1be** (446) et font toujours 16 octets chacune.
+\\
+La principale différence est qu'il n'y a que deux entrées et que les autres sont vides. La zone amorce se termine toujours par le mot magique **aa55**.
+\\
+En décalant les adresses (pour mieux voir la structure on obtient :
+\\ 
+<code>000001be   00   fe ff ff   82   fe ff ff   02 00 00 00   cd b1 41 00
+000001ce   00   fe ff ff   05   fe ff ff   cf b1 41 00   a2 75 e0 07
+000001de   00   00 00 00   00   00 00 00   00 00 00 00   00 00 00 00
+000001ee   00   00 00 00   00   00 00 00   00 00 00 00   00 00 00 00  
+</code>
+
+\\
+==== La première entrée d'un EBR - Une partition logique====
+
+La première ligne qui correspond à la première entrée concerne une partition logique. C'est sda5 pour le premier ebr.
+\\
+ Cette partition est en Linux-swap (type **82**) et commence **2** secteurs (octets **02 00 00 00**) après l'ebr courant, soit au secteur :
+\\
+176120656 + 2 = **176120658**
+\\
+
+La taille de la partition logique, donnée par les octets cd b1 41 00, est de 4305357 secteurs, soit 2152678,5 kio
+\\
+\\
+==== La deuxième entrée - L'EBR suivant====
+
+La deuxième entrée ne concerne pas une partition logique mais les caractéristiques de l'ebr suivant.
+\\
+Parmi ces dernières nous retrouvons le type, le début et la taille de cet ebr.
+\\
+<note important>Il y a néanmoins ici une différence importante c'est que la partition logique est positionnée par rapport à l'**ebr courant** alors que l'ebr suivant est positionné par rapport au **début de la partition étendue** (unique).</note>
+\\
+Ce deuxième ebr (type **05**) commence donc 4305359 (cf b1 41 00) secteurs après le début de la partition étendue soit en 
+\\
+176120656 + 4305359 = **180426015**
+\\
+\\
+Sa taille est de **132150690** secteurs (a2 75 e0 07)
+
+===== Exercice pratique =====
+\\
+Nous pouvons continuer l'analyse en affichant la zone amorce du deuxième ebr par
+\\
+<code>sudo dd if=/dev/sda bs=512 count=1 skip=180426015 | hexdump -C</code>
+\\
+Ce qui donne :
+\\
+<code>000001b0  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 fe  |................|
+000001c0  ff ff 83 fe ff ff 3f 00  00 00 63 75 e0 07 00 00  |......?...cu....|
+000001d0  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+*
+000001f0  00 00 00 00 00 00 00 00  00 00 00 00 00 00 55 aa  |..............U.|
+</code>
+\\
+On retrouve la structure des tables des partitions avec une nouvelle partition logique, sda6, de type **83** (en fait ext4) mais ici il n'y a qu'une entrée car il n'y a pas d'autre partition logique - et donc pas besoin d'autre ebr.
+\\
+<note help>Lorsque la deuxième entrée est vide (ne contient que des zéros), alors nous avons inventorié toutes les partitions logiques.</note>
+\\
+Cette partition commence 63 secteurs (3f 00 00 00) après l'ebr courant, soit en :
+\\
+180426015 + 63 = **180426078**
+\\
+\\
+Sa taille est de 132150627 secteurs (63 75 e0 07), soit 66075313,5 kio
+\\
+\\
+\\
+Nous retrouvons les débuts des partitions et les tailles avec la commande
+\\
+<code>sudo fdisk -lu</code>
+
+<note tip>L'option -lu permet d'afficher les résultats en secteurs au lieu de cylindres (option -l qui est moins précise)</note>
+
+<code>Disque /dev/sda: 160.0 Go, 160041885696 octets
+255 têtes, 63 secteurs/piste, 19457 cylindres, total 312581808 secteurs
+Unités = secteurs de 1 * 512 = 512 octets
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Identifiant de disque : 0x525d525d
+
+Périphérique Amorce  Début        Fin      Blocs     Id  Système
+/dev/sda1   *          63    63055124    31527531    7  HPFS/NTFS
+/dev/sda2        63055125   145404314    41174595    7  HPFS/NTFS
+/dev/sda3       145404315   176120594    15358140   83  Linux
+/dev/sda4       176120656   312576704    68228024+   5  Etendue
+/dev/sda5       176120658   180426014     2152678+  82  Linux swap / Solaris
+/dev/sda6       180426078   312576704    66075313+  83  Linux
+</code>
+\\
+===== Schéma d'organisation des partitions =====
+Le partitionnement du disque dur fait alors apparaitre le mbr, les partitions principales, les ebr et les partitions logiques.
+\\
+Les ebr sont encastrés les uns dans les autres à la façon de poupées russes selon le schéma suivant :
+\\
+\\
+{{ :partitions_disque.png? |}}
+\\
+\\
+Les zones hachurées représentent des secteurs du disque normalement inutilisés (secteurs suivant le mbr, fin du disque). A noter que certains secteurs entre le MBR et la première partition sont utilisés par [[grub-pc|l'amorceur d'Ubuntu]].
+
+===== Intérêt de connaitre la structure de ces EBR =====
+\\
+Il arrive parfois que la table des partitions soit corrompue pouvant empêcher tout redimensionnement. Cette corruption peut se trouver dans le mbr tout comme dans les ebr.
+\\
+Si l'emplacement du mbr est facile à trouver, ce peut être plus délicat pour les ebr dont les adresses n'apparaissent pas lorsque l'on utilise fdisk. Il sera alors nécessaire de cheminer d'ebr en ebr pour effectuer des vérifications - voire des corrections.
+\\
+
+<note important>Il est souvent conseillé de sauvegarder le mbr - voire les secteurs suivants - pour se prémunir de problèmes ultérieurs. Cependant cette sauvegarde ne concernera que les partitions principales en oubliant les éventuelles partitions logiques.</note>
+<note important>Il est aussi recommandé de vérifier que les partitions logiques trouvées présentent des caractéristiques correspondantes au système de fichiers indiqué, par exemple en trouvant la chaine de caractères "NTFS" au début d'une partition de type **07**. En effet il peut arriver qu'un type de système de fichiers soit mentionné et que la zone amorce de la partition ne corresponde pas (en tête corrompu ou mal positionné).</note>
+===== Voir aussi =====
+\\
+  * **(en)** [[http://en.wikipedia.org/wiki/Extended_boot_record]]
+  * **(fr)** [[http://fr.wikipedia.org/wiki/Master_boot_record]]
+  * **(fr)**[[http://fr.wikipedia.org/wiki/Partition_de_disque_dur]]
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=390336]] sur le forum ubuntu-fr
+  * **(fr)**[[http://fr.wikipedia.org/wiki/Logical_block_addressing]]
+
+
+----
+//Contributeurs principaux : [[:utilisateurs:Nasman]].//

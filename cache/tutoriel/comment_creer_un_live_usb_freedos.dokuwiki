@@ -1,0 +1,97 @@
+
+{{tag>Xenial tutoriel matériel carte_mère bios système}}
+
+----
+
+====== Comment créer un live-USB contenant FreeDOS ======
+
+FreeDOS est un système d'exploitation complet, libre, et 100% compatible MS-DOS.
+
+Aujourd'hui, FreeDOS est idéal pour tous ceux qui veulent fournir une version du DOS sans avoir à payer des royalties pour pouvoir l'utiliser. FreeDOS fonctionnera aussi sur du vieux matériel, dans des émulateurs DOS et dans des systèmes embarqués.
+
+**Le présent tutoriel permet d'installer FreeDOS sur un support externe USB sur lequel les fichiers stockés seront accessibles depuis FreeDOS sur le lecteur A:**\\
+Il existe une méthode d'installation graphique utilisant [[:UNetbootin]] mais cette méthode ne vous permettra pas d'accéder aux fichiers que vous aurez placé sur votre clé en vue d'une utilisation avec FreeDOS.
+
+===== Pré-requis =====
+
+Avant de suivre le tutoriel, vous devez :
+  * Disposer des [[:sudo|droits d'administration]] ;
+  * Savoir utiliser un [[:terminal|terminal de commande]] ;
+  * Savoir manipuler des [[:partitions|partitions]] et système de fichiers ;
+  * Savoir si vous utilisez une architecture 32bits ou 64bits ;
+  * Avoir [[:tutoriel:comment_installer_un_paquet|installé le paquet]] **[[apt>//qemu|qemu]]** ;
+  * Avoir téléchargé [[http://www.freedos.org/download/|FreeDOS]].
+
+En fonction de l'architecture de votre système, la commande à utiliser diffère : 
+  * Pour un système 32bits, la commande à utiliser est **qemu-system-i386** ;
+  * Pour un système 64bits, la commande à utiliser est **qemu-system-x86_64**.
+
+**Le présent tutoriel utilise des commandes pour un système 32bits.**
+
+===== Création des partitions =====
+
+Tout d'abord, il vous faudra créer une partition au format FAT.
+
+Le **FAT16** est recommandé car certaines anciennes carte-mères ne savent pas démarrer sur des partitions en **FAT32**. Si vous savez que votre carte mère arrivera à utiliser le format FAT32, vous êtes libre de choisir l'un des deux formats.
+
+L'exemple suivant utilise le format **FAT16** sur le support **/dev/sdb**. Votre périphérique doit être connecté mais les partitions ne doivent pas être montées. Si besoin, démontez-les en utilisant la commande <code>sudo umount /media/<nom_du_périphérique></code>
+
+  - Ouvrez fdisk : <code>sudo fdisk /dev/sdb</code>
+  - Supprimez les partitions existantes (touche **d**) ;
+  - Ajouter une partition (touche **n**) et validez les choix par défaut ;
+  - Définissez le format de partition (touche **t**) avec le code Hexa **6** ;
+  - Activez l'unique et nouvelle partition (touche **a**) sur l'emplacement **1** ;
+  - Contrôler les modifications avant écriture (touche **p**) ;
+  - Si les modifications sont correctes, écrivez la nouvelle table de partitions (touche **w**) ;
+  - Formatez votre support pour appliquer les modifications <code>sudo mkdosfs -F 16 -n FreeDOS /dev/sdb1</code>
+
+===== Installation de FreeDOS =====
+
+Identifiez l'emplacement de votre support externe (ex : /dev/sdb) et de l'image ISO de FreeDOS que vous avez téléchargé (ex : ~/Téléchargements/fdbasecd.iso). L'installation de FreeDOS est à effectuer avec **Qemu**. Pour libérer la souris et la clavier, utilisez la combinaison de touche ctrl+alt. Les commandes suivantes sont à adapter à votre configuration : 
+  - Exécutez la commande <code>sudo qemu-system-i386 -hda /dev/sdb -cdrom ~/Téléchargements/fdbasecd.iso -boot d</code>
+  - Choisissez la première entrée : ''1) Continue to boot FreeDOS from CD-ROM'' ;
+  - Choisissez la première entrée : ''1. Install to harddisk using FreeDOS SETUP (default)'' ;
+  - Choisissez votre langage et agencement de clavier ;
+  - Choisissez la première entrée : ''1) Continue with FreeDOS installation'' ;
+  - Choisissez la première entrée : ''1) Start installation of FreeDOS 1.0 Final'' ;
+  - Laissez vous guider en choisissant les choix par défaut ;
+  - **NE REDÉMARREZ PAS** (touche **N**) et suivez la suite du tutoriel.
+
+==== Créez un secteur de d'amorçage ====
+
+Toujours dans Qemu que vous n'avez pas fermé, créez un secteur de d'amorçage : <code>fdisk /mbr 1</code>
+
+==== Modifiez le fichier fdconfig.sys ====
+
+Toujours dans Qemu :
+  - Retournez à la racine du lecteur <code>cd \</code>
+  - Éditez le fichier fdconfig.sys <code>edit fdconfig.sys</code>
+  - Ajouter **1234?** au début de la ligne n°22 commençant par ''SHELLHIGH=C:\'' pour obtenir un résultat similaire (peut varier selon les version de FreeDOS) <file>1234?SHELLHIGH=C:\FDOS\bin\command.com C:\FDOS\bin /E:1024 /P=C:\FDOS\fdauto.bat</file>
+  - Sauvegardez le fichier avec la combinaison de touche **Ctrl+S** ;
+  - Quittez l'édition avec la combinaison de touche **Alt+X** ;
+  - Quittez Qemu.
+
+===== Vérification =====
+
+Avant de démarrer, vous pouvez tester votre clé avec Qemu : <code>qemu-system-i386 -hda /dev/sdb -boot c</code>
+
+Les fichiers et dossiers que vous ajouterez sur votre clé seront accessibles dans le lecteur A: rendant possible, par exemple, la mise à jour d'un BIOS.
+
+<note tip>
+Si lors du démarrage de FreeDOS en condition réelle (c-a-d pas avec Qemu mais sur le PC cible), vous avez une erreur du genre:
+<file>Bad or missing Command Interpreter: C:\FDOS\bin\command.com C:\FDOS\bin /E:1024 /P=C:\autoexec.bat</file>
+Il se peut que la clé USB soit montée lors du boot sur ce PC cible comme un lecteur A:\ alors que les commandes contenues dans FDCONFIG.SYS et AUTOEXEC.BAT pointent vers un lecteur C:\ inexistant. Pour corriger ce problème, il suffit de modifier ces 2 fichiers sur la clé USB (à l'aide de gedit par exemple) et de remplacer toutes les occurrences "C:\" par "A:\".
+</note>
+
+===== Utilisation =====
+Vous rencontrez des difficultés pour monter un disque partitionné en NTFS (disque contenant des erreurs) et [[:ntfsfix]] ne résout pas le problème.
+
+Freedos contient l'utilitaire **chkdsk**. 
+La syntaxe pour lancer cet utilitaire est :
+<code>chkdsk E: /f</code> ou "E:" est la lettre du disque dur a réparer et "/f" l'option qui corrige les erreurs.
+----
+
+//Basé sur [[http://manual.aptosid.com/fr/bios-freedos-fr.htm|Mettre à jour le bios avec FreeDOS]]//
+
+----
+//Contributeurs principaux : [[:utilisateurs:percherie]].//

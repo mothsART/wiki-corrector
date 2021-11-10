@@ -1,0 +1,643 @@
+
+{{tag>messagerie courriel postfix MTA serveur}}
+
+====== Installer Postfix en local pour un poste de travail ======
+Pour une correspondance entre vos utilisateurs d'un poste de travail et avec les applications locales de la machine, il est important d'installer un serveur de courrier MTA. Pour plus d'informations sur la messagerie lire [[:comment_fonctionne_le_courriel_sous_linux|Comment fonctionne le courriel sous Linux ?]], et sur les principes du serveur Postfix lire [[:comment_configurer_sa_distribution_de_courriels_systemes_mta|Comment configurer sa distribution de courriels systèmes MTA avec Postfix ?]]
+
+===== Installation du serveur de messagerie Postfix =====
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] du serveur de messagerie **[[apt>postfix|postfix]]**.
+Choisir «pas de configuration» si l'installation demande de paramétrer le serveur de messagerie.
+
+{{ :doc:02_pasdeconfiguration.png?nolink&600 |}}
+
+Installer le client [[mutt|Mutt]] de messagerie MUA **[[apt>mutt|mutt]]** (les clients MUA de mailutils et de bsd-mailx ne supportent que le format mbox pour la gestion locale, vous pouvez aussi utiliser [[https://neomutt.org|Neomutt]] avec plus de fonctionnalités en remplacement de Mutt **[[apt>neomutt|Neomutt]]**). 
+
+
+===== Définir le gestionnaire de messagerie =====
+**Vous devez définir qui va avoir la supervision de la messagerie**. Donc si l'utilisateur root est le superviseur de la messagerie, ou si c'est un utilisateur du système (serveur ou desktop Linux). Le fichier **/etc/aliases** (''kate /etc/aliases'') est à paramétrer comme suit.
+
+Avec l'utilisateur directement gestionnaire de messagerie :
+<file>postmaster:    utilisateur</file>
+
+Avec l'utilisateur gestionnaire de la machine Linux (relais postmater à l'utilisateur root) :
+<file>postmaster:    root
+root:    utilisateur</file>
+
+<note tip>Pour valider dans Postfix la configuration après modification (en ayant créer une première configuration du serveur de messagerie avec l'étape de configuration ci-après) :
+<code bash>sudo postalias /etc/aliases</code></note>
+
+<note warning>Par défaut, lors de la configuration du serveur de messagerie, celui-ci sera positionné avec l'utilisateur root</note>
+
+===== Configurer le DNS pour votre serveur de messagerie =====
+[[configuration_serveur_dns_bind9_pour_son_poste_de_travail|Pour configurer un serveur DNS local avec Bind9 pour votre poste de travail]].
+
+[[configuration_serveur_dns_pour_son_poste_de_travail|Pour configurer un serveur DNS local avec Dnsmasq pour votre poste de travail]].
+
+
+==== Si vous ne voulez pas d'un serveur DNS dédié à votre messagerie ====
+Pour créer un domaine 
+dns local pour votre messagerie :
+<code bash>sudo hostnamectl set-hostname ma-machine.local.fr --static</code>
+Remplacez local.fr par le non DNS que vous voulez, et ma-machine avec le non d'ordinateur.
+
+Vérifiez que le DNS fonctionne bien :
+<code bash>hostname</code>
+retourne le nom d'ordinateur
+<code>ma-machine.local.fr</code>
+<code bash>hostname -d</code>
+retourne le domaine DNS de l'ordinateur
+<code>local.fr</code>
+
+
+===== Configurer le serveur de messagerie par le paquet d'installation =====
+Vous pouvez maintenant configurer le serveur de messagerie Postfix.
+
+Si votre application est déjà installée, tapez :
+<code bash>sudo dpkg-reconfigure postfix</code>
+
+
+Entrez les détails suivants
+{{ :doc:01_ecrandemarage.png?nolink |}}
+Touche tabulation pour basculer sur OK, et touche Entrée pour valider le message d'information.
+
+----
+
+{{ :doc:02_localuniquement2.png?nolink |}}
+Choisissez le type de configuration automatique Postfix de serveur de messagerie que vous voulez faire. Ici c'est **Local Uniquement**
+
+----
+
+{{ :doc:03_nomducourriel_local.png?nolink |}}
+Ici on va fixer le non de domaine de messagerie (par exemple @local.fr). Donc **saisissez le nom du domaine de messagerie que vous voulez pour vos courriels locaux** des utilisateurs de la machine.
+
+La variable du fichier Ubuntu **/etc/mailname** et le paramètre Postfix **myorigin** sont donc paramétrés ici.
+
+----
+
+{{ :doc:04_adminserveur_local.png?nolink |}}
+Ici on fixe le gestionnaire de messagerie. 
+<note warning>Si vous n'avez pas précisé en amont de cette configuration le gestionnaire de messagerie, le configurateur du serveur de messagerie remplacera le nom d'utilisateur que vous avez saisie par root dans le fichier /etc/aliases (''postmaster: root'')</note>
+
+----
+
+{{ :doc:05_domainesmessagerie_locale.png?nolink |}}
+Ici on fixe les domaines de messagerie à accepter comme courriels au départ. Par exemple pour des adresses @Ma-Machine (résultat de la commande bash ''hostname'') ajouter Ma-Machine, pour des courriels @local.fr ajouter local.fr, etc.
+
+Donc dans notre cas :
+<code>Ma-Machine, Ma-Machine.local.fr, localhost.localdomain, localhost, local.fr</code>
+
+C'est la variable **mydestination** du fichier /etc/postfix/main.cf qui est modifiée.
+
+----
+
+{{ :doc:06_synchrofileattente.png?nolink |}}
+
+----
+
+{{ :doc:07_reseauxdistribution_aucun.png?nolink |}}
+Définit sur quel réseau distribuer les courriels.
+<code>127.0.0.1/32 [::1]/128</code>
+
+C'est la variable **mynetworks** du fichier /etc/postfix/main.cf qui est modifiée.
+
+----
+
+{{ :doc:08_taillebal.png?nolink |}}
+Fixe un taille limite pour les boites aux lettres des comptes utilisateur du système.
+
+C'est la variable **mailbox_size_limit** du fichier /etc/postfix/main.cf qui est modifiée.
+
+----
+
+{{ :doc:09_extadresse.png?nolink |}}
+Définit une extension pour des sous domaines de messagerie.
+
+C'est la variable **recipient_delimiter** du fichier /etc/postfix/main.cf qui est modifiée.
+
+----
+
+{{ :doc:10_protocoles.png?nolink |}}
+Définit les protocoles du réseaux de transport qui doivent être utiliser.
+
+C'est la variable **inet_protocols** du fichier /etc/postfix/main.cf qui est modifiée.
+
+
+===== Emplacement des boîtes aux lettres des utilisateurs du système =====
+Nous remarquons que le «configurateur» de Postfix ne demande pas de préciser où les boîtes aux lettres des utilisateurs sont situées. 
+
+La commande de la file d'attente :
+<code bash>postconf queue_directory</code>
+renvoie
+<code>queue_directory = /var/spool/postfix</code>
+
+La commande de boîtes postales :
+<code bash>postconf mail_spool_directory</code>
+renvoie
+<code>mail_spool_directory = /var/mail</code>
+
+Si on passe la commande de boîtes aux lettres utilisateurs :
+<code bash>postconf home_mailbox</code>
+Nous avons :
+<code>home_mailbox =</code>
+Nous voyons alors que les boîtes aux lettres des utilisateurs sont des boîtes postales et se situent dans /var/mail/utilisateur.
+
+Il nous faudra donc éditer le fichier /etc/postfix/main.cf (''kate /etc/postfix/main.cf'') et ajouter la variable **home_mailbox** pour vos utilisateurs.
+
+Par exemple :
+<file># au format maildir
+home_mailbox = .local/share/courriels/arrivées/</file>
+ou passer la commande dans un terminal :
+<code bash>sudo postconf -e home_mailbox=.local/share/courriels/arrivées/</code>
+afin que le courriel soit directement distribué dans la boîte aux lettres locale de l'utilisateur.
+
+Pour valider la configuration dans Postfix, tapez :
+<code bash>systemctl restart postfix</code>
+
+===== Configurer le client mail MUA système =====
+Testez la lecture de la boîte aux lettres :
+<code bash>mutt</code>
+
+Si vous avez un message du genre :
+<code>/home/utidisateur/Mail n'existe pas. Le créer ? ([oui]/non):</code>
+C'est que votre client mail est mal configuré.
+
+Tapez : <code>n</code> puis pour quitter Mutt <code>q</code>
+
+Éditer le fichier .muttrc dans votre dossier /home/utilisateur (''kate ~/.muttrc'')
+Et ajouter ou modifier ces lignes :
+<file># Configuration de base
+set realname="{Prénom NOM}"
+set header_cache=~/.mutt/cache/headers
+set certificate_file=~/.mutt/certificates
+set message_cachedir=~/.mutt/cache/bodies
+set beep
+set use_from = yes
+
+# Boite de réception
+set spoolfile=~/.local/share/courriels/arrivées/
+# Boite aux lettres de Mutt
+set folder=~/.local/share/courriels
+
+# Autres dossiers
+set postponed=+brouillons
+set record=+envoyés
+
+# Encodage à utiliser
+set charset=utf-8
+set send_charset=utf-8
+# Format de la date à afficher avant les citations lors d'une réponse
+set date_format="%A %d %B %Y à %I:%M:%S%p"
+set index_format="%4C %Z %{%b %d} %-15.15F (%4l) %s"
+set fast_reply
+set include=yes
+
+# Configuration SMTP
+set sendmail="/usr/sbin/sendmail"
+</file>
+
+===== Configurer une distribution SMTP locale sécurisée =====
+==== Bloquer le port 25 SMTP standard ====
+=== Test de la connexion sur le port 25 ===
+Déjà testons que le port 25 est ouvert.
+Pour cela tapez la commande :
+<code bash>telnet localhost 25</code>
+
+Ce qui affiche
+<code>Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+220 Ma-Machine ESMTP Postfix (Ubuntu)</code>
+
+Tapez :
+<code>HELO Ma-Machine</code>
+retourne
+<code>250 Ma-Machine</code>
+
+Puis saisissez l'identifiant d'un compte local :
+<code>MAIL FROM: utilisateur</code>
+retourne
+<code>250 2.1.0 Ok</code>
+
+Saisissez le destinataire :
+<code>RCPT TO: utilisateur@localhost</code>
+retourne
+<code>250 2.1.5 Ok</code>
+
+Saisissez :
+<code>DATA</code>
+retourne
+<code>354 End data with <CR><LF>.<CR><LF></code>
+
+Et enfin vous pouvez saisir votre courriel :
+<code>From: utilisateur
+To: utilisateur
+Subject: Test de message sur port 25
+Ceci est un test d'envoie sur port 25
+Merci de votre coopération
+.</code>
+retourne
+<code>250 2.0.0 Ok: queued as 9E77AA02321</code>
+
+Pour quitter tapez :
+<code>QUIT</code>
+retourne
+<code>221 2.0.0 Bye
+Connection closed by foreign host.</code>
+
+Vous avez expédié un courriels :-)
+
+=== Blocage du port 25 ===
+Modifier le fichier master.cf (''kate /etc/postfix/master.cf'')
+
+Changer <file>smtp      inet  n       -       y       -       -       smtpd</file>
+
+en
+<file>587     inet    n       -       y       -       -       smtpd
+      -o content_filter=dksign:[127.0.0.1]:12028</file>
+
+Redémarrage de Postfix pour valider les changements :
+<code bash>systemctl restart postfix</code>
+
+=== Test du verrouillage du port 25 ===
+Pour cela taper :
+<code bash>telnet localhost 25</code>
+retourne
+<code>Trying 127.0.0.1...
+telnet: Unable to connect to remote host: Connection refused</code>
+
+=== Test de l'accès sur le port 587 ===
+Pour cela taper :
+<code bash>telnet localhost 587</code>
+retourne
+<code>Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+220 Ma-Machine ESMTP Postfix (Ubuntu)</code>
+
+Tapez :
+<code>HELO Ma-Machine</code>
+retourne
+<code>250 Ma-Machine</code>
+
+Puis saisissez l'identifiant d'un compte local :
+<code>MAIL FROM: utilisateur</code>
+retourne
+<code>250 2.1.0 Ok</code>
+
+Tapez pour quitter :
+<code>QUIT</code>
+retourne
+<code>221 2.0.0 Bye
+Connection closed by foreign host.</code>
+
+=== Renforcer la sécurité ===
+Vous pouvez modifier la directive <file>smtpd_banner = $myhostname ESMTP (Courriels)</file> dans le fichier main.cf si vous voulez plus de sécurité. Cela retournera lors de la connexion telnet sur le port 587 :
+<code>Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+220 Ma-Machine ESMTP (Courriels)</code>
+
+==== Mettre en place la connexion TLS ====
+Pour valider le transport [[https://fr.wikipedia.org/wiki/Transport_Layer_Security|TLS]] il faut modifier le fichier main.cf (''kate /etc/postfix/main.cf'') comme suit :
+<file># TLS pour le serveur smtpd de Postfix
+# Utilise le générateur de nombres aléatoires de Linux
+tls_random_source = dev:/dev/urandom
+# Active le protocole de cryptage TLS
+smtpd_use_tls = yes
+# N'autorise que les connections TLS
+smtpd_tls_auth_only = yes
+# Niveau de sécurité dans la négociation du protocole
+smtpd_tls_security_level = may
+# Les clefs du cryptage
+smtpd_tls_cert_file = /etc/ssl/certs/ssl-cert-snakeoil.pem
+smtpd_tls_key_file = /etc/ssl/private/ssl-cert-snakeoil.key
+
+# TLS pour le client
+# Active le protocole de cryptage TLS
+smtp_use_tls = yes
+# Niveau de sécurité dans la négociation du protocole
+smtp_tls_security_level = may
+# Les clefs du cryptage
+smtp_tls_CApath = /etc/ssl/certs
+# Répertoire de cache pour la communication
+smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache</file>
+
+=== Tester le fonctionnement de TLS ===
+Connexion normale
+Tapez :
+<code bash>telnet localhost 587</code>
+retourne
+<code>Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+220 Ma-Machine ESMTP (Courriels)</code>
+
+Tapez :
+<code>ehlo Ma-Machine</code>
+retourne
+<code>250-Ma-Machine
+250-PIPELINING
+250-SIZE 10240000
+250-VRFY
+250-ETRN
+250-STARTTLS
+250-ENHANCEDSTATUSCODES
+250-8BITMIME
+250-DSN
+250-SMTPUTF8
+250 CHUNKING</code>
+
+Tapez :
+<code>MAIL FROM: utilisateur</code>
+retourne
+<code>250 2.1.0 Ok</code>
+
+Tapez :
+<code>QUIT</code>
+retourne
+<code>221 2.0.0 Bye
+Connection closed by foreign host.</code>
+
+Pour vous connecter en TLS :
+<code bash>openssl s_client -starttls smtp -connect localhost:587</code>
+retourne
+<code>CONNECTED(00000003)
+…
+    Start Time: 1598437512
+    Timeout   : 7200 (sec)
+    Verify return code: 0 (ok)
+    Extended master secret: no
+    Max Early Data: 0
+---
+read R BLOCK</code>
+
+Tapez :
+<code>ehlo Ma-Machine</code>
+retourne
+<code>250-Ma-Machine
+250-PIPELINING
+250-SIZE 10240000
+250-VRFY
+250-ETRN
+250-ENHANCEDSTATUSCODES
+250-8BITMIME
+250-DSN
+250-SMTPUTF8
+250 CHUNKING</code>
+
+Tapez :
+<code>MAIL FROM: utilisateur</code>
+retourne
+<code>250 2.1.0 Ok</code>
+
+Tapez :
+<code>QUIT</code>
+retourne
+<code>221 2.0.0 Bye
+Connection closed by foreign host.</code>
+
+=== Bloquer les connections non TLS ===
+Pour cela il faut modifier le fichier master.cf (''kate /etc/postfix/master.cf'')
+
+Modifier le fichier comme ci-dessous :
+<file>#587      inet  n       -       y       -       -       smtpd
+#  -o content_filter=dksign:[127.0.0.1]:12028
+⋅⋅⋅
+submission inet n       -       y       -       -       smtpd
+  -o syslog_name=postfix/submission
+  -o smtpd_tls_security_level=encrypt
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_tls_auth_only=yes
+  -o smtpd_reject_unlisted_recipient=no
+#  -o smtpd_client_restrictions=$mua_client_restrictions
+#  -o smtpd_helo_restrictions=$mua_helo_restrictions
+#  -o smtpd_sender_restrictions=$mua_sender_restrictions
+  -o smtpd_recipient_restrictions=
+  -o smtpd_relay_restrictions=permit_sasl_authenticated,reject
+  -o milter_macro_daemon_name=ORIGINATING
+</file>
+
+=== Vérifier le blocage des connexions non TLS ===
+Tester la connexion telnet :
+<code bash>telnet localhost 587</code>
+retourne                                
+<code>Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+220 Ma-Machine ESMTP (Courriels)</code>
+
+Taper :
+<code>ehlo Ma-Machine</code>
+retourne
+<code>250-Ma-Machine
+250-PIPELINING
+250-SIZE 10240000
+250-VRFY
+250-ETRN
+250-STARTTLS
+250-ENHANCEDSTATUSCODES
+250-8BITMIME
+250-DSN
+250-SMTPUTF8
+250 CHUNKING</code>
+
+Taper :
+<code>MAIL FROM: utilisateur</code>
+retourne
+<code>530 5.7.0 Must issue a STARTTLS command first</code>
+
+Taper :
+<code>quit</code>
+retourne
+<code>221 2.0.0 Bye
+Connection closed by foreign host.</code>
+
+Tester la connection TLS :
+<code bash>openssl s_client -starttls smtp -connect localhost:587</code>
+retourne
+<code>CONNECTED(00000003)
+…
+read R BLOCK</code>
+
+Tapez :
+<code>ehlo Ma-Machine</code>
+retourne
+<code>250-Ma-Machine
+250-PIPELINING
+250-SIZE 10240000
+250-VRFY
+250-ETRN
+250-AUTH DIGEST-MD5 NTLM CRAM-MD5 PLAIN LOGIN
+250-ENHANCEDSTATUSCODES
+250-8BITMIME
+250-DSN
+250-SMTPUTF8
+250 CHUNKING</code>
+
+Tapez :
+<code>MAIL FROM: utilisateur</code>
+retourne
+<code>250 2.1.0 Ok</code>
+
+Tapez :
+<code>QUIT</code>
+retourne
+<code>221 2.0.0 Bye
+Connection closed by foreign host.</code>
+
+Vos échanges de courriels sont maintenant cryptés lors du transport en SMTP. 
+
+On peut encore [[renforcer_la_securite_du_cryptage_tls_dans_postfix|Renforcer la sécurité du cryptage TLS dans Postfix]].
+
+C'est maintenant à l'authentification système au niveau utilisateur que nous allons agir pour renforcer la sécurité :-)
+
+
+==== Mettre en place l'authentification SASL ====
+Si vous voulez pousser la sécurité à l'extrême, vous pouvez authentifier vos utilisateurs de façon plus poussé pour la messagerie.
+
+=== Installer les applications complémentaires ===
+Pour la partie authentification [[:tutoriel:comment_installer_un_paquet|installez les paquets]] **[[apt>libsasl2-modules, sasl2bin |libsasl2-modules sasl2bin]]**.
+
+== Postfix doit être membre du groupe sasl ==
+<code bash>getent group sasl</code>
+doit retourner
+<code>sasl:x:45:postfix</code>
+
+Pour ajouter l'utilisateur «postfix» au groupe sasl, tapez dans un [[terminal]] :
+<code bash>sudo adduser postfix sasl</code>
+
+=== Voir quels sont les types d'authentifications acceptés par Postfix ===
+Pour le serveur smtpd de Postfix :
+<code bash>postconf -a</code>
+retourne
+<code>cyrus
+dovecot</code>
+
+Pour le client smtp de Posfix :
+<code bash>postconf -A</code>
+retourne
+<code>cyrus</code>
+
+=== Configurons le serveur smtpd de Postfix pour accepter l'authentification SASL Cyrius ===
+Afin de permettre l'authentification SASL Cyrius par Postfix, il va être nécessaire de modifier la configuration générale. Nous allons ajouter les options suivantes à main.cf afin de n'autoriser l'accès au SMTP qu'aux utilisateurs identifiés (par un login qui est leur adresse e-mail, et le mot de passe de ce compte e-mail).
+
+Éditer le fichier main.cf (kate /etc/postfix/main.cf) et modifiez/ajoutez les lignes suivantes :
+<file># Paramétrages SASL du serveur smtpd de Postfix
+# Variable postfix contenant le hostname Ma-Machine
+smtpd_sasl_local_domain = $myhostname
+# Active l'authentification SASL pour le serveur smtpd de Postfix
+smtpd_sasl_auth_enable = yes
+# Interdit les méthodes qui autorisent l'authentification anonyme.
+smtpd_sasl_security_options = noanonymous
+# Active l’interopérabilité avec les clients SMTP qui implémentent une version obsolète de la commande AUTH (RFC 2554). MicroSoft Outlook Express version 4 et Exchange version 5.0 sont des exemples de tels clients.
+broken_sasl_auth_clients = no
+# Pour autoriser le relais de courriels des utilisateurs authentifiés
+smtpd_recipient_restrictions = permit_sasl_authenticated,permit_mynetworks,reject_unauth_destination </file>
+
+=== Configurer le serveur d'authentification Cyrus ===
+Créer et éditer le fichier smtpd.conf (''kate /etc/postfix/sasl/smtpd.conf'') avec ces valeurs :
+<file>pwcheck_method: saslauthd # Fonctionnement avec le service saslauthd de Cyrus
+mech_list: PLAIN LOGIN # Les méthodes d'authentifications PLAIN et LOGIN sont permises
+</file>
+
+Créer un fichier de configuration Cyrus saslauthd-postfix pour Postfix :
+<code bash>sudo cp /etc/default/saslauthd /etc/default/saslauthd-postfix</code>
+
+Modifier le fichier saslauthd-postfix (''kate /etc/default/saslauthd-postfix'') suivant :
+<file>START=yes
+NAME="saslauthd-postf" # Maximum 15 caractères
+OPTIONS="-c -m /var/spool/postfix/var/run/saslauthd" # Chroot du serveur Postfix dans /var/spool/postfix</file>
+
+Créer le sous répertoire dans le chroot de Postfix :
+<code bash>sudo dpkg-statoverride --add root sasl 710 /var/spool/postfix/var/run/saslauthd</code>
+
+Redémarrer le service saslauthd :
+<code bash>systemctl restart saslauthd</code>
+
+Pour valider la configuration de postfix, tapez :
+<code bash>systemctl restart postfix</code>
+
+=== Configurer le client mail MUA système pour l'authentification SASL ===
+Le client Mutt devrait fonctionner de façon transparente en local avec cette configuration.
+
+Pour vérifier l’authentification au serveur SMTP en TLS SASL.
+Créer un Hash (code crypté) pour votre utilisateur local.
+<code bash>python3 -c 'import sys; from base64 import b64encode; print(b64encode(bytes(f"utilisateur@local.fr", encoding="ascii")).decode("ascii"))'</code>
+ou en perl:
+<code bash>perl -MMIME::Base64 -le 'print encode_base64("utilisateur\@local.fr");'</code>
+Ce qui donne en sortie :
+<code>dXRpbGlzYXRldXJAbG9jYWwuZnI=</code>
+
+Créer un Hash pour le mot de passe de l'utilisateur local.
+<code bash>python3 -c 'import sys; from base64 import b64encode; print(b64encode(bytes(f"mdp_de_utilisateur", encoding="ascii")).decode("ascii"))'</code>
+ou en perl:
+<code bash>perl -MMIME::Base64 -le 'print encode_base64("mdp_de_utilisateur");'</code>
+Ce qui donne en sortie :
+<code>bWRwX2RlX3V0aWxpc2F0ZXVy</code>
+
+Créer un Hash (code crypté de connexion) pour l'identifiant avec mot de passe de l'utilisateur local.
+<code bash>python3 -c 'import sys; from base64 import b64encode; print(b64encode(bytes(f"\000utilisateur@local.fr\000mdp_de_utilisateur", encoding="ascii")).decode("ascii"))'</code>
+ou en perl:
+<code bash>perl -MMIME::Base64 -le 'print encode_base64("\000utilisateur\@local.fr\000mdp_de_utilisateur");'</code>
+Ce qui donne en sortie :
+<code>AHV0aWxpc2F0ZXVyQGxvY2FsLmZyAG1kcF9kZV91dGlsaXNhdGV1cg==</code>
+
+Pour vérifier qu'il n'y a pas d'erreurs :
+<code bash>python3 -c 'import sys; from base64 import b64decode; print(b64decode("AHV0aWxpc2F0ZXVyQGxvY2FsLmZyAG1kcF9kZV91dGlsaXNhdGV1cg==").decode("ascii"))'</code>
+ou en perl
+<code bash>perl -MMIME::Base64 -le 'print decode_base64("AHV0aWxpc2F0ZXVyQGxvY2FsLmZyAG1kcF9kZV91dGlsaXNhdGV1cg==");'</code>
+
+Pour vous connecter avec cet identifiant crypté :
+<code bash>openssl s_client -starttls smtp -connect localhost:587</code>
+
+Pour l'authentification en login :
+<code>AUTH LOGIN</code>
+retourne
+<code>334 VXNlcm5hbWU6</code>
+VXNlcm5hbWU6 c'est «Username:» en crypté.
+
+Saisissez votre identifiant utilisateur@local.fr crypté :
+<code>dXRpbGlzYXRldXJAbG9jYWwuZnI=</code>
+retourne
+<code>334 UGFzc3dvcmQ6</code>
+UGFzc3dvcmQ6 c'est «Password:» en crypté.
+
+Saisissez votre mot de passe utilisateur crypté :
+<code>bWRwX2RlX3V0aWxpc2F0ZXVy</code>
+retourne
+<code>235 2.7.0 Authentification successful</code>
+
+Pour l'authentification en direct (PLAIN) :
+
+Maintenant c'est le code de Hash de l'identifiant avec le mot de passe applicatif qu'il faut saisir pour l'authentification en clair :
+<code>AUTH PLAIN AHV0aWxpc2F0ZXVyQGxvY2FsLmZyAG1kcF9kZV91dGlsaXNhdGV1cg==</code>
+retourne
+<code>325 2.7.0 Authentification successful</code>
+
+Si le compte de connexion n'est pas bon vous aurez :
+<code>535 5.7.8 Error: authentication failed: no mechanism available</code>
+Si l'identifiant PLAIN crypté n'est pas bon vous aurez :
+<code>535 5.7.8 Error: authentication failed: another step is needed in authentication</code>
+Si le protocole de connexion n'est pas bon vous aurez:
+<code>535 5.7.8 Error: authentication failed: bad protocol / cancel</code>
+Etc.
+
+Maintenant nous avons un système de messagerie très sécurisé. On peut encore améliorer le système d'authentification SASL pour cela il faut voir [[Configuration avancée de SASL Cyrus avec Postfix|Configuration avancée de SASL Cyrus avec Postfix]].
+
+On peut aussi étendre cette configuration avec [[:postfix_en_serveur_local_avec_un_serveur_de_messagerie_relaie_sur_internet| un relaie sur un serveur de messagerie du réseau ou d'internet]]
+===== Considérations de sécurités sur une architecture LAN et au-delà =====
+Pour renforcer la sécurité si votre poste de travail est dans un réseau local, il vous faudra centraliser les messages sur des boites aux lettres postales pour éviter les failles de sécurités des utilisateurs locaux peux respectueux des consignes de sécurités.
+Pour un poste de travail multi-utilisateurs chez soit, ce genre de configuration de boîtes aux lettres par utilisateurs peut-être intéressante pour la messagerie système et entre utilisateurs locaux du poste de travail.
+  
+Dans un environnement professionnel où le serveur de messagerie est sur un réseau local, il est préférable d'avoir des boites aux lettres postales (/var/mail/utilisateur). Cela permet d'avoir plusieurs niveaux de contrôles de sécurités. 
+
+Le premier aux niveau du serveur de messagerie MTA (filtrages SPAM et antivirus). 
+
+Le deuxième au niveau du MDA (Mail Delivery Agent aussi avec des outils anti-SPAMs et anti-virus) qu'il faudra installer voir [[:comment_configurer_sa_distribution_de_courriels_locale_MDA|Comment configurer sa distribution de courriels locale MDA ?]]. 
+
+Un troisième niveau peut-être mis en place au niveau du client de messagerie MUA sur le poste de travail avec un serveur local sur le modèle ci-dessus complété par un [[:postfix_en_serveur_local_avec_un_serveur_de_messagerie_relaie_sur_internet|relaie vers le serveur de messagerie du réseau]]
+
+Pour cela il faut supprimer la directive <file>home_mailbox= ...</file> du fichier de configuration main.cf de Postfix. Et modifier le client MUA Mutt avec <file>set spoolfile=/var/mail/$USER</file> dans le fichier .muttrc du répertoire home de l'utilisateur.
+
+===== Filtrage des courriels indésirables =====
+* [[https://guide.ubuntu-fr.org/server/mail-filtering.html|Comment filtrer les courriels indésirables d'Internet du serveur de messagerie]]

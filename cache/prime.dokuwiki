@@ -1,0 +1,150 @@
+
+{{tag>Xenial matériel carte_graphique nvidia}}
+----
+<note warning>Cette page n'est plus à jour : il est question de basculement automatique (comment ???) et plus bas de baculement forcément manuel.
+Merci à des personnes compétentes d'actualiser le document.</note>
+
+
+====== Prime : Optimus sous Linux ======
+
+Cette page présente l'installation du logiciel **Prime**, dont le but est de supporter la [[:nvidia_optimus|technologie Optimus de NVIDIA]] sous Linux.
+
+
+**Prime** apporte un meilleur support pour les ordinateurs portables disposant de la technologie Optimus. Il permet de gérer cette technologie présente dans de nombreux PC portables équipés d’un processeur Intel et d’une carte graphique dédiée Nvidia. Pour rappel, Optimus permet de basculer automatiquement de l’une à l’autre, en fonction des logiciels lancés par l’utilisateur.
+
+<note important>Prime prend en charge les pilotes propriétaires Nvidia mais ne fonctionne pas avec le pilote libre Nouveau !</note>
+
+
+===== Installation =====
+
+De manière générale, les différents composants matériels présents dans de tels ordinateurs nécessitent l'utilisation d'un [[kernel|noyau]] récent.
+
+Si vous voulez installer le support Optimus avec le pilote graphique Nvidia 319 ou plus récent, voici ce que vous devez faire :
+
+Tout d'abord, désinstaller Bumblebee et libvdpau-va-gl1 si nécessaire :
+
+<code>sudo apt-get purge bumblebee* primus libvdpau-va-gl1</code>
+
+Ensuite, il faut installer les drivers propriétaires NVidia. Lancez "Pilotes additionnels" (pressez une fois la touche Super
+ et commencez à taper le nom de l'application) :
+{{ ::lancement_selection_pilotes.jpg?direct |lancement de "Pilotes additionnel" }}
+
+Cela lance l'application "Logiciels et mises à jour" sur l'onglet "Pilotes additionnels":
+{{ ::selection_pilotes.png?direct |Sélecteur de pilotes additionnels }}
+Si "Nouveau" est sélectionné, vous utilisez les pilotes libres. Vous constatez que les noms de pilotes finissent pas un numéro de version. Sur l'illustration ci-dessus, la dernière version du driver propriétaire NVIDIA est la 460, c'est donc celle-ci que je sélectionne. N'oubliez pas de cliquer sur "Appliquer les changements". Vous aurez à entrer votre mot de passe. Le pilote sélectionné ne sera actif qu'au redémarrage de votre machine.
+
+
+Pour obtenir  [[vaapi|l’accélération]] GPU pour les vidéos HD via le pilote nvidia et un player compatible (VLC, mplayer, xbmc, etc) il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>vdpau-va-driver|vdpau-va-driver]]** 
+
+Redémarrez ensuite votre système.
+
+Après le redémarrage, vous pourrez utiliser l'application nvidia-settings pour choisir les performances (passage du GPU intégré au GPU NVidia et vice versa).
+
+===== Passer de la Nvidia à la Intel et vice versa =====
+
+Le basculement n'est pas automatique comme sous Windows® mais manuel. Il y a 2 solutions.
+<note>Pour les 2 méthodes, le basculement de votre carte graphique nécessite le [[:lightdm#redemarrage_de_session|redémarrage de votre session utilisateur]].</note>
+==== Nvidia Settings ====
+//Pour Ubuntu et toutes ses [[:variantes]]: //
+=== Sélection du profil ===
+
+Lancez **Nvidia-setting** l'utilitaire de configuration Nvidia. Vous aurez un onglet PRIME profiles qui permet de changer le [[wpfr>processeur graphique]] actif.
+
+{{:nvidia-prime-profiles.jpg?direct|nvidia-settings profiles}}
+
+Désormais, il y a 3 options de profil :
+  - **NVIDIA (Performance Mode)** : ce profile sélectionne votre GPU dédié NVidia ("dGPU"). Votre machine consommera plus (même sans application spécifique lancée), mais si vous lancez une application ou un jeu sollicitant fortement le GPU, vous aurez les meilleures performances. C'est uniquement dans ce mode que vous aurez accès aux autres options de votre GPU Nvidia (résolution, correction des couleurs, etc.)
+  - **Nvidia On-Demand** : ce profil permet d'alterner entre le dGPU et le GPU intégré ("iGPU"). Ce mode est le plus flexible car il permet d'utiliser l'iGPU peu consommateur en énergie par défaut, et de lancer certaines applications avec le dGPU (jeu ou autre application utilisant intensivement la 3D).
+  - **Intel (Power Saving Mode)** : ce profil force l'utilisation de l'iGPU uniquement (ici l'iGPU embarqué sur un CPU Intel). Vous n'aurez pas les meilleures performance mais la meilleure autonomie.
+
+=== Utilisation du profil "On Demand" ===
+<note tip>Dans ce mode, les applications s'exécutent par défaut avec l'iGPU. Cependant, il rexiste un moyen de lancer une application avec votre dGPU NVidia à la volée.</note>
+
+== Via l'interface graphique ==
+
+À partir du moment où vous utilisez le profil "On Demand", vous pouvez lancer une application avec votre dGPU en faisant un clic droit → "Démarrer en utilisant la carte graphique dédiée" sur son icône de lancement.
+
+{{:lancement_dgpu_via_gui.jpg?direct|Démarrer une application en utilisant la carte dédiée}}
+
+== Via la ligne de commande ==
+
+De manière générale, vous contrôlez si un programme démarre avec le dGPU avec ces variables d'environnement :
+
+^ Variable                      ^ Valeur ^ Effet                           ^
+| %%__NV_PRIME_RENDER_OFFLOAD%% | 1      |Active le//render offload//   |
+| %%__GLX_VENDOR_LIBRARY_NAME%% | nvidia |Sélectionne le dGPU NVidia. En effet, le render offload peut théoriquement être utilisé avec d'autres dGPU que NVidia |
+
+Pour aller plus loin, voir la [[https://download.nvidia.com/XFree86/Linux-x86_64/435.17/README/primerenderoffload.html|doc officielle sur le render offload NVidia]]
+
+Voici deux lignes de commande qui servent à valider que les variables sont bien prises en compte :
+<code bash>
+$ __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia glxinfo | grep vendor
+server glx vendor string: NVIDIA Corporation
+client glx vendor string: NVIDIA Corporation
+OpenGL vendor string: NVIDIA Corporation
+$ glxinfo | grep vendor
+server glx vendor string: SGI
+client glx vendor string: Mesa Project and SGI
+OpenGL vendor string: Intel
+</code>
+Les commandes ci-dessus appellent ''glxinfo'' respectivement avec le dGPU et le iGPU, puis sélectionnent les lignes affichant le mot "vendor". 
+
+Dans certains cas, il peut être nécessaire d'[[variables_d_environnement#assigner_des_valeurs_aux_variables_d_environnement|exporter les variables d'environnement]] :
+  * si vous souhaitez que tous les programmes lancés depuis un terminal utilisent le dGPU
+  * si vous souhaitez que tous les programmes lancés depuis un script shell utilisent le dGPU
+  * si la ligne de commande que vous exécutez ne lance pas directement le programme qui utilise la carte graphique, mais un script ou un programme intermédiaire
+
+== En modifiant un lanceur ==
+
+Vous pouvez créer un lanceur d'application qui lance toujours l'application cible avec le dGPU en l'éditant avec un éditeur de texte de manière à préfixer la commande de lancement (ligne ''Exec='') avec les variables vues dans la section précédente.
+
+Par exemple, si lanceur de l'application (un fichier avec l'extension ''.desktop'') contient la ligne :
+<code bash>Exec=/usr/bin/mon_application</code>
+... alors vous devrez l'éditer pour obtenir :
+<code bash>Exec=env __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia /usr/bin/mon_application</code>
+
+== Dans les adaptateurs pour les application et jeux ==
+
+Les adaptateurs tels [[wine]], [[steam]] ou [[lutris]] possèdent tous des moyens pour définir les variables d'environnement afin que l'application puisse être lancée sur le dGPU. Référez-vous à leurs documentations respectives.
+
+==== Prime Indicator ====
+//Pour [[:unity|Ubuntu Unity]] et [[http://cubuntu.fr|Cubuntu]]://
+<note important>La méthode précédente est préférable. Si vous rencontrez des problèmes avec cette méthode, utilisez la précédente. Le support de l'applet **Prime Indicator** est inconnu.</note>
+
+**Prime Indicator** est un petit utilitaire pour Ubuntu qui permet aux utilisateurs de basculer rapidement entre les cartes graphiques Intel et Nvidia. 
+
+{{:nvidia:prime-indicator.jpg?200|}}
+
+  - [[:PPA|Ajoutez le PPA]] **ppa:kranich/cubuntu**((https://launchpad.net/~kranich/+archive/ubuntu/cubuntu)) dans vos sources de logiciels;
+  - [[:tutoriel:comment_modifier_sources_maj#recharger_la_liste_des_paquets|Rechargez la liste des paquets]];
+  - [[:tutoriel:comment_installer_un_paquet#paquet_present_dans_les_depots|Installez le paquet]] **[[apt>prime-indicator]]**
+  - Puis redémarrez votre système.
+
+=====Problèmes connus=====
+====Gel de l'écran à l'utilisation du touchpad====
+
+Après l'installation de Prime et des derniers pilotes propriétaires Nvidia, un bug provoquerait un gel de l'écran à l'utilisation du touchpad. Les détails et témoignages sur launchpad.net (en anglais) [[https://bugs.launchpad.net/ubuntu/+source/nvidia-prime/+bug/1220426|ici]] et [[https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers-331/+bug/1277245|ici]].
+
+====Si NVIDIA X Server Settings ne lance plus====
+<note tip>Ce problème n'est plus censé se produire. Avec les nouveaux drivers propriétaires NVidia qui supportent le profil "On Demand", prime-select ne devrait plus être utilisé.</note>
+
+Après avoir installé le driver propriétaire, il est possible de switcher dans l'onglet Prime entre la carte graphique et le processeur. Un bug reconnu empêche NVIDIA X Server Settings de se lancer en version 384.69-0ubuntu1 lorsque le choix Prime est mis sur le processeur. 
+
+Dans ce cas, pour switcher à nouveau, il faut utiliser cette commande : 
+
+<code>sudo prime-select nvidia</code> pour basculer sur la carte graphique
+
+ou 
+
+<code>sudo prime-select intel</code> pour revenir sur le processeur. 
+<note warning>En version 20.04.1  jongler avec cette technique peut empêcher de booter Voir [[https://forum.ubuntu-fr.org/viewtopic.php?pid=22351188#p22351188|cette discussion]] </note>
+
+Redémarrez votre ordinateur après chaque changement. 
+===== Lien divers =====
+  * **(fr)** [[http://www.nextinpact.com/news/84863-nvidia-prime-optimus-sous-ubuntu-14-04-via-interface-graphique.htm|nvidia-prime fr]]
+  * **(en)**[[https://launchpad.net/ubuntu/+source/nvidia-prime|nvidia-prime Launchpad]]
+  * **(en)**[[https://github.com/beidl/prime-indicator|prime indicator GitHub]]
+  * **(en)**[[http://askubuntu.com/questions/485582/nvidia-drivers-question]]
+  * **(en)**[[http://ubuntuforums.org/showthread.php?t=2221392]]
+----
+//Contributeurs :  [[:utilisateurs:mario_26|mario_26]], [[:utilisateurs:gp974|gp974]], [[:utilisateurs:syrion|syrion]]//

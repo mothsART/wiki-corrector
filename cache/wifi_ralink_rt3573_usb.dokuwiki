@@ -1,0 +1,132 @@
+
+{{tag>Trusty wifi usb }}
+----
+
+====== Wifi: installation et configuration des clés wifi USB équipées du chipset RT3573 ======
+<note important>Cette puce est peut-être parfaitement reconnue depuis Ubuntu 14.04, si quelqu'un en a fait l'expérience merci de mettre à jour cette page, voire de la supprimer.</note>
+La puce wifi a/b/g/n Ralink RT3573, présente dans certaines clés WiFi USB, n'est pas reconnue nativement par Ubuntu.
+Il existe cependant un pilote fonctionnel et relativement simple à installer.
+<note tip>Après une mise à jour du [[kernel|noyau]], il est nécessaire de réinstaller le pilote. Il est donc conseillé de conserver les fichiers nécessaires à l'installation du pilote sur votre ordinateur (et enregistrer cette page sur votre disque dur si nécessaire afin de pouvoir y accéder sans accés internet).</note>
+
+
+===== Compatibilité =====
+
+//Liste à compléter//
+
+  * Buffalo WLI-UC-G450
+  * Edimax EW-7733UnD
+  * Netgear WNDA4100 N900
+  * Sitecom WLA-6100
+  * Clés wifi USB équipées du chipset RT3573 (une liste non exhaustive est disponible [[http://wikidevi.com/wiki/Special:Ask?title=Special%3AAsk&q=%5B%5BChip1+model::RT3573%5D%5D&po=%3FInterface%0D%0A%3FFCC+ID%0D%0A%3FOEM+brand%0D%0A%3FOEM+model%0D%0A%3FVendor+ID%0D%0A%3FDevice+ID%0D%0A%3FChip1+model%0D%0A%3FSupported+802dot11+protocols=PHY+modes%0D%0A%3FMIMO+status%0D%0A%3FOUI%0D%0A%3FEstimated+year+of+release=Est.+year&eq=yes&p%5Bformat%5D=broadtable&order%5B0%5D=ASC&sort_num=&order_num=ASC&p%5Blimit%5D=500&p%5Boffset%5D=&p%5Blink%5D=all&p%5Bsort%5D=&p%5Bheaders%5D=show&p%5Bmainlabel%5D=&p%5Bintro%5D=&p%5Boutro%5D=&p%5Bsearchlabel%5D=%E2%80%A6+further+results&p%5Bdefault%5D=&p%5Bclass%5D=sortable+wikitable+smwtable|ici]], en bas de la page)
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée (ou télécharger les fichiers nécessaires depuis un autre ordinateur).
+  * Avoir [[:tutoriel:comment_installer_un_paquet|installé les paquets]] **[[apt>build-essential|build-essential]]** **[[apt>fakeroot|fakeroot]]** **[[apt>checkinstall|checkinstall]]** .
+
+===== Installation =====
+
+<note>L'installation décrite ci-dessous est simplifiée par l'utilisation de pilotes déjà pré-configurés par mes soins (notamment par l'activation de la prise en charge des clés WPA et l'ajout de la prise en charge de la clé wifi Buffalo WLI-UC-G450, non présente dans le pilote original). Les versions non modifiées des pilotes sont disponibles:
+  * [[http://www.mediatek.com/_en/07_downloads/01_windows.php?sn=501|ici]] pour la version 32 bits,
+  * [[https://github.com/ashaffer/rt3573sta|ici]] pour la version patchée 64 bits 
+</note>
+
+Télécharger le pilote RT3573 USB modifié sur [[http://www.mediafire.com/download/61ry5ih01r798li/rt3573usb_pers.tar.gz|cette page]] (ou [[http://dfiles.eu/files/vzna4z3hm|celle-ci]]).
+
+<note important>**Sur les systèmes 64 bits**, il se peut que le pilote classique provoque un freeze complet de l'ordinateur le rendant inutilisable. Un pilote patché permet de résoudre ce problème, vous pouvez le télécharger [[http://www.mediafire.com/download/yo987bff3w4f5fp/rt3573usb-fix64_pers.tar.gz|ici]] (ou [[http://dfiles.eu/files/ak4x0epki|ici]]). La procédure d'installation est la même que pour le pilote non-patché.</note>
+
+[[:archivage#graphiquement|Extraire l'archive]] téléchargée dans le dossier de votre choix.\\
+Ouvrez un [[:terminal]] puis entrez les [[:commande_shell|commandes]] suivantes:
+<code>cd /(repertoire où vous avez extrait l'archive)/
+sudo make clean
+sudo make
+sudo make install</code>
+
+
+A présent, exécutez le module du pilote avec la commande:
+<code>sudo modprobe rt3573sta</code>
+
+Votre clé wifi devrait à présent fonctionner.
+===== Lancer automatiquement le pilote au démarrage de l'ordinateur =====
+
+[[:tutoriel:comment_modifier_un_fichier|Éditez avec les droits d'administration]] le fichier **/etc/modules** listant les modules pour y ajouter la ligne suivante:
+<file>rt3573sta</file>
+Enregistrez puis fermez l'éditeur de texte.
+
+Pour être sûr que la modification soit bien effective, vous pouvez exécuter la commande <code>sudo update-initramfs -u</code>
+
+===== Problèmes connus =====
+
+==== La clé wifi est bien reconnue mais aucun réseau n'est détecté ====
+
+Si le pilote a été correctement installé et que le wifi a bien été activé dans [[:Network-manager]], mais qu'aucun réseau n'est détecté, le problème peut être résolu en modifiant la configuration du pilote.
+
+Avant celà, désactivez temporairement le pilote en tapant dans un terminal:
+<code> sudo modprobe -r rt3573sta</code>
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez avec les droits d'administration]] le fichier **/etc/Wireless/RT2870STA/RT2870STA.dat** (qui paradoxalement définit les paramètres du module rt3573sta).
+
+Vous pouvez tout d'abord compléter cette ligne avec FR:
+<file>CountryCode=FR</file>
+
+Le problème de détection de réseau peut être résolu en modifiant le mode wifi (a/b/g/n) défini à la ligne
+<file/>WirelessMode=?</file>
+Il se trouve que le mode mixte (option 5) peut poser problème, essayez donc une autre option (compatible avec votre réseau/ routeur) parmi celles-ci en entrant le nombre correspondant:
+  *   0: legacy 11b/g mixed 
+  *   1: legacy 11B only 
+  *   2: legacy 11A only         //Not support in RfIcType=1(id=RFIC_5225) and RfIcType=2(id=RFIC_5325)//
+  *   3: legacy 11a/b/g mixed     //Not support in RfIcType=1(id=RFIC_5225) and RfIcType=2(id=RFIC_5325)//
+  *   4: legacy 11G only
+  *   5: 11ABGN mixed
+  *   6: 11N only
+  *   7: 11GN mixed
+  *   8: 11AN mixed
+  *   9: 11BGN mixed
+  *   10: 11AGN mixed	
+
+Par exemple, si votre réseau est en wifi n (dernière norme en date, la plus rapide) et que vous n'avez pas besoin d'une compatibilité avec les normes b et g:
+<file>WirelessMode=6</file>
+
+Une fois les modifications terminées, enregistrez le fichier et fermez l'éditeur de texte.
+Relancez le module en tapant <code>sudo modprobe rt3573sta</code>
+
+
+
+==== La clé wifi n'est pas reconnue par le pilote ====
+Si votre clé wifi n'est pas reconnue par le pilote et qu'elle est bien dotée d'une puce RT3573, il se peut que son modèle ne soit pas listé dans les fichiers du pilote, et donc qu'il ne soit pas automatiquement associé à celui-ci. La manipulation consiste alors à ajouter son "device id" (identifiant matériel propre à chaque modèle) dans la liste des matériels supportés par le pilote.\\
+
+Avant toute chose, désactivez temporairement le pilote en entrant la [[:commande_shell|commande]] suivante dans un [[:terminal]]: <code>sudo modprobe -r rt3573sta</code>
+Pour obtenir le "device id" de votre clé wi-fi, assurez- vous qu'elle soit connectée à votre ordinateur puis ouvrez un [[:terminal]] et entrez la [[:commande_shell|commande]] suivante: <code>lsusb</code>
+Vous devriez alors obtenir une réponse de ce type, contenant la liste de vos périphériques USB: <code>Bus 001 Device 002: ID 8087:0024 Intel Corp. Integrated Rate Matching Hub
+Bus 002 Device 002: ID 8087:0024 Intel Corp. Integrated Rate Matching Hub
+Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+[...]
+Bus 002 Device 004: ID 0411:01fd BUFFALO INC. (formerly MelCo., Inc.) WLI-UC-G450 Wireless LAN Adapter
+[...]</code>
+Trouvez dans cette liste la ligne qui correspond à votre clé wi-fi.\\
+Dans l'exemple ci-dessus, c'est donc la dernière ligne qui nous intéresse. Son "device id" est "__0411:01fd__" (''0411'' correspond à l'ID constructeur, ''01FD'' à l'ID du modèle).\\
+Pour ajouter la prise en charge de la clé par le pilote, ouvrez le fichier **//répertoire-où-est-extrait-le-pilote///common/rtusb_dev_id.c** dans un éditeur de texte: <code>cd /"repertoire où vous avez extrait l'archive du pilote"/
+gedit common/rtusb_dev_id.c</code>
+Dans ce fichier se trouve la liste des matériels pris en charge par le pilote. La section qui nous intéresse est celle comprise entre la ligne "''#ifdef RT3573''" et la ligne "''#endif /* RT3573 */''"
+Chaque ligne correspond à un matériel donné. Elles sont du type: <file>{USB_DEVICE(0x[DeviceIDconstructeur],0x[DeviceIDmodele])}, /* [nom du matériel] */</file>
+Pour ajouter votre clé dans la liste, faites donc un copier-coller d'une ligne existante puis mettez-y le device ID de votre matériel (attention, __les lettres doivent être en majuscule__) et le nom que vous désirez.
+Dans notre exemple la ligne est donc: <file>{USB_DEVICE(0x0411,0x01FD)}, /* Buffalo*/</file>
+Une fois les modifications du fichier terminé, enregistrez le puis [[#Installation|recompilez et réinstallez le pilote]]:
+<code>cd /(repertoire où vous avez extrait l'archive puis ajouté la prise en charge de votre périphérique)/
+sudo make clean
+sudo make
+sudo make install</code>
+
+Enfin, relancez le module avec la [[:commande_shell|commande]]: <code>sudo modprobe rt3573sta</code>
+
+Votre clé devrait à présent être reconnue.
+==== Autres problèmes ====
+Si votre problème n'est pas référencé sur cette page, vous pouvez vous reporter à la [[wifi#problemes_et_cas_particuliers|page générale concernant les problèmes liés au réseau wi-fi]].
+
+
+===== Voir aussi =====
+* **(en)** [[http://www.mediatek.com/_en/07_downloads/01_windows.php?sn=501|Site officiel pour les pilotes Linux RTxxxx]]\\
+* **(en)** [[https://github.com/ashaffer/rt3573sta|Pilote RT3573 64 bits patché par "ashaffer"]] 
+
+----
+//Contributeurs principaux : [[utilisateurs:rob1]]//

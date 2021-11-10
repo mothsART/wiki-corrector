@@ -1,0 +1,311 @@
+
+{{tag> sécurité tutoriel}}
+
+====== Gérer la sécurité d'une installation ubuntu avec une clé usb ======
+Ici nous verrons comment paramétrer le verrouillage/déverrouillage d'une installation d'Ubuntu avec une clé USB.
+
+
+===== Déchiffrer automatiquement une partition chiffrée au démarrage =====
+
+Si vous possédez une installation d'Ubuntu sur partition LUKS (Linux Unified Key Setup) et que vous en avez marre de taper le mot de passe à chaque démarrage, vous pouvez paramétrer une clé usb afin de vous authentifier automatiquement si cette dernière est branchée!
+
+Si cette dernière n'est pas branchée, le mot de passe vous sera demandé.
+
+
+<note warning>Il est plus que conseillé de faire un backup de la clé, l'histoire de pas tout devoir reparamétrer si perte de la clé.
+De plus, Il est conseillé d'avoir une alternative de réparation (type livecd ou live usb) afin de pouvoir réparer le démarrage en cas de soucis!</note>
+==== Prérequis ====
+
+  - Une partition de type LUKS avec ubuntu d'installé dessus
+  - Une partition de boot séparée
+  - Une clé usb ou un support amovible (testé avec carte SD et clé usb)
+
+Vous pouvez avoir une installation de windows à coté. Ceci ne posera pas de soucis.
+
+
+==== Etape 1 : Préparer la clé ====
+<note warning>
+Sauvegardez toute données présente sur la clé que vous allez utiliser!
+
+De plus, soyez attentifs aux commandes, et ne validez celles-ci que lorsque vous-vous êtes relu!
+Un risque de perte de données existe si vous faites des erreurs de code!
+</note>
+Créez une partition vierge de type ext4[3/2] d'au moins 1Mo sur le support. Utilisez **[[apt>gparted]]** par exemple.
+
+Vous pouvez aussi n'utiliser qu'une grande partition.
+<note>
+Systèmes de fichiers testés: Ext4/3/2, Fat32, Ntfs
+</note>
+<note important>
+/dev/sdb1 représentera ici la partition de notre clé.
+/dev/sda2 représentera ici la partition du disque crypté.
+Vous pouvez identifier la votre dans gparted. Elle est situé en tout début de ligne à gauche de votre partition:
+
+{{:tutoriel:cryptgpart.png?200|}}
+
+Attention, /dev/sdb représente la clé en entier, n'oubliez pas de spécifier le numéro de partition (sdb1, sdf2, sdc4... tout dépend de votre clé)
+</note>
+
+Montez la clé
+<code>
+mkdir /mnt/usb
+mount /dev/sdb1 /mnt/usb
+</code>
+
+Créez un fichier "d'authentification" de 256octet sur la clé.
+<code>
+dd if=/dev/random of=/mnt/usb/.authkey bs=1 count=256
+</code>
+
+Puis démontezla clé.
+<code>
+sync
+umount /mnt/usb
+</code>
+
+==== Etape 2 : Préparer la séquence de démarrage ====
+
+<note important>
+Attention, si vous souhaitez utiliser ntfs, une mise à jour du fichier bootscript est disponible! (Etape 4) [2013/09/26]
+
+De plus, assurez-vous que le module ntfs-3g est bien présent dans **/etc/initramfs-tools/modules**, et que vous avez [[:tutoriel:comment_installer_un_paquet|Installé le paquet]] **[[apt>ntfs-3g|ntfs-3g]]**
+
+</note>
+
+Editez le fichier /etc/initramfs-tools/modules avec les droits root
+<code>
+sudo gedit /etc/initramfs-tools/modules
+</code>
+
+Et ajoutez les lignes suivantes au fichier.
+  * Si vous utilisez une carte SD:
+<code>
+mmc_core
+sdhci
+mmc_block
+aes_i586
+sha256
+dm_mod
+dm_crypt
+ntfs-3g
+</code>
+  * Si vous utilisez une clé USB:
+<code>
+usbcore
+ohci_hcd
+ehci_hcd
+usb_storage
+sd_mod
+aes_i586
+sha256
+dm_mod
+dm_crypt
+ntfs-3g
+</code>
+
+Ajoutez la nouvelle configuration au système.
+<code>sudo update-initramfs -v -u</code>
+==== Etape 3 : Paramétrer le démarrage ====
+
+Montez la clé
+<code>mkdir /mnt/usb
+mount /dev/sdb1 /mnt/usb</code>
+Ajoutez le fichier d'authentification aux clé connues
+<code>cryptsetup luksAddKey /dev/sda2  /mnt/usb/.authkey</code>
+Démontez la clé et redémarrez
+<code>umount /mnt/usb
+sync
+reboot</code>
+==== Etape 4 : Paramétrer le système ====
+
+Redémarrez normalement.
+
+Notez l'UUID (identifiant de partition) de la partition contenant la clé (/dev/sdb1), obtenu par cette commande:
+
+(Nous prendrons ici **4645b6cb-80db-457b-8d46-fbb9fd33dxxb**. N'oubliez pas de le remplacer par le votre dans les commandes suivantes)
+<code>sudo blkid /dev/sdb1</code>
+
+Éditez le fichier /etc/crypttab avec les droits root:
+<code>sudo gedit /etc/crypttab</code>
+
+Vous devriez avoir quelque chose du genre:
+<code>sda2_crypt          UUID=9df4f-878ytju-ilk45q-gfbb9f-d33dxxb       none                luks</code>
+**9df4f-878ytju-ilk45q-gfbb9f-d33dxxb** est l'UUID de la partition cryptée
+
+Dupliquez la ligne et changez le **none** par **UUID=4645b6cb-80db-457b-8d46-fbb9fd33dxxb:.authkey**, et rajoutez **,tries=3,keyscript=/usr/local/sbin/bootkeyscript** à la fin de la ligne
+
+Soit après **luks** dans notre exemple. Attention à la virgule qui est importante, et à ne pas avoir de duplicata dans la ligne.
+
+
+Notre fichier final ressemblera donc à quelque chose du genre:
+<code>sda2_crypt          UUID=9df4f-878ytju-ilk45q-gfbb9f-d33dxxb       UUID=4645b6cb-80db-457b-8d46-fbb9fd33dxxb:.authkey                luks,tries=3,keyscript=/usr/local/sbin/bootkeyscript
+sda2_crypt          UUID=9df4f-878ytju-ilk45q-gfbb9f-d33dxxb       none                                                                                                   luks</code>
+
+Téléchargez [[http://iutinfo2000.free.fr/Linux/bootkeyscript| ce script]] et placez le dans **/usr/local/sbin/bootkeyscript** à l'aide des droits root.
+<code>sudo cp ~/Téléchargements/bootkeyscript /usr/local/sbin/bootkeyscript</code>
+(N'oubliez pas de changez l'emplacement du fichier téléchargé si **~/Téléchargements/bootkeyscript** n'est pas sa localisation)
+
+Donnez-lui les droits d’exécution:
+<code>sudo chmod +x /usr/local/sbin/bootkeyscript</code>
+
+Réactualisez la séquence de démarrage:
+<code>update-initramfs -v -u</code>
+Redémarrez et profitez! 8-)
+
+
+<note astuce>
+Si vous souhaitez débguer et afficher les messages de ce que fait le script, modifier la ligne **debug=0** en **debug=1** du fichier **/usr/local/sbin/bootkeyscript**
+
+Puis réactualisez la séquence de démarrage:
+<code>update-initramfs -v -u</code>
+</note>
+==== En cas de soucis ====
+
+Si une erreur apparaît au démarrage indiquant quelque chose du genre "UUID=nf14k7-ui56gf-wzdf4gt1-yj3-61sd not found".
+
+Et que vous tombez sur la console
+<code>(initramfs)</code>
+
+Alors le fichier **/etc/crypttab** n'est pas correct.
+La procédure est comme ceci:
+  * Démarrez sur un live cd ou live usb
+  * Identifiez les emplacements de la partition de boot et la partition root avec gparted ici respectivement **/dev/sda1** et **/dev/sda2**
+  * Identifiez l'UUID de la partitino cryptée par un:
+<code>sudo cryptsetup luksUUID /dev/sda2</code>
+  * créez le répertoire /tmproot:
+<code>mkdir /tmproot</code>
+  * montez les deux partitions:
+<code>cryptsetup luksOpen /dev/sda2 tmproot
+mount /dev/mapper/tmproot /tmproot
+mount /dev/sda1 /tmproot/boot</code>
+  * Chrootez-vous dans le système:
+<code>chroot /tmproot</code>
+  * [[:tutoriel:comment_modifier_un_fichier|Modifiez]] le fichier **/etc/crypttab**, et vérifiez que l'UUID de montage est bien celui de la partition cryptée.
+  * Nous aurons donc, pour l'optimal:
+<code>sda2_crypt   UUID=uuid-de-votre-partition-cryptee   none   luks</code>
+
+<note warning>ATTENTION, **sda2_crypt** doit correspondre avec le nom de la partition montée en root listée dans le fichier /etc/fstab!
+
+Sinon quoi, la partition sera bien décryptée au démarrage, mais absolument pas montée dans **/**, ce qui ne permettra bien évidement pas le démarrage!
+Logiquement, vous n'avez pas à y toucher à n'importe quel moment du tutoriel. Seul le "none" et la partie "luks" sont à modifier dans l'étape 4!</note> 
+
+  * Enregistrez et réactualisez la configuration:
+<code>update-initramfs -v -u</code>
+  * Redemarrez
+===== Verrouiller / Déverrouiller l'écran avec une clé USB =====
+==== Identifier l'ID de sa clé ====
+
+Notez l'identification de la clé, obtenu par cette commande:
+<code>lsusb</code>
+Vous devrez obtenir une résultat similaire:
+<code>Bus 001 Device 002: ID 8087:0024 Intel Corp. Integrated Rate Matching Hub
+Bus 002 Device 002: ID 8087:0024 Intel Corp. Integrated Rate Matching Hub
+Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 002 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 003 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 004 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+Bus 001 Device 003: ID 114b:085b PNY 
+Bus 002 Device 004: ID 035f:0945 Microsoft Corp. Nano Transceiver v1.0 for Bluetooth</code>
+
+Nous choisirons ici la clé "PNY".
+Retenez donc la section ID qui précède le nom du materiel. Ici:
+
+**ID 114b:085b PNY**
+
+==== Paramétrer et installer le script ====
+
+Installez **[[apt>xscreensaver]]** (requis)
+<code>sudo apt-get install xscreensaver</code>
+
+Créez un script dans le répertoire **~/** (votre home) appelé **.autoLock**
+Éditez avec gedit:
+<code>touch ~/.autoLock
+gedit ~/.autoLock</code>
+Et on copie/colle le code suivant:
+<code>#!/bin/bash
+# A simple shell to lock / unlock your Desktop
+# Ubuntu
+# ----------------------------------------------------------------------------
+# Original Script by Echowrap http://echowarp.neomenlo.org
+# Modified by Vidyadhar D S <http://www.techienote.com/>
+# vidyadhards@gmail.com techienote.com@gmail.com
+# Translated and corrected by malabarth malabarth@gmail.com
+# ----------------------------------------------------------------------------
+#Replace with the ID of your USB device
+id="ID 114b:085b PNY"
+ 
+#runs every 2 seconds
+for ((i=0; i<=30; i++))
+do
+if [ -z "`lsusb | grep "$id"`" ]
+then
+ 
+    echo "Clé d'authentification absente"
+    if [ -n "`DISPLAY=:0.0 gnome-screensaver-command --query | grep "est actif"`" ]
+    then 
+    
+    if [ -e /tmp/autoUnlock.lock ]
+    then
+    rm /tmp/autoUnlock.lock
+ 
+fi
+ 
+elif [ -e /tmp/autoUnlock.lock ]
+then
+ 
+    DISPLAY=:0.0 notify-send -t 5000 --icon=dialog-info "Clé d'authentification deconnectée" "A bientôt!"
+    DISPLAY=:0.0 gnome-screensaver-command --lock
+    rm /tmp/autoUnlock.lock
+ 
+fi
+else
+ 
+    echo "Clé d'authentification connectée"
+    if [ ! -e /tmp/autoUnlock.lock ]
+    then
+    
+    DISPLAY=:0.0 gnome-screensaver-command --deactivate
+    DISPLAY=:0.0 notify-send -t 5000 --icon=dialog-info "Clé d'authentification connectée" "Bienvenue!"
+    touch /tmp/autoUnlock.lock
+    
+    fi
+ 
+fi
+sleep 2
+done</code>
+
+**ATTENTION** On n'oubliera pas de remplacer **ID 114b:085b PNY** par votre **ID**
+
+Puis donnez-lui les droits d'execution:
+<code>chmod +x .autoLock</code>
+==== Ajouter aux tâches cron ====
+
+<code>crontab -u votrenomdutilisateur -e</code>
+On ajoute la ligne suivante:
+<code>* * * * * bash /home/votrenomdutilisateur/.autoLock & >/dev/null 2>&1</code>
+  * Enregistrez (ctrl + o)
+  * Quittez (ctrl + x)
+
+Redémarrez cron:
+<code>sudo /etc/init.d/cron restart</code>
+
+Voila, enlevez votre clé, l'écran devrait se verrouiller.
+Remettez-là, L'écran se déverrouillera!
+
+Si pas de clé, le mot de passe sera demandé comme un déverrouillage normal.
+
+
+==== En cas de soucis ====
+Si problème il y a, loguez vous en console tty1 (ctrl + alt + 1), et déplacez le fichier exécutable:
+<code>mv .autoLock .autoLock.bak</code>
+Puis redémarrez! N'oubliez pas de supprimer la tâche de cron tab si vous ne souhaitez plus cette fonctionnalité!
+<code>crontab -u votrenomdutilisateur -e</code>
+
+===== Sources & Contributeurs =====
+[[http://web.archive.org/web/20100110234521/http://petaramesh.org/post/2007/11/29/Une-cle-de-contact-pour-votre-portable-chiffre]]
+
+[[http://www.techienote.com/2011/03/lock-unlock-ubuntu-desktop-using-usb-drive.html]]
+
+----
+
+//Contributeurs: malabarth//

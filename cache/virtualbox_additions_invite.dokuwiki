@@ -1,0 +1,119 @@
+
+{{tag>Xenial virtualisation windows}}
+----
+
+{{ :applications:virtualbox.png?70}}
+====== Virtualbox : Additions Invité  ======
+
+Cette page est une annexe destinée à alléger la page principale de **[[:VirtualBox]]**. Elle a pour but de présenter l'installation des Additions Invité ainsi que la façon de mettre en œuvre un partage de dossier entre le système hôte et le système invité.\\
+Pour faciliter cela VirtualBox offre un système simple, accessible grâce aux **Additions invité** (cependant le partage Netbios //via// Samba marche également très bien).\\
+
+Les Additions invité sont des pilotes adaptés pour les systèmes invités comme Windows ou ceux basés sur GNU/Linux qui permettent :
+  * Un affichage graphique plus rapide (avec gestion de l'accélération 2D et 3D) et automatiquement adapté à la résolution graphique du système hôte,
+  * Le partage du presse-papier,
+  * Le partage des dossiers,
+  * Une capture/libération dynamique du curseur lorsque celui-ci se déplace entre système hôte et système invité.
+
+
+=====Pré-requis===== 
+
+  * Avoir [[:tutoriel:comment_installer_un_paquet|installé le paquet]] **[[apt>virtualbox-guest-additions-iso]]**,
+  * Si l'invité est un Ubuntu [[:tutoriel:comment_installer_un_paquet|installez également le paquet]] **[[apt>virtualbox-guest-utils]]**.
+  
+=====Installation=====
+Pour activer les Additions invité, lancez **[[Virtualbox]]**, puis le Système invité. Ensuite dans le menu **Périphériques**, cliquez sur **Insérer l'image CD des Additions invité...**.
+La suite dépend du système invité.
+ 
+Si lors de l'installation vous avez une erreur comme //The headers for the current running kernel were not found.//, vérifiez que vous avez bien installé les trois paquets suivants (dkms est important) avec cette commande :
+<code>sudo apt-get install build-essential linux-headers-`uname -r` dkms</code>
+
+<note tip>Une fois ces opérations faites, vérifier que l'accélération 3D est disponible :
+  * Dans l'interface graphique sous Unity ou Gnome : Applications //Détails// (disponible dans les paramètres systèmes), sous //Résumé//, doit être indiqué la //Carte graphique// ''Chromium''
+  * Dans un terminal : ''/usr/lib/nux/unity_support_test -p'' doit renvoyer //yes// partout
+</note>
+
+Si vous avez oublié **dkms** lors de la première installation, et que vous avez une //Carte graphique// ''llvm Gallium'', désinstallez les **Additions**, installez dkms, et réinstallez les ajouts des additions invitées, puis redémarrer la machine virtuelle.
+====Invité Linux====
+Acceptez le montage du périphérique (comme une clé usb).
+Placez vous dans le périphérique des Additions invité (son nom ressemble à VBOXADDITIONS_X.XXX) puis lancer la commande: <code>sudo ./VBoxLinuxAdditions.run</code> ou double-cliquez tout simplement dessus.\\
+Redémarrez votre système invité.
+
+====Invité Windows====
+Sous Windows ouvrez le navigateur de fichier, dans le panneau latéral gauche vous verrez **Lecteur de CD (D:) VirtualBox Guest Additions**.
+Cliquez dessus. Puis double-cliquez sur **VBoxWindowsAdditions**.\\
+Redémarrez votre système invité.
+
+=====Utilisation=====
+Il n'y a pas d'utilisation à proprement parler, les Additions vous donnent simplement la possibilité de partager des dossiers entre l'hôte et l'invité. La suite décrit la procédure pour le partage d'un dossier entre les deux systèmes.
+
+==== Ajoutez un répertoire de partage à VirtualBox ====
+Si ce n'est pas encore fait :
+  * Activez l'option réseau dans VirtualBox : **Préférences-> Réseaux -> Activer la carte réseaux**.
+  * Éteignez complètement votre système invité (mode **Oublier**, pas **Sauvegarder**).
+
+<note tip>Une fois le dossier de partage correctement configuré, il est possible de lancer la VM SANS activer le contrôleur réseau. Le dossier de partage reste actif. Cela permet donc d'isoler le sytème invité du réseau.</note>
+
+=== Avec l'interface graphique de VirtualBox ===
+
+Dans les préférences de VirtualBox, cliquez sur **Dossiers partagés**, cliquez sur le petit logo **Ajoute un nouveau dossier partagé**, naviguez jusqu'au dossier de votre choix et donnez-lui un nom. Retenez bien ce nom, il correspond à **dossierpartage** dans les exemples qui suivent.
+Vous pouvez ensuite cochez les cases **Lecture seule**, **Montage automatique**, **Configuration permanente**, si vous souhaitez ces options.
+
+
+=== En ligne de commande ===
+
+Pour réaliser le partage d'un dossier en ligne de commande, éteignez votre système invité avant d'effectuer cette manipulation. Dans le système hôte (votre ubuntu), entrez la commande (à titre d'exemple) :
+<code>VBoxManage sharedfolder add "xp" -name dossierpartage -hostpath "/home"</code>
+  * **xp** est ici le nom de votre machine virtuelle (il est préférable d'éviter les tirets dans le nom de la machine virtuelle). Pour connaître le nom de votre machine virtuelle :<code> ls VirtualBox\ VMs/</code>
+  * **dossierpartage** est le nom de partage désiré (ne pas mettre de _ dans le nom)
+  * **/home** est le chemin absolu que vous voulez partager. Attention, ce dossier doit appartenir au groupe ''vboxusers'' sous peine de voir une erreur 67 dans windows :<code bash>chgrp vboxusers la_cible_du_repertoire_à_partager</code>
+
+
+==== Accès au partage ====
+
+=== Système invité Windows === 
+Pour accéder au partage sous Windows :
+  * Soit vous naviguez dans l'explorateur Windows, **Outils > Connecter un lecteur réseau**, puis choisissez la lettre que vous voulez pour désigner le fichier (ex X:) dans **Dossier** entrez //\\vboxsvr\dossierpartage//.\\ Sous Windows 10, dans le volet de navigation de l'explorateur, à gauche de la fenêtre, clic-droit sur Réseau puis "Connecter un lecteur réseau...". Choisir un lecteur (ex X: comme ci-dessus) puis "Parcourir..." pour sélectionner le dossier réseau partagé. Après validation, ce dossier apparaît dans le volet de navigation au-dessus et dans "Réseau" avec un un intitulé en majuscule : \\VBOXSVR
+<note important>A la première sollicitation de "Réseau" dans l'explorateur de Windows 10, si un message : "La découverte du réseau est désactivée...", clic-droit sur le bandeau sous la barre de menus : "La découverte du réseau et le partage de fichiers sont désactivés..." puis "Activer la découverte de réseau et le partage des fichiers".</note>
+  * Soit dans une invite de commandes, //Démarrer -> Exécuter -> « cmd »//, vous tapez : <code>net use X: \\vboxsvr\dossierpartage</code>
+(**dossierpartage** est le nom du dossier partagé crée précédemment).
+Et le lecteur apparaîtra à la lettre X dans le poste de travail...
+
+<note important>Si cette commande ne fonctionne pas il se peut que se soit le DNS de VirtualBox qui ne fonctionne pas correctement ; essayez alors de remplacer dans cette ligne : "vboxsvr" par votre adresse ip sous Ubuntu (disponible en tapant la commande "ifconfig" dans un terminal)</note>
+
+
+
+===Système invité GNU/Linux ===
+
+Pour automatiser le montage du partage au démarrage du système [[:GNU]]/[[:Linux]] virtuel, il faut ajouter son compte utilisateur au groupe ''vboxsf'', et les dossiers partagés seront automatiquement montés dans /media. Par exemple, si vous avez appelé un dossier partagés **Documents**. Alors un dossier **/media/sf_Documents** apparaîtra, contenant ce que contient le dossier partagé. 
+Pour ajouter votre utilisateur au groupe ''vboxsf'' entrez la commande suivante dans un terminal : <code>sudo adduser $USER vboxsf</code>
+
+[[https://peertube.live/videos/watch/4f0df0e9-b2b7-4aa3-bd43-7fb4c9ac3334|Tuto vidéo partage de dossier entre invité et hôte]]
+
+Vous pouvez également le faire graphiquement avec [[:users-admin]]. Il suffit alors de cliquer sur **Gérer les groupes**, puis de cliquer sur **Propriétés** après avoir sélectionné le groupe **vboxsf** et de cocher son identifiant en tant que membre du groupe. 
+
+Pour accéder manuellement à un partage sous un système invité Linux, créer d'abord un dossier de partage par exemple dans le dossier **media** avec la commande :
+<code>sudo mkdir -p /media/monpartage</code>
+Puis rendez accessible le dossier partagé en entrant dans un [[:terminal]] : <code>sudo mount -t vboxsf dossierpartage pointdemontage</code>
+
+<note warning>Si vous rencontrez l'erreur "**/sbin/mount.vboxsf: mounting failed with the error: Protocol error** (ou no such device", remplacez //mount -t vboxsf// par //mount.vboxsf// </note>
+
+**dossierpartage** est le nom du dossier partagé lors de la configuration de votre machine.\\
+**pointdemontage** est le dossier de montage que vous avez créer plus haut.
+Naviguez jusqu'à votre dossier de partage pour accéder à vos documents.
+
+<note warning> La commande mount est exécutée [[:sudo|avec les droits administrateur]] si cela limite les accès en écriture à vos documents, vous pouvez forcer l'accès de l'utilisateur sur le dossier monté, avec la commande: <code>sudo mount -t vboxsf -o uid=`id -u` -o gid=`id -g` sharename /mnt/partage</code></note>
+
+
+
+ 
+
+==== Suppression d'un répertoire de partage ====
+
+Pour enlever ce point de montage, dans votre système hôte, il vous faudra quitter votre session Virtualbox, et taper : <code>VBoxManage sharedfolder remove "xp" -name "dossierpartage"</code>
+
+  * **xp** est ici le nom de votre machine virtuelle (celle-ci ne doit pas être lancée, et il est préférable d'éviter les tirets dans le nom de la machine virtuelle). Pour connaître le nom de votre machine virtuelle :<code> ls VirtualBox\ VMs/</code>
+  * **dossierpartage** est le nom de partage désiré (ne pas mettre de _ dans le nom)
+\\
+
+----
+//Contributeurs: [[utilisateurs:Fabien26]], [[utilisateurs:sbig77]], [[utilisateurs:vorach]], [[utilisateurs:omega13]], [[utilisateurs:DarkHylian]], [[utilisateurs:BravoJR]], [[utilisateurs:Maniack Crudelis]], [[utilisateurs:mcpeter|McPeter]], [[utilisateurs:wubijacq|wubijacq]].//

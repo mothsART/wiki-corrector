@@ -1,0 +1,235 @@
+
+{{tag>Lucid tutoriel haute_disponibilité}}
+----
+
+====== Cluster de deux machines ip virtuelle + supervision d'un service======
+
+
+Ce tutoriel est une sous-partie de la documentation pacemaker. Il décrit les différentes étapes de configuration du cluster par l'intermédiaire de la commande crm. Je vous conseille néanmoins de configurer les ressources avec l'interface java de Linbit.
+
+Le but de cette configuration est de créer un cluster de serveur web (ou de reverse proxy) de deux machines. Une adresse virtuelle est partagée entre les deux machines, lorsque l'une d'entre elle est hors ligne l'autre machine peut prendre le relai automatiquement.
+
+Détail des étapes de la configuration:
+
+  - Adresse ip virtuelle partagée entre les deux membres du cluster ici 192.168.1.100
+  - Lancement, arrêt et supervision d'un service par l'intermédiaire d'un script d'initialisation compatible LSB (ici nginx)
+  - Clonage du service, nginx sera démarré sur les deux machines
+  - Ordonnancement des ressources le service, nginx devra être démarré pour que l'adresse ip virtuelle soit attribuée à un membre du cluster
+
+
+|              ^ Nom de poste                  ^ Adresse ip          ^
+^ pc 1      | machine1            | 192.168.1.101    |
+^ pc 2      | machine2            | 192.168.1.102    |
+
+===== Pré-requis =====
+
+  * Bien connaître le principe de fonctionnement de [[:pacemaker]].
+  * Comprendre le principe de la norme LSB pour les scripts d'initialisation. 
+  
+
+<note>
+Les scripts d'initialisation sont ceux disponibles dans le répertoire /etc/init.d/. Pacemaker va les utiliser pour démarrer, arrêter et superviser l'état du service. C'est pourquoi ces scripts doivent respecter les normes lsb. Pacemaker a par exemple besoin que les scripts possèdent un argument status. Pour plus d'informations visitez cette [[http://wiki.debian.org/LSBInitScripts|page]]
+</note>
+  * Avoir effectué le tutoriel officiel en anglais est une bonne chose. [[http://www.clusterlabs.org/doc/en-US/Pacemaker/1.1/html/Clusters_from_Scratch/index.html|lien]] 
+  * Ne pas avoir peur de lire la documentation officielle de pacemaker qui se trouve [[http://www.clusterlabs.org/doc/en-US/Pacemaker/1.1/html/Pacemaker_Explained/index.html|ici]].
+
+===== Configuration =====
+
+
+
+Entrer dans le mode de configuration du cluster
+
+  sudo crm configure
+  
+==== Paramétrage des options générales ====
+
+  
+Premierement nous allons désactiver deux fonctionnalités inutile pour notre cluster 
+
+  * mode stonith "shot the other node in the head" permet lorsqu'une machine n'est plus joignable d'être sur que cette machine soit bien hors ligne
+  * quorum indique le nombre minimal de membres pour prendre une décision. Ce paramètre est utile pour les cluster de plus de deux machines
+
+
+Désactivation du mode stonith
+
+  property stonith-enabled=false
+
+Désctivation du paramètre quorum
+
+  property no-quorum-policy=ignore 
+
+
+
+==== Paramétrage du service nginx ====
+
+
+
+Avant toute chose pensez à désactiver le démarrage automatique du démon avec la commande ci dessous 
+
+  sudo update-rc.d -f nginx remove
+
+Ensuite nous allons indiquer à pacemaker de superviser le processus nginx. Pour cela il est nécessaire que le logiciel possède un script de démarrage et d'arrêt dans le répertoire /etc/init.d. Ce script doit en outre respecter les normes LSB (si il est est déjà présent il doit sûrement les respecter). A l'avenir c'est pacemaker qui démarrera nginx par intermédiaire de ce script. 
+
+Instruction permettant à pacemaker de superviser un programme par l'intermédiaire de son script systemV (init script)
+
+Syntaxe de base
+
+  primitive <nom de la ressource (ce que vous voulez)> lsb::<nom du démon> op monitor interval=5s
+
+Dans notre cas 
+
+  primitive reverse-proxy lsb::nginx op monitor interval=5s
+  
+Clonage de la ressource pour que le démon nginx soit démarré sur les deux machines en même temps. Cela permet une migration plus rapide. Pacemaker n'ayant pas à démarrer le processus puis à faire migrer l'adresse ip.
+
+Syntaxe de base
+
+  clone <nom de la ressource> <nom de la ressource à cloner>
+
+Dans notre cas 
+  
+  clone clone_reverse_proxy reverse-proxy 
+  
+==== Paramétrage de l'ip virtuelle ====
+
+  
+Création d'une ip virtuelle partagée entre les deux membres du cluster
+<code>
+  primitive <nom de la ressource> ocf:heartbeat:IPaddr2 params ip="<adresse ip virtuelle>" broadcast="<adresse de broadcast>" cidr_netmask="<masque en écriture décimal>" nic="<nom de l'interface virtuelle>" meta target-role="started" migration-threshold="2" resource-stickiness="100"
+ op monitor interval="<interval de temps de supervision>"
+</code>
+explications:
+
+^ Options         ^ explications           ^ 
+| target-role   | started ou stopped l'état dans lequel pacemaker doit maintenir la ressource     | 
+| migration-threshold   | nombre maximal d'échec de la ressource, après lesquels la machine est déclarée inéligible pour recevoir la ressource     | 
+| resource-stickiness   | Ce paramètre est utile lorsque l'on définit une règle "location" indiquant la machine élue par défaut pour héberger la ressource. Nous ferons une configuration de ce type plus tard. Ce paramètre empêche la ressource de retourner sur la machine élue par défaut après que celle ci est défaillit et soit revenue en ligne. La ressource devra être migrée manuellement.  La valeure numérique attribuée à ce paramètre doit être supérieure à celle attribuée dans la règle "location".   |
+
+
+
+Dans notre cas 
+
+<code> 
+  primitive ip_virtuelle ocf:heartbeat:IPaddr2 params ip="192.168.1.100" broadcast="192.168.1.255" cidr_netmask="24" nic="eth0:0" meta target-role="started" migration-threshold="2" resource-stickiness="100"
+ op monitor interval="10s"
+</code>
+==== Lien entre les ressources ====
+
+
+Par défaut pacemaker répartie les ressources entre les membres du cluster. Bien qu'ici une des ressources soit clonée il est préférable de créér un lien entre les deux ressources  //clone_reverse_proxy// et //ip_virtuelle//
+
+Syntaxe de base 
+
+  colocation link-ressources INFINITY: <nom de la deuxième ressource>  <nom de la première ressource>
+  
+Dans notre cas 
+
+  colocation link-ressources INFINITY: ip_virtuelle clone_reverse_proxy 
+  
+Il est aussi nécessaire d'établir un ordre de démarrage entre les ressources. En effet l'ip virtuelle ne doit être activée que si le démon nginx est lancée
+
+Syntaxe de base 
+
+  order <nom de la ressource> mandatory: <première ressource à lancer>  <deuxième ressource>
+
+Dans notre cas 
+
+  order demon_before mandatory: clone_reverse_proxy  ip_virtuelle
+  
+Il peut aussi être intéressant de choisir une machine préférée pour accueillir la ressource. Ici nous voulons que l'adresse ip virtuelle soit activée par défaut sur la machine1.
+
+Syntaxe de base
+
+  location <nom ressource> <nom de la ressource> <score>: <nom du poste>
+  
+Dans notre cas 
+
+  location node-master ip_virtuelle 50: machine1
+
+==== Vérification et application de la configuration ====
+
+Vérifier que votre configuration est correcte, normalement l'analyse ne doit pas rapporter d'erreurs
+
+  verify
+  
+Puis appliquez votre configuration au cluster
+
+  commit
+ 
+==== Afficher l'état du cluster ====
+
+Affichage de l'état du cluster, avec les compteurs d'échecs
+
+  sudo crm_mon -1f
+  
+Vous devriez voir un résultat semblable
+
+  Online: [ machine1 machine2 ]
+  Clone Set: clone_reverse_proxy
+     Started: [ machine1 machine2 ]
+  ip_virtuelle	(ocf::heartbeat:IPaddr2):	Started machine1
+
+===== Tester sa configuration =====
+
+Vous pouvez facilement vous rendre compte des migrations de ressources dans le cluster en personnalisant les pages internet des serveurs webs nginx. Le chemin de la page d'accueil est ///var/www/nginx-default/index.html// .
+==== Meurtre du processus nginx ====
+
+Effectuer les commandes sur le poste hébergeant l'adresse ip virtuelle.
+
+  ps -aux | grep nginx
+  kill <numéro processus>
+  
+Vous devriez voir que le compteur d'échec a été incrémenté 
+
+  Online: [ machine1 machine2 ]
+  Clone Set: clone_reverse_proxy
+     Started: [ machine1 machine2 ]
+  ip_virtuelle	(ocf::heartbeat:IPaddr2):	Started machine1
+  Migration summary:
+  * Node machine2: 
+  * Node machine1: 
+     reverse-proxy:0: migration-threshold=1000000 fail-count=1
+
+et si vous effectuez cette commande 
+
+  sudo /etc/init.d/nginx status
+  
+Elle devrait vous retourner ce retour 
+
+  nginx is running
+
+Le processus a bien été redémarré après qu'il a été tué. Il n'y a pas eu de migration de l'adresse ip.
+
+==== Blocage du redémarrage du serveur nginx ====
+
+Cette fois ci nous allons être un peu plus pervers. Nous allons empêcher le serveur nginx de redémarrer. Normalement l'adresse ip devrait migrer vers l'autre machine.
+
+Éditer le fichier /etc/nginx/nginx.conf et ajouter cette ligne au début du fichier
+
+  plop !
+  
+Tuer à nouveau le processus du démon nginx 
+
+Vous devriez obtenir ce résultat
+
+  Online: [ machine1 machine2 ]
+  Clone Set: clone_reverse_proxy
+     Started: [ machine2 ]
+     Stopped: [ reverse-proxy:0 ]
+  ip_virtuelle	(ocf::heartbeat:IPaddr2):	Started machine2
+  Migration summary:
+  * Node machine2: 
+  * Node machine1: 
+     reverse-proxy:0: migration-threshold=1000000 fail-count=1000000
+
+On peut voir que l'adresse ip virtuelle a été migrée vers la machine 2 et que le compteur d'échec a été fixé à sa valeur maximale.
+
+===== Voir aussi =====
+
+  * **(fr)** [[:pacemaker|fiche du logiciel pacemaker]]
+
+
+
+----
+//Contributeurs principaux : [[:utilisateurs:Miam Miam]].//
+

@@ -1,0 +1,125 @@
+
+{{tag>matériel portable Asus}}
+----
+
+====== Asus A7J ======
+{{http://www.erenumerique.fr/images/51/20060705/asus_a7j.jpg|Asus A7J}}
+
+===== En un coup d’œil =====
+
+Le tableau suivant récapitule la prise en charge du matériel de ce portable par les différentes versions d'Ubuntu.
+Il utilise les notations suivantes :
+
+Il utilise les notations suivantes :
+  * {{:icons:ok_32.png|OK 32 bits}} **Fonctionne immédiatement**
+  * {{wiki:modeles:laptop_work.png|Fonctionne après config}} **Fonctionne après quelques manipulations**
+  * {{icons:process-stop.png|Ne fonctionne pas}} **Ne fonctionne pas**
+  * {{icons:icon-support.png?32|Pas testé}} : **Pas d'informations disponibles**
+  * {{:icons:edit-clear.png?32|Information obsolète}} : **Information de support trop ancienne**, si possible mettez là à jour.
+
+^ Version ^ Installation ^ Carte \\ graphique ^ Son ^ Réseau ^ Wifi ^ Bluetooth ^ Webcam ^ Touchpad ^ Raccourcis \\ multimédia ^ Lecteur de carte SD ^
+| [[:oneiric|11.10 (Oneiric Ocelot)]] | {{:icons:ok_32.png|OK}} | {{:icons:ok_32.png|OK}} | {{:icons:ok_32.png|OK}} | {{:icons:ok_32.png|OK}} | {{:icons:ok_32.png|OK}} | {{:icons:ok_32.png|OK}} | {{:icons:ok_32.png|OK}} | {{:icons:ok_32.png|OK}} | {{wiki:modeles:laptop_work.png|Fonctionne après config}} | {{icons:icon-support.png?32|Pas testé}} |
+
+**Cet ordinateur portable n'est pas [[:pc_tatoué|tatoué]].**
+
+===== Installation =====
+
+Installation OK depuis une clef USB (normalement ça marche aussi depuis un CD, mais à vérifier). [[:installation |Suivre la procédure d’installation habituelle]]. 
+
+===== Raccourcis multimédia =====
+
+===== Mise en veille =====
+
+Parce que les récentes version de Ubuntu ont un kernel compilé avec ehci_hcd, il faut désactiver les périphériques USB avant la veille. 
+
+==== Étape 1 ====
+
+Créer un script dans /etc/pm/sleep.d/. Il peut avoir le nom que vous voulez, mais pour être sur qu'il se charge dans le bon ordre, utiliser le préfixe 20_.
+
+<code>
+sudo touch /etc/pm/sleep.d/20_custom-ehci_hcd && sudo xdg-open /etc/pm/sleep.d/20_custom-ehci_hcd
+</code>
+
+==== Étape 2 ====
+
+Insérer le code suivant dans le fichier qui vient d’être créé :
+
+<code bash>
+#!/bin/sh
+#inspired by http://art.ubuntuforums.org/showpost.php?p=9744970&postcount=19
+#...and http://thecodecentral.com/2011/01/18/fix-ubuntu-10-10-suspendhibernate-not-working-bug    
+# tidied by tqzzaa :)
+
+VERSION=1.1
+DEV_LIST=/tmp/usb-dev-list
+DRIVERS_DIR=/sys/bus/pci/drivers
+DRIVERS="ehci xhci" # ehci_hcd, xhci_hcd
+HEX="[[:xdigit:]]"
+MAX_BIND_ATTEMPTS=2
+BIND_WAIT=0.1
+
+unbindDev() {
+  echo -n > $DEV_LIST 2>/dev/null
+  for driver in $DRIVERS; do
+    DDIR=$DRIVERS_DIR/${driver}_hcd
+    for dev in `ls $DDIR 2>/dev/null | egrep "^$HEX+:$HEX+:$HEX"`; do
+      echo -n "$dev" > $DDIR/unbind
+      echo "$driver $dev" >> $DEV_LIST
+    done
+  done
+}
+
+bindDev() {
+  if [ -s $DEV_LIST ]; then
+    while read driver dev; do
+      DDIR=$DRIVERS_DIR/${driver}_hcd
+      while [ $((MAX_BIND_ATTEMPTS)) -gt 0 ]; do
+          echo -n "$dev" > $DDIR/bind
+          if [ ! -L "$DDIR/$dev" ]; then
+            sleep $BIND_WAIT
+          else
+            break
+          fi
+          MAX_BIND_ATTEMPTS=$((MAX_BIND_ATTEMPTS-1))
+      done  
+    done < $DEV_LIST
+  fi
+  rm $DEV_LIST 2>/dev/null
+}
+
+case "$1" in
+  hibernate|suspend) unbindDev;;
+  resume|thaw)       bindDev;;
+esac
+</code>
+
+==== Étape 3 ====
+
+Rendre le script exécutable :
+
+<code>
+sudo chmod 755 /etc/pm/sleep.d/20_custom-ehci_hcd
+</code>
+
+==== Étape 4 ====
+
+Pour que lors de la sortie de la mise en veille le wifi marche correctement, créer le fichier :
+
+<code>
+sudo touch /etc/pm/config.d/wifi-suspend-workaround && sudo xdg-open /etc/pm/config.d/wifi-suspend-workaround
+</code>
+
+et y ajouter le contenu :
+
+<file>
+SUSPEND_MODULES="iwl3945"
+</file>
+
+Redémarrer pour vérifier que la mise en veille s'effectue correctement.
+
+
+=====Voir Aussi=====
+  * [[http://thecodecentral.com/2011/01/18/fix-ubuntu-10-10-suspendhibernate-not-working-bug/comment-page-3#comment-52399|Source du fix pour la mise en veille]]
+  * [[http://askubuntu.com/questions/37360/i-cant-connect-wireless-network-when-wakeup-after-sleep-hibernate|Source du fix WIFI lors de la mise en veille]]
+----
+//Contributeurs: Pokemon_JOJO

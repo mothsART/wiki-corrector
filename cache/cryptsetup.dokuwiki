@@ -1,0 +1,280 @@
+
+{{tag>Trusty Xenial chiffrement sécurité}}
+
+----
+
+
+====== Partition chiffrée avec Cryptsetup ======
+
+Afin de protéger au mieux vos données personnelles, il peut être nécessaire de chiffrer vos partitions utilisateur. En effet, si via le système il est impossible d’accéder aux fichiers qui ne vous appartiennent pas, un simple passage sur un livecd permet d’accéder à n’importe quel fichier de votre système. Le chiffrement de partition permet d’éviter ça.
+Ubuntu intègre en standard les outils nécessaires à une gestion simple de votre sécurité. 
+
+=====Installation=====
+
+Installer **[[apt>cryptsetup|cryptsetup]]**
+
+Si nécessaire charger les modules « aes-i586 », « dm_mod » et « dm_crypt ». Au besoin, les ajouter à la liste de ///etc/modules// (cf. infra Référence).
+
+
+===== Applications =====
+[[https://forum.ubuntu-fr.org/viewtopic.php?pid=21818104#p21818104|Exemple pour avoir une partition chiffrée, montée-démontée manuellement]].
+
+==== Chiffrer une partition ====
+
+Créer un conteneur pour vos données : une partition ou un fichier contenant votre système de fichier.
+
+Les données sont chiffrées à la volée, tout est transparent pour l'utilisateur, mais cependant il y a un coût machine pour le chiffrement. Ce coût est négligeable, tant que la fonction première de votre machine n'est pas serveur de fichiers.
+
+
+=== Initialiser la partition ===
+
+Exemple sur une partition libre /dev/hda7 :
+<code> sudo cryptsetup luksFormat  /dev/hda7 </code>
+
+On invoque cette commande pour formater la partition au type LUKS (initialiser la partition LUKS et définir la clé initiale). Le chiffrement sera de type AES avec un algorithme de hachage SHA256. Vous allez taper votre phrase de déchiffrement qui va permettre de créer un conteneur standard chiffré à l'aide de votre phrase.
+
+Le conteneur chiffré de manière standard va stocker la clé de chiffrement maître qui servira à ouvrir votre volume chiffré. Il est possible d'ajouter jusqu'à 8 clefs supplémentaires dans des "slots", qui déverrouillent l'accès à la clef maître. Vous pouvez ainsi avec cette méthode avoir plusieurs utilisateurs qui vont chacun ouvrir le conteneur chiffré avec leur clef, et il vous sera possible de révoquer les clés éventuellement compromises.
+
+Pour ajouter une clé d'accès au conteneur chiffré précédent :
+<code>sudo cryptsetup luksAddKey /dev/hda7</code>
+Pour voir l'état du conteneur chiffré et les "slots" utilisés :
+<code>sudo cryptsetup luksDump /dev/hda7</code>
+Pour révoquer une clé contenue dans un "slot" :
+<code>sudo cryptsetup luksKillSlot /dev/hda7 <numero_de_slot></code>
+
+=== Montage manuel et formatage ===
+
+Ouverture et formatage en ext3 de la partition chiffrée. L'appellation du volume est ici **home**((Vous pouvez le remplacer par le nom que vous voulez!)).
+
+<code> sudo cryptsetup luksOpen /dev/hda7 home
+ sudo mkfs.ext3 /dev/mapper/home </code>
+
+puis montage de la partition :
+
+<code> sudo mount -t ext3 /dev/mapper/home /mnt/ </code>
+
+puis démontage et fermeture du volume chiffré :
+
+<code> sudo umount /mnt
+ sudo cryptsetup luksClose home </code>
+
+=== Aparté sur la transformation de fichiers en volumes ===
+Pour générer un fichier de nom **big** de 10 Mo :
+<code>dd if=/dev/urandom bs=1M count=10 of=big</code>
+Pour éviter de dévoiler des informations, cette commande remplit le fichier avec du contenu aléatoire (/dev/urandom/). Cette opération est horriblement lente (quelque MiB/s). Utilisez Truecrypt pour générer un volume dans un fichier, la génération du fichier est beaucoup plus rapide et continuez ensuite normalement ce tutoriel.
+
+Pour transformer le fichier en volume (sur Dapper, remplacer /dev/loop0 par **/dev/loop/0**) :
+<code>sudo losetup /dev/loop0  big</code>
+
+Pour déconnecter le volume du fichier (sur Dapper, remplacer /dev/loop0 par **/dev/loop/0**) :
+<code>sudo losetup -d /dev/loop0</code>
+
+Ces informations vous permettront d'utiliser **dm-crypt** sur des systèmes de fichiers embarqués dans des fichiers.
+
+=== Montage automatique ===
+Depuis **Dapper**, Ubuntu intègre la gestion des volumes chiffrée LUKS en standard, ce qui permet de gérer de manière automatique le montage et le démontage de vos volumes (partitions) sécurisées. La configuration des paramètres du volume chiffré est dans le fichier **/etc/crypttab** et le montage du volume est de manière classique dans **/etc/fstab**.
+
+Un exemple de chiffrement du dossier **/home**:
+
+Modifier le fichier **/etc/crypttab** :
+<code> # <target name> <source device>         <key file>      <options>
+home /dev/hda7  none    luks </code>
+
+Si vos disques cryptés ont des noms séquentiels vous pouvez utiliser une boucle: <code> for i in sda1 sda2 ; do echo "${i}_crypt UUID=$(blkid -o full /dev/$i | cut -d '"' -f 2) none luks" >> /etc/crypttab ; done </code> 
+
+Si vous désirez que tout vous array raid soient décryptés: <code> truncate -s 0 /etc/crypttab ; for i in $(cat /proc/mdstat | grep -E "^md" | cut -d ' ' -f 1) ; do echo "${i}_crypt UUID=$(blkid -o full /dev/$i | cut -d '"' -f 2) none luks" >> /etc/crypttab ; done </code>
+
+Modifier **/etc/fstab** pour le volume qui nous intéresse :
+<code># /etc/fstab: static file system information.
+#
+# <file system> <mount point>   <type>  <options>       <dump>  <pass>
+/dev/mapper/home        /home   ext3    defaults        0       1 </code>
+
+La clé d'ouverture du volume chiffré vous sera demandée au démarrage de la machine si votre partition est montée automatiquement (voir [[mount_fstab|fstab]]).
+
+Attention, si une ligne est déjà présente pour le montage de la partition qui héberge le système de fichier chiffré (/dev/hda7 dans l'exemple ci-dessus), il faut la commenter (en ajoutant un # comme premier caractère) pour éviter un message d'erreur au démarrage.
+
+Attention: Si le boot a lieu avec les options **quiet splash** supprimées, la demande de la phrase de décodification  va passer inaperçue... Le boot se mettra à attendre la saisie de la clé. Le plus simple est d'appuyer sur la touche **entrée** afin qu'il repose la question. 
+
+=== Ouverture automatique du conteneur chiffré au démarrage à l'aide d'un support amovible ===
+
+[[:tutoriel:securiser_ubuntu_avec_peripherique_externe]]
+
+On peut grâce à LUKS monter automatiquement les partitions chiffrées au démarrage sans mot de passe à taper. Ceci est possible par l'intermédiaire d'une clé USB ou d'une carte SD ou MS : [[http://web.archive.org/web/20100110234521/http://petaramesh.org/post/2007/11/29/Une-cle-de-contact-pour-votre-portable-chiffre]] FIXME
+
+Suivre la procédure indiquée plus haut, mais modifier le fichier **/etc/crypttab** :
+<code>
+# <target name> <source device> <key file>          <options>
+  home          /dev/hda7       /dev/sda:/keyfile:1 luks,keyscript=/lib/cryptsetup/scripts/passdev
+  home          /dev/hda7       none                luks
+</code>
+
+De cette manière, le système va tenter de déchiffrer la partition /dev/hda7 au moyen du fichier clé "keyfile" se trouvant sur le périphérique /dev/sda (en FAT par exemple). Le "1" représente le temps d'attente avant de demander le mot de passe si le fichier clé n'est pas trouvé.
+
+ou
+
+Pour les versions plus récentes d'Ubuntu (10.04 et plus) : [[http://wejn.org/how-to-make-passwordless-cryptsetup.html#28bd9ec7b2f9ea74ea0499586bde727c]] FIXME
+
+=== Ouverture et montage automatique de la partition chiffrée à l'ouverture de session, sans support amovible ni pass-phrase ===
+Les techniques exposées plus haut offrent un haut niveau de sécurité pour peu que la pass-phrase de LUKS ait été bien choisie. Cependant, elles sont également assez lourdes, dans la mesure où elles nécessitent que l'utilisateur rentre à chaque démarrage sa pass-phrase (ou qu'il porte sur lui en permanence le support amovible permettant l'ouverture du conteneur chiffré).
+La méthode proposée ici va permettre d'ouvrir automatiquement le conteneur chiffré et de monter la partition chiffrée au démarrage de la session, sans que la pass-phrase ne soit saisie. La partition chiffrée n'est donc plus protégée que par le mot de passe d'ouverture de session.
+
+__La pass-phrase de la partition chiffrée et le mot de passe associé au compte doivent être les mêmes__ (PAM ne fait que "passer" le mot de passe de session pour le montage de la partition), cela a donc des implications lorsque le mot de passe de l'utilisateur doit être changé : il faut au préalable rajouter une pass-phrase (identique au nouveau mot de passe) dans un nouveau "slot" et une fois que cela est validé, supprimer l'ancienne pass-phrase.
+
+Le niveau de sécurité est donc plus bas, mais le chiffrement devient parfaitement transparent pour l'utilisateur. Cette solution convient donc bien si vous souhaitez simplement protéger vos données personnelles en cas de vol de votre machine par un quidam quelconque, mais peut-être pas si vous avez des documents vraiment confidentiels à protéger.
+
+Nous allons utiliser PAM, utilitaire habituellement utilisé pour le montage automatique de partitions sur des postes multi-utilisateurs.
+<note warning>pam_mount ne prend pas en charge les partitions LUKS2, ([[https://wiki.archlinux.org/index.php/pam_mount|voir ici]])</note>
+
+La situation est la suivante : la partition /dev/sda2 est notre partition chiffrée. Elle doit être montée automatiquement au point /mnt/cryptodisk.
+Les opérations suivantes ont donc été effectuées au préalable :
+
+<code>
+#Création du containeur chiffré. Attention, la partition ne doit pas être montée. De plus, toute donnée présente sur cette partition sera perdue :
+sudo cryptsetup luksFormat /dev/sda2
+
+#Ouverture du containeur nouvellement créé, à qui on donne le nom de "cryptodisk":
+sudo cryptsetup luksOpen /dev/sda2 cryptodisk
+
+#Création du système de fichier ext3 sur cette partition chiffrée :
+sudo mkfs.ext3 /dev/mapper/cryptodisk
+
+#Création du point de montage :
+sudo mkdir /mnt/cryptodisk
+
+#Définition du point de montage: Dans le fichier /etc/fstab, notez l'option
+#"noauto" qui permet de faire apparaître la partition dans le fichier fstab
+#sans pour autant la monter automatiquement au démarrage
+/dev/mapper/cryptodisk /mnt/cryptodisk           ext3    defaults,noauto        0       0
+
+#Et on s'arrête là. Ne RIEN ajouter dans le fichier /etc/cryptab</code>
+
+Notre partition chiffrée est à présent créée, formatée, et un point de montage a été défini. Il ne reste plus qu'à indiquer à PAM de la monter automatiquement à chaque ouverture de session (sans demande de la pass-phrase donc).
+
+<code>
+#Installation de la librairie :
+sudo apt-get install libpam-mount</code>
+Indication à PAM de la partition à monter : Editer le fichier /etc/security/pam_mount.conf.xml. Au début du fichier, après la première balise <pam-mount>, ajouter la ligne suivante :
+<code>
+<volume user="*" mountpoint="/mnt/cryptodisk" path="/dev/sda2" fstype="crypt" />
+</code>
+La partition /dev/sda2 de type "crypt" (partition chiffrée) sera montée à l'ouverture de session sans demande de la phrase-pass sur le point de montage /mnt/cryptodisk, et ce quel que soit l'utilisateur qui se connecte (et dont le mot de passe de session correspond à une pass-phrase de la partition).
+
+Et pour finir, il suffit d'indiquer à gdm (dans le cas de Gnome) ou kdm (pour KDE) d'appeler PAM.
+Ouvrir ainsi dans le cas de Gnome le fichier /etc/pam.d/gdm, et ajouter à la fin de ce fichier la ligne
+<code>@include common-pammount</code>
+
+**Remarque : ceci n'est plus utile depuis Jaunty.**
+
+Et voilà ! Il ne vous reste plus qu'à redémarrer votre machine, et à l'ouverture de session la partition chiffrée sera ouverte et montée automatiquement, sans que la pass-phrase ne vous soit demandée. Bien entendu, si vous avez au préalable désactivé l'authentification pour l'ouverture de la session, cela ne sert pas à grand chose d'avoir une partition chiffrée (car alors l'authentification étant désactivée, la session est ouverte automatiquement à chaque démarrage et la partition chiffrée est également ouverte et montée automatiquement et sans pass-phrase à chaque démarrage).
+
+Remarque: méthode testée et approuvée sous Ubuntu 10.04
+
+
+=== Réglage de la priorité d'exécution ===
+Par défaut le niveau de priorité du démon de chiffrage est trop élevé et peut induire des ralentissements gênants. Vous pouvez modifier cette priorité à l'aide de la commande **renice** :
+
+<code> sudo renice 10 `pgrep kcryptd` </code>
+
+Pour exécuter cette commande à chaque démarrage, il faut la placer dans le fichier **/etc/rc.local** avant la ligne **exit 0** sans sudo car c'est le système avec les droits administrateur qui l'exécutera.
+
+<code>
+#!/bin/sh -e
+#
+renice 10 `pgrep kcryptd`
+exit 0
+</code>
+
+==== Modifier le mot de passe de la partition chiffrée ===
+LUKS autorise jusqu'à 8 mots de passe pour une même partition, ce qui permet d'attribuer des mots de passe différents à différents utilisateurs. Pour supprimer un mot de passe existant, il convient préalablement d'ajouter un mot de passe supplémentaire avant de supprimer l'ancien mot de passe.
+=== Ajouter un mot de passe supplémentaire ===
+On suppose que l'utilisateur a parfaitement identifié la partition physique chiffrée, par exemple avec lsblk :
+<code>
+usr@pc:~$ sudo lsblk
+sda                        8:0    0 211,8G  0 disk  
+├─sda1                     8:1    0   512M  0 part  /boot/efi
+├─sda2                     8:2    0   700M  0 part  /boot
+└─sda3                     8:3    0 210,6G  0 part  
+  └─partition_chiffree
+                         253:0    0 210,6G  0 crypt 
+    ├─PartitionLUKS--vg-root 253:1    0    30G  0 lvm   /
+    └─PartitionLUKS--vg-home 253:2    0    180G  0 lvm   /home
+sdb                        8:48   0 800,4G  0 disk  
+└─sdb1                     8:49   0 800,4G  0 part   /media/disque
+</code>
+Dans l'exemple ci-dessus, la partition dont le mot de passe doit être modifié est la partition /dev/sda3. L'ajout d'un mot de passe se fait en utilisant la commande **cryptsetup luksAddKey**. L'affichage interactif invite ensuite l'utilisateur, dans le terminal, à saisir d'abord une clé valide (la seule s'il n'y en a qu'une), puis, à deux reprises, le nouveau mot de passe (nouvelle clé ou nouvelle phrase secrète : ces termes sont ici synonymes).
+<code>
+usr@pc:~$ sudo cryptsetup luksAddKey /dev/sda3
+Entrez une phrase secrète existante : 
+Entrez une nouvelle phrase secrète pour l'emplacement de clé : 
+Vérifiez la phrase secrète : 
+</code>
+Une fois ce nouveau mot de passe créé, il est désormais possible de supprimer l'ancien mot de passe.
+=== Supprimer un mot de passe ===
+<note important>Attention à bien avoir préalablement créé au moins un autre mot de passe pour le conteneur chiffré qui permettra de le déverrouiller ultérieurement</note>
+La suppression d'un mot de passe utilise la commande **cryptsetup luksRemoveKey**. Celle-ci nécessite, tout comme lors de la création d'un mot de passe, de connaître la partition physique sur laquelle opérer. Dans l'exemple ci-dessous, c'est toujours /dev/sda3. Après avoir saisi la commande suivie de la partition, il suffit donc, à l'invite du terminal, de saisir la phrase secrète (le mot de passe) à supprimer pour que celle-ci le soit immédiatement :
+<code>
+usr@pc:~$ sudo cryptsetup luksRemoveKey /dev/sda3
+Entrez la phrase secrète à effacer : 
+</code>
+C'est tout.
+<note tip>Il semblerait que la commande **luksChangeKey** permettre d'effectuer l'opération de changement de clé en une seule opération. À vérifier.
+<code>
+usr@pc:~$ cryptsetup luksChangeKey <target device> -S <target key slot number>
+</code>
+</note>
+
+===== Chiffrer votre système avec le swap aléatoirement =====
+Allez voir ce tutoriel pour plus d'information sur le sujet : [[:chiffrement_manuel]]
+===== Conclusion =====
+
+Le nouveau système de gestion des volumes chiffrés est très bien implémenté dans Dapper. Il permet notamment de sécuriser votre /home sans manipulation complexe autre que de renseigner la pass-phrase lors du démarrage.
+
+
+
+===== Sous Windows =====
+
+Grâce au logiciel [[http://sourceforge.net/projects/freeotfe.mirror/|FreeOTFE]], il est possible de monter de façon non permanente une partition LUKS chiffrée par Cryptsetup sous Linux à partir de votre système Windows.
+
+Pour monter et utiliser le même type de partition que celle décrite dans ce wiki, voici les étapes :
+
+1. Télécharger FreeOTFE [[http://www.freeotfe.org/download.html|ici]]
+
+2. Extraire les fichiers de l'archive dans un dossier et ouvrir FreeOTFE.exe
+
+3. Lorsqu'on vous demande si vous voulez démarrer FreeOTFE en portable mode, dites oui. Si vous voulez utiliser FreeOTFE régulièrement afin de monter des volumes chiffrés sous Windows, vous pouvez cliquer sur non et activer de façon permanente tous les pilotes de chiffrement un par un.
+
+4. Cliquez ensuite sur File / Linux volume / Mount partition
+
+5. Choisissez la partition qui est chiffrée sur votre disque dur
+
+6. Dans la grande case, entrez votre clé secrète, puis cliquez sur Ok
+
+7. Si vous avez choisi la bonne partition et la bonne clé, le programme détectera le chiffrage correspondant et vous offrira une liste des pilotes pouvant monter le volume. Faites votre choix.
+
+8. Si tout s'est bien passé, vous avez un nouveau lecteur dans votre poste de travail !
+
+
+
+==== Notes importantes ====
+
+Ce volume ne survivra pas à un redémarrage, il faudra tout reprendre de zéro à chaque fois.
+
+Si vous fermez FreeOTFE alors qu'il est en mode portable, vous devez lui spécifier de ne pas désactiver les pilotes d'encryptage afin de ne pas perdre l'usage de votre partition. 
+
+Avant de fermer votre ordinateur, il est recommandé de démonter la partition à l'aide de FreeOTFE et de lui permettre de désactiver tous les pilotes à sa fermeture.
+
+Si votre système de fichier est ext2 ou ext3, Windows ne sera pas capable de lire le contenu de votre partition, sauf si vous installez le [[http://www.fs-driver.org/|Ext2 IFS For Windows]]. Attention toutefois, ce pilote pour Windows ne prend pas en charge les droits d'accès et la journalisation. Pour du partage entre Windows et Linux, le Fat32 est plus conseillée.
+
+
+
+===== Liens =====
+
+  * Une bonne référence : [[https://wiki.ubuntu.com/EncryptedFilesystemHowto]]
+
+  * Un 'howto' expliquant étape par étape comment mettre en œuvre LUKS pour construire un système sûr: [[http://xberger.free.fr/en-US/A_startup_key_to_protect_my_data/1.0/html/How_to_have_a_fully_secure_laptop/index.html | A startup key to protect my data]]
+
+  * [[:tutoriel:chiffrer_son_disque|Tutoriel d'installation d'une Ubuntu utilisant cryptsetup]]
+----
+
+//Contributeur : ??? //

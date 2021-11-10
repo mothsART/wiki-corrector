@@ -1,0 +1,402 @@
+
+{{tag>Xenial serveur BROUILLON}}
+
+----
+
+====== Les liste de diffusions Mailman ======
+
+
+{{serveur:mailman.jpg }}
+
+**Mailman** est une application libre pour gérer des listes de diffusion électroniques, les listes de discussion et les « newsletters » (traduisez littéralement par « lettres d'information »). La plupart des listes de diffusions de logiciel libre utilisent Mailman comme programme de gestion des messages. Ce dernier est performant, facile à installer et facile à maintenir. 
+
+<note warning>Avant de commencer, déterminez bien la version (et stratégie) que vous souhaitez utiliser : \\
+la version inclue par défaut dans le [[pu>allpackages|dépôt principale de Xenial (16.04)]] est la 2.1 qui est la plus répandue alors que la dernière release est la  [[http://docs.mailman3.org/en/latest/|v. 3.1]] avec des ruptures importantes: installation via pip (python), django… API REST… docker.</note>
+
+
+
+===== Pré-requis =====
+
+Il est nécessaire, pour la suite de ce tutoriel, de connaître les commandes Linux, [[:tutoriel:comment_editer_un_fichier|savoir éditer un fichier]], et démarrer/arrêter un service sous Linux. Il est aussi requis que vous soyez actuellement sous un système Ubuntu, que vous ayez un accès root (super-utilisateur), et bien sûr que vous souhaitiez utiliser le programme Mailman.
+
+
+==== Apache2 ====
+
+[[Apache2]] est déjà disponible dans les dépôts, donc [[:tutoriel:comment_installer_un_paquet|installez-le]].
+==== Exim4 ====
+
+<note important>L'installation d'exim4 **supprimera postfix** si celui ci est présent. (cf. [[:exim4-satellite|installation d'exim4]])</note>
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>exim4,exim4-base,exim4-config|exim4 exim4-base exim4-config]]**.
+
+Une fois Exim4 installé, les fichiers de configuration se trouvent dans « /etc/exim4/ ». Dans Ubuntu, par défaut, les fichiers de configuration de Exim4 sont répartis en plusieurs fichiers.
+
+Vous pouvez changer ceci en éditant la variable ci-dessous dans « /etc/exim4/update-exim4.conf.conf » :
+<file>
+  dc_use_split_config='true' # ='false' pour désactiver l'option</file>
+
+Si vous faites face à un problème durant l'installation et que vous êtes incapable de résoudre ce dernier, référez-vous à la liste de diffusion appropriée pour plus d'assistance.
+
+==== Mailman ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>mailman]]**.
+
+Cette dernière copiera les fichiers d'installation dans le dossier « /var/lib/mailman » et installera les scripts CGI dans le dossier « /usr/lib/cgi-bin/mailman ».
+Enfin, le programme créera le groupe et l'utilisateur « list ». Notez que le processus « mailman » doit être lancé avec les privilèges super-utilisateur.
+
+
+===== Configuration =====
+
+Pour cette section, il est nécessaire que vous ayez complété avec succès l'installation de Mailman, Apache et Exim4. Ici, nous allons voir les étapes de configuration. À la fin de cette section, Mailman devrait être prêt à être utilisé.
+
+==== Apache ====
+
+Une fois l'installation d'Apache2 effectuée, vous pouvez le démarrer avec la commande suivante :
+
+  sudo /etc/init.d/apache2 start
+
+Mailman utilise Apache pour créer un rendu de ses scripts CGI. Les scripts de Mailman se trouvent dans le dossier « /usr/lib/cgi-bin/mailman ». Dans le fichier « /etc/apache2/apache2.conf », rajoutez une ligne :
+<file xml>ScriptAlias /mailman/ /usr/lib/cgi-bin/mailman/</file>
+Ceci aura pour effet de poser le répertoire **/usr/lib/cgi-bin/mailman/** à la racine du serveur, c'est-à-dire en http://votre_domaine/mailman. Faites de même pour que les archives soient accessibles en http://votre_domaine/archives :
+   Alias /archives/ /var/lib/mailman/archives/public/
+
+Vous pouvez évidemment fignoler les préférences, par exemple en ajoutant dans ce même fichier :
+<file xml><Directory /usr/lib/cgi-bin/mailman/>
+    AllowOverride None
+    Options ExecCGI
+    Order allow,deny
+    Allow from all
+</Directory>
+<Directory /var/lib/mailman/archives/public>
+    Options Indexes MultiViews FollowSymLinks
+    AllowOverride None
+    Order allow,deny
+    Allow from all
+</Directory></file>
+
+Pensez à activer le module cgi de Apache2 par la commande suivante :
+
+  sudo a2enmod cgi
+
+==== Exim4 ====
+
+Pour que Mailman puisse fonctionner avec Exim4, vous êtes supposé configurer ce dernier. Comme mentionné plus haut, par défaut, Exim4 utilise de multiples fichiers de configurations, et de tout type. Pour plus de détails, merci de vous référer au site [[http://www.exim.org|officiel d'Exim]].
+
+Pour démarrer Mailman, nous devons ajouter un nouveau fichier de configuration avec les catégories suivantes :
+  * Configuration globale (main)
+  * Transport
+  * Routeur (router)
+
+Exim crée un fichier principal de configuration, ainsi que plusieurs mini-fichiers de configuration. C'est pourquoi, l'ordre de ces fichiers de configuration est important. Une fois ces fichiers créés, vous pouvez lancer Exim4 avec la commande :
+
+  sudo /etc/init.d/exim4 start
+
+
+
+=== Configuration globale (main) ===
+
+Tous les fichiers de configuration concernant le type « main » sont stockés dans le dossier « /etc/exim4/conf.d/main/ ». Vous pouvez [[:tutoriel:comment_editer_un_fichier|ajouter]] les lignes suivantes dans un nouveau fichier nommé « 04_exim4-config_mailman » :
+
+<file>
+# start
+# Home dir for your Mailman installation -- aka Mailman's prefix
+# directory.
+# By default this is set to "/usr/local/mailman"
+# On a Red Hat/Fedora system using the RPM use "/var/mailman"
+# On Debian using the deb package use "/var/lib/mailman"
+# This is normally the same as ~mailman
+MM_HOME=/var/lib/mailman
+#
+# User and group for Mailman, should match your --with-mail-gid
+# switch to Mailman's configure script.  Value is normally "mailman"
+MM_UID=list
+MM_GID=list
+#
+# Domains that your lists are in - colon separated list
+# you may wish to add these into local_domains as well
+domainlist mm_domains=bluestar.co.in
+#
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+#
+# These values are derived from the ones above and should not need
+# editing unless you have munged your mailman installation
+#
+# The path of the Mailman mail wrapper script
+MM_WRAP=MM_HOME/mail/mailman
+#
+# The path of the list config file (used as a required file when
+# verifying list addresses)
+MM_LISTCHK=MM_HOME/lists/${lc::$local_part}/config.pck
+# end
+</file>
+
+=== Transport ===
+
+Tous les fichiers de configuration concernant le type « transport » sont stockés dans le dossier « /etc/exim4/conf.d/transport/ ». Vous pouvez ajouter les lignes suivantes dans un nouveau fichier nommé « 04_exim4-config_mailman »:
+
+<file>
+mailman_transport:
+ driver = pipe
+ command = MM_WRAP \
+             '${if def:local_part_suffix \
+                   {${sg{$local_part_suffix}{-(\\w+)(\\+.*)?}{\$1}}} \
+                   {post}}' \
+             $local_part
+  current_directory = MM_HOME
+  home_directory = MM_HOME
+  user = MM_UID
+  group = MM_GID
+</file>
+
+=== Routeur (router) ===
+
+Tous les fichiers de configuration concernant le type « router » sont stockés dans le dossier « /etc/exim4/conf.d/router/ ». Vous pouvez ajouter les lignes suivantes dans un nouveau fichier nommé « 04_exim4-config_mailman »:
+
+<file>
+mailman_router:
+ driver = accept
+ require_files = MM_HOME/lists/$local_part/config.pck
+ local_part_suffix_optional
+ local_part_suffix = -bounces : -bounces+* : \
+                     -confirm+* : -join : -leave : \
+                     -owner : -request : -admin
+ transport = mailman_transport
+</file>
+
+==== Mailman ====
+
+Modifiez d'abord les paramètres de mailman afin qu'il reconnaisse votre nom de domaine. Éditez le fichier /etc/mailman/mm_cfg.py et ajoutez-y :
+  DEFAULT_EMAIL_HOST = 'votre_domaine.fr'
+  DEFAULT_URL_HOST = 'votre_domaine.fr'
+L'adresse de la liste sera du type **nom_liste@votre_domaine.fr**.
+
+[[https://wiki.list.org/DOC/How%20do%20I%20configure%20postfix_to_mailman.py%3F|infos sur postfix_to_mailman.py]]
+
+Créez ensuite une liste de diffusion, ici « mailman »:
+<code bash>sudo newlist mailman
+
+Entrez l'adresse courriel du gestionnaire de la liste : utilisateur@serveur.com
+Mot de passe initial de la liste mailman :
+Pour achever la création de votre liste de diffusion, vous devez
+modifier votre fichier /etc/aliases (ou équivalent) en y ajoutant les
+lignes suivantes et peut être exécuter le programme « newaliases »:
+
+liste de diffusion ## mailman
+mailman:              "|/var/lib/mailman/mail/mailman post mailman"
+mailman-admin:        "|/var/lib/mailman/mail/mailman admin mailman"
+mailman-bounces:      "|/var/lib/mailman/mail/mailman bounces mailman"
+mailman-confirm:      "|/var/lib/mailman/mail/mailman confirm mailman"
+mailman-join:         "|/var/lib/mailman/mail/mailman join mailman"
+mailman-leave:        "|/var/lib/mailman/mail/mailman leave mailman"
+mailman-owner:        "|/var/lib/mailman/mail/mailman owner mailman"
+mailman-request:      "|/var/lib/mailman/mail/mailman request mailman"
+mailman-subscribe:    "|/var/lib/mailman/mail/mailman subscribe mailman"
+mailman-unsubscribe:  "|/var/lib/mailman/mail/mailman unsubscribe mailman"
+
+Tapez sur Entrée pour aviser le propriétaire de mailman...
+</code>
+
+Nous avons configuré Exim afin qu'il reconnaisse tous les courriels de Mailman. Ainsi, il n'est plus obligatoire de créer des entrées dans « /etc/aliases ». Si vous avez effectué un changement quelconque, merci de vous assurer que vous ayez redémarré tous les services, avant de passer à la section suivante.
+
+Enfin, démarrez Mailman :
+
+  sudo /etc/init.d/mailman start
+
+Pour avoir le site web en français, modifier la ligne suivante du fichier:
+<file - /etc/mailman/mm_cfg.py>
+DEFAULT_SERVER_LANGUAGE = 'fr'
+</file>
+===== Administration =====
+
+{{ serveur:mailman-webbased-admin2.png }}
+
+Nous allons maintenant voir comment administrer Mailman. Cette étape considère que l'installation de ce dernier a correctement été effectuée. 
+
+Mailman fournit une administration web facile d'utilisation. Pour y accéder, entrez le lien suivant dans votre navigateur internet : http://serveur/cgi-bin/mailman/admin
+
+La liste de diffusion par défaut « mail » devrait apparaître sur l'écran. Si vous cliquez sur celle-ci, on vous demandera un mot de passe pour vous identifier. Si vous entrez le bon mot de passe, vous pourrez changer les options d'administration de la liste de diffusion.
+
+Vous pouvez créer une nouvelle liste de diffusion en utilisant l'utilitaire « ''newlist'' » en ligne de commande. Alternativement, vous pourez utiliser l'interface web pour en créer une nouvelle.
+
+==== Gestion des rebonds ====
+Les rebonds (bounces) correspondent à des refus de distribution du serveur de mail du destinataire. Les rebonds sont tracés dans le fichier /var/log/mailman/bounce
+
+===== Utilisateurs =====
+
+Mailman fournit aussi une interface web pour les utilisateurs. Pour y accéder, entrez le lien suivant dans votre navigateur : 
+http://serveur/cgi-bin/mailman/listinfo
+
+La liste de diffusion par défaut, « mailman », devrait apparaître à l'écran. Si vous cliquez sur le nom de la liste de diffusion, l'interface affichera le formulaire de souscription. Vous pouvez entrer votre adresse électronique, votre nom (optionnel), et un mot de passe, afin de vous inscrire. Suivez les instructions contenues dans le courriel envoyé à la fin de l'inscription, pour finir cette dernière.
+
+===== Handlers =====
+==== Principe ====
+Il peut être utile de modifier les mails que l’on envoie d’une manière n’étant pas prévue par Mailman. Dans cette optique on peut vouloir par exemple changer les en-têtes d’un mail, le corps des messages ou tout simplement effectuer une modération selon certains critères préprogrammés.  Un exemple concret est disponible dans la [[mailman#Je ne reçois pas mes propres mails depuis mon entreprise|FAQ de cette page]].
+
+Le traitement des mails depuis leur réception jusqu’à leur renvoi à la liste est décomposé par Mailman en plusieurs phases, appelées « Handlers », dont l’ordre et l’usage est défini dans le fichier « Mailman/defaults.py » par la ligne suivante :
+
+<code>
+GLOBAL_PIPELINE = [
+    'SpamDetect',
+    'Approve',
+…
+    'Acknowledge',
+    'ToOutgoing',
+    ]
+</code>
+
+Tous les handlers de cette liste sont des fichiers contenant du code en Python et sont situés dans le répertoire « Mailman/Handlers ». Bien entendu il est possible de les modifier directement afin de personnaliser le comportement de l’application, mais un meilleur moyen est de créer un handler personnalisé et de l’insérer à l’endroit où on le souhaite dans le traitement.
+
+==== Handlers personnalisés====
+=== Avantages===
+Les handlers personnalisés ont plusieurs avantages :
+    * Ils permettent de ne pas modifier le code original de l’application. Cela évite les dommages collatéraux non prévus et facilite la maintenance ultérieure par une tierce personne.
+    * Ils ne seront pas affectés par une mise à jour de l’application.
+    * Ils permettent de n’être appliqués qu’à une collection spécifique de listes. Le code du handler n’a donc pas à effectuer de filtre pour savoir s’il doit, ou non, s’appliquer en fonction de la liste qui l’appelle.
+    * Tous les changements sont regroupés ce qui permet une désactivation ou suppression aisée du comportement modifié.
+
+=== Code===
+Un handler est codé en python. Il doit nécessairement définir la fonction « process(mlist, msg, msgdata) » qui sera appelée par Mailman avec ces trois arguments :
+    * mlist est l’instance de la liste
+    * msg est l’instance du mail
+    * msgdata contient les méta-données du mail
+Toutes les méthodes relatives à la liste ou au message peuvent donc être appelées à l’intérieur de cette fonction.
+Toutes les modifications qui sont effectuées dans cette fonction affecteront le message et donc le traitement qui sera effectué par les handlers suivants. Il convient donc de placer le handler personnalisé au bon endroit dans le pipeline de traitement du mail.
+
+=== Insertion du handler===
+Considérons que notre handler personnalisé a bien été créé et est sauvegardé dans le répertoire « Mailman/Handlers » sous le doux nom « MonHandler ». Il faut alors choisir où insérer le code créé.
+Pour cela je vous laisse vous reporter à la liste de handlers que nous avons vu plus haut (le champ GLOBAL_PIPELINE dans le fichier « Defaults.py »).
+Pour l’exemple nous allons le positionner avant le handler « Moderate ». 
+Une fois que l’on sait où placer notre code, il existe plusieurs moyens de le faire prendre en compte par l’application :
+    * L’insertion globale qui va l’appliquer à toutes les listes sans modifier les autres handlers. Nous allons alors éditer le fichier de configuration de Mailman (/etc/mailman/mm_cfg.py) et y ajouter la ligne suivante :
+<code>
+GLOBAL_PIPELINE.insert(GLOBAL_PIPELINE.index('Moderate'), ' MonHandler')
+</code>
+    * Le remplacement global, qui va remplacer un des handlers par défaut par notre nouveau handler. Comme au dessus, nous allons ajouter dans le fichier de configuration de Mailman la ligne suivante :
+<code>
+GLOBAL_PIPELINE[GLOBAL_PIPELINE.index('Moderate')] = ' MonHandler'
+</code>
+    * L’insertion/remplacement spécifique, qui ne va impacter que les listes que nous aurons déterminées. Pour cela nous allons utiliser le fichier « bin/config_list ». Pour ce faire, il nous faut créer un fichier contenant les informations que nous voulons injecter dans la liste. Nous allons donc créer un fichier « MonFichier » qui contiendra les informations suivantes :
+<code>
+mlist.pipeline = [
+'SpamDetect',
+   'Approve',
+   …
+   'Replybot',
+   'MonHandler',
+   'Moderate',
+   …
+   'Acknowledge',
+   'ToOutgoing',
+    ]
+</code>
+Soit le pipeline global au complet ainsi que notre handler personnalisé inséré au bon endroit. Bien sûr si vous souhaitez remplacer « Moderate » par « MonHandler », vous supprimez « Moderate » du pipeline.
+
+Ensuite pour l’appliquer à la liste « MaListe » il ne reste qu’à exécuter la commande :
+<code>
+bin/config_list -i MonFichier MaListe
+</code>
+
+
+Enfin redémarrez Mailman :
+<code>
+sudo /etc/init.d/mailman restart
+</code>
+
+
+
+===== FAQ =====
+====Envoi de mails avec Exim====
+Si vous n'arrivez pas à envoyer de mails avec exim, vérifiez que vos fichiers logs ne contiennent pas une des erreurs suivantes :
+
+=== 554 SMTP service not available ===
+
+Il suffit d'autorisez l'accès au service exim en ajoutant dans le fichier /etc/hosts.allow la ligne :
+  exim : ALL
+
+=== 553 sorry, your envelope sender domain must exist (#5.7.1) ===
+
+Modifiez le paramètre **primary_hostname** dans le fichier de configuration d'exim, /etc/mail/exim.conf, de telle sorte qu'il contienne votre nom de domaine :
+  primary_hostname = mon_domaine.fr
+
+==== Je ne reçois pas mes propres mails depuis mon entreprise ====
+Avec mon adresse professionnelle, je ne recevais pas mes propres mails, ni ceux venant d’autres personnes de ma société. Cela venait du fait que le serveur de messagerie de l’entreprise n’autorisait pas de mails entrant si le nom de domaine était celui de la boite. Afin de contourner le problème il faut simplement supprimer le nom de domaine du champ d’en-tête « from ». Nous allons donc créer un handler personnalisé nommé « RemoveDomain.py » que l’on va placer dans le dossier « Mailman/Handlers ». Il contient le code suivant :
+<code>
+"""Remove '@domain' from the messages From: header.
+"""
+
+import re
+
+def process(mlist, msg, msgdata):
+    from_val = msg.get('from')
+    if from_val:
+        from_val = re.sub('@[^ >,]*', '', from_val)
+        del msg['from']
+        msg['From'] = from_val
+</code>
+
+Pour corriger le problème sur toutes les listes et éviter que cela arrive sur les listes futures, nous allons insérer ce handler de manière globale dans le pipeline :
+<code>
+GLOBAL_PIPELINE.insert(GLOBAL_PIPELINE.index('Cleanse'), ' RemoveDomain ')
+</code>
+
+Pourquoi l’insérer avant « Cleanse » ? En fait on l’insère plutôt après « AvoidDuplicates ». Si nous l’avions inséré n’importe où avant ce handler, Mailman aurait considéré que vous n’étiez pas l’expéditeur du mail (vu que le nom de domaine est différent) et vous aurait donc envoyé une copie de votre propre mail malgré le fait que vous ayez configuré l’option « Recevez les messages que vous envoyez à la liste ? » à « Non ».
+
+==== Migrer MailMan entre 2 serveurs ====
+
+<code>
+for list in <vos_listes_ici>; do
+echo $list
+rsync -az --progress -e ssh <ancien_serveur>:/var/lib/mailman/archives/public/$list /var/lib/mailman/archives/public/
+rsync -az --progress -e ssh <ancien_serveur>:/var/lib/mailman/archives/private/$list /var/lib/mailman/archives/private/
+rsync -az --progress -e ssh <ancien_serveur>:/var/lib/mailman/archives/private/${list}.mbox /var/lib/mailman/archives/private/
+rsync -az --progress -e ssh <ancien_serveur>:/var/lib/mailman/lists/$list /var/lib/mailman/lists/
+done
+# Vérifier les listes visibles sur le nouveau serveur
+list_lists
+# Si utilisation sur un nom DNS qui n'est pas dédié aux listes mailman, on regénère les aliases à utiliser dans le MTA
+/usr/lib/mailman/bin/genaliases
+# Démarrage du service
+/etc/init.d/mailman start
+# Paramétrer le serveur web et le MTA (comme une nouvelle installation)
+# Vérifier le bon fonctionnement
+</code>
+
+Ressources :
+  * [[http://wiki.list.org/display/DOC/How+do+I+move+a+list+to+a+different+server-Mailman+installation.]] 
+  * [[http://www.mail-archive.com/mailman-users@python.org/msg08534.html]]
+
+==== Mailman ne fonctionne qu'en local après migration vers Precise 12.04 (Relay access denied) ====
+
+Si l'envoi de mails depuis l'extérieur sur la liste échoue ou que mailman n'arrive pas à envoyer les mails à tous les destinataires, cela peut provenir d'un problème de résolution DNS.
+
+Un exemple de log Postfix :
+<code>May  1 10:46:08 server-mail postfix/smtpd[17869]: warning: hostname ns.****.** does not resolve to address 192.168.1.11: No address associated with hostname
+May  1 10:46:08 server-mail postfix/smtpd[17869]: connect from unknown[192.168.1.11]
+May  1 10:46:08 server-mail postfix/smtpd[17869]: Anonymous TLS connection established from unknown[192.168.1.11]: TLSv1 with cipher ECDHE-RSA-AES256-SHA (256/256 bits)
+May  1 10:46:08 server-mail postfix/smtpd[17869]: CCE521FCD0: client=unknown[192.168.1.11], sasl_method=PLAIN, sasl_username=truc
+May  1 10:46:08 server-mail postfix/cleanup[17874]: CCE521FCD0: message-id=<4F9FA2CF.1000208@****.**>
+May  1 10:46:08 server-mail postfix/qmgr[3072]: CCE521FCD0: from=<*****@****.**>, size=720, nrcpt=1 (queue active)
+May  1 10:46:08 server-mail postfix/smtpd[17869]: disconnect from unknown[192.168.1.11]
+May  1 10:46:09 server-mail postfix/pipe[17875]: CCE521FCD0: to=<****@****.**>, relay=mailman, delay=0.38, delays=0.09/0.01/0/0.29, dsn=2.0.0, status=sent (delivered via mailman service)
+May  1 10:46:09 server-mail postfix/qmgr[3072]: CCE521FCD0: removed
+May  1 10:46:11 server-mail postfix/smtpd[17869]: warning: hostname localhost does not resolve to address ::1: No address associated with hostname
+May  1 10:46:11 server-mail postfix/smtpd[17869]: connect from unknown[::1]
+May  1 10:46:11 server-mail postfix/smtpd[17869]: NOQUEUE: reject: RCPT from unknown[::1]: 554 5.7.1 <*******@orange.fr>: Relay access denied; from=<***-bounces@***> to=<*******@****> proto=ESMTP helo=<[127.0.1.1]></code>
+
+Ubuntu lors de la migration vers Precise modifie le fichier ''/etc/hosts'', il suffit d'[[:tutoriel:comment_editer_un_fichier|éditer le fichier]] avec les droits d'administrateur pour commenter les lignes suivantes :
+<code>::1 localhost ip6-localhost ip6-loopback
+fe00::0 ip6-localnet
+ff00::0 ip6-mcastprefix
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+ff02::3 ip6-allhosts</code>
+
+[[http://ubuntuforums.org/showthread.php?t=1970483|Source]]
+
+===== Dbmail =====
+[[dbmail#mailman|Dbmail et Mailman]]
+
+===== Lien =====
+Site officiel [[http://www.gnu.org/software/mailman/]]
+----
+
+//Contributeurs : [[utilisateurs:Kmeleon]] ([[https://wiki.ubuntu.com/Mailman|traduction]]), [[utilisateurs:Ner0lph]] (mise aux normes), [[utilisateurs:piccolo]] (handlers).//

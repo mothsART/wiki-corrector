@@ -1,0 +1,169 @@
+
+{{tag>Trusty Xenial matériel sécurité}}
+----
+
+====== Cartes à puce sous Ubuntu ======
+
+Les Cartes à puce  (smart cards en anglais) sont des cartes intelligentes qui embarquent un microcontrôleur ou un microprocesseur. Le nombre d'applications est illimité.
+
+Les exemples les plus populaires de carte à puce sont les cartes de paiement, les cartes vitales, les cartes de transport ou encore les cartes de fidélité distribuées en grandes surfaces.\\
+L'utilisation d'une carte à puce requiert l'installation sur la machine d'un lecteur de carte et une d'interface de communication.
+Cette page traite de deux type de cartes, les cartes PC/SC et les cartes de type [[#javax.smartcardio]].
+
+[[wpfr>PC/SC|Personal computer/Smart Card]] (ou PC/SC) est une bibliothèque logicielle pour l'accès à des cartes à puce sous Microsoft Windows. Une implémentation libre de PC/SC, appelée PC/SC Lite, est disponible sous GNU/Linux et distribuée avec Mac OS X.
+La spécification de cette bibliothèque est faite par le PC/SC Workgroup, composé de grands fabricants de carte à puce ou d'ordinateur. Son but est d'assurer une base standard de commandes pour permettre une meilleure interopérabilité entre PC, lecteurs de carte et cartes à puce elles-mêmes.
+
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+===== PC/SC (Personal computer/Smart Card) =====
+
+==== Installation====
+
+La gestion des lecteurs PC/SC n'est pas native sous Linux, mais peut être très facilement ajoutée par l'[[:tutoriel:comment_installer_un_paquet|installation des paquets]]  **[[apt>pcscd,libpcsclite1,pcsc-tools]]** qui installent respectivement le démon PC/SC et la bibliothèque de communication.
+
+====Configuration====
+Par la suite, suivant votre lecteur, il vous faudra installer le pilote PC/SC correspondant à votre périphérique. Un certain nombre est déjà fourni dans les [[:depots|dépôts]] Ubuntu. Pour savoir lequel est nécessaire à l'utilisation de votre carte entrez la commande suivante dans un [[:terminal]] : <code>apt-cache search "PC/SC driver"</code>
+Vous obtiendrez une réponse qui vous permettra de savoir quel paquet installer : <code>
+libacr38u - PC/SC driver for the ACR38U smart card reader
+libasedrive-serial - PC/SC driver for the Athena ASEDrive IIIe serial smart card reader
+libasedrive-usb - PC/SC driver for the Athena ASEDrive IIIe USB smart card reader
+libccid - PC/SC driver for USB CCID smart card readers
+libgcr410 - PC/SC driver for GemPlus GCR410 serial SmartCard interface
+libgempc410 - PC/SC driver for the GemPC 410, 412, 413 and 415 smart card readers
+libgempc430 - PC/SC driver for the GemPC 430, 432, 435 smart card readers
+pcsc-omnikey - PC/SC driver for Omnikey Cardman Smartcard readers (binary-only)
+</code>
+Installez le paquet correspondant à votre type de carte.
+Le paquet **libccid** installé par défaut avec **pcscd** est le pilote PC/SC pour le standard [[wpen>Integrated_circuit_card_interface_device|CCID]]. Il permet la reconnaissance d'un grand nombre de lecteurs génériques basés sur ce standard.
+
+==== Utilisation ====
+
+Pour vérifier que tout fonctionne, vous pouvez utiliser les outils du paquet **[[apt>pcsc-tools]]** : 
+  * **pcsc_scan** : un petit script d'exemple qui détecte les périphériques et leurs cartes : <code>pcsc_scan</code> 
+  * **gscriptor** : un petit logiciel avec interface graphique qui permet d'envoyer des commandes APDU.
+
+
+===== javax.smartcardio =====
+
+L'API Java Smart Card I/O défini par la JSR 268 est une API pour le langage Java permettant la communication avec les smart cards en utilisant l'ISO/IEC 7816-4 APDUs. Elle permet ainsi la lecture et l'écriture des cartes et fonctionne avec le lecteur PC/SC.
+
+Un des ses atouts majeurs et que couplé à une applet Java, elle permet l'utilisation des cartes directement depuis le navigateur Web.
+
+Cette API a été introduit depuis Java 1.6 et est disponible et fonctionnelle avec les [[:java]] et [[:openJDK]].
+
+==== Exemple d'utilisation ====
+
+<code java>
+import javax.smartcardio.*;
+import java.util.*;
+
+public class TestSmartCardIO {
+
+	public static String toString(byte[] bytes) {
+		StringBuffer sbTmp = new StringBuffer();
+		for(byte b : bytes){
+			sbTmp.append(String.format("%X", b));
+		}
+		return sbTmp.toString();
+	}
+
+	public static void main(String[] args) {
+
+		try {
+			// Show the list of available terminals
+			// On Windows see HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography\Calais\Readers
+			TerminalFactory factory = TerminalFactory.getDefault();
+			List terminals = factory.terminals().list();
+			System.out.println("Terminals count: " + terminals.size());
+			System.out.println("Terminals: " + terminals);
+
+			// Get the first terminal in the list
+			CardTerminal terminal = (CardTerminal) terminals.get(0);
+
+			// Establish a connection with the card using
+			// "T=0", "T=1", "T=CL" or "*"
+			Card card = terminal.connect("*");
+			System.out.println("Card: " + card);
+
+			// Get ATR
+			byte[] baATR = card.getATR().getBytes();
+			System.out.println("ATR: " + TestSmartCardIO.toString(baATR) );
+
+			// Select Card Manager
+			// - Establish channel to exchange APDU
+			// - Send SELECT Command APDU
+			// - Show Response APDU
+			CardChannel channel = card.getBasicChannel();
+
+			//SELECT Command
+			// See GlobalPlatform Card Specification (e.g. 2.2, section 11.9)
+			// CLA: 00
+			// INS: A4
+			// P1: 04 i.e. b3 is set to 1, means select by name
+			// P2: 00 i.e. first or only occurence
+			// Lc: 08 i.e. length of AID see below
+			// Data: A0 00 00 00 03 00 00 00
+			// AID of the card manager,
+			// in the future should change to A0 00 00 01 51 00 00
+
+			byte[] baCommandAPDU = {(byte) 0x00, (byte) 0xA4, (byte) 0x04, (byte) 0x00, (byte) 0x08, (byte) 0xA0, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x03, (byte) 0x00, (byte) 0x00, (byte) 0x00};
+			System.out.println("APDU >>>: " + TestSmartCardIO.toString(baCommandAPDU));
+
+			ResponseAPDU r = channel.transmit(new CommandAPDU(baCommandAPDU));
+			System.out.println("APDU <<<: " + TestSmartCardIO.toString(r.getBytes()));
+
+			// Disconnect
+			// true: reset the card after disconnecting card.
+
+			card.disconnect(true);
+		} catch(Exception ex)  {
+			ex.printStackTrace();
+		}
+	}
+} 
+</code>
+
+==== Utilisation avec Eclipse ====
+
+Généralement, sous Eclipse vous obtiendrez sur les classes de l'API un message d'erreur de ce type : 
+<note important>Access restriction: The type TerminalFactory is not accessible due to restriction on required library /usr/lib/jvm/java-6-openjdk/jre/lib/rt.jar</note>
+
+Pour pallier ce problème, il faut lever les restrictions d'Eclipse sur la JVM.
+  * Clic droit sur votre projet puis **Properties**
+  * Dans la section **Java Build Path**, onglet **Librairies**, choisissez la ligne **Access rules** puis bouton **Edit**.
+  * Dans la fenêtre, ajouter une règle avec le bouton **Add**.
+  * Dans **Resolution**, choisir "//Accessible//" et dans **Rule pattern** mettre //"%%javax/smartcardio/**%%"//.
+  * Enfin valider.
+Désormais, vos classes sont accessibles.
+
+==== Problème de détection des cibles ====
+
+Si votre cible est correctement détectée avec pcsc_scan mais pas avec Java, ceci est du à un [[https://bugs.launchpad.net/ubuntu/+source/sun-java6/+bug/378294|bug]] dans Ubuntu (ou Java au choix). 
+
+Par défaut, l'API Java cherche **libpcsclite.so** dans les dossiers ///usr/lib:/usr/lib64:/usr/local/lib:/usr/local/lib64//. Cependant, sous Ubuntu, elle se situe dans le dossier ///lib//.
+
+Pour y remédier, plusieurs solutions, soit vous copiez la bibliothèque au bon endroit :
+  * Sous architecture x86 : <code>sudo ln -s /lib/libpcsclite.so.1 /usr/local/lib/libpcsclite.so</code>
+  * Sous architecture amd64 : <code>sudo ln -s /lib/libpcsclite.so.1 /usr/local/lib64/libpcsclite.so</code>
+
+Soit vous définissez la librairie à l'exécution du programme : <code java>
+java -Dsun.security.smartcardio.library=/usr/local/lib/libpcsclite.so TestSmartCardIO 
+</code>
+Soit vous faites le travail dans le code en recherchant le fichier dans /lib dans le code : <code java>
+File libPcscLite = new File("/lib/libpcsclite.so.1");
+if (libPcscLite.exists()) {
+  System.setProperty("sun.security.smartcardio.library", libPcscLite.getAbsolutePath());
+}
+</code>
+
+SpringCard met à disposition des outils gratuit pour PC/SC sur son site. Notamment un [[http://www.springcard.com/online/applet_pcsc/|applet Java en ligne]] qui permet de tester facilement si ''javax.smartcardio'' fonctionne.
+
+===== Liens externes =====
+  * [[https://wiki.debian.org/fr/Smartcards|liste des cartes reconnues sous debian avec leur pilote respectif]],
+  * [[http://www.springcard.com/solutions/pcsc.html| Liste d'outils PCSC recensé par SpringCard]].
+
+----
+
+//Contributeurs : [[:utilisateurs:SaiyanRiku]] ;//

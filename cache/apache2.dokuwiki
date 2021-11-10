@@ -1,0 +1,532 @@
+
+{{tag>réseau serveur internet Xenial Bionic Focal}}
+{{ :logo:apache-logo.png?80nolink| Logo du logiciel Apache 2}}
+
+====== Serveur HTTP Apache 2 ======
+
+Un [[https://fr.wikipedia.org/wiki/Serveur_HTTP|serveur HTTP]] permet à un site web de communiquer avec un navigateur en utilisant le protocole [[https://fr.wikipedia.org/wiki/Hypertext_Transfer_Protocol|HTTP(S)]] et ses extensions ([[https://fr.wikipedia.org/wiki/WebDAV|WebDAV]], etc.). **Apache** est probablement le serveur HTTP le plus populaire. C'est donc lui qui met à disposition la plupart des sites Web du [[https://fr.wikipedia.org/wiki/World_Wide_Web|WWW]].\\
+Il est produit par la //Apache Software Foundation//. C'est un logiciel libre fourni sous la [[wpfr>Licence_Apache|licence spécifique Apache]].
+
+On utilise généralement Apache en conjonction avec d'autres logiciels, permettant d'interpréter du code et d'accéder à des bases de données. Le cas le plus courant est celui d'un serveur [[:LAMP]] (Linux Apache MySQL PHP).
+
+<note important>Avant de vous lancer dans l'utilisation d'Apache et si ce ne sont pas des choses claires pour vous, n'hésitez pas à consulter la documentation concernant [[:web|le Web et le protocole HTTP]].
+
+Les références à prendre en compte pour comprendre la configuration d'Apache, sont [[https://httpd.apache.org/docs/current/fr/|la documentation officielle]], les ressources présentes sur votre système, notamment ''/usr/share/doc/apache2/README.Debian.gz'', ainsi que les pages de manuel.</note>
+
+===== Installation =====
+
+Pour installer Apache seul, [[:tutoriel:comment_installer_un_paquet|installez simplement le paquet]] **[[apt>apache2]]**.
+
+Pour installer Apache avec PHP et MySQL ou MariaDB, reportez vous à l'[[:lamp#installation|installation de LAMP]].
+
+À la suite de cette installation votre serveur doit fonctionner et être accessible à l'adresse [[http://localhost]] (à partir de la même machine).
+
+Un message //It Works!// devrait s'afficher dans votre navigateur. Il s'agit du contenu du fichier ''/var/www/html/index.html'' qui est affiché par défaut.
+
+===== Lancement =====
+
+Apache 2 se lance automatiquement dès son installation, et se relance automatiquement à chaque démarrage. C'est l'idéal pour un serveur qui doit continuellement fournir du contenu en ligne, mais pour un serveur de test (on dit de //développement//) on peut éventuellement désirer un comportement différent.
+
+==== Empêcher Apache de démarrer automatiquement  ====
+
+Pour empêcher cela :
+<code>sudo systemctl disable apache2</code>
+==== Réactiver le démarrage automatique ====
+
+Pour de nouveau relancer Apache automatiquement au démarrage de la machine, c'est simple :
+<code>sudo systemctl enable apache2</code>
+
+==== Autres commandes utiles ====
+
+Pour arrêter apache2 :
+<code>sudo systemctl stop apache2</code>
+
+Pour lancer apache2 :
+<code>sudo systemctl start apache2</code>
+
+Pour relancer apache2 : 
+<code>sudo systemctl restart apache2</code>
+
+Pour recharger la configuration d'apache2 :
+<code>sudo systemctl reload apache2</code>
+ 
+Pour voir la version d'Apache utilisée :
+<code>sudo apache2ctl -v</code>
+
+Pour tester l'ensemble de la configuration d'Apache :
+<code>sudo apache2ctl -t</code>
+
+Pour tester la configuration des hôtes virtuels :
+<code>sudo apache2ctl -t -D DUMP_VHOSTS</code>
+
+Pour voir les modules d'Apache chargés :
+<code>sudo apache2ctl -M</code>
+
+===== Mode de fonctionnement sommaire =====
+
+Lorsqu'il démarre, Apache charge les fichiers de configuration et se met en attente de requêtes sur les interfaces réseaux. On dit qu'il écoute (//listen// en anglais) certains ports.
+
+Lorsqu'on utilise un navigateur web, que l'on clique sur un lien ou qu'on rentre directement une [[web#url|URL]] dans la barre d'adresse, on effectue une requête : 
+  * Le navigateur résout le nom de domaine (il obtient l'adresse IP du serveur).
+  * Il envoie une requête HTTP avec la méthode GET à l'IP du serveur sur le port 80 (ou HTTPS sur le port 443) pour lui demander de retourner un contenu particulier.
+  * Le serveur HTTP reçoit la requête, et en fonction de divers paramètres (URL appelée, configuration du serveur, etc.), va chercher un contenu dans un fichier ou lance un script qui va générer un contenu.
+  * Le serveur renvoie ce contenu à l'IP du navigateur.
+  * Le navigateur traite le contenu et le rend accessible à l'internaute (en l'affichant à l'écran par ex.).
+
+Voilà comment fonctionne (grossièrement ;-) ) un serveur web.
+
+===== Fichiers de configuration =====
+
+Un seul serveur Apache permet de déployer simultanément plusieurs sites et services qu'il faut configurer individuellement.\\
+Pour plus de clarté, la configuration d'Apache2 est morcelée. Toutefois, tous les fichiers de configuration se situent dans le répertoire ''/etc/apache2'' :
+
+  * ''sites-available'' contient les fichiers de configuration des **sites** disponibles
+  * ''sites-enabled'' contient des [[:lien_physique_et_symbolique|liens symboliques]] vers les configurations, dans ''site-available'', des sites activés 
+
+  * ''conf-available'' contient les fichiers de configuration des **autres services** disponibles
+  * ''conf-enabled'' contient des [[:lien_physique_et_symbolique|liens symboliques]] vers les configurations, dans ''conf-available'', des autres services activés
+
+  * ''mods-available'' contient les fichiers de configuration des **modules** d'Apache disponibles
+  * ''mods-enabled'' contient des [[:lien_physique_et_symbolique|liens symboliques]] vers les configurations, dans ''mods-available'', des modules activés
+
+<note important>Normalement les fichiers de configuration globale ''apache2.conf'', ''envars'' et ''ports.conf'' n'ont pas à être modifiés. Toute la configuration devrait se faire dans les sous dossiers ''xxx-available''.</note>
+
+Les diverses configurations sont activées (''a2en'' pour //Apache 2 enable//) ou désactivées (''a2dis'' pour //Apache 2 disable//) avec les commandes suivantes :
+
+<code>sudo a2ensite [configuration d'un site à activer]
+sudo a2dissite [configuration d'un site à désactiver]
+
+sudo a2enconf [configuration d'un service à activer]
+sudo a2disconf [configuration d'un service à désactiver]
+
+sudo a2enmod [configuration d'un module à activer]
+sudo a2dismod [configuration d'un module à désactiver]</code>
+
+Cela aura pour effet de créer ou supprimer les liens symboliques correspondants dans les répertoires ''xxx-enabled''.\\
+Apache prendra alors en compte, ou pas, les fichiers de configuration concernés après rechargement :
+<code>sudo systemctl reload apache2</code>
+
+<note>Par défaut Apache ne prend en compte que les fichiers portant l'extension ''.conf'' (ou ''.load'', seulement pour les modules).</note>
+
+==== Configuration des ports d'écoute ====
+
+Un dernier fichier, ''/etc/apache2/ports.conf'', permet de spécifier les ports à écouter.\\
+Par défaut, il s'agit des ports 80 (port par défaut pour HTTP), et 443 (port par défaut pour HTTPS) si le [[#https|module SSL]] est activé.
+
+Sauf cas très particulier, il n'est pas nécessaire de toucher à cette configuration.
+
+===== Hôtes virtuels =====
+
+Avec Apache, chaque site ou application web correspond en principe à un hôte virtuel (//**[[https://httpd.apache.org/docs/current/fr/vhosts/examples.html|VirtualHost]]**// en anglais).
+
+Chaque hôte virtuel est défini par un fichier de configuration indépendant, qu'on trouve ou qu'on créé dans le répertoire ''/etc/apache2/sites-available/''.
+
+==== Par défaut ====
+
+Par défaut, il existe 2 hôtes virtuels.
+
+<note important>
+Ce chapitre est ici à titre d'information.\\ 
+Il n'est a priori pas nécessaire de modifier les fichiers existant par défaut. Chaque site ou service devrait correspondre à un hôte virtuel unique, définit dans un fichier indépendant (voir [[#creation_d_hotes_virtuels|création d'hôtes virtuels]]).\\ 
+De plus ces fichiers existant par défaut peuvent éventuellement être écrasés lors de mises à jour majeures du système.
+</note>
+
+Le premier //VirtualHost// est défini dans le fichier ''/etc/apache2/sites-available/000-default.conf''. Voici son contenu sans les commentaires :
+
+<file - 000-default.conf><VirtualHost *:80>
+	ServerAdmin webmaster@localhost
+	DocumentRoot /var/www/html
+	ErrorLog ${APACHE_LOG_DIR}/error.log
+	CustomLog ${APACHE_LOG_DIR}/access.log combined
+</VirtualHost></file>
+
+^ directive ^ description ^
+| <file><VirtualHost *:80></file> | On déclare l'hôte virtuel. Il doit répondre aux requêtes qui s'adressent à toutes les adresses IP (''*'') du serveur sur le port 80. On peut ici éventuellement spécifier une adresse IP unique à laquelle répondra Apache pour un hôte virtuel donné (dans le cas ou le serveur possède plusieurs adresses IP), ou choisir de répondre au port 443 (pour [[#HTTPS]]) ou à un port exotique (à condition de [[#configuration_des_ports_d_ecoute|l'écouter]]). |
+| <file>ServerAdmin webmaster@localhost</file> | C'est le courriel de l'administrateur système. Cette directive n'est ni très utile, ni indispensable. |
+| <file>DocumentRoot /var/www/html</file> | C'est le chemin absolu vers l'emplacement local (sur l'espace disque du serveur) qui sera la racine de l'hôte. Apache recherche en premier un fichier ''index.html'' ou ''index.php'' à afficher par défaut à l'emplacement spécifié. On constate que c'est donc bien cet hôte virtuel qui affiche le message //It Works!// contenu dans le fichier ''/var/www/html/index.html''. |
+| <file>ErrorLog ${APACHE_LOG_DIR}/error.log
+CustomLog ${APACHE_LOG_DIR}/access.log combined</file> | Ce sont des directives relatives au log d'erreur et au log d'accès de cet hôte virtuel. Ceux-ci seront donc écrits dans le répertoire ''APACHE_LOG_DIR'', qui est par défaut ''/var/log/apache2'' sur ubuntu. |
+| <file></VirtualHost></file> | Fin de la section concernant cet hôte virtuel. |
+
+Le second //VirtualHost// est défini dans le fichier ''/etc/apache2/sites-available/default-ssl.conf'' et contient une configuration par défaut pour HTTPS. Il écoute donc sur le port 443 et énonce des directives spécifiques à l'usage de SSL. La racine de l'hôte (directive ''DocumentRoot'') correspond également à ''/var/www/html''.
+
+<note tip>On remarque donc ici que si on a un seul site simple à mettre en place, on peut déjà éventuellement le rendre disponible simplement en le déployant dans le répertoire ''/var/www/html'' : par défaut Apache affichera la page d'accueil qui doit en principe être écrite dans un fichier ''index.html'' ou générée par un script ''index.php'' (voir [[#index]]).\\
+Cependant il est plutôt conseillé de créer un nouvel hôte virtuel dans un nouveau fichier, même pour un seul site.</note>
+
+==== Création d'hôtes virtuels ====
+
+<note>Pour en savoir plus sur les hôtes virtuels d'Apache, référez-vous à la [[http://httpd.apache.org/docs/current/mod/core.html#virtualhost|documentation officielle]] et à ses [[https://httpd.apache.org/docs/current/fr/vhosts/examples.html|exemples]].
+
+Vous trouverez également des exemples de création d'hôtes virtuels sous forme de tutoriels sur [[:tutoriel:lamp_repertoires_de_travail|cette page de la documentation.]]</note>
+
+Apache recommande de créer un fichier de configuration dans lequel est défini un hôte virtuel pour chaque site ou application web dans le répertoire ''/etc/apache2/sites-available/''.
+
+Chaque hôte virtuel peut être appelé en fonction d'un nom de domaine ou sous-domaine, c'est la configuration la plus courante. Mais on peut également définir un numéro de port particulier, ou une adresse IP particulière (si le serveur en possède plusieurs) pour laquelle on affichera tel ou tel contenu web.
+
+Chaque hôte virtuel ayant son fichier de configuration dédié, pour s'y repérer on peut le nommer par le nom de domaine auquel il correspond, suivi de l'extension ''.conf''. Pour un nom de domaine //example.com// on créera donc un fichier ''/etc/apache2/sites-available/example.com.conf''.
+
+Voici un exemple de contenu pour ce fichier :
+
+<file - example.com.conf><VirtualHost *:80>
+	ServerName example.com
+	ServerAlias www.example.com
+	DocumentRoot "/var/www/example"
+	<Directory "/var/www/example">
+		Options +FollowSymLinks
+		AllowOverride all
+		Require all granted
+	</Directory>
+	ErrorLog /var/log/apache2/error.example.com.log
+	CustomLog /var/log/apache2/access.example.com.log combined
+</VirtualHost></file>
+
+^ directive ^ description ^
+| <file><VirtualHost *:80></file> | On accepte les connexions sur n'importe quelle IP du serveur (''*'') sur le port 80. |
+| <file>ServerName example.com</file> | Cet hôte virtuel sera seulement appelé pour le nom de domaine //example.com//... |
+| <file>ServerAlias www.example.com</file> | ...ainsi que pour le sous-domaine //<nowiki>www.example.com</nowiki>//. On peut spécifier ici d'autres noms de domaine en les séparant par un espace. On peut aussi utiliser //*.example.com// pour inclure tous les sous-domaines. |
+| <file>DocumentRoot "/var/www/example"</file> | On placera les fichiers du site dans le répertoire ''/var/www/example''. |
+| <file><Directory "/var/www/example"></file> | On spécifie dans cette section des règles pour le répertoire ''/var/www/example'' sous cet hôte virtuel. |
+| <file>Options +FollowSymLinks</file> | Apache suivra les [[:lien_physique_et_symbolique|liens symboliques]] qu'il trouvera dans ce répertoire (et ses descendants). |
+| <file>AllowOverride all</file> | On pourra inclure une configuration personnalisée via un fichier [[#.htaccess]]. |
+| <file>Require all granted</file> | Tous les visiteurs pourront accéder au contenu de ce répertoire. Voir la [[https://httpd.apache.org/docs/current/fr/mod/mod_authz_core.html#require|documentation officielle]] pour modifier ce comportement. Pour des raisons de sécurité ou de privacité on peut par exemple limiter l'accès au serveur à seulement une ou certaines adresses IP avec une directive du type ''Require ip 192.168.1.10''. |
+| <file>ErrorLog /var/log/apache2/error.example.com.log
+CustomLog /var/log/apache2/access.example.com.log combined</file> | Il est pratique d'avoir des logs séparés pour chaque hôte virtuel, afin de ne pas mélanger toutes les informations. |
+
+Après avoir l'avoir créée, il faut activer cette configuration avec la commande ''sudo a2ensite [nom du fichier sans son extension]''. Par exemple :
+<code>sudo a2ensite example.com</code>
+On recharge ensuite la configuration d'Apache :
+<code>sudo systemctl reload apache2</code>
+
+<note tip>
+On peut définir un hôte virtuel sans avoir de nom de domaine enregistré chez un registrar.
+
+On peut soit utiliser un sous-domaine de ''localhost'', comme ''example.localhost'', qui pointera directement sur la machine locale (et qui ne sera donc valable que sur la machine qui fait tourner Apache), soit créer un nouveau nom de domaine "fictif".
+
+Il faut dans ce cas résoudre l'IP du serveur pour un domaine fictif côté client. Cela se fait en [[:tutoriel:comment_modifier_un_fichier|éditant le fichier]] ''/etc/hosts'' côté client avec les [[:sudo|droits d'administration]] pour y ajouter la ligne :
+<file - hosts>127.0.0.1	example</file>
+où ''127.0.0.1'' est l'adresse IP du serveur (locale dans ce cas) et ''example'' est le nom de domaine choisi.\\
+(Voir la [[:hosts|documentation concernant le fichier hosts]])
+
+Avec la directive ''ServerName example'' dans le //VirtualHost//, l'hôte virtuel sera accessible depuis ce client à l'adresse [[http://example/]].
+
+Cela peut être très pratique en phase de développement sur une machine ou un réseau local, par exemple.
+</note>
+
+===== HTTPS =====
+
+HTTPS permet de chiffrer les communications entre le navigateur et Apache au moyen du protocole SSL/TLS, et de garantir l'authenticité de votre serveur (au moyen d'un certificat). Cela empêche qui que ce soit de récupérer ("sniffer") des informations sensibles (tels que des mots de passes) en particulier lorsqu'on se connecte depuis un réseau public, ou empêche un autre serveur de se faire passer pour le vôtre.
+
+Il n'est ni nécessaire, ni faisable de mettre en place HTTPS avec un certificat valide sur un serveur de développement local.
+
+Pour rendre disponible les sites de manière sécurisée via HTTPS avec des certificats valides, la solution la plus simple est d'utiliser l'outil **[[https://certbot.eff.org/|Certbot]]** de [[https://letsencrypt.org/|Let's Encrypt]].
+<note>Vous trouverez une documentation plus détaillée à ce sujet sur [[:tutoriel:securiser_apache2_avec_ssl|cette page de la documentation]], mais nous verrons ici une méthode spécifique à Apache.</note>
+
+==== Activation du module SSL ====
+
+Pour que le **protocole TLS** (successeur du **SSL**) puisse fonctionner avec Apache2, il faut activer le module //ssl// avec la commande :
+<code>sudo a2enmod ssl</code>
+puis recharger la configuration d'Apache 2 :
+<code>sudo systemctl reload apache2</code>
+
+==== Mise en place de HTTPS avec Certbot ====
+
+Prérequis : 
+  * avoir un ou plusieurs noms de domaine enregistrés, pointant sur le serveur depuis plus de 48 heures.
+  * avoir un serveur web apache déjà configuré, fonctionnel et accessible publiquement.
+
+<note>Les instructions pour installer et utiliser simplement certbot sont disponibles en anglais [[https://certbot.eff.org/all-instructions/|sur le site officiel]]. En voici un récapitulatif.</note>
+
+=== Installation de Certbot ===
+
+Pour installer Certbot :
+<code>sudo apt install python3-certbot-apache</code>
+
+=== Utilisation de Certbot ===
+
+Certbot permet ensuite de générer tous les certificats et d'adapter les configurations d'Apache pour tous les noms de domaine associés aux hôtes virtuels au moyen d'une seule commande :
+<code>sudo certbot --apache</code>
+
+Lors de l'opération le script nous invite à cocher les domaines pour lesquels on souhaite obtenir les certificats et à choisir de forcer l'usage de HTTPS ou pas. Pour des raisons de sécurité, c'est généralement une très bonne idée de forcer HTTPS.
+
+Après cette opération les sites devraient être accessibles en HTTPS de manière sécurisée, sans que les navigateurs affichent de message d'alerte.
+
+<note>Grâce à l'option ''--apache'', Certbot s'occupe automatiquement de créer des fichiers de configuration de la forme ''/etc/apache2/sites-available/example.com-le-ssl.conf'' pour les hôtes virtuels en HTTPS sur le port 443 et de les activer (''-le-ssl'' pour //Let's Encrypt//).</note>
+
+=== Renouvellement automatique ===
+
+Pour information c'est la commande ''certbot renew'' qui permet de renouveler les certificats très simplement, mais Certbot créé automatiquement une [[:cron|tâche cron]] à cet effet dans ''/etc/cron.d/certbot''. Il est également créé un « //timer// » systemd qui fait la même chose (/lib/systemd/system/certbot.timer et certbot.service).
+
+Le script est lancé automatiquement toutes les 12 heures, mais les certificats ne seront renouvelés que si nécessaire. En principe il n'y a donc rien à faire.
+
+===== .htaccess  =====
+
+En plus des fichiers de configuration situés dans ''/etc/apache2'', Apache nous permet de définir des configurations tierces pour certains répertoires en plaçant des fichiers nommés ''.htaccess'' directement avec les autres fichiers du contenu web. (Le point au début du nom du fichier en fait un fichier caché par défaut.)
+
+Les directives de chaque fichier ''.htaccess'' s'appliquent au répertoire dans lequel il se trouve, ainsi que tous ses descendants (sous-repertoires, sous-sous-repertoires, etc.).
+
+C'est la directive **[[https://httpd.apache.org/docs/current/fr/mod/core.html#allowoverride|AllowOverride]]**, spécifiée dans une section ''<Directory>'' de l'[[#hotes_virtuels|hôte virtuel]] qui définit si les fichiers ''.htaccess'' doivent être pris en compte, ou pas, pour ce répertoire et ses descendants. Elle peut prendre la valeur ''All'' ou ''None''.
+
+<note tip>Ces fichiers sont très pratiques pour redéfinir des paramètres sur un serveur mutualisé à l'administration duquel on n'a pas accès, ou pour définir dynamiquement des règles spécifiques à certaines solutions web (comme la [[#mod_rewrite|réécriture d'URL]]).</note>
+
+===== Index  =====
+
+L'index est le contenu affiché par défaut par Apache lorsqu'on appelle un répertoire sans spécifier de [[:web#url|nom de page web]] particulière.
+
+L'index est définit par la directive **[[https://httpd.apache.org/docs/current/mod/mod_dir.html#directoryindex|DirectoryIndex]]** qui détermine quels fichiers Apache doit traiter par défaut. Chaque nom de fichier est séparé par un espace et listé par ordre de priorité.\\
+Par défaut, ''DirectoryIndex'' a la valeur ''index.html index.cgi index.pl index.php index.xhtml index.htm''.
+
+Si Apache ne trouve aucun des fichiers mentionnés par ''DirectoryIndex'', il essaie de récupérer une liste du contenu du répertoire, afin que le navigateur l'affiche de la même manière qu'un gestionnaire de fichier.\\
+On peut activer ou désactiver ce listing avec respectivement les directives **[[https://httpd.apache.org/docs/current/mod/core.html#options|Options +Indexes]]** ou **[[https://httpd.apache.org/docs/current/mod/core.html#options|Options -Indexes]]**.\\
+Pour des raisons de sécurité, il est généralement préférable de laisser cette option désactivée. Dans ce cas, et faute de fichier index, c'est une erreur 403 qui s'affiche, car l'utilisateur n'a pas la permission de lister le contenu du répertoire.
+
+<note>Toutes ces directives peuvent être définies dans une section //[[#hotes_virtuels|<Directory>]]// ou dans un fichier //[[#.htaccess]]//.</note>
+
+===== Modules  =====
+
+Il est possible d'ajouter des modules à Apache afin d'étendre les fonctionnalités du serveur web.\\
+Les modules disponibles sont répertoriés ici : ''/etc/apache2/mods-available''
+
+==== mod_php ====
+
+[[:PHP]] est un langage de programmation et un interpréteur qui permet principalement de générer du contenu HTML. C'est donc une solution très largement utilisée pour créer des applications web ou des [[wpfr>Page_web_dynamique|sites internet dynamiques]].
+
+Il est très couramment utilisé en conjonction d'Apache. Voir [[:LAMP]].
+
+Le module //mod_php// permet de l'utiliser comme une extension d'Apache. C'est la méthode la plus simple pour utiliser PHP avec Apache.
+
+Une autre méthode consiste à utiliser PHP [[http://php.net/manual/fr/install.fpm.php|en FastCGI]]. C'est une solution plus souple et mieux optimisée pour des sites destinés à supporter un traffic important, mais elle est plus complexe à mettre en oeuvre. Nous ne traiterons pas de ce cas ici.
+
+Pour installer et activer //mod_php// sous ubuntu, on utilise cette commande :
+<code>sudo apt install libapache2-mod-php</code>
+
+Mais encore une fois, mieux vaut vous reporter à la documentation de [[:LAMP]] à ce sujet.
+
+==== mod_rewrite ====
+
+**//[[https://httpd.apache.org/docs/current/fr/mod/mod_rewrite.html|mod_rewrite]]//** permet de réécrire des [[wpfr>Uniform_Resource_Locator|URL]].
+
+Il s'agit généralement de remplacer le chemin, le nom de la page, et la chaîne de requête de l'[[:web#url|URL]] par une chaîne de caractère en concordance avec la structure et le contenu du site.
+
+De nombreux services ont recours à cette pratique afin d'augmenter leur référencement et de clarifier leur contenu.\\
+Ces services utilisent parfois une terminologie exotique pour mentionner cette pratique : [[:WordPress]] parle par ex. de //permalinks//.\\
+On peut aussi s'en servir pour déployer une [[https://fr.wikipedia.org/wiki/Interface_de_programmation|API]] web propre.\\
+On utilise aussi parfois cette méthode afin de mettre en place des [[https://httpd.apache.org/docs/current/fr/rewrite/remapping.html|redirections web]] un peu complexes.
+
+Pour activer ce module on utilisera la commande
+<code>sudo a2enmod rewrite</code>
+
+<note>L'utilisation de //mod_rewrite// est relativement complexe et fait appel à des [[wpfr>Expression_régulière|expressions régulières]]. N'hésitez pas à consulter [[https://httpd.apache.org/docs/current/fr/rewrite/intro.html|la documentation officielle]] à ce sujet.\\
+Pour la rédaction des expressions régulières, vous pouvez vous aider de services en ligne tels que [[https://regex101.com/|regex101.com]] ou [[https://regexr.com/|regexr.com]]</note>
+
+Un petit exemple :
+
+<file>RewriteEngine on
+
+RewriteRule ^page-([0-9]+)$ /page.php?id=$1 [L]
+
+# Lorsque l'on tape dans la barre d'adresse www.example.com/page-* c'est la page www.example.com/page.php?id=* qui s'affiche
+# ^ et $ dans le bloc modèle signifient respectivement le début et la fin d'une ligne.
+# $1 est une variable qui récupère la valeur entre les premières parenthèses du bloc modèle
+# [L]=[last] signifie que si cette règle s'applique on n'en cherche pas d'autre</file>
+
+<note>On peut écrire ces règles de réécriture dans une section //[[#hotes_virtuels|<VirtualHost>]]// ou  //[[#hotes_virtuels|<Directory>]]// (le comportement n'est pas le même), ou dans un fichier //[[#.htaccess]]//.</note>
+
+<note important>N'oubliez pas de modifier le virtualhost en conséquence sinon les règles de réécriture .htaccess ne fonctionneront pas correctement. Voici un exemple de configuration qui marche :
+<code>
+    <Directory /var/www/html>
+            AllowOverride All
+    </Directory>
+</code>
+</note>
+==== mod_proxy====
+
+Comme [[:proxy|son nom l'indique]], **//[[https://httpd.apache.org/docs/current/fr/mod/mod_proxy.html|mod_proxy]]//** permet à apache de relayer des requêtes depuis ou vers un service tiers.
+
+Ce module peut par exemple être utile lorsqu'on utilise d'autres serveurs HTTP en plus d'Apache sur un même serveur web, afin d'éviter d'avoir à accéder au contenu web sur d'autres ports que le port 80 ou 443.
+
+<note warning>L'activation de ce module sur un serveur ouvert sur le web est dangereuse. Une mauvaise configuration permet par exemple à un intrus d'accéder aux services disponibles sur le réseau local, ou d'usurper votre adresse IP.\\
+N'activez ce module que si vous êtes certain de ce que vous faites.
+
+Voir [[https://httpd.apache.org/docs/current/fr/mod/mod_proxy.html#access|la documentation officielle à ce sujet]].</note>
+
+Pour activer ce module :
+<code>sudo a2enmod proxy proxy_http proxy_wstunnel
+sudo systemctl reload apache2</code>
+
+Voici un exemple de configuration qui permet d'accéder à un serveur [[https://emby.media|emby]] à l'adresse http://example.com/emby plutôt que http://example.com:8096 :
+<file><Location /emby>
+	ProxyPass http://localhost:8096/
+	ProxyPassReverse http://localhost:8096/
+	Require all granted
+	SetEnv proxy-nokeepalive 1
+	SetEnv proxy-sendchunked 1
+</Location></file>
+
+==== mod_userdir ====
+
+<note>Ce module est également documenté sur [[:xampp#modifier_le_dossier_racine_du_serveur_apache|la page xampp]].</note>
+
+Il peut être utile, et c'est prévu par Apache, que chaque utilisateur puisse mettre un contenu web à disposition depuis son espace personnel (dans le répertoire ''home'').\\
+Ce contenu sera accessible à l'adresse //<nowiki>http://example.com/~nom_de_lutilisateur</nowiki>//, ou dans la plupart des cas : //<nowiki>http://localhost/~nom_de_lutilisateur</nowiki>//.
+
+Pour mettre cette configuration en place, on crée un répertoire ''public_html'' dans son espace personnel et on lui donne les droits de lecture et d'exécution :
+<code>mkdir ~/public_html
+echo 'Mon site personnel' > ~/public_html/index.html
+chmod -R 755 ~/public_html</code>
+
+On active ensuite le module //mod_userdir// :
+<code>sudo a2enmod userdir
+sudo systemctl reload apache2</code>
+
+Le message //Mon site personnel// devrait alors être lisible à l'adresse http://localhost/~nom_de_lutilisateur
+
+<note tip>L'interprétation des fichiers PHP est désactivée par défaut dans les dossiers personnels.\\
+Pour l'activer il faut modifier le fichier /etc/apache2/mods-available/php7.x.conf en commentant les lignes concernées.</note>
+
+==== mod_headers ====
+
+Le module [[https://httpd.apache.org/docs/current/fr/mod/mod_headers.html|headers]] permet de personnaliser les en-têtes HTTP. C'est à dire les informations envoyées par le serveur avant le document lui-même.
+
+C'est utile notamment pour améliorer la sécurité des sites web. Voici quelques en-têtes qui peuvent être ajoutées à cette fin.
+
+Pour appliquer globalement les directives proposées, ouvrez (ou créez s'il n’existe pas) le fichier ''/etc/apache2/mods_available/headers.conf'' et placez-y ceci :
+
+<file - headers.conf>
+# Cet en-tête empêche MSIE d'interpréter des fichiers comme quelque chose
+# d'autre que ce qui est défini en dans que type de contenu dans les en-tes HTTP
+#
+Header set X-Content-Type-Options: "nosniff"
+
+# Cet en-tête empêchera les autres sites d'intégrer les pages de ce site dans des frames.
+# C'est une mesure de portection contre les attaques par détournement de clic (clickjacking)
+# Attention cet en-tête est rendue obsolète par les CSP
+#
+Header set X-Frame-Options: "sameorigin"
+
+# Cet en-tête oblige les navigateurs à utiliser la protection XSS même s'il l'ont désactivé
+#
+Header set X-XSS-Protection "1; mode=block"
+
+# En-tête qui permet de masquer la technologie utilisée (par exemple PHP 7.0)
+# Pas une sécurité, mais inutile de transmettre cette information aux clients
+#
+Header always unset "X-Powered-By"
+</file>
+
+Vous pouvez ensuite activer le module :
+<code>sudo a2enmod headers</code> et recharger la configuration d'Apache.
+
+Les en-têtes peuvent également être définies au niveau de chaque site dans les fichiers d'hôte virtuels.
+
+Si vous utilisez HTTPS, vous voudrez certainement définir l'en-tête [[wpfr>HTTP_Strict_Transport_Security|Strict-Transport-Security]], exemple :
+<file><VirtualHost *:443>
+	…
+	Header always set Strict-Transport-Security: "max-age=31536000;includeSubDomains;preload"
+</VirtualHost></file>
+
+Enfin, toujours dans un objectif de sécurité, vous pourrez être amené à utiliser les en-têtes [[https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP|Content-Security-Policy]], exemple :
+
+<file>Header always set Content-Security-Policy: "default-src 'self'; img-src *; media-src media1.com media2.com; script-src userscripts.example.com"</file>
+
+Pour voir les en-têtes envoyées par votre serveur vous pouvez utiliser des outils en ligne de commande comme :
+<code>curl -I https://example.com</code> ou une extension du navigateur web qui permet d'afficher les en-têtes HTTP.
+
+==== Modsecurity ====
+
+Il s'agit d'un pare-feu pour Apache.
+
+Une [[:modsecurity|page de la documentation]] est consacrée à ce module.
+
+===== Sécurité  =====
+
+<note important>Sans chiffrer les communications avec le module //SSL//, toutes les informations échangées entre le navigateur et le serveur, contenu web et variables d'authentification, transitent en clair sur Internet. Une des premières règles de sécurité pour Apache est donc de forcer l'utilisation de [[#HTTPS]].</note>
+
+==== Permissions ====
+
+Par défaut sur Ubuntu, Apache est exécuté par l'utilisateur //www-data//, qui appartient au groupe //www-data//.\\
+Quand Apache créé un fichier sur l'espace disque (via par exemple un [[#mod_php|script PHP]]), celui-ci appartient donc par défaut à l'utilisateur //www-data// et au groupe //www-data//. De la même manière, le serveur ne peut accéder qu'au contenu accessible par //www-data//.
+
+Pour des raisons de sécurité il est recommandé de modifier le propriétaire des fichiers auxquels peut accéder Apache.\\
+Le propriétaire devrait être l'utilisateur qui va maintenir le contenu localement, mais le groupe propriétaire devrait rester //www-data// :
+<code>sudo chown -R $USER:www-data /var/www/example</code>
+
+On change ensuite les [[:permissions]] du contenu de manière à ce que l'utilisateur puisse le lire et le modifier, mais qu'Apache (dans le groupe //www-data//) ne puisse que le lire.
+
+On attribue donc les [[:droits]] ''rwx r-x ---'' (750) pour les répertoires, et ''rw- r-- ---'' (640) pour les fichiers :
+<code>chmod -R a-rwx,u+rwX,g+rX /var/www/example</code>
+(pour rappel ''x'' concerne les répertoires et les fichiers tandis que ''X'' ne concerne que les répertoires - et autorise à les ouvrir)
+
+Si Apache doit pouvoir modifier du contenu (pour un répertoire d'upload par exemple), on ne modifie que la permission concernant le groupe (le second numéro), donc ''rwx rwx ---'' (770) pour les répertoires et ''rw- rw- ---'' (660) pour les fichiers :
+<code>chmod -R g+w /var/www/example/upload</code>
+
+==== Fail2ban ====
+
+Pour contrer les attaques par force brute sur un système d'authentification d'une application web, il est vivement recommandé d'utiliser l'application [[:Fail2ban]].
+
+===== Problèmes courants =====
+
+<note tip>En cas d'erreur du serveur, consultez avant tout les rapports d'erreurs dans le répertoire ''/var/log/apache2''.
+
+Pour afficher les dernières 40 lignes du journal d'erreur par défaut :
+<code>sudo tail /var/log/apache2/error.log -n 40</code></note>
+
+<note tip>Si vous rencontrez un problème avec PHP, consultez également les [[:php#problemes_courants|problèmes courants spécifiques à PHP]].</note>
+
+==== Page blanche ====
+
+Si vous utilisez PHP, une page blanche indique très probablement que l'affichage des retours d'erreur sur la page n'est pas activé.
+
+Vous pouvez l'activer en suivant [[php#activer_le_rapport_d_erreur|cette documentation]].
+
+
+==== Erreur 403 ====
+
+Une erreur 403 indique un problème d'autorisation.
+
+  * Vérifiez les [[#permissions]] concernant les fichiers du contenu web que vous souhaitez partager vis-à-vis de l'utilisateur et du groupe //www-data//.
+  * Vérifiez aussi la valeur de la directive [[https://httpd.apache.org/docs/current/fr/howto/access.html|Require]] : ''Require all granted'' pour toujours autoriser l'accès aux ressources. 
+  * Il est aussi possible que cette erreur soit affichée faute de fichier [[#index]].
+
+==== Erreur 404 ====
+
+Cette erreur indique que le contenu demandé n'a pas été trouvé.
+  * En premier lieu vérifiez évidemment l'existence des contenus concernés.
+  * Le chemin vers ce contenu sur l'espace disque, relatif à la directive //[[#hotes_virtuels|DocumentRoot]]//, doit correspondre au [[:web#url|chemin de l'URL]] appelée.
+  * L'erreur peut aussi être due à une mauvaise [[#mod_rewrite|réécriture d'URL]].
+
+==== Erreur 500 ====
+
+Il s'agit d'une erreur fatale du serveur, qui peut être par exemple liée à une erreur de syntaxe dans un fichier [[#.htaccess]].
+
+Consultez le log d'erreur de votre hôte virtuel pour en savoir plus.
+
+==== Attente puis erreur 503 "service indisponible" ====
+
+Cette erreur indique que le serveur HTTP est dans les choux. Le service existe mais prend  apparemment un temps interminable à répondre.\\
+  * En premier lieu redémarrez Apache.
+  * Si le problème se pose toujours, cela peut par exemple être dû au fait qu'un script (par ex. [[:PHP]]) entre dans une boucle infinie. En plus de surcharger le processeur, ce problème ne générera pas de message d'erreur ce qui en fait malheureusement un problème particulièrement compliqué à débugger. Si votre [[:CMS]] ou application web utilise un système de cache, vous pouvez essayez de le vider et de le désactiver. Puis essayez de désinstaller les plugins installés récemment, défaire les modifications récentes ou restaurer une sauvegarde de votre application.
+
+==== Fichiers introuvables dans /javascript ====
+
+Cela peut venir du fait que le paquet **//javascript-common//** créé un alias global de ''/javascript'' vers ''/usr/share/javascript'' :
+<file - /etc/apache2/conf-available/javascript-common.conf>Alias /javascript /usr/share/javascript/
+
+<Directory "/usr/share/javascript/">
+        Options FollowSymLinks MultiViews
+</Directory></file>
+La solution est soit de supprimer ce paquet, soit de renommer le répertoire ''javascript'' à la racine de l'hôte virtuel, par exemple en ''js''.
+
+===== Liens utiles =====
+
+   * (en) [[https://apache.org/|Site officiel du projet Apache]]
+   * [[https://httpd.apache.org/docs/current/|Documentation Apache officielle en français]]
+   * [[tutoriel/securiser_apache2_avec_ssl|Sécuriser Apache 2 avec SSL]]
+   * [[:lamp|installer un serveur LAMP]]
+   * [[:tutoriel:lamp_repertoires_de_travail|Serveur LAMP - Créer un/des répertoires de travail]]
+   * [[:docker_lamp|installer un serveur LAMP avec Docker]]
+   * [[https://www.it-connect.fr/cours-tutoriels/administration-systemes/serveur-web/apache/|Plusieurs tutoriels sur la configuration d'Apache sur IT-Connect]]
+   * discussion au sujet de cette documentation sur le forum : https://forum.ubuntu-fr.org/viewtopic.php?pid=21886288
+   
+
+----
+// Contributeurs : --- //[[:utilisateurs:bruno|bruno]], [[:utilisateurs:krodelabestiole]], [[:utilisateurs:benje]], [[:utilisateurs:Pepou06]], [[:utilisateurs:Oxossi]], [[:utilisateurs:Karting06]], [[:utilisateurs:albanmartel]]. //

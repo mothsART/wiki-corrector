@@ -1,0 +1,159 @@
+
+{{tag>administration}}
+
+----
+
+====== FUSAUTO ======
+
+**FUSAUTO** est un script python pour faciliter l'usage de [[fuse | FUSE]]. Il a besoin d'un répertoire en paramètre, ce répertoire doit contenir un fichier de configuration utilisé par **FUSAUTO** et permet de monter / démonter ce répertoire avec [[fuse | FUSE]] automatiquement.
+
+
+
+===== Script python 'fusauto' =====
+
+Pour profiter de **FUSAUTO**, il faut créer le fichier contenant le script.
+Deux options :
+  * soit vous l'incluez pour votre utilisateur seulement : [[:tutoriel:comment_editer_un_fichier|~/.local/bin/fusauto]]
+  * soit vous l'incluez pour tous les utilisateurs (nécessite [[sudo]]): [[:tutoriel:comment_editer_un_fichier|/usr/local/bin/fusauto]]
+
+Y copier les lignes suivantes et sauvegarder.
+
+<code python>#! /usr/bin/env python
+# coding: utf-8
+#
+# fusauto
+# auto mount directory with fuse by reading a config file
+#
+# Copyright (C) Nicolas Albert <nicolas_albert_85@yahoo.fr>
+#
+# Version 0.0.1
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+
+import sys, os
+
+def runconf(conf, path):
+  file = open(conf, "r")
+  act = {}
+  for line in file.readlines():
+    if not line.startswith('#'):
+      part = line[:-1].partition('=')
+      act[part[0]] = part[2]
+  file.close()
+  if 'bin' in act:
+    if not 'from' in act: act['from']='none'
+    if not 'opt' in act: act['opt']=''
+    os.system("%s %s %s -o nonempty %s"%(act['bin'], act['from'], path, act['opt']))
+
+def getfuses():
+  mtab = open("/etc/mtab", "r")
+  fuses =[ line for line in mtab.readlines() if line.split()[2][0:4] == "fuse" ]
+  mtab.close()
+  return fuses
+
+def alreadymount(path):
+  for fuse in getfuses():
+    fd = fuse.split()[1]
+    if fd == path or fd == os.getcwd()+'/'+path:
+      return True
+  return False
+
+def umount(path):
+  os.system("/bin/fusermount -u "+path)
+
+if __name__ == "__main__":
+  if len(sys.argv) == 2 and os.path.isdir(sys.argv[1]):  
+    if alreadymount(sys.argv[1]):
+      umount(sys.argv[1])
+    else:
+      conf = sys.argv[1]+'/fusauto.conf'
+      if os.path.isfile(conf):
+        runconf(conf, sys.argv[1])
+      else:
+        print conf,"is required"
+  else:
+    print "One directory is required"''
+</code>
+
+Il faut rendre le script exécutable :
+''chmod u+x ~/.local/bin/fusauto''
+ou
+''sudo chmod a+rx /usr/local/bin/fusauto''
+
+
+===== Fichier de configuration 'fusauto.conf' =====
+Pour fonctionner, **FUSAUTO** a besoin d'un répertoire contenant un fichier de configuration du nom de **fusauto.conf**
+
+Rien de mieux qu'un exemple !
+
+Je veux monter un répertoire distant d'une machine (siniath-tirith) dans le répertoire __~/Network/Siniath-Tirith__ à l'aide d'sshfs (créer le répertoire au besoin).
+
+Je crée un nouveau fichier __~/Network/Siniath-Tirith/fusauto.conf__ dont le contenu est :
+
+<note warning>
+Il est important de ne mettre aucun espace avant le 1er signe égal sur les lignes qui ne sont pas des commentaires, sans quoi le script ne marchera pas correctement.</note>
+
+<code># fusauto config file
+# lines start with # are commentaries
+
+# process must be run (must exist)
+bin=/usr/bin/sshfs
+
+# remote folder (default : none)
+from=siniath-tirith:/mnt/big1/data
+
+# fuse options (default : )
+opt=-o follow_symlinks,transform_symlinks,workaround=rename,idmap=user</code>
+
+
+
+===== Utilisation =====
+
+Il suffit d'appeler **FUSAUTO** avec en paramètre, un répertoire contenant un fichier de configuration.
+
+**FUSAUTO** monte le répertoire s'il ne l'est pas déjà, sinon il le démonte.
+
+=== Shell ===
+''fusauto ~/Network/Siniath-Tirith''
+
+=== Nautilus ===
+On va utiliser la possibilité de [[nautilus_scripts|script pour Nautilus]] pour pouvoir monter/démonter directement.
+
+Pour cela, on va lier le script dans le répertoire __~/.gnome2/nautilus-scripts__ :
+
+<code>ln -s `which fusauto` ~/.gnome2/nautilus-scripts/</code>
+
+Désormais, un clic-droit sur un répertoire propose 'Scripts>fusauto'.
+
+=== Rox-Filer ===
+On va utiliser la possibilité de script pour rox-filer pour pouvoir monter/démonter directement.
+
+Pour cela, on va lier le script dans les répertoires __~/.config/rox.sourceforge.net/SendTo/.inode_directory__ et __~/.config/rox.sourceforge.net/SendTo/.inode_mount-point__ :
+
+<code>ln -s `which fusauto` ~/.config/rox.sourceforge.net/SendTo/.inode_directory/
+ln -s `which fusauto` ~/.config/rox.sourceforge.net/SendTo/.inode_mount-point/''</code>
+
+Désormais, un clic-droit sur un répertoire propose 'Rép. > fusauto'.
+
+
+
+
+===== Liens et références =====
+
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=178262|Commentaires et discussion ici]].
+
+----
+
+//Contributeurs : NicoA380 [[http://forum.ubuntu-fr.org/profile.php?id=2745|+]].//

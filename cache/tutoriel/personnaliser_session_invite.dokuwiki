@@ -1,0 +1,58 @@
+
+{{tag>Trusty tutoriel personnalisation}}
+====== Personnaliser la session invité ======
+<note>Cette page est à l’origine une traduction de [[https://help.ubuntu.com/community/CustomizeGuestSession|cette page du wiki anglais]]. Elle est susceptible d’évoluer indépendamment au gré de vos contributions.</note>
+===== Introduction =====
+Par défaut, quand vous entrez dans une [[https://help.ubuntu.com/lts/ubuntu-help/shell-guest-session.html|session invité]], le bureau ressemble au même que celui d’un utilisateur régulier lorsqu’il se connecte pour la première fois. Ce tutoriel montre comment un administrateur système peut personnaliser la session invité pour en changer l’apparence et le comportement. 
+
+
+===== Des points d’entrée pour faciliter la personnalisation =====
+Ce chapitre s’adresse aux utilisateurs expérimentés. Si vous le trouvez ésotérique, passez directement au chapitre suivant. ;-)
+
+Quand vous lancez une session invité, un compte utilisateur temporaire, dont le répertoire home est localisé dans /tmp, est créé de manière transparente. Pour personnaliser cette fonctionnalité, nous avons besoin de contrôler le contenu de ce répertoire home, et depuis Ubuntu 11.04 le code source inclus des points d’entrée dans cet objectif :
+
+  - Si le répertoire ///etc/guest-session/skel// existe et n’est pas vide, son contenu est copié dans le répertoire home du compte utilisateur temporaire. Dans le cas contraire les fichiers de ///etc/skel// sont copiés.
+  - Si le fichier ///etc/guest-session/prefs.sh// existe, il est récupéré par ///usr/sbin/guest-account// ou un équivalent précédent.\\ ///etc/guest-session/prefs.sh// est prévu pour les commandes qui modifient le contenu du répertoire home.\\ Étant donné que $USER se réfère à « guest-XXXXXX » et $HOME au répertoire home du compte temporaire, le processus qui exécute ///usr/sbin/guest-account// est privilégié. Par conséquent la dernière commande dans ///etc/guest-session/prefs.sh// pourrait être <code bash>chown -R $USER: $HOME</code> pour que l’utilisateur invité, et non root, devienne propriétaire des fichiers et répertoires que vous créez via ///etc/guest-session/prefs.sh//. (La commande n’est pas nécessaire dans Ubuntu 14.04.)
+  - Depuis Ubuntu 14.04, si le fichier ///etc/guest-session/auto.sh// existe, il est récupéré par le script ///usr/lib/lightdm/guest-session-auto.sh//.\\ ///etc/guest-session/auto.sh// peut être utilisé par exemple pour lancer des programmes automatiquement au démarrage. 
+
+
+===== Utilisateur à usage spécial =====
+Utiliser un compte spécial pour paramétrer les préférences de l’invité est le moyen le plus pratique pour personnaliser la session invité. Suivez ces étapes :
+
+  - [[https://help.ubuntu.com/lts/ubuntu-help/user-add.html|Ajouter un nouveau compte utilisateur]] ayant pour nom **guest-prefs**.
+  - Connectez-vous en tant que **guest-prefs** afin d’apporter les modifications pour avoir ce que vous souhaitez voir aux lancements de la session invité.
+  - Déconnectez-vous de la session **guest-prefs** et connectez-vous à votre session administrateur.
+  - [[:terminal#comment_ouvrir_un_terminal|Ouvrez un terminal]] et créez un lien symbolique vers le répertoire home de l’utilisateur **guest-prefs** :<code bash>sudo mkdir /etc/guest-session
+sudo ln -s /home/guest-prefs /etc/guest-session/skel</code>
+Maintenant, quand vous lancerez la session invité, elle aura les mêmes préférences que celle que vous avez données au compte **guest-prefs**.
+
+**Notes :**
+  - Dans ce tutoriel nous utilisons le nom guest-prefs, mais vous pouvez donner le nom que vous souhaitez à l’utilisateur à usage spécial.
+  - Cette méthode, avec un lien symbolique, fonctionne depuis la version 12.04. Sur Ubuntu 11.04 et 11.10 vous pouvez, à la place du lien symbolique, créer le fichier ///etc/guest-session/prefs.sh// et y mettre ces lignes :<code bash>cp -rT /home/guest-prefs $HOME
+chown -R $USER: $HOME</code>
+  - Vous préférerez sans doute masquer l’utilisateur guest-prefs de l’écran de connexion et du menu système. Souhaitons que cela sera simple à accomplir quand le [[https://launchpad.net/bugs/857651|bug #857651]] sera fixé.
+
+
+===== Boîte de dialogue de démarrage =====
+Depuis Ubuntu 14.04, quand vous lancez une session invité, une boîte de dialogue vous alerte de la nature temporaire de la session.
+{{ ::dialogue_invite.png }}
+Il est considéré comme souhaitable que la fenêtre soit visible, c’est pourquoi elle est ouverte après un délai de 4 secondes. Ce délai de 4 secondes dépend, par exemple, de la puissance de l'ordinateur et des programmes qui sont automatiquement lancés au démarrage.
+
+==== Modifier le délai d’apparition de la boîte de dialogue ====
+Pour mettre un délai de 8 secondes, créez le fichier ///etc/guest-session/prefs.sh// et ouvrez le pour y mettre cette ligne :
+<code bash>echo "export DIALOG_SLEEP=8" >> $HOME/.profile</code>
+
+==== Désactiver la boîte de dialogue ====
+Si vous préférez que la boîte de dialogue n’apparaisse pas du tout, créez le fichier ///etc/guest-session/prefs.sh// et ouvrez le pour y mettre cette ligne :
+<code bash>touch $HOME/.skip-guest-warning-dialog</code>
+
+===== Sauvegarder les fichiers sur le disque =====
+Pour le cas où vous voulez offrir à vos invités la possibilité de stocker des fichiers sur le disque de façon persistante (non autorisé par défaut), vous pouvez créer le dossier ///var/guest-data// en saisisssant la commande suivante dans un [[:terminal|terminal]] :
+<code>sudo mkdir -m 0777 /var/guest-data</code>
+Ce dossier est mentionné dans la boîte de dialogue de démarrage s’il existe et est accessible en écriture à tout le monde.
+{{ :tutoriel:dialogue_invite_var_guest-data.png }}
+
+===== Voir aussi =====
+  - [[https://help.ubuntu.com/stable/ubuntu-help/shell-guest-session.html|Démarrer une session d'invité restreinte]] - Documentation officielle.
+  - [[https://help.ubuntu.com/community/CustomizeGuestSession/old|CustomizeGuestSession/old]] - Version précédente dépréciée du tutoriel anglais.
+    Même si l'ancien tutoriel est obsolète, la page et les archives tar contiennent des extraits de code qui pourraient servir d'exemples pour le cas où vous choisissez de définir les préférences de l’invité via ///etc/guest-session/prefs.sh// ou ///etc/guest-session/auto.sh// au lieu de créer un compte [[tutoriel:personnaliser_session_invite#utilisateur_a_usage_special|utilisateur à usage spécial]].

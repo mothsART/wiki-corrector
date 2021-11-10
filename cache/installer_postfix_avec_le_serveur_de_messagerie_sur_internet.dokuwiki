@@ -1,0 +1,434 @@
+
+{{tag>messagerie courriel postfix MTA serveur}}
+
+====== Installer Postfix pour l'envoie des courriels vers un serveur de messagerie du réseau local ou d'internet ======
+Pour expédier directement sur un serveur de messagerie internet ou du [[https://fr.wikipedia.org/wiki/R%C3%A9seau_local|LAN]] vos courriels. C'est la configuration «système satellite», ou ce que l'on appelle dans le cas que nous allons voir ici, un client Postfix sans rôle avec un relaie internet.
+
+Pour plus d'informations sur la messagerie lire [[:comment_fonctionne_le_courriel_sous_linux|Comment fonctionne le courriel sous Linux ?]], et sur les principes du serveur Postfix lire [[:comment_configurer_sa_distribution_de_courriels_systemes_mta|Comment configurer sa distribution de courriels systèmes MTA avec Postfix ?]]
+
+===== Installation du serveur de messagerie Postfix =====
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] du serveur de messagerie **[[apt>postfix|postfix]]**.
+Choisir «pas de configuration» si l'installation demande de paramétrer le serveur de messagerie.
+
+{{ :doc:02_pasdeconfiguration.png?nolink&600 |}}
+
+Pour la partie sécurité du serveur [[:tutoriel:comment_installer_un_paquet|installez les paquets]] **[[apt>libsasl2-modules,libauthen-sasl-cyrus-perl, |libsasl2-modules libauthen-sasl-cyrus-perl]]**.
+
+===== Définir le gestionnaire de messagerie =====
+**Vous devez définir qui va avoir la supervision de la messagerie**. Donc si l'utilisateur root est le superviseur de la messagerie, ou si c'est un utilisateur du système (serveur ou desktop Linux). Le fichier **/etc/aliases** (''kate /etc/aliases'') est à paramétrer comme suit.
+
+Avec l'utilisateur directement gestionnaire de messagerie :
+<file>postmaster:    utilisateur</file>
+
+Avec l'utilisateur gestionnaire de la machine Linux (relais postmater à l'utilisateur root) :
+<file>postmaster:    root
+root:    utilisateur</file>
+
+Valider dans Postfix la configuration :
+<code bash>sudo postalias /etc/aliases</code>
+
+<note warning>Par défaut, lors de la configuration du serveur de messagerie, celui-ci sera positionné avec l'utilisateur root</note>
+
+===== Configuration de Postfix avec un serveur du réseau local ou sur Internet =====
+
+Pour configurer postfix, tapez :
+<code bash>sudo dpkg-reconfigure postfix</code>
+
+{{ :doc:02_systemesatellite.png?nolink&600 |}}
+Saisissez Système satellite
+
+{{ :doc:03_nomducourriel_perso-fr.png?nolink&600 |}}
+Remplacez perso.fr par votre nom de domaine de machine
+
+{{ :doc:12_reseauxrelais_smtp-fai-fr.png?nolink&600 |}}
+Indiquez ici le nom du serveur de relaie smtp de votre réseau local ou d'internet (ici cas avec Gmail)
+
+{{ :doc:04_adminserveur_internet.png?nolink&600 |}}
+Le compte de messagerie internet de l'administrateur de la machine que vous avez défini ([[:comment_configurer_sa_distribution_de_courriels_systemes_mta#definir_le_gestionnaire_de_messagerie|ne pas oublier d'avoir fait la configuration du gestionnaire avant]]) doit être saisie ici.
+
+{{ :doc:05_domainesmessagerie_defaut.png?nolink&600 |}}
+Laissez ce champ vide
+
+{{ :doc:06_synchrofileattente.png?nolink&600 |}}
+
+{{ :doc:07_reseauxdistribution_local.png?nolink&600 |}}
+
+{{ :doc:08_taillebal.png?nolink&600 |}}
+
+{{ :doc:09_extadresse.png?nolink&600 |}}
+
+{{ :doc:10_protocoles.png?nolink&600 |}}
+
+
+===== Emplacement des boîtes aux lettres des utilisateurs du système =====
+Nous remarquons que le «configurateur» de Postfix n'a pas demandé de préciser où les boîtes aux lettres des utilisateurs sont situées. 
+
+La commande de la file d'attente :
+<code bash>postconf queue_directory</code>
+renvoie
+<code>queue_directory = /var/spool/postfix</code>
+
+La commande de boîtes postales :
+<code bash>postconf mail_spool_directory</code>
+renvoie
+<code>mail_spool_directory = /var/mail</code>
+
+Si on passe la commande de boîtes aux lettres utilisateurs :
+<code bash>postconf home_mailbox</code>
+Nous avons :
+<code>home_mailbox =</code>
+Nous voyons alors que les boîtes aux lettres des utilisateurs sont des boîtes postales et se situent dans /var/mail/utilisateur.
+
+Il nous faudra donc éditer le fichier /etc/postfix/main.cf (''kate /etc/postfix/main.cf'') et ajouter la variable **home_mailbox** pour vos utilisateurs.
+
+Par exemple :
+<file># au format maildir
+home_mailbox = .local/share/courriels/arrivées/</file>
+ou passer la commande dans un terminal :
+<code bash>sudo postconf -e home_mailbox=.local/share/courriels/arrivées/</code>
+afin que le courriel soit directement distribué dans la boîte aux lettres locale de l'utilisateur.
+
+Pour valider la configuration dans Postfix, tapez :
+<code bash>systemctl restart postfix</code>
+
+===== Bloquer le port 25 SMTP standard =====
+==== Test de la connexion sur le port 25 ====
+Déjà testons que le port 25 est ouvert.
+Pour cela tapez la commande :
+<code bash>telnet localhost 25</code>
+
+Ce qui affiche
+<code>Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+220 Ma-Machine ESMTP Postfix (Ubuntu)</code>
+
+Tapez :
+<code>HELO Ma-Machine</code>
+retourne
+<code>250 Ma-Machine</code>
+
+Puis saisissez l'identifiant d'un compte local :
+<code>MAIL FROM: utilisateur</code>
+retourne
+<code>250 2.1.0 Ok</code>
+
+Saisissez le destinataire :
+<code>RCPT TO: utilisateur@localhost</code>
+retourne
+<code>250 2.1.5 Ok</code>
+
+Saisissez :
+<code>DATA</code>
+retourne
+<code>354 End data with <CR><LF>.<CR><LF></code>
+
+Et enfin vous pouvez saisir votre courriel :
+<code>From: utilisateur
+To: utilisateur
+Subject: Test de message sur port 25
+Ceci est un test d'envoie sur port 25
+Merci de votre coopération
+.</code>
+retourne
+<code>250 2.0.0 Ok: queued as 9E77AA02321</code>
+
+Pour quitter tapez :
+<code>QUIT</code>
+retourne
+<code>221 2.0.0 Bye
+Connection closed by foreign host.</code>
+
+Vous avez expédié un courriels local :-)
+
+==== Blocage du port 25 ====
+Modifier le fichier master.cf (''kate /etc/postfix/master.cf'')
+<file>#smtp      inet  n       -       y       -       -       smtpd</file>
+
+Redémarrage de Postfix pour valider les changements :
+<code bash>systemctl restart postfix</code>
+
+==== Test du verrouillage du port 25 ====
+Pour cela taper :
+<code bash>telnet localhost 25</code>
+retourne
+<code>Trying 127.0.0.1...
+telnet: Unable to connect to remote host: Connection refused</code>
+
+===== Mettre en place de la connexion TLS pour votre trafic SMTP =====
+Par défaut le configurateur configure TLS comme ci-dessus :
+<file># TLS paramètres du serveur smtpd de Postfix
+smtpd_tls_security_level=may
+smtpd_tls_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem
+smtpd_tls_key_file=/etc/ssl/private/ssl-cert-snakeoil.key
+smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
+
+# TLS paramètres du client smtp de Postfix
+smtp_tls_security_level=may
+smtp_tls_CApath=/etc/ssl/certs
+smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
+</file>
+
+==== Configuration d'un trafic TLS pur ====
+Pour valider le transport [[https://fr.wikipedia.org/wiki/Transport_Layer_Security|TLS]] il faut modifier le fichier main.cf (''kate /etc/postfix/main.cf'') comme suit :
+<file># TLS pour le serveur smtpd de Postfix
+# Utilise le générateur de nombres aléatoires de Linux
+tls_random_source = dev:/dev/urandom
+# Active le protocole de cryptage TLS
+smtpd_use_tls = yes
+# N'autorise que les connections TLS
+smtpd_tls_auth_only = yes
+# Niveau de sécurité dans la négociation du protocole
+smtpd_tls_security_level = may
+# Les clefs du cryptage
+smtpd_tls_cert_file = /etc/ssl/certs/ssl-cert-snakeoil.pem
+smtpd_tls_key_file = /etc/ssl/certs/ssl-cert-snakeoil.key
+
+# TLS pour le client
+# Active le protocole de cryptage TLS
+smtp_use_tls = yes
+# Niveau de sécurité dans la négociation du protocole
+smtp_tls_security_level = may
+# Les clefs du cryptage
+smtp_tls_CApath = /etc/ssl/certs
+# Répertoire de cache pour la communication
+smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache</file>
+
+==== Autoriser les connections TLS ====
+Pour cela il faut modifier le fichier master.cf (''kate /etc/postfix/master.cf'')
+
+Modifier le fichier comme ci-dessous :
+<file>submission inet n       -       y       -       -       smtpd
+  -o syslog_name=postfix/submission
+  -o smtpd_tls_security_level=encrypt
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_tls_auth_only=yes
+  -o smtpd_reject_unlisted_recipient=no
+#  -o smtpd_client_restrictions=$mua_client_restrictions
+#  -o smtpd_helo_restrictions=$mua_helo_restrictions
+#  -o smtpd_sender_restrictions=$mua_sender_restrictions
+  -o smtpd_recipient_restrictions=
+  -o smtpd_relay_restrictions=permit_sasl_authenticated,reject
+  -o milter_macro_daemon_name=ORIGINATING
+</file>
+
+Redémarrer Postfix :
+<code bash>systemctl restart postfix</code>
+
+==== Vérifier le blocage des connexions non TLS ====
+Tester la connexion telnet :
+<code bash>telnet localhost 587</code>
+retourne                                
+<code>Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+220 Ma-Machine ESMTP (Courriels)</code>
+
+Taper :
+<code>ehlo Ma-Machine</code>
+retourne
+<code>250-Ma-Machine
+250-PIPELINING
+250-SIZE 10240000
+250-VRFY
+250-ETRN
+250-STARTTLS
+250-ENHANCEDSTATUSCODES
+250-8BITMIME
+250-DSN
+250-SMTPUTF8
+250 CHUNKING</code>
+
+Taper :
+<code>MAIL FROM: utilisateur</code>
+retourne
+<code>530 5.7.0 Must issue a STARTTLS command first</code>
+
+Taper :
+<code>quit</code>
+retourne
+<code>221 2.0.0 Bye
+Connection closed by foreign host.</code>
+
+==== Vérifier les connexions TLS ====
+Pour vous connecter en TLS :
+<code bash>openssl s_client -starttls smtp -connect localhost:587</code>
+retourne
+<code>CONNECTED(00000003)
+…
+    Start Time: 1598437512
+    Timeout   : 7200 (sec)
+    Verify return code: 0 (ok)
+    Extended master secret: no
+    Max Early Data: 0
+---
+read R BLOCK</code>
+
+Tapez :
+<code>ehlo Ma-Machine</code>
+retourne
+<code>250-Ma-Machine
+250-PIPELINING
+250-SIZE 10240000
+250-VRFY
+250-ETRN
+250-ENHANCEDSTATUSCODES
+250-8BITMIME
+250-DSN
+250-SMTPUTF8
+250 CHUNKING</code>
+
+Tapez :
+<code>MAIL FROM: utilisateur</code>
+retourne
+<code>250 2.1.0 Ok</code>
+
+Tapez :
+<code>QUIT</code>
+retourne
+<code>221 2.0.0 Bye
+Connection closed by foreign host.</code>
+Vos échanges de courriels sont maintenant cryptés lors du transport en SMTP. 
+===== Mettre en place l'authentification SASL =====
+Pour vous connecter sur votre serveur distant relaie avec SASL il vous faut disposer d'un compte et d'un mot de passe.
+=== Exemple de mot de passe SASL Gmail ===
+Pour un identifiant SASL avec Gmail
+== Création du mot de passe applicatif ==
+{{ :doc:1_accesconfigcompte.png?nolink |}}
+
+Cliquez sur {{:doc:2_gerercomptegoogle.png?nolink|}}
+
+{{ :doc:3_menuinformationscompte.png?nolink |}}
+
+Cliquez sur {{:doc:4_securite.png?nolink|}}
+
+{{ :doc:5_connexionagoogle.png?nolink |}}
+
+Cliquez sur {{:doc:6_motdepasseapplications.png?nolink|}}
+
+{{ :doc:7_fenetremotdepasseapplications.png?nolink |}}
+
+Cliquez sur **Sélectionnez un application** pour afficher le menu  {{:doc:8_selectionapplication.png?nolink|}}
+
+Saisissez le nom Postfix de votre serveur de messagerie pour Google {{:doc:9_saisienomserveurpostfix.png?nolink|}}
+
+Cliquez sur {{:doc:10_generer.png?nolink|}}
+
+Notez le mot de passe générez {{:doc:11_motdepasseapplication.png?nolink|}}
+
+{{ :doc:12_resultat.png?nolink |}}
+Vous avez créé votre mot de passe sécurité Google pour votre application Postfix.
+==== Configuration de l'identifiant du serveur de messagerie ====
+Éditez le fichier /etc/postfix/sasl/sasl_passwd (''kate /etc/postfix/sasl/sasl_passwd'') :
+<file>[smtp.fm.fr]:587    mon_compte_messagerie:mdp_messagerie</file>
+
+Passez la commande pour valider le mot de passe avec Postfix :
+<code bash>sudo postmap /etc/postfix/sasl_passwd</code>
+
+=== Exemple avec Gmail ===
+<file>[smtp.gmail.com]:587    utilisateur@gmail.com:ygvpyhldoiqujhth</file>
+
+==== Configuration du client SASL de Postfix ====
+Modifiez /etc/postfix/main.cf (''kate /etc/postfix/main.cf''):
+<file># Les interfaces réseau par lesquelles le système de messagerie reçoit les messages.
+inet_interfaces = loopback-only
+# La machine par défaut où livrer le courrier au départ lorsqu'il n'y a aucune destination locale d'arrivée (mydestination).
+relayhost = [smtp.fm.fr]:587
+# Active l'authentification SASL
+smtp_sasl_auth_enable = yes
+# Désactive l'authentification anonyme
+smtp_sasl_security_options = noanonymous
+# Location de l'indentifiant SASL
+smtp_sasl_password_maps = hash:/etc/postfix/sasl/sasl_passwd</file>
+
+=== Exemple avec Gmail ===
+Modifier en plus de la configuration ci-dessus :
+<file># La machine par défaut où livrer le courrier au départ lorsqu'il n'y a aucune destination locale d'arrivée (mydestination).
+relayhost = [smtp.gmail.com]:587
+
+# Modifications pour SASL
+# Pour corriger des erreurs d'authentification SASL avec GMAIL
+smtp_sasl_mechanism_filter = plain
+
+# Modifications pour TLS
+# Niveau de sécurité dans la négociation du protocole
+smtp_tls_security_level = encrypt
+# Location du certificat CA
+smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt</file>
+
+Pour valider la configuration dans Postfix, tapez :
+<code bash>systemctl restart postfix</code>
+
+=== Vérifier l’authentification au serveur SMTP ===
+Créer un Hash (code crypté de connexion) pour votre identifiant et votre mot de passe messagerie.
+<code bash>python3 -c 'import sys; from base64 import b64encode; print(b64encode(bytes(f"\000mon_compte_courriel\000mdp_applicatif", encoding="ascii")).decode("ascii"))'</code>
+
+ou en perl:
+<code bash>perl -MMIME::Base64 -le 'print encode_base64("\000mon_compte_courriel\000mdp_applicatif");'</code>
+
+Soit pour notre exemple :
+<code bash>python3 -c 'import sys; from base64 import b64encode; print(b64encode(bytes(f"\000utilisateur@gmail.com\000ygvpyhldoiqujhth", encoding="ascii")).decode("ascii"))'</code>
+
+Ce qui donne en sortie :
+<code>AHV0aWxpc2F0ZXVyQGdtYWlsLmNvbQB5Z3ZweWhsZG9pcXVqaHRo</code>
+
+Pour vérifier qu'il n'y a pas d'erreurs :
+<code bash>python3 -c 'import sys; from base64 import b64decode; print(b64decode("AHV0aWxpc2F0ZXVyQGdtYWlsLmNvbQB5Z3ZweWhsZG9pcXVqaHRo").decode("ascii"))'</code>
+
+ou en perl :
+<code bash>perl -MMIME::Base64 -le 'print decode_base64("AHV0aWxpc2F0ZXVyQGdtYWlsLmNvbQB5Z3ZweWhsZG9pcXVqaHRo");'</code>
+
+Pour vous connecter avec cet identifiant crypté :
+<code bash>openssl s_client -starttls smtp -connect smtp.gmail.com:587</code>
+
+Puis saisissez : 
+<code>ehlo domain
+250-localpart.domain.part
+250-PIPELINING
+250-SIZE 31457280
+250-VRFY
+250-ETRN
+250-AUTH PLAIN LOGIN
+250-ENHANCEDSTATUSCODES
+250-8BITMIME
+250 DSN</code>
+
+Maintenant c'est le code de Hash de l'identifiant mot de passe applicatif Google qu'il faut saisir :
+<code>AUTH PLAIN AHV0aWxpc2F0ZXVyQGdtYWlsLmNvbQB5Z3ZweWhsZG9pcXVqaHRo</code>
+
+Vérifiez alors que vous avez la ligne :
+<code>235 2.7.0 Accepted</code>
+==== Correction sur l'expéditeur ====
+À ce stade, si on redémarre le service Postfix, l'envoie de messages fonctionnent. 
+
+Mais nous allons obtenir un message d'erreur sur l'expéditeur dans notre client de messagerie MUA à la réception du message. 
+
+Par exemple dans Gmail :
+{{ ::adresseexpincorrecte.png?nolink&600 |}}
+
+Il faut, pour éviter cela, substituer le nom d'expéditeur avec le nom de l'adresse de messagerie du serveur de messagerie pour lequel on envoie le courriel.
+
+=== Substitution des comptes locaux avec les adresses du fournisseur de messagerie ===
+Éditez le fichier generic (''kate /etc/postfix/generic'') et modifiez le comme suivant :
+<file>utilisateur@mon_nom_machine             username@mon_fm.fr
+utilisateur@mondomainemessagerie.fr     username@mon_fm.fr 
+root@mondomainemessagerie.fr            admin@mon_fm.fr
+sudoer@mondomainemessagerie.fr          admin@mon_fm.fr</file>
+
+== Exemple avec Gmail ==
+<file>utilisateur@mon_nom_machine             username@gmail.com
+utilisateur@localhost                   username@gmail.com
+utilisateur@mondomainemessagerie.fr     username@gmail.com 
+root@mondomainemessagerie.fr            username@gmail.com
+sudoer@mondomainemessagerie.fr          username@gmail.com</file>
+
+=== Validez pour Postfix les substitutions ===
+<code bash>sudo postmap /etc/postfix/generic</code>
+
+Ajoutez dans main.cf (''kate /etc/postfix/main.cf'') :
+<file>smtp_generic_maps = hash:/etc/postfix/generic</file>
+
+Redémarrer Postfix :
+<code bash>systemctl restart postfix</code>
+
+Vous pouvez maintenant envoyer vos messages vers votre serveur distant. Mais pour les lire il vous faudra [[:comment_configurer_sa_distribution_de_courriels_locale_MDA|installer un MDA local]], ou vous connecter sur le MDA de votre serveur de messagerie distant pour les rapatrier dans votre client local de messagerie MUA (Mutt).

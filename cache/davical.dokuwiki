@@ -1,0 +1,148 @@
+
+{{tag>travail_collaboratif entreprise synchronisation bureautique agenda calendrier}}
+
+----
+
+====== DAViCal, serveur de calendrier CalDAV ======
+
+**DAViCal** est un serveur d'agenda partagé. C'est une implémentation du protocole [[wpfr>CalDAV]] qui est conçu pour le stockage d'agenda (au format [[wpfr>iCalendar]]) sur un serveur partagé à distance.
+
+Un nombre croissant de gestionnaire d'agenda supporte le protocole CalDAV, par exemple Mozilla Calendar (Sunbird / Lightning), Evolution, Mulberry, Chandler, Rainlendar Pro et divers autres produits propriétaire tels que Apple iCal et iPhone. 
+
+===== Installation ======
+
+DAViCal ayant été intégré au dépôt à partir de la version 9.04 d'Ubuntu, il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>davical]]**.
+
+Il faudra sans doute aussi installer le paquet **[[apt>postgresql]]**.
+
+===== Configuration ======
+
+==== Configuration de postgresql =====
+
+DAViCal utilise une base de données SQL, sous PostgreSQL.
+
+Pour se connecter à PostgreSQL :
+
+  sudo -u postgres psql postgres
+
+Création du mot de passe administrateur de PostgreSQL :
+
+  \password postgres
+
+Saisir le mot de passe,
+
+[[:postgresql#creer_un_utilisateur_postgresql|Créez les utilisateurs]] **davical_dba** et **davical_app** dans PostgreSQL :
+
+<code>
+postgres=# CREATE USER davical_dba;
+postgres=# CREATE USER davical_app;
+</code>
+
+ puis taper
+<code>
+\q
+</code>
+pour sortir de la console PostgreSQL.
+
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/etc/postgresql/9.5/main/pg_hba.conf** pour ajouter au début ce qui suit :
+
+<file>
+local all all trust
+local davical davical_dba trust
+local davical davical_app trust
+host davical davical_app 127.0.0.1/32 trust
+</file>
+
+<note>Si vous utilisez une base de données distante, à la dernière ligne remplacez « 127.0.0.1/32 » par l'IP/masque du serveur DAViCal.</note>
+
+Redémarrer PostgreSQL :
+
+<code>
+sudo service postgresql restart
+</code>
+
+Nous allons maintenant peupler la base grâce au script fourni par DAViCal :
+
+  sudo su postgres -c /usr/share/davical/dba/create-database.sh
+
+<note important>Une fois le script terminé, le mot de passe admin s'affiche, pensez à le noter, il sera indispensable par la suite.</note>
+
+Il faut maintenant retourner dans le fichier « /etc/postgresql/9.5/main/pg_hba.conf » pour en retirer la ligne suivante :
+
+<file>
+local all all trust
+</file>
+
+<note important>dans le cas contraire, n'importe qui aura tous les droits sur toutes les bases !</note>
+
+Enfin redémarrer PostgreSQL :
+
+<code>
+sudo service postgresql restart
+</code>
+==== Configuration d'Apache =====
+
+[[:apache2#creation_d_hotes_virtuels|Créez un hôte virtuel]] que nous allons nommer **davical** dans le répertoire des Virtualhost apache (en général dans **/etc/apache2/site-available/**) avec le contenu suivant  :
+<code>
+<VirtualHost *:80>
+ DocumentRoot /usr/share/davical/htdocs
+ DirectoryIndex index.php index.html
+ ServerName mydavicalsite.dyndns.org
+ ServerAlias calendar.mydavicalsite.dyndns.org
+ Alias /images/ /usr/share/davical/htdocs/images/
+ <Directory /usr/share/davical/htdocs/>
+     AllowOverride None
+     Order allow,deny
+     Allow from all
+ </Directory>
+ php_value include_path /usr/share/awl/inc
+ php_value magic_quotes_gpc 0
+ php_value register_globals 0
+ php_value error_reporting "E_ALL & ~E_NOTICE"
+ php_value default_charset "utf-8"
+</VirtualHost>
+</code>
+Activez le Virtualhost que vous avez créé grâce à cette commande :
+<code>sudo ln -s /etc/apache2/sites-available/davical /etc/apache2/sites-enabled/davical</code>
+<note tip>Remplacez ServerName par le nom de votre serveur, dans la plupart des cas commentez (ajoutez un # devant) le ServerAlias</note>
+<note tip>Pensez à activer la gestion des hôtes virtuels.</note>
+
+==== Configuration de DAViCal =====
+
+[[:tutoriel:comment_modifier_un_fichier|Créer le fichier]] **/etc/davical/config.php** et copier ça dedans :
+
+<code php>
+<?php
+//  $c->domain_name = "mydavicalsite.dyndns.org";
+//  $c->sysabbr     = 'rscds';
+  $c->admin_email = 'admin@example.net';
+  $c->system_name = "Really Simple CalDAV Store";
+//  $c->collections_always_exist = true;
+//  $c->enable_row_linking = true;
+  $c->default_locale = en_US.UTF-8;
+  $c->pg_connect[] = 'dbname=davical port=5432 user=davical_app';
+</code>
+
+[[:lien_physique_et_symbolique|Créer un lien symbolique]] de ce dernier vers « /etc/davical/nom_de_domaine-conf.php ».
+
+À ce stade, vous pouvez accéder à l'interface web de Davical en tapant [[http://localhost]] dans le navigateur.
+
+Pour vous identifier, utilisez le mot de passe généré automatiquement après le script « /usr/share/davical/dba/create-database.sh » exécuté précédemment avec le login « admin ».
+
+===== Utilisation ======
+
+Pour commencer, il faut créer un utilisateur à partir de l'interface d'administration de Davical, tapez [[http://serveur_caldav/users.php]] (l'outil est tellement simple à utiliser qu'il est inutile d'entrer dans les détails).
+
+Une fois l'utilisateur créé, rendez-vous dans votre agenda préféré, au moment de saisir l'url, tapez [[http://serveur_caldav/caldav.php/username/home]].
+
+Il faut bien sûr remplacer « ''serveur_caldav'' » et « ''username'' »…
+
+===== Liens =====
+
+  * Document inspiré du [[http://wiki.davical.org/w/Ubuntu_Jaunty|wiki Davical]] testé par le contributeur principal de cette page.
+  * [[https://www.transifex.net/projects/p/davical/|État de la traduction du projet sur Transifex]]
+
+----
+
+//Contributeur principal : [[:utilisateurs:wouldsmina]].//

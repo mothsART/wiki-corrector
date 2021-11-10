@@ -1,0 +1,179 @@
+
+{{tag>apt paquet sauvegarde}}
+----
+
+====== Apt-move ======
+
+
+**Apt-move** est un utilitaire pour créer un [[:depots|dépôt de paquets]] à partir des paquets téléchargés qui sont dans le répertoire **/var/cache/apt/archives**. 
+Cette page décrit comment faire un cd-rom qui contient les paquets que vous avez téléchargés sur votre ordinateur avec [[:gestionnaire_de_paquets|le gestionnaire de paquets]]. Le cd-rom sera donc un [[:depots|dépôt]] de paquets auquel un autre ordinateur pourra avoir accès facilement avec [[:Synaptic]] ou apt-cdrom.
+
+
+===== Installation =====
+
+
+Il vous suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt://apt-move|apt-move]]**, après avoir [[:depots#universe_et_multiverse|activé les dépôts Universe]].
+ 
+
+
+===== Configuration =====
+
+Pour configurer apt-move, on [[:tutoriel:comment_editer_un_fichier|édite]] avec [[:sudo|les droits d'administration]]  le fichier **/etc/apt-move.conf** :
+<file>
+  # Les sites dans  /etc/apt/sources.list que vous voulez copier
+  APTSITES="ftp.minet.net/pub/distrib/debian/ non-us.debian.org/debian-non-US www.opera.com/debian"
+  
+  # Les architectures de processeur pour lesquelles vous voulez générer la source
+  ARCHS="i386"
+  
+  # Le chemin d'accès absolu du miroir local que vous voulez créer
+  # Ce doit être la première entrée de votre sources.list pour utiliser "sync" ou "mirror"
+  LOCALDIR=/mnt/archives/apt-mirror
+  
+  # La distribution pour laquelle vous souhaitez créer le dépôt
+  DIST=trusty
+  
+  # Le type de paquet que vous voulez copier. 
+  # Valeurs possibles : binary, source, both (n'utiliser qu'une valeur).
+  PKGTYPE=binary
+  
+  # Chemin absolu du cache des paquets. Initialement celui de apt-get par défaut.
+  FILECACHE=/var/cache/apt/archives
+  
+# The full (absolute) path to your local cache of Packages files.  The
+# default will work for the apt-get Packages, unless you've reconfigured apt.
+LISTSTATE=/var/lib/apt/lists
+
+# Do you want apt-move to delete obsolete files from your mirror? (yes/no)
+DELETE=no
+
+# Maximum percentage of files to delete during a normal run.
+MAXDELETE=20
+  # Choisir "yes" si vous voulez garder les fichiers originaux avec "move"/"movefile"
+  COPYONLY=no
+</file>
+
+===== Utilisation =====
+Voici les diverses commandes qui vous permettent d'utiliser apt-move:
+  * Pour Générer un fichier maître à partir de "LISTSTATE" (ou [dir] si spécifié) qui va répertorier les fichiers à copier/déplacer: <code>sudo apt-move get [ dir ]</code>
+  * Pour déplacer un ensemble de paquets depuis le cache vers le miroir local, d'après le fichier maître (créé par apt-move get). Tous les paquets qui ne sont pas dans ce fichier maître ou sont obsolètes ne seront pas copiés:<code>sudo apt-move move</code>
+  * Pour effacer les paquets obsolètes:<code>sudo apt-move delete</code>
+  * Pour construire une nouvelle version des fichiers Packages.gz et Sources.gz du dépôt local:<code>sudo apt-move packages</code>
+  * Pour copier les fichiers depuis le cache (FILECACHE) vers le miroir local (LOCALDIR), on lance : <code>sudo apt-move update</code> C'est en fait un alias de la commande:
+<code>sudo apt-move get  move  delete  packages</code>
+
+
+===== Création d'un dépôt sur CD avec les mises à jour de sécurité =====
+Ici est détaillée la création d'un dépôt sur cd avec mise à jour de sécurité.\\
+Commencez par[[:tutoriel:comment_editer_un_fichier|editer le fichier de configuration]] **/etc/apt-move.conf** avec [[:sudo|les droits d'administration]] et vérifiez que l'option ''COPYONLY'' est à ''yes'':
+<file>
+  COPYONLY=yes
+</file>
+Cette modification permet que apt-move ne détruise pas les paquets dans **/var/cache/apt/archives/**.
+
+
+
+==== Sélection des paquets à mettre dans le CD ====
+
+
+Premièrement, faites le ménage des vieux paquets dans **/var/cache/apt/archives** : <code>sudo apt-get autoclean</code>
+
+
+Dans cet exemple, vous n'avez besoin que des paquets qui ne sont pas dans le cd original d'Ubuntu puisque vous les avez déjà, donc vous pouvez détruire ces paquets avec le script une fois votre cd-rom monté :
+<code bash>
+  for f in `find /media/cdrom/pool/ -name '*.deb' -printf %f\\n`
+  do
+    if [ -f /var/cache/apt/archives/$f ]; then
+      sudo rm -v /var/cache/apt/archives/$f
+    fi
+  done
+</code>
+
+
+==== Exécuter apt-move pour créer la structure de l'archive ====
+
+Assurez-vous d'abord d'avoir suffisamment d'espace sur le disque dur :
+<code>df -h</code>
+
+Puisque le répertoire /mirrors/debian est un répertoire qui appartient à root la manipulation devient plus facile avec cet utilisateur, donc :
+<code>sudo -i</code>
+
+Assurez-vous d'avoir un environnement propre, en supprimant les miroirs précédents :
+<code>rm -rf /mirrors/debian</code>
+
+Ensuite, on lance apt-move :
+<code>apt-move -d trusty update</code>
+Si vous utilisez une autre version que [[:trusty]], pensez à adapter votre commande !
+
+À cause de la structure des répertoires d'Ubuntu ce ne sont pas tous les paquets qui sont ajoutés dans la liste Packages.gz. Vous devez donc refaire ''Packages.gz'' à l'aide de la commande apt-ftparchive.
+<code>cd /mirrors/debian
+apt-ftparchive packages pool/main/ | gzip -9c > dists/trusty/main/binary-i386/Packages.gz
+apt-ftparchive packages pool/restricted/ | gzip -9c > dists/trusty/restricted/binary-i386/Packages.gz
+</code>
+
+**Ici on ne prend que les fichiers main et restricted **
+
+Vous devez aussi refaire le fichier Release, pour ce faire vous devez vous faire un fichier de configuration apt nommé ~/myapt.conf qui contient ceci :
+<file>
+  APT::FTPArchive::Release {
+  Origin "APT-Move";
+  Label "APT-Move";
+  Suite "trusty";
+  Codename "trusty";
+  Architectures "i386";
+  Components "main restricted";
+  Description "Ubuntu Updates CD";
+  };
+</file>
+
+Pensez de nouveau à modifier le nom de la version, tout comme l'architecture i386 peut-être amd64.
+
+
+Ensuite, lancez la commande :
+<code>rm dists/trusty/Release
+apt-ftparchive -c ~/myapt.conf release dists/trusty/ > Release
+mv Release dists/trusty/Release
+</code>
+
+C'est le moment de créer le fichier ''Release.gpg'', pour ce faire, vous devez avoir une [[:gnupg#gerer_les_clefs_avec_gpg|clé GPG]] prête à la signature :
+<code>gpg -bao dists/trusty/Release.gpg dists/trusty/Release</code>
+
+Ensuite, supprimez le répertoire **.apt-move** :
+<code>rm -rf .apt-move</code>
+
+
+Vous pouvez identifier le cd-rom à l'aide du dossier **.disk** et du fichier info à l'intérieur :
+<code>mkdir .disk
+echo Ubuntu-Updates `date +%Y-%m-%d` > .disk/info</code>
+
+Puis, ajoutez lui votre clé publique :
+<code>gpg --export -a <identifiant> > public.key</code>
+
+==== La gravure du cd-rom ====
+
+Copiez le contenu de ///mirrors/debian// dans un cd-rom.
+
+En mode console avec cette commande :
+<code>mkisofs -r -A "Ubuntu Updates `date +%Y%m%d`" -o ubuntu-updates.iso /mirrors/debian</code>
+
+
+Avant de l'utiliser, vous devez ajouter votre clé à la clé apt. Donc, après avoir monté le CD-ROM exécutez cette commande :
+<code>apt-key add /cdrom/public.key</code>
+
+Synaptic permet aussi l'ajout de cd-rom dans le menu //Édition -> Ajouter un cédérom//.
+
+Une autre façon de faire est cette commande :
+<code>sudo apt-cdrom add</code>
+
+
+
+===== Voir aussi =====
+
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?pid=213248#p213248|Le tutoriel]] de Dexter sur le forum, pour créer un CD avec uniquement un choix de paquets.
+
+
+----
+
+//Traduit par [[utilisateurs:phetu]], modifié par [[:contributeurs|les contributeurs]], mis en forme et complété par [[:utilisateurs:mavosaure]].//
+
+// Basé sur [[https://wiki.ubuntu.com/AptMoveHowto|AptMoveHowto]] par les contributeurs de la "[[https://help.ubuntu.com/community/UserDocumentation| community documentation for Ubuntu]]".//

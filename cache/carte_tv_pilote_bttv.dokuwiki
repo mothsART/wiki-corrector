@@ -1,0 +1,144 @@
+
+{{tag>Trusty carte_tv}}
+
+----
+
+
+====== Configuration d'une carte TV utilisant le pilote bttv sous Ubuntu ======
+
+Voilà quelques exemples de configuration de cartes TV utilisant des chipsets « bt » (Brooktree corp.), n'oubliez pas d'aller vous renseigner à la dernière partie pour savoir quel programme utiliser pour regarder la télé après l'avoir installée.
+
+A priori, BTTV est installé et est configuré correctement par défaut, les modifications expliqués dans ce document ne sont donc à effectuer que si vous rencontrez des problèmes.
+
+===== Miro PCTV Pro (Chipset bt878) =====
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/modprobe.d/bttv.conf** et ajoutez-y les options suivantes : <file>
+options bttv radio=0 card=39 tuner=3 gbuffers=4</file>
+
+Pour pouvoir profiter de la TV, redémarrer ou faites : <code>sudo rmmod bt878 && sudo rmmod bttv && sudo modprobe bttv radio=0 card=39 tuner=3 gbuffers=4</code>
+
+===== Carte TV : Hercules Smart TV Stereo =====
+
+Pour cette carte, voici les réglages à effectuer:
+
+[[:tutoriel:comment_editer_un_fichier|Créer un fichier]] **/etc/modprobe.d/bttv.conf**.
+
+Y copier les lignes suivantes en fonction de votre version : <file /etc/modprobe.d/bttv.conf>
+#i2c
+alias char-major-89 i2c-devb
+options i2c-algo-bit bit_test=1
+# bttv
+alias char-major-81 videodev
+alias char-major-81-0 bttv
+# Askey TV Capturer
+options bttv card=100 tuner=24 radio=0 pll=1 adc_crush=0 gbuffers=4 i2c_udelay=64
+options tvaudio tda9874a=1 tda9874a_STD=6 tda9874a_AMSEL=1 tda9874a_SIF=2
+options tda9887 port1=0 port2=0 pal=l
+</file>
+
+Les options "adc_crush=0" et "gbuffers=4" ont permis de régler le problème du son, instable sans ces options additionnelles.
+
+===== Carte TV : Hercules Smart TV 2 Stereo =====
+
+Pour cette carte, voici les réglages à effectuer:
+
+[[:tutoriel:comment_editer_un_fichier|Créer un fichier]] **/etc/modprobe.d/bttv.conf**. Y copier les lignes suivantes en fonction de votre version : <file /etc/modprobe.d/bttv.conf>
+alias      char-major-89    i2c-dev
+options    bttv             card=100 tuner=38
+options    tvaudio          tda9874a=1 tda9874a_STD=8 tda9874a_AMSEL=1 tda9874a_SIF=2
+options	   tda9887          port1=0 port2=0 secam=l
+</file>
+
+
+===== Leadtek Winfast TV 2000 XP Deluxe Edition =====
+
+Avec cette winfast et une audigy2 platinium , je n'avais pas de son à cause d'un mauvais choix de curseur...il est en "line" et il faut activer le "capture" [de Kikibelux]
+
+==== La carte est reconnue ? =====
+
+Vérifiez qu'il s'agisse bien d'une winfast TV deluxe et non d'une winfast TV **expert** :
+
+Dans une console, tapez :
+
+  dmesg | grep bttv
+
+Normalement, vous obtenez ceci :
+
+<code>
+[4294689.700000] bttv: driver version 0.9.15 loaded
+[4294689.700000] bttv: using 8 buffers with 2080k (520 pages) each for capture
+[4294689.701000] bttv: Bt8xx card found (0).
+[4294689.701000] bttv0: Bt878 (rev 17) at 0000:01:05.0, irq: 17, latency: 32, mm   io: 0xdc100000
+[4294689.701000] bttv0: detected: Leadtek WinFast TV 2000 [card=34], PCI subsyst   em ID is 107d:6606
+[4294689.701000] bttv0: using: Leadtek WinFast 2000/ WinFast 2000 XP [card=34,in   smod option]
+[4294689.701000] bttv0: gpio: en=00000000, out=00000000 in=003ff500 [init]
+[4294689.704000] bttv0: using tuner=5
+[4294689.704000] bttv0: i2c: checking for MSP34xx @ 0x80... not found
+[4294689.706000] bttv0: i2c: checking for TDA9875 @ 0xb0... not found
+[4294689.709000] bttv0: i2c: checking for TDA7432 @ 0x8a... not found
+[4294689.711000] bttv0: i2c: checking for TDA9887 @ 0x86... found
+[4294689.754000] bttv0: registered device video0
+[4294689.755000] bttv0: registered device vbi0
+[4294689.756000] bttv0: registered device radio0
+[4294689.756000] bttv0: PLL: 28636363 => 35468950 .. ok
+[4294689.796000] bttv0: add subdevice "remote0"
+</code>
+
+Donc, la carte est reconnue comme une Winfast TV 2000, mais par défaut, le tuner est considéré comme **type=5**, soit un tuner Philips PAL.
+Hors, il ne s'agit pas forcément du tuner réellement présent dans votre carte Winfast.
+
+
+==== Choisir le bon tuner ====
+
+Comment savoir quel tuner se trouve dans la carte ?
+
+  * il faut connaitre le standard de la carte (PAL, SÉCAM, NTSC) ;
+  * choisir un tuner correspondant dans la liste des tuners compatibles avec les pilotes BTTV ([[http://www.lea-linux.org/cached/index/Hardware-hard_image-tv.html|liste des cartes et tuners compatibles BTTV]]).
+
+Exemple : pour la France, il s'agit d'un **tuner type=24 - Philips PAL/SECAM multi (FQ1216ME)** mais il peut également s'agir d'un **tuner type=38 - Philips PAL/SECAM multi (FM1216ME MK3)** pour les plus récentes.
+
+Pour vérifier que notre choix est le bon, nous allons relancer le module //bttv// avec les options nécessaires :
+
+<code>
+sudo rmmod bt878 
+sudo rmmod bttv
+sudo modprobe bttv card=34 tuner=24
+</code>
+
+Lancer [[:TVTime]] et vérifier que le logiciel trouve des stations.
+
+==== Module BTTV ====
+
+Pour conserver les réglages aux prochains redémarrage de l'ordinateur, il faut [[:tutoriel:comment_editer_un_fichier|créer un fichier]] **/etc/modprobe.d/bttv.conf** qui sera pris en charge au boot.
+
+Y copier les informations nécessaires aux pilotes BTTV :
+
+<file>
+options bttv radio=0 card=34 tuner=24 gbuffers=8
+</file>
+
+Pour que les informations du fichier soient prises en charge au démarrage, il faut ajouter « bttv » à la fin [[:tutoriel:comment_editer_un_fichier|du fichier]] **/etc/modules**.
+
+===== Pour d'autres cartes TV =====
+
+Les autres options sont dans la documentations du noyaux Linux, disponible généralement dans **/usr/share/doc/linux-doc/video4linux/**. Il faut avoir préalablement [[:tutoriel:comment_installer_un_paquet|installé le paquet]] **linux-doc**.
+
+Les paramètres //card// et //tuner// sont à adapter en fonction de votre carte.
+Les cartes et tuners supportés par le noyau sont listées dans **CARDLIST.bttv.gz** et **CARDLIST.tuner.gz**.
+
+  zless /usr/share/doc/linux-doc/video4linux/CARDLIST.bttv.gz
+  less /usr/share/doc/linux-doc/video4linux/CARDLIST.tuner
+
+Une page intéressante: [[http://xawdecode.sourceforge.net/aideFR/htmlpage/prerequisCTVall.htm|liste des cartes et tuners compatibles BTTV]]
+
+===== Avec quoi voir la TV sur son ordinateur ? =====
+
+Après avoir bien paramétré votre carte il reste à savoir avec quel programme l'utiliser, il existe donc quelques programmes intéressants:
+  *[[:Tvtime]]
+  *[[:XdTV]] - Permet la lecture ET l'enregistrement !
+  *[[:Xawtv]]
+  *[[:zapping]]
+
+----
+
+//Contributeurs : [[utilisateurs:nuscly]], [[utilisateurs:Fabien26]].//

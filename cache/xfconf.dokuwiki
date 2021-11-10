@@ -1,0 +1,133 @@
+
+{{tag>Bionic xfce système}}
+
+----
+
+====== Xfconf - Éditeur de paramètres ======
+
+A l'instar de //Gconf// pour le bureau //Gnome//, **Xfconf** est le système pour la gestion des paramètres dans Xfce. Il vient ainsi remplacer le vieillissant MCS((Multi-Channel Settings)).\\ 
+Tandis que l'« **Éditeur de paramètres** » (//xfce4-settings-editor//) offre une interface graphique pour accéder à //Xfconf//, **xfconf-query** est son alter ego en mode console.
+
+Les objectifs des développeurs de Xfconf étaient les suivants :
+  * garder le concept familier de //canal//((« channel » en anglais)) issu de MCS, mais en rendant hiérarchique les noms de clés pour le stockage des paramètres.
+  * le démon d'enregistrement des paramètres devait être capable de se lancer sans nécessiter de fenêtre.
+  * séparer les paramètres de gestion XSETTINGS hors du démon.
+  * intégrer la fonctionnalité du "mode kiosque" directement dans le mécanisme de sauvegarde des paramètres.
+  * supporter les sections / structures dans le gestionnaire de configuration.
+  * proposer une librairie qui permette un accès facile et qui offre les fonctionnalités les plus couramment utilisées.
+  * aucune application cliente spécifique : toutes les applications doivent pouvoir lire et écrire les paramètres.
+
+MCS imposait l'utilisation d'une interface graphique dépendante de X pour accéder aux paramètres.\\ De toute évidence, ce genre de chose n'est pas adapté à un système de configuration qui peut fonctionner sans interface graphique, ou même sur un système non-X11.\\ 
+Compte tenu de son envol au cours des deux dernières années, D-Bus semblait donc être le mieux placé dans le cadre d'une communication inter-processus. Ainsi naquit l'interface D-Bus pour Xfconf.
+
+Pour le reste, cela ressemble grandement à gconf.
+Nous disposons d'un démon (//xfconfd//) et d'une librairie cliente (//libxfconf//).
+Les applications utilisent la librairie cliente pour accéder et stoker les paramètres depuis xfconfd.
+Le démon stocke les paramètres sur disque dans le format de son choix, et gère l'interface D-Bus.\\ 
+D-Bus permet de bénéficier de plusieurs fonctionnalités.
+Ainsi, Xfconfd est lancé lors de l'activation de D-Bus. Il n'est pas nécessaire de l'ajouter à un script de démarrage ou de le lancer depuis l'application cliente.
+D-Bus empêche également que deux instances de Xfconfd ne soient lancées.
+
+
+===== Pré-requis =====
+
+Pour bénéficier de **xfconf** vous devez disposer de Xubuntu.
+
+
+=== Hiérarchie des paramètres ===
+
+  * Les paramètres sont organisés sous forme de **//canaux//** qui détiennent chacun un nombre arbitraire de **//propriétés//**.
+  * Le nom des canaux est une simple chaîne de caractère (comme "xfwm4" ou "xfce4-desktop").
+  * Les propriétés sont comme des noms d'emplacements //hiérarchisés//.
+  * Les **//valeurs//** des propriétés peuvent être de différents types (booléen, nombre, chaîne) mais également sous forme de tableau.
+
+
+===== Configuration =====
+
+Jusqu'à Xfce 4.4, il était possible d'utiliser le système « //XfceKiosk// » qui permettait de mettre en place une configuration pour définir si un paramètre pouvait ou non être modifié par certains utilisateurs.\\ 
+Xfconf intègre également un système de "verrouillage".
+L'administrateur système peut ainsi installer un fichier de configuration pour xfconf avec des directives pour indiquer à xfconfd de verrouiller des paramètres.
+Ainsi, les applications n'ont pas à supporter la charge d'un outil de verrouillage spécifique, ceci est intégré dans la configuration du système.
+
+
+===== Utilisation=====
+
+
+==== Utilisation graphique ====
+
+Pour lancer l'« **Éditeur de paramètres** », cliquez sur le menu //Applications ⇒ Paramètres ⇒ Éditeur de paramètres// ou dans un terminal, lancer la commande :
+  xfce4-settings-editor
+
+La fenêtre suivante devrait apparaître :
+
+{{  :variantes:xubuntu:xfec4-setting-editor.png?600  }}
+
+La colonne de gauche vous permet de sélectionner le canal souhaité.
+Dans la partie droite apparaît la liste des propriétés sous forme d'arbre, avec le type et la valeur de la propriété.
+Les boutons de la barre d'action vous permettent de :
+  * créer une nouvelle propriété
+  * modifier la propriété existante
+  * réinitialiser la propriété à sa valeur par défaut ou supprimer une propriété ajoutée.
+
+
+==== Utilisation en mode console ====
+
+Dans un terminal, la commande offrant l'interface avec xfconf est **''xfconf-query''**.\\ 
+Comme vous pouvez le deviner, il permet d'intéroger xfconf pour obtenir des paramètres depuis un terminal ou un script.
+En dépit de la parti "query" de son nom, il vous permet également de modifier et créer des paramètres.
+
+  * Pour lister les canaux disponibles :
+
+  xfconf-query -l
+
+  * Pour lister les propriétés disponibles dans un canal :
+
+  xfconf-query -c "nom_du_canal" -l
+
+  * Pour afficher la valeur d'une propriété :
+
+  xfconf-query -c "nom_du_canal" -p "nom_de_la_propriété"
+
+D'autres options permettent ensuite de modifier [-s] , créer [-n], donner un type [-t] ou réinitialiser [-r] une propriété donnée.
+
+
+=== Exemple ===
+
+**//Pour changer le papier peint du bureau//** 
+  * Avec %f le nom du fichier image à utiliser.
+
+  xfconf-query -v -c xfce4-desktop -p /backdrop/screen0/monitor0/image-path -s %f
+
+  * Avec une liste d'image déjà définie :
+<note>Ce code est équivalent à la commande ''//xfdesktop --reload//'' qui ne fonctionne plus sous Xfce 4.6</note>
+
+<code>
+  declare VALUE="$(xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/image-path)"  # Sauver la valeur actuelle
+  xfconf-query -v -c xfce4-desktop -p /backdrop/screen0/monitor0/image-path -s ""            # Rémettre à blanc la valeur de la propriété
+  xfconf-query -v -c xfce4-desktop -p /backdrop/screen0/monitor0/image-path -s "${VALUE}"    # Réalimenter la propriété avec la valeur sauvegardée
+</code>
+
+\\ 
+**//Pour ne plus afficher les options "Hibernation" et "Veille" dans la boite de déconnexion//**((issu de [[http://forum.xfce.org/index.php?topic=4781|ce topic]])).
+
+  xfconf-query -c xfce4-session -np '/shutdown/ShowSuspend' -t 'bool' -s 'false'
+  xfconf-query -c xfce4-session -np '/shutdown/ShowHibernate' -t 'bool' -s 'false'
+
+Remarque : L'option ''//-n//'' permet de créer les propriétés qui n'existent pas initialement, et ''//-t 'bool'//'' permet de les définir en type booléen.
+
+===== Désinstallation =====
+
+Xfconf fait partie intégrante de Xfce 4.6 et ne peut être désinstallé sans casser le système :-)
+
+===== Liens =====
+
+  * **(fr, en)** [[http://www.xfce.org|Site officiel du projet Xfce]]
+  * **(en)** [[http://wiki.xfce.org/settings4.6|Liste des canaux et propriétés existantes]]
+  * **(en)** [[http://www.xfce.org/documentation/4.6/api/xfconf/|Manuel de référence pour Xfconf]]
+
+----
+
+
+//Contributeur principal : [[:utilisateurs:draco31.fr|draco31.fr]].//
+
+//Basé sur [[http://spurint.org/journal/2008/10/xfconf-a-new-configuration-storage-system/|« Xfconf — A New Configuration Storage System »]] par Brian Tarricone.//

@@ -1,0 +1,394 @@
+
+{{tag>Bionic BROUILLON reseau Tutoriel}}
+
+----
+
+====== VsftpD et authentification via pam_mysql sur base de données SQL ====== 
+<note warning>Cette page aurait besoin d'une mise à jour, à lire avec précaution.</note>
+Ce tutoriel vous servira à authentifier des utilisateurs VsftpD grâce à une base de données MySQL. Le but étant de ne pas utiliser une base de données Berkeley qui doit être re-générée à chaque création, suppression ou mise à jour d'utilisateur.
+
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt://vsftpd,mysql-server,libpam-mysql,openssl|vsftpd mysql-server libpam-mysql openssl]]**
+
+Une fois ces logiciels installés, je vous conseille de suivre ce [[:mysql|tutoriel MySQL]] afin de correctement sécuriser votre serveur
+de base de données, notamment la partie **Configuration**.
+
+===== Configuration de VsftpD =====
+
+On commence par sauvegarder le nécessaire :
+
+<code>
+sudo cp /etc/vsftpd.conf /etc/vsftpd.conf.OK
+</code>
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] en tant qu'[[:sudo|administrateur]].
+
+Ci dessous la configuration du fichier **/etc/vsftpd.conf** avec le détail de chaque option. Les utilisateurs virtuels se
+connectent et sont emprisonnés (chroot) dans un même dossier, les connections sont encryptées en SSL (**Cipher DES-CBC3-SHA**)
+et les options de connexion passives sont activées.
+
+<file>
+
+# Serveur en écoute
+listen=YES
+# Port d’écoute du serveur
+listen_port=21
+
+# Options des utilisateurs anonymes ici désactivés
+anonymous_enable=NO
+# Autorisation d'upload pour les utilisateurs anonymes
+anon_upload_enable=NO
+# Autorisation de création de répertoire pour les utilisateurs anonymes
+# mais aussi de suppression et de renommage
+anon_other_write_enable=NO
+anon_mkdir_write_enable=NO
+# Autorisation de connexion anonyme en ssl
+allow_anon_ssl=NO
+# Autorise les utilisateurs locaux ou virtuels a se connecter
+local_enable=YES
+# Autorise l'ecriture sur le serveur (upload)
+write_enable=YES
+# Masque d'upload de fichier 022 => correspond a un chmod 755
+local_umask=022
+# Monitoring de base via `ps -ef | grep vsftpd`
+setproctitle_enable=YES
+# Active les messages de changement de répertoire
+dirmessage_enable=YES
+# Utilisation de log pour les uploads et downloads (par defaut /var/log/vsftpd.log)
+xferlog_enable=YES
+# Emplacement du fichier de log 
+xferlog_file=/var/log/vsftpd.log
+# Formatage de la log au standard wu-ftpd
+xferlog_std_format=YES
+# Utilisation de 2 fichiers de log différents (Par défaut /var/log/xferlog et /var/log/vsftpd.log)
+dual_log_enable=YES
+
+# Options de connexion
+# Nombre de clients maximum
+max_clients=30
+# Nombre maximum de connexions par clients
+max_per_ip=3
+# Durée en secondes d’inactivité avant déconnexion de la session
+idle_session_timeout=60
+# Durée en secondes d’inactivité avant déconnexion de données
+data_connection_timeout=120
+# Débit maximum du serveur en bytes par secondes (0 = débit illimité)
+local_max_rate=0
+# Message de bienvenue affiche durant la phase de connexion
+ftpd_banner=Bienvenue sur le serveur VsftpD
+# Bloquer les utilisateurs dans un dossier
+chroot_local_user=YES
+# Dossier utiliser pour le chroot (doit appartenir a root et avec un chmod 755)
+# car il ne doit surtout pas être inscriptible (writable) par tous le monde
+secure_chroot_dir=/var/run/vsftpd
+# Nom du service d'authentification utilise par le serveur vsftpd
+pam_service_name=vsftpd
+# Utilisation des privilèges locaux pour les utilisateurs virtuels
+# permet notamment de donner les droits d’écriture car sinon les 
+# utilisateurs virtuels ont des droits d'utilisateurs anonymes
+virtual_use_local_privs=YES
+# Autoriser les utilisateurs virtuels
+guest_enable=YES
+# Utilisateur du lancement du serveur vsftpd
+# ici c'est le même utilisateur que le serveur apache
+# mais vous pouvez créer un utilisateur dédie à cette tache
+guest_username=www-data
+# Dossier ou vont être encapsules les utilisateurs virtuels
+# représente le / du site ftp
+local_root=/home/vsftpd
+</file>
+<note tip>
+Options supplémentaires pour le SSL, utiles si vous voulez encrypter les connexions utilisateur et connexions de données.
+</note>
+<file>
+# Activation du SSL
+ssl_enable=YES
+# Oblige les connexions de données a passer par du SSL
+# Si cette option est activée les clients ftp ne gérant pas 
+# SSL ne pourront envoyer ni recevoir de données
+force_local_data_ssl=NO
+# Oblige la connexion d'identification a être encryptée en SSL
+# Si cette option est activée les clients ftp ne gérant pas 
+# SSL ne pourront plus se connecter
+force_local_logins_ssl=YES
+# Versions de SSL pris en charge par le serveur VsftpD
+ssl_sslv2=YES
+ssl_sslv3=YES
+ssl_tlsv1=YES
+# Emplacement du certificat d'encryption SSL
+rsa_cert_file=/etc/ssl/certs/vsftpd/vsftpd.pem
+# Emplacement de la clé privée (inutile et ne fonctionne pas ,il va la chercher dans le cert)
+#rsa_private_key_file=/etc/ssl/certs/vsftpd/vsftpd.key
+</file>
+<note tip>
+Options supplémentaires d'utilisation de VsftpD derrière un routeur (NAT), pensez bien à ouvrir et rediriger les ports décrits ci-dessous vers l'adresse IP locale de la machine hébergeant VsftpD
+</note>
+<file>
+# Option permettant de désactiver la méthode passive (PASV)
+# déconseille si vous êtes derrière un routeur
+pasv_promiscuous=NO
+# Mode passif autorise
+pasv_enable=YES
+# Debut de la plage de ports passifs
+pasv_min_port=21000
+# Debut de la plage de ports passifs
+pasv_max_port=21100
+# Adresse IP ou nom de domaine a renseigner
+pasv_address=monsiteftp.com
+# Demande de résolution DNS du nom de domaine (pour tous ceux en DynDNS, no-ip, etc ...)
+pasv_addr_resolve=YES
+# Option permettant de désactiver la méthode (PORT)
+port_promiscuous=NO
+</file>
+
+Il faut penser à créer le dossier **secure_chroot_dir** Vsftpd (dans notre exemple **/var/run/vsftpd**)
+et lui appliquer les [[:permissions]] adéquates, il ne faut pas que les utilisateurs aient des droits d'écriture dans ce répertoire.
+
+<code>
+sudo mkdir /var/run/vsftpd
+sudo chown root:root /var/run/vsftpd
+sudo chmod 660 /var/run/vsftpd
+</code>
+
+===== Configuration de MySQL =====
+
+À ce stade, plusieurs possibilités pour administrer la base de données MySQL :\\
+
+En commande, pas très convivial mais efficace ou via une interface Web comme [[:lamp|PhpMyAdmin]] ou [[:webmin|Webmin]].
+Concernant PhpMyAdmin et Webmin je vous laisse chercher, je vais donner les commandes MySQL de base tout en précisant les besoins.
+
+<code>
+sudo mysql -u root -p (puis taper le mot de passe de votre superutilisateur MySQL)
+mysql> 
+
+# Création d'une nouvelle base nommée "vsftpd"
+CREATE DATABASE vsftpd;
+# Attribution des privilèges a l'utilisateur vsftpd avec comme mot de passe : MOTDEPASSE_VSFTPD
+# MOTDEPASSE_VSFTPD ne doit pas contenir de caractère # : interpréte le reste de la ligne comme un commentaire. 
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP ON vsftpd.* TO 'vsftpd'@'localhost' IDENTIFIED BY 'MOTDEPASSE_VSFTPD';
+# Sous Mysql 8.0 ou >  :
+# CREATE USER 'vsftpd'@'localhost' IDENTIFIED BY 'MOTDEPASSE_VSFTPD';
+# GRANT ALL ON vsftpd.* TO 'vsftpd'@'localhost';
+# Application des privileges
+FLUSH PRIVILEGES;
+# Utilisation de la base de données fraîchement créée
+USE vsftpd;
+
+# Création d'une table utilisateurs avec 4 champs (ID, NOM, PASS, CRYPTAGE)
+# ID => identifiant unique (auto-incrémentation et clé primaire)
+# NOM => texte (nul non autorise)
+# PASS => texte (nul non autorise)
+# CRYPTAGE => texte (nul autorise)
+CREATE TABLE `utilisateurs` ( `ID` INT NOT NULL AUTO_INCREMENT PRIMARY KEY , `NOM` TEXT NOT NULL , `PASS` TEXT NOT NULL , `CRYPTAGE` TEXT );
+
+# Création d'une table logging avec 6 champs (ID, USER, HOST, RHOST, MSG, TIME)
+# ID => identifiant unique (auto-incrémentation et clé primaire)
+# USER => texte (nul non autorise)
+# HOST => texte (nul non autorise)
+# RHOST => texte (nul non autorise)
+# TIME => texte (nul non autorise)
+# MSG => => texte (nul non autorise)
+# PID => texte (nul non autorisé)
+CREATE TABLE `logging` ( `ID` INT NOT NULL AUTO_INCREMENT PRIMARY KEY , `USER` TEXT NOT NULL , `HOST` TEXT NOT NULL , `RHOST` TEXT NOT NULL , `TIME` TEXT NOT NULL , `MSG` TEXT NOT NULL , `PID` TEXT NOT NULL);
+</code>
+
+Notre base de données est créée et nous allons donc la renseigner avec un jeu d'utilisateurs de test, voici la syntaxe pour ajouter un utilisateur, sachant
+que cette commande est aussi utilisable sous [[:lamp|PhpMyAdmin]] ou [[:webmin|Webmin]] pour ceux qui n'ont pas envie de s'embêter. Nous allons créer 3 utilisateurs nommés respectivement
+"toto", "tata" et "titi" avec comme mots de passes respectifs **toto**, **tata** et **titi**.
+Ceci afin de détailler l'utilisation de la librairie pam_mysql et de MySQL-server. 
+
+<code>
+# Création de l'utilisateur toto avec comme mot de passe toto stocke en clair (aucun cryptage)
+INSERT INTO utilisateurs (NOM, PASS, CRYPTAGE) VALUES('toto', 'toto', 'aucun' );
+
+# Création de l'utilisateur tata avec comme mot de passe tata crypte avec la fonction MySQL PASSWORD() => deconseille dans le manuel MySQL
+INSERT INTO utilisateurs (NOM, PASS, CRYPTAGE) VALUES('tata', PASSWORD('tata'), 'PASSWORD' );
+
+# Création de l'utilisateur titi avec comme mot de passe titi crypte avec la fonction MySQL ENCRYPT() => conseille a la place de PASSWORD()
+INSERT INTO utilisateurs (NOM, PASS, CRYPTAGE) VALUES('titi', ENCRYPT('titi'), 'ENCRYPT' );
+</code>
+
+===== Configuration du certificat SSL =====
+<note warning> La commande **sudo head -15 vsftpd.pem > vsftpd.key**
+peut rendre votre système fortement instable</note>
+<code>
+# Creation du repertoire pour stocker les certificats
+sudo mkdir /etc/ssl/certs/vsftpd && cd /etc/ssl/certs/vsftpd
+# Creation du certificat SSL valable 1 an 
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:1024 -keyout vsftpd.pem -out vsftpd.pem
+# Copie de la partie [PRIVATE_KEY] du certificat dans le fichier vsftpd.key
+sudo head -15 vsftpd.pem > vsftpd.key
+# Protection du certificat et de la cle privee
+sudo chmod 600 *
+</code>
+
+<note important>
+La clé privée générée est auto-signée et certains clients vont donc afficher des alertes de sécurité,
+car la clé n'est pas validée par une authorité de certification reconnue (Thawte, Verisign, etc)
+</note>
+
+Exemple de clé privée :
+
+<file>
+-----BEGIN RSA PRIVATE KEY-----
+MIICXAIBAAKBgQDA4ApkDJ3bW16Fgp2voDLr0ku7IYNP1tz43i1zWdwlPuoXtNyQ
+Gl8jO6QjWfPY1p/LpK7KM434yZeC53QO8cJA60KFDUTdNpxmknZBWblU86nHiYNZ
+IOy/ojEt7I5/4pQEVG0ns9JEmpNje1pjPX/K2vX4yRHxDdJhlJS+zlUgNQIDAQAB
+AoGAeAb0cG6pjei+Wbd/CdxX1Al6t2mTngvIV9dr0W0KYuNUKoyS9dpzeimTa6x+
+42Is7z38yDhtEXXio8QFpYctqsKQsekB/iboA9Qvh2+NONBVv/9oFxdRE2lZHVc/
+YdiFv17LlN34FEGb7CgkJtA30ma09wwWEtAS11Fo2nFMOcECQQD3fo7oX2pMH74W
+WQl/+RmQlC2OF+6HZko73TrGTBVzhhcKzqtbrTyD2gPid9QHCKKQB1gMsoPi3+HV
+20uBrfDPAkEAx4DyEOLK8EX0vHg8k57WESQpd2bbL+ugUaksmBGmPcuXsP6tGBan
+6jtYip8tKgVAZ89oYxtw8hFI+69u6sp3uwJAQE/sxsl0j893z8rXQx/x2rYGmHPz
+kc+s3p2AVmMS9/ASMMa/lJURspmGhOTqfeFqjM67vKDu0Jeo0a+okUwn1QJBAJGh
+rxJke3+pkV2C57Va3SjmHN7sVlREzGLP+52GRLQXSkQJpJFQ+IIjkB6g03c5Hiqp
+XKn7/ha2R3ByP6Vk5sECQCZRJ0c1TEsmt4sZAO2rfWHeQ5D6GZWjsqY/WW2TInM/
+ynrPiJyfS8mVrKmwZa4JjL/1ohDd+ma8MsgWIXBc7ck=
+-----END RSA PRIVATE KEY-----
+</file>
+
+===== Configuration de pam_mysql =====
+
+On commence par sauvegarder l'existant :
+
+<code>
+sudo cp /etc/pam.d/vsftpd /etc/pam.d/vsftpd.ok
+</code>
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/pam.d/vsftpd** vous devriez tomber sur quelque chose ressemblant à ça :
+
+<file>
+# Standard behaviour for ftpd(8).
+auth    required        pam_listfile.so item=user sense=deny file=/etc/ftpusers onerr=succeed
+
+# Note: vsftpd handles anonymous logins on its own.  Do not enable
+# pam_ftp.so.
+
+# Standard blurb.
+@include common-account
+@include common-session
+
+@include common-auth
+auth    required        pam_shells.so
+</file>
+
+Il faut commenter toutes les lignes avec un **#** ou effacer tout le contenu du fichier et coller le code ci dessous à la place.
+
+<code>
+
+# fonction pam_mysql crypt=1 OK avec la fonction ENCRYPT() de MySQL
+# fonction pam_mysql crypt=2 OK avec la fonction PASSWORD() de MySQL
+
+# Minimum necesaire afin de se connecter
+# auth required pam_mysql.so user=vsftpd passwd=VsftpD host=localhost db=vsftpd table=users usercolumn=nom passwdcolumn=mdp crypt=1
+# account required pam_mysql.so user=vsftpd passwd=VsftpD host=localhost db=vsftpd table=users usercolumn=nom passwdcolumn=mdp crypt=1
+
+# Connexion avec logging en base de donnees des acces
+auth required pam_mysql.so verbose=1 user=vsftpd passwd=VsftpD host=localhost db=vsftpd table=utilisateurs usercolumn=NOM passwdcolumn=PASS crypt=1 sqllog=true logtable=logging logmsgcolumn=msg logusercolumn=user loghostcolumn=host logrhostcolumn=rhost logtimecolumn=time logpidcolumn=pid
+account required pam_mysql.so verbose=1 user=vsftpd passwd=VsftpD host=localhost db=vsftpd table=utilisateurs usercolumn=NOM passwdcolumn=PASS crypt=1 sqllog=true logtable=logging logmsgcolumn=msg logusercolumn=user loghostcolumn=host logrhostcolumn=rhost logtimecolumn=time logpidcolumn=pid
+</code>
+<note>
+N'oubliez pas de remplacer VsftpD par le mot de passe que vous avez choisi lors de la création de la base de données
+</note>
+La librairie pam_mysql acceptent plusieurs arguments dont voici le détail :
+\\
+**verbose**  => Mode verbeux, nécessaire pour logger les accès ( 0=désactivé, 1 = activé )\\
+**user** => Utilisateur employé par VsftpD pour se conncter à MySQL\\
+**password** => Mot de passe de l'utilsateur employé par VsftpD pour se connecter à MySQL\\
+**host** => Hote hébergeant le serveur MySQL (localhost ou adresse IP)\\
+**db** => nom de la base de données à utiliser\\
+**table** => nom de la table contenant les utilisateurs\\
+**usercolumn** => nom de la colonne contenant les noms des utilisateurs\\
+**passwdcolumn** => nom de la colone contenant les mot de passe des utilisateurs\\
+**crypt** => type de cryptage utilisé pour les mots de passe ( 0 = clair , 1 = fonction ENCRYPT(), 2 = fonction PASSWORD(), 3 = fonction MD5(), 4 = fonction SHA1() )\\
+**sqllog** => activation du logging d'accès en base SQL ( 0 = désactivé, 1 = activé )\\
+**logtable** => nom de la table de log des accès utilisateurs\\
+**logmsgcolumn** => nom de la colonne ou seront stockés les messages de pam_mysql\\
+**logusercolumn** => nom de la colonne ou seront stockés les nom des utilisateurs\\
+**logpidcolumn** => nom de la colonne ou seront stockés les numéros de process (pid)\\
+**loghostcolumn** => nom de la colonne ou seront stockés les adresses ou se connectent les utilisateurs (en général le serveur lui même)\\
+**logrhostcolumn** => nom de la colonne ou seront stockés les adresses distantes des utilisateurs\\
+**logtimecolumn** => nom de la colonne ou seront stockés les heures de connexion\\
+
+La fonction **crypt** de la librairie pam_mysql accepte différents arguments (**0**, **1**, **2**, **3**, **4**) , cependant je n'en ai trouvé que deux qui fonctionnent avec mysql-server, bien que, sous mysql la fonction **MD5()** et la fonction **SHA1()** existent, elles ne renvoient pas les mêmes valeurs que le **crypt** fourni par pam_mysql. Autrement dit, les valeurs ne correspondent pas et l'authentification échoue systématiquement.
+
+===== Configuration des partages =====
+
+Nos utilisateurs virtuels se connectent et sont emprisonnés dans un dossier dans lequel il n'ont pas les droits en écriture. Il faut donc leur monter des
+répertoires en lecture et en écriture (si besoin). Dans notre exemple (cf fichier **/etc.vsftpd.conf**) ce dossier **/home/vsftpd**
+
+Nous allons monter deux repertoires nommés **dossier1** accessible en lecture et **dossier2** accessible en écriture dans **/home/vsftpd** et les faire pointer vers deux dossiers existants **dossier1** et **dossier2** dans **/media/donnees**\\
+
+<code>
+cd /home/vsftpd
+# Creer les repertoires de destination des montages
+sudo mkdir dossier1 dossier2
+# Donner les droits en ecriture a tout le monde sur dossier2
+sudo chmod 777 dossier2 
+</code>
+
+Il faut ensuite modifier le fichier **/etc/fstab** pour monter à chaque démarrage les répertoires partagés sur le serveur VsftpD,
+ajoutez à la fin de **/etc/fstab** les deux lignes suivantes.
+
+<code>
+/home/vsftpd/dossier1           /media/donnees/dossier1         none  bind,defaults,auto     0    0
+/home/vsftpd/dossier2		/media/donnees/dossier2		none  bind,defaults,auto     0    0
+</code>
+
+Pour que **dossier2** soit en lecture/écriture il faut penser aux permissions du répertoire de destination.
+
+<code>
+sudo chmod 777 /media/donnees/dossier2
+</code>
+
+===== Utilisation ===== test
+
+Pour faire mes tests j'ai utilisé différents clients ftp, cependant je conseille **ftp-ssl** pour les tests car les messages d'erreurs sont plus
+parlants. Autrement il existe **Filezilla** ou **FireFTP** sous Mozilla qui fonctionnent très bien.
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] suivants :
+
+  * [[apt://filezilla|filezilla]]
+  * [[apt://ftp-ssl|ftp-ssl]]
+  * [[https://addons.mozilla.org/fr/firefox/addon/684|Plugin FireFTP pour Firefox]]
+
+Pour commencer il faut recharger le fichier de configuration VsftpD.
+
+<code>
+sudo /etc/init.d/vsftpd restart
+</code>
+
+Ensuite tentative de connexion en commande ou via un client graphique qui devrait normalement vous répondre comme ci-dessous. Il est aussi possible de tester via un navigateur à l'adresse ftp://toto@localhost:21 si vous avez laisser les options adéquates.\\
+
+<code>
+ftp-ssl localhost 21
+Connected to localhost.
+220 Bienvenue sur le serveur VsftpD
+Name (localhost:toto): toto
+234 Proceed with negotiation.
+[SSL Cipher DES-CBC3-SHA]
+331 Please specify the password.
+Password:
+230 Login successful.
+Remote system type is UNIX.
+Using binary mode to transfer files.
+ftp> 
+</code>
+
+Si toutefois vous avez des problèmes de connexion (Authentication Failed) vérifiez les paramètres de cryptage de pam_mysql et la fonction\\
+utilisée dans MySQL-server pour crypter le mot de passe. Pour les problèmes de connexion sur nom de domaine vérifiez bien que tous les ports\\
+(connexion et plage de ports passifs) sont bien ouverts et redirigés vers l'adresse IP locale de votre machine.
+
+Une autre solution est de venir en discuter [[http://forum.ubuntu-fr.org/viewtopic.php?id=198367|ici]] ou [[http://forum.ubuntu-fr.org|ici]]. Bon courage.
+
+===== Liens =====
+
+  * [[http://vsftpd.beasts.org/vsftpd_conf.html|Page officielle du manuel VsftpD)]]
+  * [[:Vsftpd|Vsftpd sur ubuntu-fr]] (pour toute la partie installation du serveur et configuration des certificats SSL)
+  * [[http://pam-mysql.sourceforge.net/Documentation/package-readme.php?seemore=y|le README de la librairie pam_mysql]]
+  * [[https://doc.fedora-fr.org/wiki/Vsftpd_:_Installation_et_configuration|Page similaire sur le wiki de Fedora]]
+
+----
+
+//Contributeur : [[:utilisateurs:maclane45]]//

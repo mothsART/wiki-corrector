@@ -1,0 +1,623 @@
+
+{{tag>Focal audio vidéo encodage montage_vidéo capture_vidéo multimédia}}
+
+----
+
+{{ http://ffmpeg.org/ffmpeg-logo.png?150| Logo de ffmpeg}}
+====== FFmpeg ======
+
+**FFmpeg** est une application de lecture et encodage de vidéo. Très puissante comme son alter ego [[Mencoder]], il assure en [[;commande_shell|ligne de commande]] la possibilité de convertir les fichiers vidéo d'un format à un autre, dont le **mts** et m2ts.
+
+===== Utilisation graphique =====
+
+Il existe des interfaces graphiques permettant de simplifier grandement le transcodage de fichiers :
+  * [[http://ekd.tuxfamily.org/|EKD]] - EKD est un logiciel libre qui se propose de faire des opérations de post-production aussi bien pour des vidéos, que pour des images. En ce qui concerne les images, EKD fait du traitement par lots.
+  * [[WinFF]] - Cette application vous permet de choisir parmi une liste de profils un encodage vidéo qui conviendra à vos attentes. Par exemple si vous voulez faire une vidéo compatible Blackberry, il ne vous sera même pas nécessaire de savoir quel est l'encodage interne utilisé.
+
+D'autres interfaces graphiques ont été créées pour répondre à des attentes spécifiques :
+  * [[Mobile Media Converter]] - Se propose quant à lui de transcoder vos vidéos pour les appareils de lecture vidéo mobiles tels que les téléphones portables les iPod et les lecteurs MP3/MP4.
+  * [[:DVDstyler]] - Transcode pour construire des DVD vidéos avec des menus interactifs.
+  * [[:Devede]] - Se propose de transcoder puis graver vos vidéos aux formats CD/DVD.
+D'autres applications permettent de faire des modifications plus profondes à la vidéo et utilisent FFMpeg pour rendre la vidéo finale :
+  * [[Avidemux]] - Sa principale particularité est de permettre l'application de filtres à la vidéo comme par exemple enlever les bandes noires d'une vidéo. Concernant le transcodage il se débrouille très bien et permet l'utilisation des principaux codecs en lecture et en écriture (équivalent de Virtualdub).
+  * [[Cinelerra]] - Application de montage extrêmement puissante, ne convient pas aux débutants et ne propose pas une interface simple d'utilisation en matière de transcodage. Réservez-la à vos effets spéciaux :-D
+  * [[Kino]] - Application de montage et de transcodage destinée aux débutants.
+  * [[http://sourceforge.net/projects/outreel/files/|Outreel]] - Une autre interface graphique pour FFMpeg.
+
+
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt>ffmpeg]]**
+
+===== Utilisation =====
+
+==== Commencer sur une bonne base ====
+  
+Toutes les instructions se passent de la même façon.
+Par exemple pour  **-vcodec copy** taper dans un [[:terminal]]:
+<code>ffmpeg -vcodec copy</code>
+
+Pour identifier le format d'un fichier multimedia (audio et/ou video), tapez :
+  ffmpeg -i fichier 2>&1 | egrep "Seems|Input|Duration:|Stream"
+<code>
+Seems stream 1 codec frame rate differs from container frame rate: 1000.00 (1000/1) -> 25.00 (25/1)
+Input #0, asf, from 'fichier':
+  Duration: 00:01:19.50, start: 4.000000, bitrate: 389 kb/s
+    Stream #0.0: Audio: wmav2, 44100 Hz, stereo, s16, 64 kb/s
+    Stream #0.1: Video: wmv3, yuv420p, 320x240, 323 kb/s, 25 tbr, 1k tbn, 1k tbc
+</code>
+Le nombre d'instructions à passer peut être grand, il faudra en ajouter bout à bout et au final vous finirez par créer vous-même une commande correspondant à vos besoins !
+Une commande finale ressemblera à ça :
+<code>ffmpeg -i "vidéo d'entrée.avi" -threads 4 -f matroska -vcodec libvpx -vb 1350000 -rc_lookahead 16 -keyint_min 0 -g 360 -skip_threshold 0 -level 116 -qmin 15 -qmax 30 -acodec libvorbis -ab 128k -ar 44100 -ac 2 "vidéo de sortie.mkv"</code>
+
+Voici un exemple concret qui converti un fichier **mts** en **avi** : <code>ffmpeg -i input.mts -vcodec mjpeg -b 100M -acodec pcm_s16be output.avi</code>
+
+==== Connaître FFmpeg ====
+
+Ces instructions n'ont rien à voir avec l'encodage, elles servent à savoir ce que contient FFMpeg !
+
+=== Connaître les conteneurs installés ===
+
+Il est important de savoir ce que FFmpeg est capable de lire et d'écrire ! Si vous ne le savez pas, c'est simple ! Vous ne pouvez rien faire !
+Depuis un [[:terminal]], lancez la [[:commande_shell|commande]] :
+<code>ffmpeg -formats</code>
+Après avoir appuyé sur la touche "Entrée", vous devez avoir une longue liste de formats (conteneurs) que reconnaît ffmpeg.
+Cette liste est organisée de manière simple, la première colonne indique si l'on peut lire (D) ou écrire (E) le format en question.
+
+<code>DE matroska        Matroska file format</code>
+Veut simplement dire que l'on peut à la fois lire et écrire les fichiers .mkv avec ffmpeg.
+
+=== Connaître les codecs installés ===
+Comme pour les conteneurs, vous pouvez avoir la liste des codecs disponibles.
+Pour ceci, dans un [[:terminal]] faites :
+<code>ffmpeg -codecs</code>
+
+Vous aurez une liste avec là aussi les fameux **D** et **E**. Mais aussi des **V**, **A** ou **S** qui vous permettent de savoir si un codec concerne la vidéo, le son ou les sous-titres.
+
+<note>Vous pouvez voir les codecs étranges comme **lib**quelquechose.
+Ce sont des codecs externes pour ffmpeg.
+
+Vous trouverez par exemple vorbis et libvorbis. Le codec est le même, il s'agit juste de deux encodeurs différents.
+Si la qualité est importante pour vous,  préférez les libquelquechose aux quelquechose eux-mêmes.
+
+Par exemple préférez libvorbis à vorbis, libfaac à aac, car la qualité s'en ressentira...</note>
+
+==== Instruction générale ====
+
+=== Utilisation Multithreads ===
+
+Si FFmpeg est compilé avec la possibilité de faire du **[[multithreading]]** (la version par défaut d'Ubuntu le permet par exemple), il permet sans aucune difficulté d'utiliser les processeurs actuels à leur plein potentiel pour encoder un fichier, il suffit de passer l'instruction threads à ffmpeg à chaque encodage :
+<code>-threads 0</code>
+
+Vous pouvez spécifier le nombre de threads à utiliser comme ceci :
+<code>-threads N</code>
+
+N étant le nombre de threads à utiliser. Vous pouvez donc en utiliser seulement 3 sur un processeur Quad Core pour garder une grande réactivité sur une autre tâche.
+
+Vous pouvez ensuite compléter par n'importe quelles instructions, et si le codec supporte le multithreading il utilisera automatiquement au mieux votre installation.
+
+=== Fichiers d'entrée et de sortie ===
+
+Le fichier d'entrée est spécifié par l'option **-i**, suivi du fichier à encoder.
+Pour aller plus vite vous pouvez taper "-i", espace, et glisser le fichier à encoder dans le terminal.
+
+Ce qui donne :
+<code>-i "/home/vous/fichier vidéo.avi"</code>
+  
+Pour donner le nom de votre fichier de sortie, il faudra juste le taper à la fin de votre commande ffmpeg.
+
+<code>ffmpeg -bla bla -bla bla "/home/vous/fichier vidéo de sortie.mkv"</code>
+  
+Attention !
+À moins de savoir exactement ce que vous faites, vous ne devez rien mettre après le nom du fichier final.
+
+=== Choisir le conteneur ===
+
+Le conteneur est choisi automatiquement via l'extension du fichier.
+C'est-à-dire que si le fichier final se termine par **.mkv** le format sera automatiquement mis en **matroska** sans vous demander votre avis.
+
+Mais vous pouvez vous exprimer haut et fort (!) en précisant le format via l'option **-f**.
+Vous pouvez faire suivre "-f" de tous les formats que vous voulez suivant la liste que vous donne **ffmpeg -formats**.
+Par exemple :
+<code>-f matroska
+-f avi</code>
+  
+==== Extraction de la bande Audio ====
+Tapez la commande :
+  ffmpeg -i <nom du fichier video> -vn -acodec libmp3lame bande_son
+  
+<note important> Cette commande n'extraira pas la piste audio //originale//, mais la **transcodera en mp3**, ce qui a des effets néfastes sur la qualité (mais peut servir un intérêt de compatibilité).
+</note>
+On lui préférera de manière générale cette méthode pour **extraire la piste audio originale (sans transcodage) de la vidéo** :
+  * D'abord se renseigner sur le type de flux audio, via [[mediainfo-gui|Mediainfo]] ou la commande :
+
+  ffmpeg -i <votre vidéo>
+
+<note utile>N'oubliez pas que vous pouvez glisser-déposer votre fichier dans le terminal plutôt que de recopier entièrement son chemin d'accès. Cela limite le risque d'erreurs avec les espaces etc. ;-)</note>
+Et regarder l'avant-dernière ligne de ce qui ressort, par exemple :
+
+  ...
+  Stream #0.1: Audio: aac, 44100 Hz, stereo, s16, 69 kb/s
+  At least one output file must be specified
+
+  * Puis appuyer sur Flèche haut (pour ré-entrer automatiquement la commande précédente) ou la retaper puis compléter :
+
+  ffmpeg -i <votre fichier video> -vn -acodec copy '(destination et) nom du fichier audio créé'.EXTENSION
+
+Remplacer EXTENSION par :
+  * **.m4a** (préférable) ou **.mp4** pour un flux audio en **aac** (comme dans l'exemple), la majorité des vidéos Flash (FLV) récupérées d'Internet ainsi que de nombreux MKV utilisant ce format,
+<note important> Attention à ne pas mettre ".aac" comme extension, sous peine d'avoir un fichier en //raw aac// qui ne sera pas (ou problématiquement) lisible. Le AAC doit être placé dans un [[https://fr.wikipedia.org/wiki/Format_conteneur|conteneur]] pour être lu, d'où le ".m4a" qui est la version audio du MP4 (qui pourrait convenir aussi, mais bon... Vous voulez un fichier audio, donc autant faire les choses bien :-D).</note>
+  * **.mp3** pour un flux audio en **mp3**,
+  * **.ogg** pour un flux audio en **vorbis**...
+==== Extraction de la bande Video ====
+Tapez la commande :
+  ffmpeg -i '(chemin et)nom du fichier video' -an -vcodec copy '(chemin et) nom de la bande video extraite'.EXTENSION
+
+<note important> Cette commande ne fonctionnera pas tant que vous ne préciserez pas l'**extension** du fichier à créer, à savoir son conteneur.
+Ici cependant, on peut se contenter d'utiliser la même extension que le fichier source (.mkv, .ogm, .avi, etc), ou encore changer de conteneur (passer de .flv à .mkv par exemple) sans pour autant transcoder le flux vidéo, ce qui est bien pratique.</note>
+__Remarque__: bien que ffmpeg fasse très bien les choses, pour certains formats et en particulier le MKV, il est recommandé d'utiliser les outils dédiés tels que [[mkvtoolnix]].
+==== Instructions d'encodage Audio ====
+Il faut paramétrer le son. Et c'est très simple !
+<code>-acodec "nom du codec"</code>
+Vous permet de choisir le codec.
+
+<code>-ab 128000</code>
+ou
+<code>-ab 128k</code>
+Vous permet de choisir le bitrate à utiliser pour le son.
+
+Si vous préférez choisir une qualité plutôt qu'un bitrate, utilisez :
+<code>-aq 4</code>
+
+Les paramètres suivants sont optionnels (si l'on ne précise rien, les caractéristiques seront identiques au fichier d'origine).
+
+Vous pouvez choisir la fréquence d'échantillonnage comme ceci :
+<code>-ar 44100</code>
+
+Le nombre de canaux (stereo/mono/surround) :
+<code>-ac 2</code>
+2 étant le nombre de voies (2 : stéréo, 6 : 5.1, etc ...)
+
+Pour supprimer l'audio
+<code>-an</code>
+==== Instructions d'encodage vidéo ====
+
+C'est là où ça se complique car il y a plein de codecs vidéo, et ils ont souvent des instructions obscures, même pour les utilisateurs les plus avertis... Ce qui est... Déroutant...
+
+Mais ne vous inquiétez pas, nous allons vous expliquer comment éviter les plus gros pièges !
+
+Le codec vidéo se choisit avec l'instruction :
+<code>-vcodec</code>
+Les codecs sont nombreux, et il faudra ajouter pas mal d'instructions pour que le codec ne fasse pas n'importe quoi.
+
+== Codec libx264 ==
+
+Le codec libx264 a besoin d'une instruction supplémentaire obligatoire.
+
+Si vous souhaitez l'utiliser, il est fortement conseillé d'utiliser les //preset// fournis par ffmpeg.
+Ce sont des "packs" d'options pré-configurées.
+<code>-vpre</code>
+suivi d'un //preset// qui donnera les paramètres par défaut de l'encodeur à ffmpeg suivant plusieurs profils.
+
+Les //presets// gérant la complexité et les //features// activés dans le fichier vidéo de sortie :
+  * baseline : à utiliser si votre matériel n'arrive pas à décoder les fichiers encodés avec les autres //presets//.
+  * main : inférieur au profile //high//
+  * ipod320
+  * ipod640
+Le profile //high// n'est pas disponible en option car il est le //preset// par défaut.
+
+Les //presets// gérant le temps nécessaire à l'encodage :
+  * ultrafast : le plus rapide, mais donne la moins bonne qualité d'image.
+  * superfast
+  * veryfast
+  * faster
+  * fast
+  * medium
+  * slow
+  * slower
+  * veryslow : La meilleure qualité au prix de la vitesse
+  * placebo : le plus lent, mais pas la meilleure qualité (optimisé pour les benchmarks)
+
+Les //presets// gérant le temps nécessaire à un encodage sans aucune perte de qualité d'image :
+  * lossless_max
+ *<del>* lossless_ultrafast</del>
+  * lossless_fast
+  * lossless_medium
+  * lossless_slow
+  * lossless_slower
+
+Par exemple, la ligne suivante permet de spécifier que le fichier de sortie doit pouvoir être lu sur à peu près n'importe quel appareil (cela donnera une moins bonne qualité d'image ou un fichier de sortie plus gros) et un encodage très lent (pour essayer de maximiser la qualité d'image) :
+<code>-vcodec libx264 -vpre baseline -vpre veryslow</code>
+
+Il ne reste plus qu'à dire au codec la qualité ou le débit que l'on attend pour la vidéo finale.
+
+== codec libvpx ==
+
+Le codec libvpx (c'est-à-dire VP8) propose des options par défaut de très mauvaise qualité...
+Il va falloir préciser quelques options non obligatoires, mais grandement conseillées.
+
+<code>-rc_lookahead 16 -keyint_min 0 -g 360 -skip_threshold 0 -level 116</code>
+  * **-rc_lookahead 16** permet au codec de regarder les prochaines images pour adapter ces paramètres en conséquence.
+  * **-g 360** demande au codec de créer une image de référence toutes les 360 images.
+  * **-level 116** permet de passer en mode "lent". Cela active des améliorations graphiques mais augmente le temps d'encodage. Vous pouvez la modifier en 216 pour gagner un peu de temps ou 214, mais vous perdrez en qualité.
+
+=== Encodage à bitrate constant - CBR ===
+
+Faire une vidéo en bitrate (débit) constant revient à rendre les scènes en mouvement moins belles que les scènes statiques, ce type d'encodage n'est pas conseillé !
+
+Pour choisir un bitrate, il suffit de le préciser après l'instruction :
+<code>-b</code>
+
+Le bitrate peut être précisé en bits/s ou en kbits/s :
+<code>-b 2700000</code>
+<code>-b 2700k</code>
+
+=== Encodage à qualité constante ===
+
+Faire une qualité constante est très simple, il suffit de choisir un quantiser identique pour la qualité maximale et minimale de la vidéo avec les instructions suivantes :
+<code>-qmin 20 -qmax 20</code>
+
+Voilà, c'est tout !
+Vous pouvez changer le nombre par un plus élevé (moins bonne qualité) ou plus bas (meilleure qualité)
+
+<note idée>Vous pouvez mixer ces paramètres avec un bitrate pour créer un bitrate constant avec des limites de qualité minimum et maximum.</note>
+
+== avec libx264 ==
+
+Pour un encodage en h264, il est conseillé d'utiliser l'option **-crf** (non décrite dans le manuel) plutôt que "-qmin" et "-qmax".
+<code>-crf 20</code>
+
+=== Encodage 2-pass ===
+
+L'encodage double passe, multi-passes, 2pass ou autres, est une technique d'encodage qui mêle les deux techniques d'encodage précédentes.
+
+Cette technique permet d'encoder une première fois à bitrate constant pour faire un index des moments qui vont être encodés avec une qualité exécrable.
+Ensuite lors du deuxième encodage, la qualité sera équilibrée en baissant la qualité globale des meilleures scènes pour augmenter la qualité des plus mauvaises, ce qui revient quasiment au même que d'avoir une qualité constante.
+Au final on aura donc une vidéo plus uniforme niveau qualité, tout en ayant le contrôle via un bitrate.
+
+Pour lancer un encodage 2 passes il faut préciser beaucoup de paramètres et lancer l'encodage deux fois.
+
+<code>-b 2700000 -qmin 1 -qmax 31 -minrate 0 -maxrate 9000000 -pass 1 -passlogfile pass1.fpf</code>
+
+Les paramètres sont simples : on choisit le bitrate moyen voulu, le bitrate minimum (-minrate) que l'on peut atteindre (pourquoi pas 0), et le bitrate maximum (-maxrate) (là aussi, si la vidéo n'a rien à voir avec le streaming, mettez le plus haut possible).
+Il faut aussi préciser un quantiser minimum et maximum ! Pourquoi ? Parce que certains codecs comme le VP8 ont des bugs si on ne le fait pas...
+
+Certains codecs ont leur maxi à 31 d'autres plus haut. Comme le VP8 et le x264 qui vont jusqu'à 51.
+
+Ensuite, -pass 1 signifie que nous sommes en train d'effectuer la première passe. et passlogfile est le fichier "pass" que l'on écrira temporairement.
+
+Pour la seconde passe, utilisez les mêmes paramètres à une exception ! (vous pouvez utiliser la flèche de haut pour retourner dans l'historique du terminal)
+
+La seule chose à modifier est le paramètre **-pass 1** à changer en **-pass 2**.
+
+Fini !
+
+<note>De par mon expérience, si vous utilisez un encodage en h264 et que vous visez une certaine qualité d'image et non une taille de fichier, utilisez l'option **-crf** sans spécifier de bitrate.
+
+Si, en revanche, vous voulez une taille de fichier final bien précise, utilisez un encodage en 2 passes.
+
+Voir : [[encodage_dvd_mkv|Encodage DVD → MKV]]
+</note>
+
+==== Transformer la vidéo ====
+
+Vous pouvez transformer la vidéo avec ffmpeg, modifier la résolution, changer l'aspect ratio (4/3, 16/9), couper autour de l'image, etc.
+
+Bon pour la découpe... c'est clair c'est plus simple avec un outil graphique comme [[Handbrake]], mais ne sous estimez pas la puissance de la ligne de commande hein ! :-D
+
+=== Changer la résolution ===
+
+Vous pouvez changer la résolution avec **-s** et en spécifiant la résolution.
+Vous pouvez spécifier manuellement (1280x720) ou automatiquement (hd720)
+
+Voici la liste des abréviations :
+
+| sqcif  | qcif    | cif     | 4cif    | 16cif     |
+| 128x96 | 176x144 | 352x288 | 704x576 | 1408x1152 |
+
+
+| qqvga   | qvga    | vga     | svga    | wvga    | 
+| 160x120 | 320x240 | 640x480 | 800x600 | 852x480 | 
+
+| xga      | uxga      | sxga      | wxga     | wsxga     | wuxga     | qxga      | woxga     | qsxga     | wqsxga    | wquxga    |
+| 1024x768 | 1600x1200 | 1280x1024 | 1366x768 | 1600x1024 | 1920x1200 | 2048x1536 | 2560x1600 | 2560x2048 | 3200x2048 | 3840x2400 |
+| hsxga     | whsxga    | whuxga |
+| 5120x4096 | 6400x4096 | 7680x4800 |
+
+| cga     | ega     |
+| 320x200 | 640x350 |
+
+| hd480   | hd720    | hd1080    |
+| 852x480 | 1280x720 | 1920x1080 |
+
+=== Changer le nombre d'images par seconde ===
+
+Le framerate, ou FPS se change comme ceci :
+
+<code>-r FPS</code>
+
+Par exemple :
+<code>-r 25</code>
+
+=== Changer l'aspect ratio ===
+
+<code>-aspect aspect</code>
+Aspect étant 4:3, 16:9 ou 1.3333, 1.7777. Vous pouvez faire des aspects spéciaux si vous le voulez.
+
+==== Faire des essais de conversion avec FFmpeg sur une portion de fichier ====
+
+La commande ci dessous permet de faire un essai d'encodage :
+<code>ffmpeg -ss 80 -t 60 -i videoInput.mpg -s 240x180 -b 380k -ab 64k videoOutput.flv</code>
+
+Cette commande convertit la portion commençant à t<sub>0</sub> = 80 secondes (option **-ss**) et s'étendant sur une durée de 60 secondes (option **-t**) du fichier d'entrée "videoInput.mpg" codé en MPEG.
+Le fichier produit sera encodé en Flash, la taille d'image sera de 240×180, le débit engendré par son affichage de 380 kbps et le débit audio de 64 kbps.
+
+Exemple pour sortir un fichier AVI en qualité moyenne, à partir d'un fichier OGG Theora :
+<code>ffmpeg -ss 4518 -t 1100 -b 768k -ab 128k -i videoInput.ogv -f avi videoOutput.avi</code>
+
+==== Exemples de conversions ====
+
+=== Convertir un fichier video pour les réseaux sociaux et messageries (Signal, WhatsApp, Viber, ...) ===
+Cette conversion est utile pour réduire de façon drastique la taille des fichiers en conservant une qualité suffisante pour le regarder sur un téléphone.
+<code>ffmpeg -i FichierSource.MOV -vcodec libx264 FichierResultat.mp4</code>
+Si la source est en HD, vous pouvez réduire un peu la définition pour réduire de façon importante la taille du fichier :
+<code>ffmpeg -i FichierSourceHD.MOV -s wvga -vcodec libx264 FichierResultat.mp4</code>
+
+=== Convertir une vidéo en WebM (VP8+Vorbis) en deux passes ===
+
+Ces deux commandes permettent d'encoder en deux passes un fichier WebM.
+Pour que cela fonctionne vous devez avoir minimum FFMpeg 0.6 !
+
+<code>avconv -i 'fichier source' -threads 0 -vcodec libvpx -b 1500k -minrate 0 -maxrate 9000k -rc_lookahead 16 -keyint_min 0 -g 360 -skip_threshold 0 -level 116 -qmin 1 -qmax 51 -an  -pass 1 -passlogfile pass1.fpf pass1.webm
+avconv -i 'fichier source' -threads 0 -vcodec libvpx -b 1500k -minrate 0 -maxrate 9000k -rc_lookahead 16 -keyint_min 0 -g 360 -skip_threshold 0 -level 116 -qmin 1 -qmax 51 -acodec libvorbis -ab 192k -pass 2 -passlogfile pass1.fpf "fichier final.webm"</code>
+
+===Convertir un fichier webm en .mp4===
+Le format [[webm|webm]] est largement utilisé sur internet, en particulier pour youtube. Vous pouvez télécharger ces vidéos de différentes façons, par exemple via [[youtube-dl|youtube-dl]]. Pour voir ces vidéos sur une télévision, il vous faudra sans doute modifier le format (il n'est généralement pas reconnu). Pour passer la vidéo webm en .mp4 :
+
+<code>ffmpeg -i ma-video.webm ma-video.mp4</code>
+La qualité de sortie est alors en qualité moyenne.
+
+Vous pouvez spécifier une autre qualité de sortie avec l'option **-crf**. "0" donne la meilleur qualité (et le plus gros fichier), "51" donne la moins bonne qualité (et le plus petit fichier). Pour une qualité maximum (mais le fichier peut-être 10 fois plus gros que le webm initial !) :
+
+<code>ffmpeg -i ma-video.webm -crf 0 ma-video.mp4</code>
+
+=== Convertir une vidéo en x264 en qualité constante ===
+
+Cette commande permet d'encoder un fichier vidéo en H.264 en qualité constante :
+<code>ffmpeg -threads 0 -i "fichier d'origine" -f matroska -vcodec libx264 -vpre normal -crf 20 -acodec libvorbis -ab 192k -ar 44100 -ac 2 "fichier final.mkv"</code>
+
+=== Convertir le format FLV en AVI ===
+
+Cette conversion est utile si vous téléchargez des vidéos en streaming (YouTube, Google Video, framatube.org !-), etc.).
+<code>ffmpeg -i nom_du_fichier.flv -f avi nom_du_fichier.avi</code>
+
+Si vous voulez télécharger une vidéo depuis Youtube ou d'autres sites, voir aussi : [[:telecharger_streaming]]
+
+=== Convertir le format AVI en MPEG ===
+
+Un exemple de commande, et d'options, pour faire un DVD (donc un format MPEG) depuis un fichier ''avi'' : 
+<code>ffmpeg -i ma_video.avi -target pal-dvd -aspect 16:9 -qscale 0 mon_dvd_video.mpg</code>
+Où :
+  * **-i ma_video.avi** est le fichier départ ;
+  * **-target pal-dvd** le format de sortie ;
+  * **-fs 2000000000** la taille maximale du fichier de sortie, en bits (ici 2 Gbit) ;
+  * **-aspect 16:9** le ratio widescreen (avec les franges en haut et en bas).
+
+=== Convertir le format AVI en DV ===
+
+Cette conversion est utile pour faire du montage vidéo, dans [[Kino]] par exemple.
+<code>ffmpeg -i video.avi -target pal-dv video.dv</code>
+
+Attention, ici le chemin n'est pas précisé. Le fichier doit se trouver dans votre dossier personnel pour que cela fonctionne.
+
+=== Convertir un grand nombre de fichiers Vidéo vers le format MP3===
+
+Ce script permet d'automatiser la conversion de vidéos de plusieurs formats ( Mpeg4, Avi, Flv etc... ) vers le format MP3.
+Plusieurs formats de vidéos peuvent se trouver dans le même dossier au moment de la conversion. 
+
+<code> #!/bin/bash
+#Fichier "Conversion Script " 
+
+echo "Création de la liste de fichiers..."
+cd CHEMIN_VERS_LES_VIDEOS ( par exemple ~/Downloads ou ~/Videos )
+ls *.* > to_convert
+echo "Préparation de ffmpeg..."
+while read line  
+do
+		echo "Traitement de $line programmé"
+done < to_convert
+#On s'assure que chaque vidéo a été détectée
+while read line
+do
+	sed -i -e "s/(//g" to_convert
+	sed -i -e "s/)//g" to_convert 
+	sed -i -e "s/\[//g" to_convert 
+	sed -i -e "s/\]//g" to_convert 
+	sed -i -e "s/\ /\./g" to_convert
+done < to_convert
+#Ceci permet de contourner le problème posé par d'éventuels caractères spéciaux dans le titre de la vidéo traitée ( tels que "[","]","(",")" ou " ")
+echo "_______________________________________________"
+while read line
+do
+	rename=`echo ${line%%.*}`
+	original=`ls CHEMIN_VERS_LES_VIDEOS| grep $rename`
+	mv CHEMIN_VERS_LES_VIDEOS/"$original" CHEMIN_VERS_LES_VIDEOS/"$line"
+	echo "$line loaded"
+done < to_convert
+echo "______________________________________________"
+echo "La conversion a démarré : "
+while read line 
+do
+	sdot=`echo ${line%.*}`
+	echo "CONVERSION EN COURS :[ $line ]"
+	ffmpeg -ab 192k -i `echo "$line"` `echo "$sdot.mp3"` 1>.ffmpeg_last_log 2>/dev/null
+        #Le fichier log de la conversion seront stockés dans le dossier courant sous le nom ".ffmpeg_last_log"
+	mv $line /RÉPERTOIRE OU SERONT STOCKÉES LES VIDÉOS SI ON SOUHAITE LES CONSERVER ( COMMENTER POUR ENLEVER )
+	mv "$sdot.mp3" /RÉPERTOIRE OU SERA DÉPLACÉ LE FICHIER *.MP3 GÉNÉRÉ ( COMMENTER POUR ENLEVER )
+	echo "→ OK !"
+done < to_convert
+rm to_convert
+</code>
+
+=== Convertir tous les fichiers Windows Media Audio ( WMA ) en mp3  ===
+
+Dans un dossier contenant des fichiers au format wma.
+La boucle for lance la conversion des fichiers.
+Il suffira de supprimer les fichier wma une fois la conversion terminée.
+
+<code>for i in *.wma; do ffmpeg -i "$i" -ab 256k "${i%wma}.mp3"; done</code>
+
+=== Convertir le format AVI en MP4 (PSP) ===
+
+Cette conversion est utile pour lire vos vidéos sur une console portable [[PSP]]. En ligne de commande, tapez :
+
+<code>ffmpeg -i video.avi -f psp -r 29.97 -b 768k -ar 24000 -ab 64k -s 480x160 m4v00001.mp4 </code>
+
+Attention, si vous générez plusieurs fichiers vidéos, ceux-ci doivent avoir un nommage particulier pour pouvoir être lus sur votre console (m4v00001.mp4, m4v00002.mp4, m4v00003.mp4, et ainsi de suite).
+
+Si vous encodez une vidéo qui est au format 4/3, choisissez une taille de 320×240 pour conserver les proportions.
+
+Pour avoir une bonne qualité avec une résolution 480×272, avec un débit de 768 kbps, //firmware// conseillé 3.71 ou supérieur :
+<code>ffmpeg -i video_en_entrée.avi -r 29.97 -vcodec h264 -s 640x480 -aspect 16:9 -flags +loop -cmp +chrom</code>
+
+=== Convertir un mkv en gif animé ===
+
+<code>ffmpeg -i input.mkv -pix_fmt rgb24 -r 10 -s 320x240 output.gif</code>
+
+Résumé des options
+
+-pix_fmt rgb24 pour 'encoder' le gif.
+
+-r 10 pour avoir 10 images par seconde.
+
+-s 320x240 pour avoir une résolution de sortie de 320x240.
+
+Vous pouvez également choisir de découper une portion de vidéo avec les options -ss et -t.
+Par exemple :
+<code>ffmpeg -i input.mkv -ss 00:01:00.00 -pix_fmt rgb24 -r 10 -s 320x240 -t 00:00:10.00 output.gif</code>
+Permet de convertir 10 secondes de vidéo à partir de 1 minute.
+
+=== Réaliser une rotation d'une vidéo ===
+Une vidéo pourtant prise en "paysage" se visualisait en mode "portrait". Pour réaliser la rotation, on utilise l'option //filtergraph// (-vf) avec //transpose//.\\
+Le chiffre passé avec transpose correspond à:
+^chiffre ^ filtrage appliqué ^ désignation en anglais ^
+|0|-90° (sens anti-horaire) puis symétrie verticale (par défaut)|90CounterClockwise and Vertical Flip (default)|
+|1|90° (sens horaire) |90Clockwise|
+|2|-90° (sens anti-horaire)|90CounterCLockwise|
+|3|90° (sens horaire) puis symétrie verticale|90Clockwise and Vertical Flip (default)|
+Voici la  commande pour -90°:
+<code>ffmpeg -i vidéo_originale.mp4 -vf "transpose=2" vidéo_correctement_orienté.mp4</code>
+du fait du  codec audio utilisé, //aac//, une erreur est survenu en précisant d'ajouter //-strict -2//, ce qui donne:
+<code>ffmpeg -i vidéo_originale.mp4 -strict -2 -vf "transpose=2" vidéo_correctement_orienté.mp4</code>
+==== Effectuer une capture vidéo (screencast) de l'écran ====
+
+Après avoir exécuté cette commande, appuyez sur q pour arrêter la capture.
+
+<code>ffmpeg -f x11grab -s 1920x1080 -r 25 -i :0.0 screencast.mp4</code>
+//-f// force la capture de l'écran (//x11grab//)\\
+//-s// définit la [[wpfr>Format_d'affichage_vidéo|taille de la capture]], doit être inférieur ou égale à la taille réelle d'affichage!\\
+//-r// définit le nombre d'images par seconde : 12.5, 25, 30 sont les plus courants, pour un //screencast// de tutoriel, on peut descendre à 5, mais du fait de la compression, l'économie sur la taille mémoire n'est pas proportionnel.\\
+//-i:0:0// correspond au nombre du serveur X11, [[http://ffmpeg.org/ffmpeg.html#X11-grabbing|peut permettre de définir un offset]] auquel cas, il faut réduire la taille d'autant avec l'option -s\\
+<note warning>Si une autre session est active (ou l'a été) il se peut que ça ne fonctionne pas avec -i:0:0, en effet, le premier nombre correspond au numéro de session qui s'affiche entre parenthèse dans ce que retourne la commande //who// et qui correspond à l'ordre d'ouverture de session (:0 pour le premier connecté, :1 pour le deuxième …). Si c'est le cas, vous pouvez utiliser la commande ci-dessous qui ajuste le numéro de session:
+<code>ffmpeg -f x11grab -s 1920x1080 -r 25 -i $(who | awk '{print substr($5,2,2)}').0 screencast.mp4</code></note>
+Pour une capture d'écran Hi-Fi, **son et vidéo** sans perte, avec **Pulse Audio** comme serveur de son :
+<code>ffmpeg -f alsa -ac 2 -i pulse -f x11grab -r 25 -s 1024x768 -i :0.0 -acodec flac -vcodec libx264 -preset ultrafast -qn 0 output.mkv
+</code>
+
+==== Pour créer une vidéo à partir de photos ====
+À partir des images //img001.png, img002.png, img003.png//:
+<code>
+ffmpeg -framerate 24 -i img%03d.png output.mp4
+</code>
+[[https://trac.ffmpeg.org/wiki/Slideshow|Explication pour créer une vidéo à partir de photo (animation) (en)]]
+
+==== Découper une vidéo ====
+Découper la vidéo entre la 24ème minute et la 50ème plus 14 secondes (-c:v copy -c:a copy permettent de conserver le même encodeur vidéo et audio)
+<code>
+ffmpeg -i fichieradecouper.avi -ss 00:24:00.00 -to 00:50:14.00 -c:v copy -c:a copy  extrait.avi
+</code>
+
+Extraire une séquence de 12 mn 18.25 secondes à partir de la 18ème minute
+<code>
+ffmpeg -i fichieradecouper.avi -ss 00:18:00.00 -t 00:12:18.25 -c:v copy -c:a copy  extrait.avi
+</code>
+
+<note tip>Insérer les balises de temps -ss, -to et -t avant -i permet d'éviter de ré-encoder les parties du fichier qui ne sont pas utilisées :
+<code>
+ffmpeg -ss 00:8:00.00 -t 00:12:18.25 -i fichieradecouper.avi -c:v copy -c:a copy  extrait.avi
+</code>
+</note>
+==== Pivoter une vidéo ====
+Utile par exemple pour redresser une vidéo réalisée avec un téléphone mobile tourné dans le mauvais sens
+<code>
+ffmpeg -i VideoInitiale.MOV -vf "transpose=1" VideoRedressee.MOV
+</code>
+L'option transpose supporte plusieurs paramètres selon la transformation à réaliser :
+| Option | Effet |
+| 0 | Rotation à 90° sens des aiguilles d'une montre et miroir vertical (défaut) |
+| 1 | Rotation à 90° sens des aiguilles d'une montre |
+| 2 | Rotation à 90° sens inverse des aiguilles d'une montre |
+| 3 | Rotation à 90° sens inverse des aiguilles d'une montre et miroir vertical (défaut) |
+
+==== Concaténer plusieurs vidéos ====
+Abouter (enfiler plusieurs vidéos successivement en une seule plus longue) plusieurs vidéos n'est pas l'opération la plus simple. Celle-ci dépend de la nature des fichiers à concaténer.
+=== Concaténation simple ===
+Quelques rares formats ("file level") acceptent la concaténation simple : MPEG-1, MPEG-2 PS, DV. Dans ce cas l'opération reste assez simple à réaliser.
+<code>
+cat fichier1.mpg fichier2.mpg > Fichier_concatene.mpg
+</code>
+ou
+<code>
+ffmpeg -i concat:"fichier1.mpg|fichier2.mpg" -c copy Fichier_concatene.mpg
+</code>
+<note tip>Si la qualité des fichiers s'y prête, il peut être plus simple de convertir les fichiers à concaténer en mpg, de réaliser la concaténation en mpg puis de ré-encoder le fichier concaténé dans votre format de prédilection.</note>
+=== Avec concat ===
+Le filtre concat opère sur des segments synchrones de flux vidéo et audio. Tous les segments doivent avoir le même nombre de flux, qui sera également celui du fichier concaténé.
+Options du filtre :
+| Option | Usage | Valeur par défaut |
+| n | Nombre de segments à concaténer | 2 |
+| v | Nombre de flux vidéo (identique dans les sources et la destination) | 1 |
+| a | Nombre de flux audio (identique dans les sources et la destination) | 0 |
+| unsafe | Prévient l'échec de l'opération si les sources ne possèdent pas le même nombre de flux | désactivé |
+
+Concaténer une ouverture, un milieu et une fin avec 2 pistes son
+<code>
+ffmpeg -i ouverture.avi -i milieu.avi -i fin.avi -filter_complex '[0:0] [0:1] [0:2] [1:0] [1:1] [1:2] [2:0] [2:1] [2:2] concat=n=3:v=1:a=2 [v] [a1] [a2]' -map '[v]' -map '[a1]' -map '[a2]' fichierfinal.avi
+</code>
+
+=== Autres cas et cas complexes ===
+Voir la documentation (en anglais), notamment [[https://ffmpeg.org/faq.html#How-can-I-concatenate-video-files_003f|3.14]], [[https://ffmpeg.org/ffmpeg-filters.html#concat|15.8]] et [[https://ffmpeg.org/ffmpeg-formats.html#concat|3.4]]
+==== Méta-données ====
+On peut visualiser quelques méta-données en exécutant :
+<code bash>ffmpeg -i ma_vidéo.AVI</code>
+qui va nous retourner l'appareil qui a créé la vidéo, la date de création, la durée, et des infos sur l'encodage de la vidéo et de la bande son.\\
+Pour les méta-données, on peut aussi utiliser [[:exiftool]]
+
+==== Pour consulter le manuel de FFmpeg ====
+
+<code>man ffmpeg</code>
+
+Pour une synthèse des options
+<code>ffmpeg -help long</code>
+
+===== JDownloader 2 Beta =====
+
+FFmpeg is missing ! Pour résoudre ce problème, notamment avec le site Youtube, il faut:
+  * Installer FFmpeg avec la Logithèque 
+  * Ouvrir JD et aller dans les Préférences
+  * Puis dans les Paramètres avancés
+  * Trouver la clef FFmpegSetup: Binary Path
+  * A la place de 'null', mettre /usr/bin/ffmpeg
+  * Arrêter les téléchargements (bouton Stop), puis redémarrer les (bouton Lecture)
+  * Enjoy !
+
+
+===== Pour en savoir plus sur Internet =====
+
+  * ''**(en)**'' [[http://ffmpeg.org/|Site officiel]] 
+  * ''**(fr)**'' [[http://www.jcartier.net/spip.php?article36|Exemples d'usages]]
+  * ''**(fr)**'' [[http://www.korben.info/ffmpeg-pour-les-nuls.html|FFMPEG pour les nuls]]
+
+ ----
+
+//Contributeurs principaux : loup_74, ElGeneralMidi, [[utilisateurs:Wido]], [[utilisateurs:laurentb|Laurent Bellegarde]], Isamaya (pour l'extraction des flux audio et vidéo).//

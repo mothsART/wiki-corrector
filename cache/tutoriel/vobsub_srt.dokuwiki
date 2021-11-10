@@ -1,0 +1,139 @@
+
+{{tag>tutoriel vidéo sous-titrage}}
+
+----
+
+====== Conversion de sous-titres VobSub en SRT ======
+
+Ce tutoriel décrit une façon de convertir des sous-titres **VobSub** en sous-titres **SRT**.
+
+**VobSub** est le format des sous-titres sur DVD. Chaque sous-titre est stocké sous forme d'image. Ils ne sont pas toujours bien lus par les lecteurs multimédia, lorsqu'il sont intégrés à des fichiers vidéo ([[:matroska|mkv]] par exemple).
+
+Les sous-titres **SRT** (appelés aussi SubRip) sont au format texte, facilement éditables, peuvent être intégrés à des fichiers vidéos et sont aisément lus par les lecteurs multimédias.
+
+Quelques logiciels permettent de réaliser cette opération de façon intégrée, mais présentent quelques désavantages :
+
+  * [[:avidemux|Avidemux]] possède une fonction "//Vobsub -> srt//", mais qui oblige à valider pas-à-pas la reconnaissance de caractères et ne sais pas interpréter les sous-titres sur deux lignes. //Vu sur le forum// [[http://forum.ubuntu-fr.org/viewtopic.php?id=140926|Transformer un sous-titre de sub en srt]]
+
+  * [[:ogmrip|OGMRip]] peut réaliser cette opération en rippant un DVD, mais cela oblige à convertir toute la vidéo en même temps.
+
+La méthode ci-dessous utilise différents logiciels, combinant interface graphique, ligne de commande et script Nautilus, mais reste simple malgré cela.
+
+
+===== Pré-requis =====
+
+==== Logiciels à installer ====
+
+Les logiciels suivants doivent être installés :
+  * [[:avidemux|Avidemux]] ou [[:mkv_extractor_gui_v4|MKV-Extractor-GUI]]
+  * [[:ogmrip|OGMRip]] qui fournit subp2tiff et subptools
+  * [[:tesseract-ocr|Tesseract]] : installer les paquets [[apt>tesseract-ocr]] [[apt>tesseract-ocr-fra]] (pour la reconnaissance de caractères)
+  * [[:gnome-subtitles|Gnome Subtitles]]
+
+==== Script Nautilus ====
+
+Le [[:nautilus_scripts|script Nautilus]] suivant doit être installé :
+
+<file bash OCR_Tesseract>
+#!/bin/bash
+
+IFS='
+'
+printf %s "$NAUTILUS_SCRIPT_SELECTED_FILE_PATHS" |
+while read -r arg
+do
+  tesseract "$arg" "$arg" -l fra -psm 6
+done
+</file>
+
+Sous XFCE / Xubuntu, vous pouvez créer le script ci-dessous, et configurer une action personnalisée dans Thunar avec la commande : ''/chemin/OCR_Tesseract.sh %F''
+
+<file bash OCR_Tesseract.sh>
+#!/bin/bash
+
+for arg in $@
+do
+  tesseract "$arg" "$arg" -l fra -psm 6
+done
+</file>
+
+Si vous n'arrivez pas à installer le script dans nautilus, vous pouvez placer et lancer ce script à l'intérieur du dossier où se trouvent les fichiers :
+<file bash Tesseract.sh>
+NPROC=$(nproc --all| awk '{ print $1 - 1 }')        # Set number of processor
+for fichier in *.tif
+do
+	(
+	echo "$fichier"
+	tesseract  "$fichier" "$fichier" -l fra -psm 6 &>/dev/null
+	) &
+	if [[ $(jobs -r -p | wc -l) -gt $NPROC ]]; then
+		wait -n
+	fi
+done
+wait
+</file>
+
+===== Les étapes =====
+
+==== Obtenir le sous-titrage VobSub ====
+
+Un sous-titrage VobSub est composé de 2 fichiers : ''.idx'' + ''.sub''.
+
+Pour obtenir ces 2 fichiers, il existe [[:sous-titrage#extraction_de_sous-titres|plusieurs méthodes]] selon la source, par exemple :
+  * À partir d'un DVD : **Avidemux** possède un outil pour extraire les sous-titres (menu Outils > VOB%% -> %%VobSub).
+  * À partir d'un fichier MKV : **MKV-Extractor-GUI**
+
+==== Extraire les images des sous-titres ====
+
+Pour extraire les images des sous-titres au format TIFF, on utilise la commande suivante :
+
+<code>
+subp2tiff --sid=0 -n <nom du vobsub>
+</code>
+
+__Paramètres__ :
+  * Le numéro après ''--sid='' est l'ID du sous-titre. Cet ID peut être identifié selon la méthode décrite [[:encodage_dvd_mkv#extraire_en_vob|ici]], ou par tâtonnement en extrayant successivement chaque ID et en visualisant les fichiers image pour vérifier que ça correspond à ce qu'on veut.
+  * ''<nom du vobsub>'' est le nom du fichier de sous-titres, sans les extensions ''.idx'' et ''.sub''.
+
+Cette commande doit être lancée dans le dossier où sont situés ces 2 fichiers.
+
+Cela va générer toute une série de fichiers ''.tif'' : chacune de ces images est un sous-titre.
+
+Attention, cela peut faire beaucoup de fichiers : si votre vidéo a 1000 sous-titres, il y aura 1000 fichiers ''.tif''.
+
+Un fichier ''.xml'' est également généré, qui contient l'indexation des sous-titres au format XML.
+
+==== Convertir les images des sous-titres en texte ====
+
+Sélectionner tous les fichiers ''.tif'' et lancer le script Nautilus "OCR_Tesseract".
+
+Ou
+
+Vous pouvez aussi lancer le script "Tesseract.sh" dans le dossier où se trouvent les fichiers.
+
+Cela va générer un fichier ''.txt'' pour chaque fichier ''.tif'', contenant le texte du sous-titre.
+
+==== Générer le fichier de sous-titres SRT ====
+
+Lancer la commande suivante, dans le dossier où sont situés les fichiers :
+<code>
+subptools -s -w -t srt -i nom.xml -o nom.srt
+</code>
+
+__Paramètres__ :
+  * ''nom.xml'' : le nom du fichier ''.xml'' (voir étape 2)
+  * ''nom.srt'' : le nom du fichier de sous-titres ''.srt'' que l'on veut créer.
+
+Un fichier de sous-titres ''.srt'' est généré.
+
+==== Correction orthographique ====
+
+Ouvrir le fichier ''.srt'' avec **[[:gedit|Gedit]]** ou **LibreOffice** et utiliser le correcteur orthographique, ainsi que la fonction "Remplacer" pour corriger rapidement les anomalies dues à la reconnaissance de caractères.
+
+==== Relecture, ajustement et recalage ====
+
+Utiliser **[[:gnome-subtitles|Gnome Subtitles]]**.
+
+----
+
+//Contributeurs principaux : [[:utilisateurs:beguam]]//

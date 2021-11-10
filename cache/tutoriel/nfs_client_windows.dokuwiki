@@ -1,0 +1,135 @@
+
+{{tag>tutoriel nfs partage réseau}}
+
+----
+
+====== Comment configurer un PC client Windows pour accéder à un partage NFS ======
+
+Imaginons le cas où vous disposez d'un réseau de PC en grande partie GNU/Linux, et que vous voulez donner accès à des fichiers partagés via [[:NFS]] à un pauvre petit ordi que vous auriez laissé tourner sous Windows™ ? Pas possible ? Si !
+
+Pour cela, il va falloir suivre scrupuleusement l'astuce, en effet, même si Microsoft™ fournit un outil permettant d'accéder ou de partager en [[:NFS]], cet outil est capricieux.
+
+===== Pré-requis =====
+
+  * Un PC sous Windows™ (de 2000 jusqu'à Vista (professionnel et ultimate seulement))
+  * Ou un PC sous Seven 32 bits (peut être aussi 64 bits, je ne peux pas vérifier)
+  * Un réseau local sur lequel existent des partages [[:NFS]]
+  * Et le Windows **S**ervices **F**or **U**nix (ci-dessous nommé SFU)
+
+
+===== Obtention de Windows Services for Unix =====
+
+==== Windows Vista et Seven ====
+
+<del>Les Windows Services For Unix sont normalement intégrés</del>
+Les services pour Unix ne sont disponibles que dans les éditions Intégrales (Ultimate) et Entreprises (Corporate). Il faut les installer via le panneau de configuration -> ajout/suppression de programmes -> composants Windows. (Sous Seven sous le nom de Services pour NFS)
+
+==== Windows XP ou si vous ne le trouvez pas dans les Composants ====
+
+Cela se fait directement sur le site de Microsoft : [[http://www.microsoft.com/downloads/details.aspx?FamilyID=896c9688-601b-44f1-81a4-02878ff11778&DisplayLang=en|suivez le guide.]]
+Il ne faut pas avoir peur, le SFU fait 217 Mo, c'est parfaitement normal.
+
+Ceci fait, exécutez **''SFUxxxx_LN.exe''** (où //xxxx// représente sa version((version 3.5SEL à l'heure où j'écris)) ; et //LN// la langue choisie, pour notre cas EN fait l'affaire (jap ne vous intéressera pas je pense... ).
+L'exécutable est une archive auto-extractible, qui va donc vous demander où se décompresser, un emplacement facile d'accès comme le bureau sera le bienvenu.
+<note tip>Lors de l'extraction, SFU ne crée pas de sous-dossier pour s'y décompresser, pensez donc à le décompresser dans un sous-dossier du bureau.</note>
+
+Une fois décompressé, lancez le **''setup.exe''** comme pour toute installation sur Windows. Faites « //Next// », et acceptez le EULA (CLUF en français). Choisissez « //custom// », et gardez dans les cas NFS (et toutes ses sous-fonctionnalités) et « //Authentication Tools for NFS// » (idem). Le reste est à installer à votre guise.
+
+Pour la suite de l'installation, faites « //next// » sans vous soucier de quoi que ce soit !
+
+<note important> Pour Windows XP Home Édition, l'installation nécessite de corriger l'installeur en hexadécimal. Faites une sauvegarde du fichier ''SfuSetup.msi'', puis ouvrez-le avec un [[wpfr>Éditeur_hexadécimal|éditeur hexadécimal]]. Cherchez la chaîne : <file>NOT (VersionNT = 501 AND MsiNTSuitePersonal)</file> et remplacez **''501''** par **''510''**.
+
+
+
+Autre solution qui permet de se passer d'éditeur :
+
+cat SfuSetup.msi | sed 's/VersionNT \= 501 AND MsiNTSuitePersonal/VersionNT \= 510 AND MsiNTSuitePersonal/' > SfuSetup_xphome.msi
+
+</note>
+
+
+===== Configuration de Windows Services for Unix =====
+
+==== Windows Seven ====
+
+<del>Rien à faire, tout devrait marcher.</del>
+
+Il faut malheureusement batailler. Windows 7 n'intègre pas le User Name Mapping contrairement à Windows XP. De fait, il est impossible de monter un répertoire NFS sans un windows capable de faire du routage de nom d'utilisateur. (Win XP ou 2008 Serveur)
+
+<del>Vous pouvez trouver une aide en ligne sous Windows dans votre Panneau de configuration dans les "Administrative Tools" (désolé j'ai accès qu'à une version américaine de Windows en ce moment). Vous trouverez une aide pour régler certains problèmes que vous pourrez rencontrer.</del>
+
+==== Windows XP et Vista ====
+
+Maintenant que c'est installé, il faut le configurer. Rien de bien compliqué, quand on sait ce qu'il faut faire.
+
+Munissez-vous d'une copie des fichiers **''/etc/group''** et **''/etc/passwd''** d'un de vos postes GNU/linux, et transférez-les vers le disque dur de votre poste Windows, peu importe l'emplacement, tant que vous puissiez les retrouver.
+
+Pour l'exemple, nous les copions dans le répertoire d'installation de SFU, (par défaut : "''C:\SFU\''" ).
+
+Ceci fait, direction //**menu démarrer ⇒ programmes** (ou tous les programmes selon la version) **⇒ Windows Services for Unix ⇒ Services for Unix Administration**//.
+
+Le programme se lance. Une fenêtre scindée en 2 parties apparaît.
+(Nous ferons référence ainsi à la partie gauche quand nous dirons //Gauche//, et la partie droite quand nous dirons //Droite//).
+
+  * A gauche, cliquez sur « //Services for Unix (Local)// », puis à droite sur « //Settings// ». Dans l'invité de texte vérifiez que soit écrit **''localhost''**, puis cliquez sur « //Apply// » (en haut).
+
+  * A gauche, cliquez sur « //User Name Mapping// ». A droite, préférez « //Use Password and Group files// », et renseignez les champs "''path''" pour les fichiers //password// et //group//.
+
+Dans l'exemple, il s'agit des fichiers **''passwrd''** et **''group''** copiés sur le disque, donc nous renseignons ainsi : "''C:\SFU\passwd''" et "''C:\SFU\group''" .
+
+Ceci fait, cliquez « //Apply// » puis « //Reload// ».
+
+  * A droite toujours, cliquez sur « //Maps// ».
+
+Le but est de faire correspondre un utilisateur Windows à un utilisateur Linux, avec plus ou moins de droits d'accès. Évitez de faire correspondre les comptes administrateurs de Windows ou de Linux avec d'autre comptes, ceci pour des raisons de sécurité, bien évidemment.
+
+Cliquez sur « //Show User Maps// ». Puis successivement « //list Windows User// » et « //list Unix Users// ». Si tout se passe bien, vous avez normalement les 2 listes, une correspondant à Windows, l'autre à GNU/linux.
+
+Si (comme moi), vous avez une erreur disant que windows ne peut contacter le serveur "User Name Mapping", c'est qu'il n'a pas été activé à l'installation. Il faut aller alelr dans les services pour activée et démarrer le service "User Name Mapping" (cf http://www.suacommunity.com/forum/fb.ashx?m=7086).
+
+Choisissez votre nom d'utilisateur Windows, et l'équivalent qui correspond le mieux pour Linux (le compte d'un autre utilisateur par exemple), puis cliquez sur « //Add// ». Vous avez //mappé// un utilisateur et vous pouvez le vérifier dans « //Mapped Users// » juste en dessous.
+Chaque fois que vous ajoutez des utilisateurs, cliquez « //Apply// ».
+
+  * Vous pouvez faire de même pour les //Group// (en cliquant sur « //show Group Maps// »), et une fois fini, n'oubliez pas : « //Apply// ».
+
+Maintenant que c'est fait, vous pouvez parcourir votre réseau local à la recherche de points de montage NFS.
+
+
+===== Utilisation de Windows Services for Unix =====
+
+==== Windows Seven ====
+
+Il suffit de monter un partage NFS plus ou moins comme on le ferait sous Linux ((vraiment plus ou moins)). \\
+Tout d'abord ouvrez l'invité de commande MS-DOS. L'équivalent Windows du [[:Terminal]], puis tapez :
+
+  mount \\ip du serveur\dossier\partagé Lettre :
+  
+Ce qui peut ressembler à ça :
+
+  mount \\192.168.1.10\home\Partage R :
+  
+Si après avoir monté votre partage NFS sous windows, Windows se plaint d'une erreur incohérente comme quoi vous n'avez pas les droits pour accéder au partage ((mais qu'il le monte quand même ce qui est illogique)), faites un clic droit sur le partage problématique dans le **Poste de Travail** puis **Propriétés**. Dans la fenêtre qui s'affiche, allez dans les **Attributs NFS** et cochez tout ! Si certains refusent de se cocher, ce n'est pas grave. Faites appliquer et sortez d'ici, illogiquement ça devrait marcher !
+  
+Attention, veuillez garder à l'esprit que NFS et Windows ne font pas forcement bon ménage, si vous n'arrivez pas à partager avec Windows via NFS vous pouvez utiliser [[:Samba]]
+
+
+
+
+
+
+==== Windows XP et Vista ====
+
+Les points de montage NFS sont reconnus pour des dossiers sur le réseau, ils peuvent donc être associés à un lecteur réseau de la même manière que n'importe quel partage Windows.
+
+Pour les trouver, allez dans //**Favoris réseau ⇒ tout le réseau ⇒ NFS Network ⇒ Default LAN**//.
+
+Vous trouverez ici les IP des postes Linux connectés, mais aussi les noms de machines des postes Windows utilisant le service NFS.
+
+Sous XP home il peut y avoir un message d'erreur avec mount : "Error 67 : le nom réseau introuvable"
+Il faut pour cela installer un FIX (http://support.microsoft.com/kb/917796/fr)
+
+Et maintenant, à vous de vous servir.
+ 
+----
+//Créée par //[[:utilisateurs:draco31.fr|draco31.fr]] le 23/01/2010, 18:18 à partir de l'[[:nfs?rev=1258038788|ancienne page NFS]]
+\\ Contributeur de la page d'origine :// [[:utilisateurs:ostaquet]], [[:utilisateurs:Fabien26]], [[:utilisateurs:DarkHylian]]

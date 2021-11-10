@@ -1,0 +1,194 @@
+
+{{tag>programmation compilation BROUILLON}}
+
+----
+
+====== Vala : Un langage de programmation pour GNOME ======
+
+**Vala** est un nouveau langage de programmation (2006) qui propose des fonctionnalités modernes sans nécessiter l'installation d'un environnement d'exécution ou d'un interpréteur.
+
+La syntaxe de Vala est proche de celle du C#. À la différence de ce dernier, Vala n'est pas exécuté dans un environnement d'exécution mais transformé en code C puis compilé en code machine par un compilateur C standard (comme [[GCC]] par exemple).
+
+Vala est basé sur le modèle [[wp>GObject]]<sup>**(en)**</sup> et est donc particulièrement bien adapté, mais sans s'y limiter, à la programmation pour [[GNOME]], qui lui-même l'utilise.
+
+===== Installation du compilateur (valac) =====
+
+====via les dépôts officiels====
+Il vous suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt://valac|valac]]**.
+
+====via le PPA====
+
+[[ppa|Ajoutez à vos sources de logiciels le PPA]] suivant : [[https://launchpad.net/~vala-team/+archive/ppa|ppa:vala-team/ppa]] , rechargez la liste des paquets, puis [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt://vala|vala]]**
+
+===== Utilisation du compilateur =====
+
+Le compilateur Vala s'utilise comme la plupart des compilateurs directement en ligne de commande ou par le biais d'un [[wpfr>Environnement de développement intégré|EDI]].
+
+La commande basique pour compiler un programme en Vala est la suivante :
+  valac source.vala -o executable
+
+Il est bien-sûr possible de fournir plusieurs fichiers sources Vala pour générer un exécutable. Pour lier une bibliothèque, on utilisera l'option ''%%--pkg%% <package>'', par exemple pour compiler un programme utilisant [[wpfr>GTK+]] :
+  valac source.vala -o executable --pkg gtk+-2.0
+
+Pour plus de détails, référez-vous à la [[:man|page de manuel]] de **valac**.
+
+===== Exemple de code =====
+
+Voici un exemple de [[wpfr>Hello World]] en Vala :
+
+<code c#>
+using GLib;
+
+class Sample : Object {
+        void run () {
+                stdout.printf ("Hello World\n");
+        }
+
+        static int main (string[] args) {
+                var sample = new Sample ();
+                sample.run ();
+                return 0;
+        }
+}
+</code>
+
+===== Manipuler des objets créés avec glade dans l'edi Anjuta (ubuntu 11.10) =====
+La seule difficulté est de comprendre qu'il faut créer des pointeurs manuellement dans la classe.
+
+L'interface de développement ne les crée pas automatiquement. 
+
+Puis lorsqu'on lit le fichier xml, on fait l'affectation des pointeurs. 
+
+Fichier essai.ui
+<code>
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <!-- interface-requires gtk+ 2.12 -->
+  <object class="GtkWindow" id="window">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="title" translatable="yes">window</property>
+    <property name="default_width">500</property>
+    <property name="default_height">400</property>
+    <signal name="destroy" handler="main_on_destroy" swapped="no"/>
+    <child>
+      <object class="GtkFixed" id="fixed1">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <child>
+          <object class="GtkLabel" id="label1">
+            <property name="width_request">50</property>
+            <property name="height_request">20</property>
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="xalign">0</property>
+            <property name="yalign">0</property>
+            <property name="label" translatable="yes">Mon texte de départ.</property>
+          </object>
+          <packing>
+            <property name="x">26</property>
+            <property name="y">10</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkButton" id="button1">
+            <property name="label" translatable="yes">button</property>
+            <property name="width_request">50</property>
+            <property name="height_request">20</property>
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="use_action_appearance">False</property>
+            <signal name="clicked" handler="main_on_button_clicked" swapped="no"/>
+          </object>
+          <packing>
+            <property name="x">26</property>
+            <property name="y">50</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>
+</code>
+
+Fichier essai.vala
+<code>
+using GLib;
+using Gtk;
+
+public class Main : Object 
+{
+
+	/* 
+	 * Uncomment this line when you are done testing and building a tarball
+	 * or installing
+	 */
+	//const string UI_FILE = Config.PACKAGE_DATA_DIR + "/" + "essai.ui";
+	const string UI_FILE = "src/essai.ui";
+
+	//Mes pointeurs pour manipuler l'interface graphique
+	private Window window ;
+	private Gtk.Label label1 ;
+
+	
+	public Main ()
+	{
+
+		try 
+		{
+			var builder = new Builder ();
+			builder.add_from_file (UI_FILE);
+			builder.connect_signals (this);
+
+			
+			//var window = builder.get_object ("window") as Window;
+
+			//Lecture du fichier xml et affectation des pointeurs aux objets
+			//privés de la classe pour pouvoir les manipuler.
+			this.window = builder.get_object ("window") as Window;
+			this.label1 = builder.get_object ("label1") as Gtk.Label;
+			
+			window.show_all ();
+		} 
+		catch (Error e) {
+			stderr.printf ("Could not load UI: %s\n", e.message);
+		} 
+
+	}
+
+	[CCode (instance_pos = -1)]
+	public void on_destroy (Widget window) 
+	{
+		Gtk.main_quit();
+	}
+	
+	[CCode (instance_pos=-1)]
+	public void on_button_clicked (Gtk.Button button1) {
+		stdout.printf ("Bonjour Monde \n");
+
+		//Mes objets de classe manipuler
+		stdout.printf ( this.label1.get_text() + " \n");
+		
+		this.label1.set_text("J'ai cliqué sur mon bouton.") ;
+	}
+
+	static int main (string[] args) 
+	{
+		Gtk.init (ref args);
+		var app = new Main ();
+
+		Gtk.main ();
+		
+		return 0;
+	}	
+}
+</code>
+===== Liens externes =====
+
+  * [[http://live.gnome.org/Vala|Site officiel de Vala]] **(en)**
+  * [[wpfr>Vala (langage de programmation)|Vala sur Wikipedia]] **(fr)**
+  * [[http://www.wikivala.org|Wiki dédié à Vala]] Lien inexistant semble-t-il
+----
+
+//Contributeurs : [[utilisateurs:Dradge|Dradge]], [[utilisateurs:Ban]], [[utilisateurs:Kriegy|Kriegy]] //

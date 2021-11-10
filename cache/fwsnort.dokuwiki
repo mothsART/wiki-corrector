@@ -1,0 +1,211 @@
+
+{{tag>sécurité pare-feu ips}}
+
+----
+====== FWSnort - Système de Prévention d'intrusion ======
+
+FWSnort est un [[ips]] ( système de prévention d'intrusion ) agissant de pair avec le [[pare-feu]] iptable ( intégré dans ubuntu/linux ) afin de bloquer des attaques réseau qu'il détecte.
+
+fwsnort, comme son nom l'indique, convertit les règles de Snort dans le pare-feu iptables. fwsnort évalue d'abord votre pare-feu actuel et ajoute des règles pour le trafic acceptés. Par défaut, fwsnort logue le trafic suspect, et [[psad]] (( du même auteur)) surveille les journaux.
+
+fwsnort accepte les arguments de ligne de commande pour restreindre le traitement à une classe particulière des règles snort comme "ddos", "backdoor" ou "web-attaques". 
+
+Le traitement peut même être limité à une règle Snort spécifique identifié par son "id snort" ou "sid". fwsnort fait usage de IPTables:: Parse module pour traduire les règles de Snort pour laquelle le trafic correspondant pourrait être passé à travers le jeu de règles iptables existants. Autrement dit, si iptables ne va pas passer, par exemple, le trafic HTTP, puis fwsnort ne comprendra pas les signatures HTTP au sein de l'ensemble de règles iptables qu'elle construit. 
+
+
+===== Pré-requis =====
+
+Si vous souhaitez utiliser une version de FWSnort qui n'est pas dans les dépôts officiels, il est nécessaire d'utiliser un kernel spécifique.
+
+<note warning>L'utilisation d'un autre Kernel que celui fourni par les dépôts peut rendre votre système très instable, voir causer des dommages irréversibles.</note>
+<note warning>FIXME évaluer l'intérêt de parler de cette compilation, si le patch est déjà présent dans le kernel d'ubuntu, ( ce qui reste à évaluer également pour le moment).</note>
+====Compilation du kernel compatible====
+<code>
+wget http://www.kernel.org/pub/linux/kernel/v2.4/linux-2.4.21.tar.bz2
+wget http://www.netfilter.org/files/iptables-1.2.7a.tar.bz2
+wget http://www.netfilter.org/files/patch-o-matic-20030107.tar.bz2
+
+wget http://www.cipherdyne.com/fwsnort/download/string_replace_iptables.patch
+wget http://www.cipherdyne.com/fwsnort/download/string_replace_kernel.patch
+tar -jxf linux.2.4.21.tar.bz2
+tar -jxf iptables-1.2.8.tar.bz2
+tar -jxf patch-o-matic-20030107.tar.bz2
+
+echo "Apply libipt_string patch to iptables source and build iptables kernel and user spaces code:"
+
+cd iptables-1.2.7a/extensions
+patch -p1 < libipt_string.c.patch
+make KERNEL_DIR=../linux-2.4.21
+sudo make install KERNEL_DIR=../linux-2.4.21
+
+echo "Next step is to apply a string match support from a patch-o-matic package. "
+
+cd patch-o-matic-20030107
+KERNEL_DIR=../linux-2.4.21 ./runme extra
+
+make mrproper && make menuconfig
+make menuconfig
+make dep && make bzImage
+sudo make modules && make modules_install
+sudo cp arch/i386/boot/bzImage /boot/vmlinuz-2.4.21
+sudo mkinitrd -f -v /boot/initrd-2.4.21.img 2.4.21
+</code>
+
+Redémarrer avec ce kernel.
+
+===== Installation =====
+
+==== Par les dépôts ====
+  * [[:tutoriel:comment_installer_un_paquet|installez le paquet]] [[apt://fwsnort|fwsnort]].
+
+====À partir du site officiel====
+
+   * [[http://cipherdyne.org/fwsnort/download/|Téléchargez la dernière version sur le site officiel]]<code>
+fwsnortversion=fwsnort-1.1
+cd ~/Téléchargements
+wget http://cipherdyne.org/fwsnort/download/$fwsnortversion.tar.gz
+tar xvf $fwsnortversion.tar.gz
+cd $fwsnortversion
+sudo ./install.pl
+</code>
+   * Appuyez sur entrer pour accepter les paramètres par défaut.
+
+=====Configuration =====
+
+====Mettre à jour les règles====
+
+Lancer la récupération de règle de type snort :
+  * <code>
+sudo su
+cd /etc/fwsnort/snort_rules/
+wget http://www.emergingthreats.net/rules/emerging.rules.tar.gz
+tar xvf emerging.rules.tar.gz
+cp rules/* .
+</code>
+
+<note help>Les règles (.rules) qui seront dans le dossier /etc/fwsnort/snort_rules/ seront transformés.
+
+Vous pouvez trouvez d'autres règles sur internet :
+   * à lister FIXME
+
+Bien qu'il existe une fonction fwsnort pour trier ce que vous allez ajouter au pare-feu, vous pouvez par exemple trier manuellement les fichiers rules. ( exemple : sudo nautilus /etc/fwsnort/snort_rules/  et déplacez ce qui ne vous sert pas dans un sous dossier )</note>
+
+La commande par défaut récupère http://www.emergingthreats.net/rules/emerging-all.rules ((apparemment fichier trop imposant , cause une erreur iptable à suivre)) :
+  * <code>sudo fwsnort --update-rules</code>
+
+<note help>Le dossier de règle sera /etc/fwsnort/snort_rules/</note>
+
+====Lancer la génération du script d'installation des règles====
+
+<note help>Étape qui va générer le script installation des règles ( /etc/fwsnort/fwsnort.sh ) pour iptable à partir des règles de type snort</note>
+Lancez cette commande pour générer le script avec des règles choisi((voir ci dessus)) : 
+<code>sudo fwsnort</code>
+
+===Explication détaillée===
+
+Pour tout transformer en règle snort :
+  * <code>sudo fwsnort</code>
+Pour affiner le choix des règles ( voir :"man fwsnort" ) :
+  * Choisir des règles ( par expression régulière ) :
+     * <code>sudo fwsnort --include-regex scan</code>
+  * Choisir des règles en fonction du type ( apparemment ne fonctionne qu'avec les règles du site snort, non-libre, par défaut fwsnort prend les règles emerging-all adapté pour ips ) : 
+     * <code>sudo fwsnort --include-type </code>
+  * Exclure des règles : 
+     * <code>sudo fwsnort --exclude-type </code>
+  * Sélectionner une règle snort selon son id : 
+     * <code>sudo fwsnort --snort-sid 2001842,1834</code>
+<note help>Si vous avez des problèmes lancez <code>
+fwsnort --no-ipt-test --verbose</code>
+</note>
+
+====Exécuter le script d'installation des règles====
+  * script qui ajoutera les règles à iptable : <code>sudo /etc/fwsnort/fwsnort.sh</code>
+
+
+====Appliquer le script d'installation des règles au démarage==== 
+  * [[:tutoriel:comment_modifier_un_fichier|Editez le fichier]] ''/etc/rc.local''
+  * et ajouter ''/etc/fwsnort/fwsnort.sh''
+
+<note help>Deux cas sont envisageables :
+   * si il s'agit d'une machine dédiée pour faire pare-feu ((nous imaginerons dans un contexte professionnel)) vous pouvez utiliser cette méthode
+   * Mais dans le cas d'un pare-feu dit "personnel", cela pourrait ralentir le démarrage, donc :
+      * soit on l'accepte ...
+      * soit on utilise [[apt://iptables-persistent|iptables-persistent]] ( à compléter)
+
+</note>
+
+====Sécuriser fwsnort avec Apparmor(facultatif ?)====
+vous pouvez écrire vos propres profils [[AppArmor]] ou télécharger celui-ci ((http://bodhizazen.net/Tutorials/psad/)):<code>sudo -i
+
+wget http://bodhizazen.net/aa-profiles/bodhizazen/ubuntu-10.04/usr.sbin.fwsnort
+wget http://bodhizazen.net/aa-profiles/bodhizazen/ubuntu-10.04/etc.fwsnort.fwsnort.sh
+
+aa-enforce usr.sbin.fwsnort etc.fwsnort.fwsnort.sh
+</code>
+
+==== Mettre à jour régulièrement (facultatif ?)====
+<note help>Il peut être préférable de mettre à jour manuellement avec maîtrise du contenu ...</note>
+  * Créez un fichier update.sh <code>sudo gedit /etc/fwsnort/update.sh</code>
+  * Copier et adapter le script de mise à jour <code> cd /etc/fwsnort/snort_rules/
+wget http://www.emergingthreats.net/rules/emerging.rules.tar.gz
+tar xvf emerging.rules.tar.gz
+
+cd rules
+echo "copiez ici les fichiers / rules que vous avez choisi pour votre configuration"
+echo " remplacez * par les noms de fichier séparé d'un espace"
+cp * /etc/fwsnort/snort_rules/
+
+fwsnort
+/etc/fwsnort/fwsnort.sh
+</code>
+  * Donnez les droits d'execution: <code>sudo chmod +x /etc/fwsnort/update.sh</code>
+  * [[:tutoriel:comment_modifier_un_fichier|Editez le fichier]] ''/etc/crontab''
+  * et ajouter à la fin : <code>15 17  * *  * root /etc/fwsnort/update.sh
+</code>
+  * Ce qui lancera la mise à jour tous les jours à 17h15 (voir [[:cron|crontab]])
+
+===== Description supplémentaire des fonctionnalités =====
+
+Voici quelques caractéristiques principales de "fwsnort":
+
+  * Détection de TCP SYN, FIN, Null et Xmas scans ainsi que scans UDP.
+  * Détection des règles de signature du système de détection d'intrusion Snort.
+  * Le mode d'analyse iptables Forensics logfile (utile comme outil de médecine légale pour l'extraction d'informations de scan iptables et les vieux fichiers de journalisation).
+  * Système d'empreintes passives  via des paquets TCP SYN. Deux stratégies différentes de prise d'empreintes digitales sont prises en charge, une remise en œuvre de p0f qui utilise strictement iptables pour enregistrer des messages (nécessite l'option - log-tcp-options en ligne de commande), et une stratégie basée sur TOS.
+  * Souscription Alertes e-mail contenant tcp / udp / icmp analyse des caractéristiques, reverse DNS et les informations whois, règle Snort matches, des informations à distance suppose un OS, et plus encore.
+  * Contenu des alertes basées sur des attaques de type buffer overflow, et des commandes d'application suspectes, et d'autres activités suspectes de trafic grâce à l'utilisation de l'extension iptables string match et fwsnort.
+  * ICMP type et validation des champs de code-tête.
+  * Analyse Configurable par  des seuils et des affectations niveau de danger.
+
+  * jeu de règles d'analyse Iptables pour vérifier le déroulement "par défaut" de l'orientation de la politique de sécurité.
+  * IP / danger au niveau du réseau d'auto-affectation (peut être utilisé pour ignorer ou automatiquement fermer l'escalade des niveaux de danger pour certains réseaux).
+  * Souscription Alertes DShield.
+  * Auto-blocage de scanner des adresses IP via iptables et / ou de tcpwrappers basée sur le scan en niveau de danger. (Ceci n'est pas activé par défaut.)
+  * Statut mode qui affiche un résumé des informations de numérisation en cours avec les chiffres de paquets associés, chaînes iptables, et les niveaux de danger.
+
+===== Désinstallation =====
+
+==== Pour une installation par paquet ====
+
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. La configuration de l'application sera conservée ou supprimée selon la méthode de désinstallation que vous choisirez.
+
+
+==== Pour une installation depuis le site officiel de FWSnort ====
+
+FIXME : Détailler ici les script à lancer pour désinstaller FWSnort.
+
+=====Ressource=====
+
+FWSnort a fait l'objet d'un article de sécurité en vedette "[[http://www.linuxsecurity.com/content/view/117370/49/|Prévention basic d'intrusions en utilisant le filtrage  basé sur le contenu]]" sur linuxsecurity.com, et est également apparue dans SysAdmin Magazine dans l'article "[[http://www.samag.com/articles/2004/0404/|filtrage de contenu et inspection avec fwsnort et psad]]". fwsnort est également en vedette dans le livre "[[http://www.amazon.com/exec/obidos/redirect?path=ASIN/0321227239&link_code=as2&camp=1789&tag=cipherdyne-20&creative=9325|Resolution de Pare-feu Linux (R) ]]" par Michael Shinn et Scott Shinn, et publié par Addison Wesley, et un traitement complet de fwsnort peuvent être trouvés dans "[[http://www.nostarch.com/firewalls_mr.htm|Linux Firewalls: Attack Detection and Response avec iptables, psad et fwsnort]]"publié par No Starch Press.
+
+====Tutoriel====
+  
+   * (en) **[[http://bodhizazen.net/Tutorials/psad/|NIDS with psad and fwsnort]]** (ubuntu, debian, fedora)
+   * (en) [[http://www.linuxsecurity.com/content/view/117370/49/|Basic Intrusion Prevention using Content-based Filtering]]
+   * (en) [[http://www.tinker.tv/download/firewalls_ch10.pdf|DEPLOYING FWSNORT]]
+
+====Liens externes====
+
+   * [[http://www.cipherdyne.org/projects/fwsnort/|Site officiel]]
+----
+Contributeurs : [[:utilisateurs:psychederic|Psychederic]], [[:utilisateurs:draco31.fr]] ...//

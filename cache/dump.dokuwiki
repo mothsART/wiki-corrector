@@ -1,0 +1,244 @@
+
+{{tag>Xenial sauvegarde sécurité serveur}}
+
+----
+
+
+====== Sauvegardes sur bandes magnétiques avec Dump ======
+
+L'information contenue sur les disques est souvent plus importante que l'ordinateur lui-même. Il est impératif de s'assurer contre la perte d'informations due à :
+  * une défaillance matérielle
+  * une destruction par un logiciel
+  * une erreur de l'utilisateur
+  * un désastre (incendie, tremblement de terre, raz de marée, météorite, extinction de l'espèce humaine, etc.)
+  * etc.
+
+La stratégie de sauvegarde adoptée va dépendre de :
+  * la quantité, le roulement et l'importance de l'information
+  * le prix que l'on est prêt à engager
+
+L'offre en terme de support de sauvegarde est abondante. On retrouve les CD, les DVD, les bandes magnétiques, les disques ZIP (ou similaires), les disques durs, etc.
+
+Dans cet article, nous allons nous pencher sur les bandes magnétiques. Les bandes magnétiques restent une solution très intéressante pour les quantités importantes de données pour les raisons suivantes :
+  * capacités disponibles jusqu'à 200 Go non compressés (plus ou moins 400 Go compressés)
+  * prix de revient au Go intéressant
+  * possibilités de sortir les bandes du bâtiment de production
+
+===== La sauvegarde sur bandes avec Ubuntu =====
+
+==== Le matériel ====
+
+La plupart des lecteurs/enregistreurs de bandes magnétiques sont disponibles en SCSI. Dans mon cas, il s'agit d'un //HP StorageWorks Ultrium 215// que j'utilise avec des bandes de 100 Go.
+
+
+==== Les applicatifs ====
+
+Les applicatifs que je vous propose d'utiliser sont des outils en mode console. Ils sont très simples d'usage et permettent d'automatiser une grosse partie du processus de sauvegarde à l'aide de scripts.
+
+Les outils que nous allons utiliser sont : ''dump'', ''restore'' et ''mt''.
+
+Pour installer les applications ''dump'' et ''restore'', vous devez [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>dump]]**. Pour installer ''mt'', vous devez installer le paquet ''mt-st'' (dans le dépôt //Universe// également).
+
+=== dump ===
+
+L'application ''dump'' va se charger d'effectuer des sauvegardes incrémentales ou non d'un système de fichiers et de l'écrire sur une bande magnétique. L'avantage de ''dump'' par rapport à tous les systèmes de backup disponibles sur le marché est qu'il est facilement utilisable en ligne de commande et compatibles avec n'importe quel système Unix/Linux.
+
+Voici la syntaxe générale d'une commande ''dump'' : 
+
+  sudo dump -0 -A archfile -L label -f device filestosave
+
+Voici un exemple que j'utilise sur mon système :
+
+  sudo dump -0 -A /opt/tape/LU-MIDI.arch -L "LU-MIDI" -f /dev/st0 /srv/
+
+Les paramètres utilisés sont les suivants :
+  - ''-0'' : indique le niveau de sauvegarde (utilisé pour les sauvegardes incrémentales). ''-0'' indique que l'on veut tout sauvegarder.
+  - ''-A'' : indique le chemin du fichier archive à utiliser. Ce fichier va contenir un ensemble d'informations comme l'arborescence qui est sur la bande ainsi que les positions physiques des fichiers sur la bande. A l'aide de ce fichier, on peut facilement déterminer les éléments à restaurer en cas de besoin.
+  - ''-L'' : indique le label qui sera sauvegardé sur la bande. Un label fait maximum 16 caractères suivi d'un ''\0'' (en fait, il faut toujours indiquer le label entre guillemets (''"label"'').
+  - ''-f'' : indique le device sur lequel on écrit. Notez qu'ici on utilise un lecteur de bande SCSI mais on peut utiliser un disque dur.
+  - dernier paramètre : l'arborescence à sauvegarder.
+
+Je vous invite à consulter les //manpages// pour de plus amples informations concernant l'utilisation de ''dump''.
+
+== Concernant les sauvegardes incrémentales… ==
+
+Une sauvegarde se fait toujours à un certain **niveau** (de 0 à 9). Une sauvegarde de niveau **i** consistera à sauver tout ce qui a été modifié depuis le dernier backup à un niveau inférieur. Un backup de niveau 0 revient à tout sauvegarder.
+
+=== restore ===
+
+L'application ''restore'' se charge de restaurer un ensemble de fichiers à partir d'une sauvegarde effectuée par ''dump''. ''restore'' peut fonctionner de deux manières : soit on restaure toute la bande, soit on restaure une partie déterminée en mode interactif (ce qui est très simple, même via une console SSH).
+
+Pour effectuer une restauration interactive, on utilise ''restore'' de la manière suivante :
+
+  sudo restore -i -A archfile -f device
+
+Pour restaurer une partie de la sauvegarde effectuée avec la commande ''dump'' de l'exemple :
+
+  sudo restore -i -A /opt/tape/LU-MIDI.arch -f /dev/st0
+
+Les paramètres utilisés sont les suivants :
+  - ''-i'' : indique que l'on travaille en mode interactif; nous y reviendrons tout de suite après.
+  - ''-A'' : indique le chemin du fichier archive à utiliser.
+  - ''-f'' : indique la device sur laquelle se trouve la sauvegarde.
+
+//Remarque :// Par défaut, la restauration se passe toujours dans le répertoire courant. Dès lors, vérifiez que vous avez assez d'espace disque libre avant d'effectuer une grosse restauration.
+
+== Restauration en mode interactif ==
+
+Lorsque vous lancez une restauration en mode interactif, vous allez entrer dans une sorte de console simplifiée dans laquelle vous pouvez naviguer comme si vous aviez monté le système de fichier de la bande. Vous disposez d'un nombre de commandes restreints vous permettant de choisir les fichiers ou répertoires à restaurer :
+  - ''ls'' : idem que la commande ''ls'' du bash.
+  - ''cd repertoire'' : idem que la commande ''cd'' du bash.
+  - ''add fichier|repertoire'' : ajoute le fichier ou le répertoire (récursif) dans la liste des fichiers à restaurer. Il apparaîtra avec un ''*'' lors d'un ''ls''.
+  - ''extract'' : lance la restauration.
+  - ''quit'' : quitte le mode interactif.
+
+== Restauration complète ==
+
+Pour restaurer complètement les fichiers sauvegardés :
+
+   sudo restore -x -A /opt/tape/LU-MIDI.arch -f /dev/st0
+
+//Remarque :// Il est important de préciser avec l'option -A le fichier dans lequel est inscrit l'arborescence des fichiers sauvegardés, sinon ''restore'' refusera de recréer cette arborescence.
+
+== Vérification de la bande magnétique ==
+
+Pour vérifier un système de fichier présent sur la bande par rapport au système de fichier sur disque :
+
+   sudo restore -C -D filesystem -f device
+
+=== mt ===
+
+L'application ''mt'' sert à contrôler le lecteur de bandes magnétiques à un assez bas niveau. Cette application permet d'ajouter des //tags// sur la bande, éjecter la bande, rebobiner la bande et se déplacer par rapport aux //tags//.
+
+Il est donc possible de mettre plusieurs enregistrements (sauvegardes) sur une même bande. Dans ce cas, le lecteur de bandes met des repères (//tags//) pour pouvoir retrouver les débuts des enregistrements. **Cependant** :
+  - il n'y a pas de table des matières.
+  - il n'y a aucune information concernant le format du contenu (''tar'', ''dump'', autre...)
+
+C'est pour cela qu'il faut **tout noter soigneusement**. Pour se déplacer sur la bande, on ne dispose pas de beaucoup de possibilités.
+
+! Concernant la syntaxe de la commande mt, elle peut à priori varier : l'argument peut venir après le device.
+   ex : sudo mt -f /dev/st0 rewind
+
+Pour rebobiner la bande (complètement) :
+
+   sudo mt rewind -f /dev/st0
+
+Pour avancer de ''n'' enregistrements :
+  
+   sudo mt fsf n -f /dev/st0
+
+Nous disposons également de la commande d'éjection précédée ou pas du rebobinage complet.
+
+Pour éjecter la bande :
+
+   sudo mt off -f /dev/st0
+
+Pour rebobiner et éjecter la bande :
+
+   sudo mt rewoffl -f /dev/st0
+
+
+
+==== Les scripts utiles ====
+
+Lorsque j'ai mis en place la stratégie de sauvegarde de notre serveur, je me suis vite rendu compte qu'une certaine //automatisation// s'imposait. C'est pour cette raison que j'ai fait quelques scripts qui pourront sans doute vous servir.
+
+=== Affiche le label de la bande insérée ===
+
+<code bash>
+#!/bin/bash
+BAK_TMP=/tmp
+mt rewind -f /dev/st0
+echo "n" > $BAK_TMP/what-tape.cmd
+restore -t -h -f /dev/st0 /mnt < $BAK_TMP/what-tape.cmd &> $BAK_TMP/what-tape.tmp
+rm $BAK_TMP/what-tape.cmd
+mt rewind -f /dev/st0
+TAPE_LABEL=`cat $BAK_TMP/what-tape.tmp | grep Label: | awk '{print $2}'`
+rm $BAK_TMP/what-tape.tmp
+echo $TAPE_LABEL
+</code>
+
+=== Formate la bande en lui imposant un label ===
+
+<code bash>
+#!/bin/bash
+# Usage : tapebak_format <name>
+# Exemple : tapebak_format LU-MIDI
+BAK_NAME=$1
+# Tend la bande
+mkdir /tmp/empty
+mt retension -f /dev/st0
+# Format
+dump -0 -L "$BAK_NAME" -f /dev/st0 /tmp/empty
+# Rebobinne et éjecte
+mt rewoffl -f /dev/st0
+rm -Rf /tmp/empty
+</code>
+
+=== Effectue une sauvegarde ===
+
+<code bash>
+#!/bin/bash
+# Usage : tapebak_backup <name>
+# Exemple : tapebak_backup LU-MIDI
+
+BAK_NAME=$1
+BAK_LABEL=`/opt/tapebak/bin/tapebak_label`
+PATH_ARCH=/opt/tapebak/archfiles
+PATH_LIST=/opt/tapebak/filelists
+LOG=/tmp/tapebak_backup.log
+
+# Initialise la log
+echo "Backup $BAK_NAME - `date +%F\ %X`" > $LOG
+echo "" >> $LOG
+
+# Vérifie le label de la bande
+if test $BAK_NAME != $BAK_LABEL
+then
+        # Génère une erreur
+        ERREUR="Mauvaise bande ! Attendue : $BAK_NAME, dans le lecteur : $BAK_LABEL"
+        echo $ERREUR >> $LOG
+        echo "Opération annulée" >> $LOG
+else
+        # Commence la génération de la liste
+        ls -AlhR /srv/files/* > $PATH_LIST/$BAK_NAME.txt
+        # Dump le tout sur la bande
+        dump -0 -A $PATH_ARCH/$BAK_NAME.arc -L "$BAK_NAME" -f /dev/st0 /srv/on_tape >> $LOG
+        echo "DONE (`date +%X`)" >> $LOG
+        echo "" >> $LOG
+        # Rebobinage et éjection
+        mt rewoffl -f /dev/st0
+fi
+cat $LOG | mail -s Tapebak\ $BAK_NAME admin@ub.untu.fr
+</code>
+
+=== Restaure une bande en mode interactif ===
+
+<code bash>
+#!/bin/bash
+# Usage : tapebak_restore <name>
+# Exemple : tapebak_restore LU-MIDI
+
+BAK_NAME=$1
+BAK_LABEL=`/opt/tapebak/bin/tapebak_label`
+PATH_ARCH=/opt/tapebak/archfiles
+PATH_LIST=/opt/tapebak/filelists
+
+# Vérifie le label de la bande
+if test $BAK_NAME != $BAK_LABEL
+then
+        # Génère une erreur
+        ERREUR="Mauvaise bande ! Attendue : $BAK_NAME, dans le lecteur : $BAK_LABEL"
+        echo $ERREUR
+        exit -1
+else
+        # Lance le système de restauration interactif
+        restore -i -A $PATH_ARCH/$BAK_NAME.arc -f /dev/st0
+        mt rewind -f /dev/st0
+        echo "Restauration $BAK_NAME finie !" | mail -s Tapebak admin@ub.untu.fr
+fi
+</code>
+
+----
+
+//Contributeur : [[:utilisateurs:ostaquet]].//

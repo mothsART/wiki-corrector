@@ -1,0 +1,173 @@
+
+{{tag>personnalisation}}
+
+----
+
+====== Conky : Scripts Divers ======
+
+
+Compléments à la documentation [[/conky|Conky]]\\
+Les codes donnés ci dessous sont à placer __après__ la section **TEXT** de votre //conkyrc//\\
+Références des [[http://doc.ubuntu-fr-secours.org/astuces/conky_variables.html|Variables]]
+
+
+===== Progression des téléchargements de aMule =====
+Si vous désirez voir sur votre Conky, les progressions des téléchargements de aMule, voici la marche à suivre.
+==== Les packages ====
+nécessaire : [[:tutoriel:comment_installer_un_paquet|Installez les paquet]] **[[apt://amule|amule]]** et **[[apt://amule-utils|amule-utils]]**
+
+facultatif : [[:tutoriel:comment_installer_un_paquet|Installez les paquet]] **[[apt://amule-daemon|amule-daemon]]** **[[apt://amule-utils-gui|amule-utils-gui]]** (Pour que aMule s'exécute automatiquement en service de fond automatiquement (amuled))
+
+==== Configuration ====
+=== Contrôler aMule à distance ===
+Depuis amule, allez dans les Préférences → Contrôle à distance → Paramètre externes
+  * Cochez "Accepter les connexions externes"
+  * Entrez un mot de passe
+  * Choisissez un port TCP
+  * Redémarrez aMule
+=== Configurer amulecmd ===
+tapez la commande :
+<code>amulecmd -h hostname -p ECport -P ECpassword -w</code>
+hostname = 127.0.0.1 si le amule est sur votre pc. (si non il faut entrer l'ip du pc sur lequel amuled est exécuté)
+
+ECport = port que vous avez entre à l'étape ci-dessus
+
+ECpassword = port que vous avez entré à l'étape ci-dessus
+=== aMuled (pour ceux qui ont choisi d'installer les paquets facultatifs) ===
+  - Il sera nécessaire d'ajouter un utilisateur à la configuration du daemon (éviter l'utilisation de root pour des questions de sécurité) : [[:tutoriel:comment_editer_un_fichier|/etc/default/amule-daemon]] mettre à jour : AMULED_USER="votre_user"
+  - Redémarrer l'ordinateur.
+  - Pour accéder à l'interface graphique de aMule, lancer : Application → Internet → aMuleGUI
+=== Script conky ===
+Donc normalement si tout c'est bien passé, si vous exécutez la commande :
+[code]amulecmd -c "show dl"[/code]
+Un résultat devrait s'afficher, si ce n'est pas le cas, c'est soit que vous avez oublié de lancer amule (ou pas redémarré votre ordinateur pour les personnes qui on choisi d'installer aMuled) soit qu'il y a un point que vous avez mal effectué...
+
+
+~/conky/filtre.awk :
+<code>
+/^ > [^\t]/    {
+    dejaEcrit = 0;
+    for (i=3;i<=NF&&dejaEcrit<20;i++) {
+        printf("%s", (length($i) > 20-dejaEcrit) ? substr($i,1,23-dejaEcrit)"..." : $i);
+        dejaEcrit += length($i)
+    }
+    printf("\t");
+   
+    next;
+}
+                   
+                   
+/^ > \t/    {
+    printf("%s", (length($2) < 7) ? "0"substr($2,2,3) : substr($2,2,4));
+}
+
+                   
+/^ > \t.*\/s/    {
+    printf("\t%s", $(NF-1)$(NF));
+}
+
+/^ > /    {
+    printf("\n");
+}
+</code>
+
+~/conky/amulecmd_perso.sh :
+<code>
+#!/bin/bash
+if [ "`ps -ef |grep 'amule' |grep -v grep`" != "" ]; then
+amulecmd -c "$1"
+fi
+</code>
+
+Dans conky (si vous n'utiliser pas amuled, remplacer le {if_running amuled} par {if_running amule}) :
+<code>
+color1 d51621    # ecriture active
+color0 d4d4d4    # ecriture pasive
+
+${color2}${stippled_hr}
+${color0}${font Webdings:style=Regular:pixelsyze=8}i${font}aMule ${if_running amuled}(${color3}${texeci 5 ~/conky/amulecmd_perso.sh status | awk '/ > Download:/ { print $3$4}'}${color0} / ${color1}${texeci 5 ~/conky/amulecmd_perso.sh status | awk '/ > Upload:/ { print $3$4}'}${color0})${execi 5 ~/conky/amulecmd_perso.sh "show dl" | awk -f ~/conky/filtre.awk | sort -k 2 -r > ~/conky/tmp}
+${color0}${if_empty ${exec awk 'NR==1{ print $1 }' ~/conky/tmp}}${else}${texeci 5 awk 'NR==1{ print $1 }' ~/conky/tmp} ${if_empty ${exec awk 'NR==1{ print $3 }' ~/conky/tmp}}${else}(${color3}${texeci 5 awk 'NR==1{ print $3 }' ~/conky/tmp}${color0})${endif}${color3}${alignr 90}${execibar 5 awk 'NR==1{ print $2 }' ~/conky/tmp}${endif}
+${color0}${if_empty ${exec awk 'NR==2{ print $1 }' ~/conky/tmp}}${else}${texeci 5 awk 'NR==2{ print $1 }' ~/conky/tmp} ${if_empty ${exec awk 'NR==2{ print $3 }' ~/conky/tmp}}${else}(${color3}${texeci 5 awk 'NR==2{ print $3 }' ~/conky/tmp}${color0})${endif}${color3}${alignr 90}${execibar 5 awk 'NR==2{ print $2 }' ~/conky/tmp}${endif}
+${color0}${if_empty ${exec awk 'NR==3{ print $1 }' ~/conky/tmp}}${else}${texeci 5 awk 'NR==3{ print $1 }' ~/conky/tmp} ${if_empty ${exec awk 'NR==3{ print $3 }' ~/conky/tmp}}${else}(${color3}${texeci 5 awk 'NR==3{ print $3 }' ~/conky/tmp}${color0})${endif}${color3}${alignr 90}${execibar 5 awk 'NR==3{ print $2 }' ~/conky/tmp}${endif}
+${color0}${if_empty ${exec awk 'NR==4{ print $1 }' ~/conky/tmp}}${else}${texeci 5 awk 'NR==4{ print $1 }' ~/conky/tmp} ${if_empty ${exec awk 'NR==4{ print $3 }' ~/conky/tmp}}${else}(${color3}${texeci 5 awk 'NR==4{ print $3 }' ~/conky/tmp}${color0})${endif}${color3}${alignr 90}${execibar 5 awk 'NR==4{ print $2 }' ~/conky/tmp}${endif}
+${color0}${if_empty ${exec awk 'NR==5{ print $1 }' ~/conky/tmp}}${else}${texeci 5 awk 'NR==5{ print $1 }' ~/conky/tmp} ${if_empty ${exec awk 'NR==5{ print $3 }' ~/conky/tmp}}${else}(${color3}${texeci 5 awk 'NR==5{ print $3 }' ~/conky/tmp}${color0})${endif}${color3}${alignr 90}${execibar 5 awk 'NR==5{ print $2 }' ~/conky/tmp}${endif}
+${color0}${if_empty ${exec awk 'NR==6{ print $1 }' ~/conky/tmp}}${else}${texeci 5 awk 'NR==6{ print $1 }' ~/conky/tmp} ${if_empty ${exec awk 'NR==6{ print $3 }' ~/conky/tmp}}${else}(${color3}${texeci 5 awk 'NR==6{ print $3 }' ~/conky/tmp}${color0})${endif}${color3}${alignr 90}${execibar 5 awk 'NR==6{ print $2 }' ~/conky/tmp}${endif}
+${color0}${if_empty ${exec awk 'NR==7{ print $1 }' ~/conky/tmp}}${else}${texeci 5 awk 'NR==7{ print $1 }' ~/conky/tmp} ${if_empty ${exec awk 'NR==7{ print $3 }' ~/conky/tmp}}${else}(${color3}${texeci 5 awk 'NR==7{ print $3 }' ~/conky/tmp}${color0})${endif}${color3}${alignr 90}${execibar 5 awk 'NR==7{ print $2 }' ~/conky/tmp}${endif}
+${color0}${if_empty ${exec awk 'NR==8{ print $1 }' ~/conky/tmp}}${else}${texeci 5 awk 'NR==8{ print $1 }' ~/conky/tmp} ${if_empty ${exec awk 'NR==8{ print $3 }' ~/conky/tmp}}${else}(${color3}${texeci 5 awk 'NR==8{ print $3 }' ~/conky/tmp}${color0})${endif}${color3}${alignr 90}${execibar 5 awk 'NR==8{ print $2 }' ~/conky/tmp}${endif}
+${color0}${if_empty ${exec awk 'NR==9{ print $1 }' ~/conky/tmp}}${else}${texeci 5 awk 'NR==9{ print $1 }' ~/conky/tmp} ${if_empty ${exec awk 'NR==9{ print $3 }' ~/conky/tmp}}${else}(${color3}${texeci 5 awk 'NR==9{ print $3 }' ~/conky/tmp}${color0})${endif}${color3}${alignr 90}${execibar 5 awk 'NR==9{ print $2 }' ~/conky/tmp}${endif}
+${color0}${if_empty ${exec awk 'NR==10{ print $1 }' ~/conky/tmp}}${else}${texeci 5 awk 'NR==10{ print $1 }' ~/conky/tmp} ${if_empty ${exec awk 'NR==10{ print $3 }' ~/conky/tmp}}${else}(${color3}${texeci 5 awk 'NR==10{ print $3 }' ~/conky/tmp}${color0})${endif}${color3}${alignr 90}${execibar 5 awk 'NR==10{ print $2 }' ~/conky/tmp}${endif}
+${color0}${if_empty ${exec awk 'NR==11{ print $1 }' ~/conky/tmp}}${else}${texeci 5 awk 'NR==11{ print $1 }' ~/conky/tmp} ${if_empty ${exec awk 'NR==11{ print $3 }' ~/conky/tmp}}${else}(${color3}${texeci 5 awk 'NR==11{ print $3 }' ~/conky/tmp}${color0})${endif}${color3}${alignr 90}${execibar 5 awk 'NR==11{ print $2 }' ~/conky/tmp}${endif}
+${color0}${if_empty ${exec awk 'NR==12{ print $1 }' ~/conky/tmp}}${else}${texeci 5 awk 'NR==12{ print $1 }' ~/conky/tmp} ${if_empty ${exec awk 'NR==12{ print $3 }' ~/conky/tmp}}${else}(${color3}${texeci 5 awk 'NR==12{ print $3 }' ~/conky/tmp}${color0})${endif}${color3}${alignr 90}${execibar 5 awk 'NR==12{ print $2 }' ~/conky/tmp}${endif}
+${color0}${if_empty ${exec awk 'NR==13{ print $1 }' ~/conky/tmp}}${else}${texeci 5 awk 'NR==13{ print $1 }' ~/conky/tmp} ${if_empty ${exec awk 'NR==13{ print $3 }' ~/conky/tmp}}${else}(${color3}${texeci 5 awk 'NR==13{ print $3 }' ~/conky/tmp}${color0})${endif}${color3}${alignr 90}${execibar 5 awk 'NR==13{ print $2 }' ~/conky/tmp}${endif}
+${color0}${if_empty ${exec awk 'NR==14{ print $1 }' ~/conky/tmp}}${else}${texeci 5 awk 'NR==14{ print $1 }' ~/conky/tmp} ${if_empty ${exec awk 'NR==14{ print $3 }' ~/conky/tmp}}${else}(${color3}${texeci 5 awk 'NR==14{ print $3 }' ~/conky/tmp}${color0})${endif}${color3}${alignr 90}${execibar 5 awk 'NR==14{ print $2 }' ~/conky/tmp}${endif}
+${color0}${if_empty ${exec awk 'NR==15{ print $1 }' ~/conky/tmp}}${else}${texeci 5 awk 'NR==15{ print $1 }' ~/conky/tmp} ${if_empty ${exec awk 'NR==15{ print $3 }' ~/conky/tmp}}${else}(${color3}${texeci 5 awk 'NR==15{ print $3 }' ~/conky/tmp}${color0})${endif}${color3}${alignr 90}${execibar 5 awk 'NR==15{ print $2 }' ~/conky/tmp}${endif}
+$else${color1}Arrêté
+$endif
+</code>
+
+===== Programme de sortie des séries TV (Mise a jour automatique) =====
+Si vous désirez voir sur votre Conky, un guide des programmes de sortie des séries TV, voici la marche à suivre.
+==== Les packages ====
+nécessaire : [[:tutoriel:comment_installer_un_paquet|Installez les paquet]] **[[apt://gawk|gawk]]**
+
+==== Configuration ====
+=== Script awk ===
+[[:tutoriel:comment_modifier_un_fichier|Créer]] Le fichier dans votre home //**.series.awk**// et placer le code ci-dessous a l'intérieur :
+<code>
+BEGIN {skip=1;}
+/<td class="dayhead">/ {
+    if (skip==1) skip=0;
+    gsub("<[^>]*>", "", $0);
+}
+$0 ~ "^(" serie ")" {
+    if (skip==1) next;
+    gsub(/'/, "_", $0);
+    print gensub(/(.*) \(([^\)]*)\)([^\)]*)/, "\\1\n\\2\n\\3", "g", $0);
+    if (skip==0) skip=1;
+}
+</code>
+=== Script conky ===
+À l'endroit désirer de votre script placer le code suivant :
+<code>
+#Téléchargement du calendrier sur http://www.pogdesign.co.uk/cat/
+${execi 3600 DATE=`awk 'BEGIN{print strftime("%d-%m-%Y",systime());}'`;wget -O .conky_today http://www.pogdesign.co.uk/cat/day/$DATE}
+${execi 3600 DATE=`awk 'BEGIN{print strftime("%d-%m-%Y",systime()+86400);}'`;wget -O .conky_tomorrow http://www.pogdesign.co.uk/cat/day/$DATE}
+${execi 3600 DATE=`awk 'BEGIN{print strftime("%d-%m-%Y",systime()+172800);}'`;wget -O .conky_atomorrow http://www.pogdesign.co.uk/cat/day/$DATE}
+#Affichage des séries diffusées ce jour remplacer les <> par le nom de la série (EXEMPLE : pour la série Docteur House le titre est "House") :
+Séries diffusées Aujourd'hui :
+${execi 3601 <.conky_today awk -f ~/.series.awk -v serie="<NOM_DE_LA_SÉRIE_COMME_SUR_POGDESIGN.CO.UK>"}
+#Affichage des séries diffusées demain:
+Séries diffusées Demain :
+${execi 3601 <.conky_tomorrow awk -f ~/.series.awk -v serie="<NOM_DE_LA_SÉRIE>"}
+Séries diffusées Demain :
+${execi 3601 <.conky_atomorrow awk -f ~/.series.awk -v serie="<NOM_DE_LA_SÉRIE>"}
+</code>
+<note>Le site affiche l'heure anglaise pour palier a ce problème créez vous un compte sur [[http://www.pogdesign.co.uk/cat/]] et dans les préférence choisir le bon fuseau horaire (ça prend 5 min)</note>
+
+===== Pourcentage d'utilisation de Dropbox =====
+
+Ce script affiche le pourcentage d'utilisation du dossier dropbox, vous pouvez aussi l'utiliser pour Ubuntuone mais dans ce cas il vous faudra l'adapter.
+
+=== Script conky ===
+À l'endroit désiré de votre conky placer le code suivant :
+<code>
+Dropbox${alignr}${execi 1 $HOME/.conky/dropbox.sh}%
+${execibar 1 $HOME/.conky/dropbox.sh}
+</code>
+
+=== Script bash (dans le dossier .conky de votre home) ===
+Dans le script bash remplacez 5.5 (correspondant à la variable db) par la valeur maximale en Gio disponible sur Dropbox
+<code>
+#!/bin/bash
+dropboxdir=$HOME/Dropbox
+db=5.5
+sz=`du -sL $dropboxdir | cut -f1`
+op="100*$sz/$db/1024/1024"
+po=`awk "BEGIN{ print $op }"`
+po=${po%.*}
+echo $po
+</code>
+
+----
+
+//Contributeur : [[utilisateurs:mcpeter|McPeter]], [[utilisateurs:ljere|ljere]], [[utilisateurs:wanoo|Wanoo]], [[utilisateurs:eauland|EauLand]], [[utilisateurs:pierrro|Pierrro]]

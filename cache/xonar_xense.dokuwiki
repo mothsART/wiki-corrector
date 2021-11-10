@@ -1,0 +1,303 @@
+
+{{tag>Trusty matériel audio asus}}
+====== Carte son : Xonar Xense ======
+
+La carte son d'Asus, [[http://www.ldlc.com/fiche/PB00107269.html|Xonar Xense]], propose un équipement parfait pour tout audiophile polyvalent, amateur de musique en format sans perte ou qualité studio, comme cinéphile ou gamer, celle ci répond à toutes les attentes, néanmoins, son support a beaucoup tardé sous Linux, celle ci proposant un bundle carte son +  Micro Casque [[http://www.lesnumeriques.com/casque-audio/sennheiser-pc-350-p5987/test.html|Sennheiser PC 350]] pour un prix se situant entre 200€ et 250€ selon les boutiques, ce qui n'est guère facilement accessible aux développeurs d'Alsa, le casque pouvant en plus faire double emploi pour ceux ci.
+
+{{http://pix.toile-libre.org/upload/original/1379109323.jpg?440}}                                 {{http://pix.toile-libre.org/upload/original/1379109344.jpg?440}}
+===== Spécifications techniques =====
+
+**Chip / DSP** : ASUS AV100
+
+**Bus**	: PCI Express 1x
+
+**Nombre de canaux audio** : 7,1
+
+**Convertisseur N/A** : 24 bits / 192 kHz
+
+**Convertisseur A/N** : 24 bits / 192 kHz
+
+**Fréquence des tests** : 44.1 kHz (min.) - 192 kHz (maximum)
+
+**Rapport signal / bruit** : 118 dB / 64 - 300 ohms
+
+**Bande passante en réponse** : 10 - 46000 Hz
+
+**Normes audio supportées** : ASIO2,  EAX 2.0, EAX 1.0, OpenAL, Dolby Digital Live, DirectSound3D GX 2.5, DirectSound3D GX 1.0, High Definition Audio, DirectSound3D GX 2.0
+
+**Caractéristiques** : Décodeur Dolby Pro Logic II intégré, technologie casque Dolby, technologie Dolby Virtual Speaker, Smart Volume Normalizer, FlexBass, Xear 3D Virtual Speaker Shifter
+
+**Entrées externes** : Line IN / Micro (Jack 6.35mm)
+
+**Sorties externes** : Sortie 7.1 (câble splitter DVI vers multi Jack 3.5mm), Casque (Jack 6.35mm), Audio numérique S/PDIF Coaxiale
+
+**Entrées et sorties internes** : Auxiliaire (pour boitier PC)
+
+
+
+===== Support de la carte son sous le noyau Linux =====
+
+<note tip>Depuis la sortie du Noyau Linux 3.18 fin 2014, le support de la carte son Asus Xonar Xense via ces pilotes à été intégré au noyau et ne nécessite plus aucune manipulation, par contre comme ici, le support se limite au stéréo pour l'instant, jusqu'à ce que quelqu'un contribue a améliorer le support de la carte</note>
+
+J'ai tenté à plusieurs reprises de contacter Asus à ce sujet, sans succès, la hotline se contentant de répondre à côté de la plaque, en évoquant à la limite, le support de MacOS pour la carte, mais ne mentionnant rien du tout pour le noyau Linux.
+De même j'ai fait chou blanc en tentant de rentrer en contact avec les développeurs d'Alsa et ai appris via un forum que le mainteneur principal du module "oxygen" prenant en charge les cartes d'ASUS, n'avait pas le temps de s'en occuper.
+C'est là qu'en juillet 2013, ô surprise, je suis tombé un peu par hasard, sur une contribution incomplète sur mailing list du projet ALSA, du développeur Ian Dawes , que j'ai finit par contacter par mail, malgré mon anglais plus que douteux, et auprès duquel je me suis manifesté pour effectuer les divers tests de ses patchs.
+Le support préliminaire ne prenait en charge que la sortie 7.1 en stéréo, mais pas la sortie audio Jack 6.35mm proposée sur la carte, enfin en mi Aout 2013; ce dernier a apporté des modifications significatives à son patch, assez pour pouvoir être qualifié d'utilisable sans problèmes.
+
+===== Paquet prêt à l'emploi (dépend de DKMS) =====
+
+Un paquet recompilant automatiquement le module à chaque mise à jour du noyau linux, est [[http://vavar60.online.fr/share/oxygen-xense-dkms_0.1~git.b044dfe_all.deb|disponible au téléchargement]].
+
+Installez le, puis redémarrez votre système.
+
+===== Code source=====
+
+
+<code> Signed-off-by: Ian Dawes <madeallup.gen@gmail.com>
+
+diff --git a/sound/pci/oxygen/virtuoso.c b/sound/pci/oxygen/virtuoso.c
+index 64b9fda..df99ec9 100644
+--- a/sound/pci/oxygen/virtuoso.c
++++ b/sound/pci/oxygen/virtuoso.c
+@@ -52,6 +52,7 @@ static DEFINE_PCI_DEVICE_TABLE(xonar_ids) = {
+     { OXYGEN_PCI_SUBID(0x1043, 0x835d) },
+     { OXYGEN_PCI_SUBID(0x1043, 0x835e) },
+     { OXYGEN_PCI_SUBID(0x1043, 0x838e) },
++    { OXYGEN_PCI_SUBID(0x1043, 0x8428) },
+     { OXYGEN_PCI_SUBID(0x1043, 0x8522) },
+     { OXYGEN_PCI_SUBID_BROKEN_EEPROM },
+     { }
+diff --git a/sound/pci/oxygen/xonar_pcm179x.c
+b/sound/pci/oxygen/xonar_pcm179x.c
+index c8c7f2c..7f31df8 100644
+--- a/sound/pci/oxygen/xonar_pcm179x.c
++++ b/sound/pci/oxygen/xonar_pcm179x.c
+@@ -212,6 +212,11 @@
+ #define GPIO_ST_MAGIC        0x0040
+ #define GPIO_ST_HP        0x0080
+ 
++#define GPIO_XENSE_OUTPUT_ENABLE (0x0001 | 0x0010 | 0x0020)
++#define GPIO_XENSE_HP_REAR       0x0002
++#define GPIO_XENSE_MAGIC         0x0040
++#define GPIO_XENSE_SPEAKERS      0x0080
++
+ #define I2C_DEVICE_PCM1796(i)    (0x98 + ((i) << 1))    /* 10011, ii,
+/W=0 */
+ #define I2C_DEVICE_CS2000    0x9c            /* 100111, 0, /W=0 */
+ 
+@@ -499,6 +504,52 @@ static void xonar_stx_init(struct oxygen *chip)
+     xonar_st_init_common(chip);
+ }
+ 
++static void xonar_xense_init(struct oxygen *chip)
++{
++    struct xonar_pcm179x *data = chip->model_data;
++
++    data->generic.ext_power_reg = OXYGEN_GPI_DATA;
++    data->generic.ext_power_int_reg = OXYGEN_GPI_INTERRUPT_MASK;
++    data->generic.ext_power_bit = GPI_EXT_POWER;
++    xonar_init_ext_power(chip);
++   
++    data->generic.anti_pop_delay = 100;
++    data->h6 = chip->model.dac_channels_mixer > 2;
++    data->has_cs2000 = 1;
++    data->cs2000_regs[CS2000_FUN_CFG_1] = CS2000_REF_CLK_DIV_1;
++    data->broken_i2c = true;
++
++    oxygen_write16(chip, OXYGEN_I2S_A_FORMAT,
++               OXYGEN_RATE_48000 |
++               OXYGEN_I2S_FORMAT_I2S |
++               OXYGEN_I2S_MCLK(data->h6 ? MCLK_256 : MCLK_512) |
++               OXYGEN_I2S_BITS_16 |
++               OXYGEN_I2S_MASTER |
++               OXYGEN_I2S_BCLK_64);
++
++    xonar_st_init_i2c(chip);
++    cs2000_registers_init(chip);
++   
++    data->generic.output_enable_bit = GPIO_XENSE_OUTPUT_ENABLE;
++    data->dacs = chip->model.dac_channels_mixer / 2;
++    data->hp_gain_offset = 2*-18;
++
++    pcm1796_init(chip);
++
++    oxygen_set_bits16(chip, OXYGEN_GPIO_CONTROL,
++              GPIO_INPUT_ROUTE | GPIO_XENSE_HP_REAR |
++              GPIO_XENSE_MAGIC | GPIO_XENSE_SPEAKERS);
++    oxygen_clear_bits16(chip, OXYGEN_GPIO_DATA,
++                GPIO_INPUT_ROUTE | GPIO_XENSE_HP_REAR | GPIO_XENSE_SPEAKERS);
++
++    xonar_init_cs53x1(chip);
++    xonar_enable_output(chip);
++
++    snd_component_add(chip->card, "PCM1792A");
++    snd_component_add(chip->card, "CS5381");
++    snd_component_add(chip->card, "CS2000");
++}
++
+ static void xonar_d2_cleanup(struct oxygen *chip)
+ {
+     xonar_disable_output(chip);
+@@ -763,7 +814,6 @@ static int st_output_switch_get(struct snd_kcontrol
+*ctl,
+     return 0;
+ }
+ 
+-
+ static int st_output_switch_put(struct snd_kcontrol *ctl,
+                 struct snd_ctl_elem_value *value)
+ {
+@@ -859,6 +909,67 @@ static const struct snd_kcontrol_new st_controls[] = {
+     },
+ };
+ 
++static int xense_output_switch_get(struct snd_kcontrol *ctl,
++                struct snd_ctl_elem_value *value)
++{
++    struct oxygen *chip = ctl->private_data;
++    u16 gpio;
++
++    gpio = oxygen_read16(chip, OXYGEN_GPIO_DATA);
++    if (gpio & GPIO_XENSE_SPEAKERS)
++        value->value.enumerated.item[0] = 0;
++    else if (!(gpio & GPIO_XENSE_SPEAKERS) && (gpio & GPIO_XENSE_HP_REAR))
++        value->value.enumerated.item[0] = 1;
++    else
++        value->value.enumerated.item[0] = 2;
++    return 0;
++}
++
++static int xense_output_switch_put(struct snd_kcontrol *ctl,
++                struct snd_ctl_elem_value *value)
++{
++    struct oxygen *chip = ctl->private_data;
++    struct xonar_pcm179x *data = chip->model_data;
++    u16 gpio_old, gpio;
++
++    mutex_lock(&chip->mutex);
++    gpio_old = oxygen_read16(chip, OXYGEN_GPIO_DATA);
++    gpio = gpio_old;
++    switch (value->value.enumerated.item[0]) {
++    case 0:
++        gpio |= GPIO_XENSE_SPEAKERS | GPIO_XENSE_HP_REAR;
++        break;
++    case 1:
++        gpio = (gpio | GPIO_XENSE_HP_REAR) & ~GPIO_XENSE_SPEAKERS;
++        break;
++    case 2:
++        gpio &= ~(GPIO_XENSE_SPEAKERS | GPIO_XENSE_HP_REAR);
++        break;
++    }
++    oxygen_write16(chip, OXYGEN_GPIO_DATA, gpio);
++    data->hp_active = !(gpio & GPIO_XENSE_SPEAKERS);
++    update_pcm1796_volume(chip);
++    mutex_unlock(&chip->mutex);
++    return gpio != gpio_old;
++}
++
++static const struct snd_kcontrol_new xense_controls[] = {
++    {
++        .iface = SNDRV_CTL_ELEM_IFACE_MIXER,
++        .name = "Analog Output",
++        .info = st_output_switch_info,
++        .get = xense_output_switch_get,
++        .put = xense_output_switch_put,
++    },
++    {
++        .iface = SNDRV_CTL_ELEM_IFACE_MIXER,
++        .name = "Headphones Impedance Playback Enum",
++        .info = st_hp_volume_offset_info,
++        .get = st_hp_volume_offset_get,
++        .put = st_hp_volume_offset_put,
++    },
++};
++
+ static void xonar_line_mic_ac97_switch(struct oxygen *chip,
+                        unsigned int reg, unsigned int mute)
+ {
+@@ -946,6 +1057,23 @@ static int xonar_st_mixer_init(struct oxygen *chip)
+     return 0;
+ }
+ 
++static int xonar_xense_mixer_init(struct oxygen *chip)
++{
++    unsigned int i;
++    int err;
++
++    for (i = 0; i < ARRAY_SIZE(xense_controls); ++i) {
++        err = snd_ctl_add(chip->card,
++                  snd_ctl_new1(&xense_controls[i], chip));
++        if (err < 0)
++            return err;
++    }
++    err = add_pcm1796_controls(chip);
++    if (err < 0)
++        return err;
++    return 0;
++}
++
+ static void dump_pcm1796_registers(struct oxygen *chip,
+                    struct snd_info_buffer *buffer)
+ {
+@@ -1138,6 +1266,13 @@ int get_xonar_pcm179x_model(struct oxygen *chip,
+         chip->model.resume = xonar_stx_resume;
+         chip->model.set_dac_params = set_pcm1796_params;
+         break;
++    case 0x8428:
++        chip->model = model_xonar_st;
++        chip->model.shortname = "Xonar Xense";
++        chip->model.chip = "AV100";
++        chip->model.init = xonar_xense_init;
++        chip->model.mixer_init = xonar_xense_mixer_init;
++        break;
+     default:
+         return -EINVAL;
+     }
+</code>
+
+Il vous incombera désormais de patcher les sources du noyau Linux et de compiler uniquement les modules nécessaires au bon fonctionnement de la carte (pour ça, vous aurez déjà besoin d'installer le paquet linux-source, et d'extraire les sources du fichier compressé situé dans /usr/src/ )
+
+Déplacez vous dans le dossier des sources des modules pour appliquer le patch ( cd linux-3.**/sound/pci/oxygen ) puis appliquez le patch
+<code>sudo patch -p1 -i /chemin/xonar-xense.patch</code>
+
+Une fois ces dernières patchées retournez à la racine du dossier des sources du noyau Linux à l'aide de la commande "cd"
+
+Exécutez ces commandes à adapter selon votre version du noyau :
+
+<code>
+cd /usr/src/linux-source-3.8.0-27/
+sudo cp /usr/src/linux-headers-3.8.0-27-generic/Module.symvers Module.symvers
+sudo cp /boot/config-3.8.0-27-generic .config
+sudo make prepare
+sudo make scripts
+sudo make -j4 M=sound/pci/oxygen/
+sudo rm /lib/modules/3.8.0-27-generic/kernel/sound/pci/oxygen/*.ko
+sudo cp sound/pci/oxygen/*.ko /lib/modules/3.8.0-27-generic/kernel/sound/pci/oxygen/
+</code>
+
+Ensuite, redémarrez le système et chargez le module :
+<code>
+sudo modprobe snd-virtuoso
+</code>
+
+
+En gros, avec ces commandes, on copie les fichiers de configuration pour compiler le noyau tel que ça a été fait pour le noyau présentement utilisé au sein du système, ensuite on prépare le nécessaire pour la prise en charge des options en question, puis on compile, pour obtenir 3 fichiers distincts ( snd-oxygen.ko / snd-oxygen-lib.ko / snd-virtuoso.ko ) qui sont nos fameux modules (drivers) patchés pour le support de la Xonar Xense, et enfin la copie de ces dernier en remplacement de ceux actuellement présents, et leur chargement pour utilisation courante.
+
+Un petit test rapide avec l'outil alsamixer vous montrera que la carte est bien accessible et utilisable, et l'applet sonore pulseaudio pourra également vous l'indiquer (pensez à configurer la bonne sortie utilisée quand nécessaire !)
+
+{{http://pix.toile-libre.org/upload/original/1379108518.png?853}}
+
+Voilà, profitez bien de votre carte Xonar Xense sous Linux ! 
+
+===== Limitations et bugs =====
+
+Ce patch est le prémisse du support officiel de cette carte son, actuellement une seule limitation est connue par rapport aux pilotes, et pas des moindres, toutes les sorties, 7.1 analagique et spdif comprises, ne fonctionnent pour le moment qu'en Stéréo.
+
+===== Liens =====
+http://mailman.alsa-project.org/pipermail/alsa-devel/2013-July/064706.html
+
+http://www.alsa-project.org/main/index.php/Matrix:Vendor-Asus
+
+http://www.alsa-project.org/main/index.php/Matrix:Module-virtuoso
+
+http://www.alsa-project.org/main/index.php/Matrix:Module-oxygen

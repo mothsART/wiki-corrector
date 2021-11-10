@@ -1,0 +1,245 @@
+
+{{tag>Xenial Serveur}}
+----
+
+====== Ubumirror ======
+
+Le paquet ubumirror est un ensemble de scripts permettant de **créer et maintenir à jour un miroir de la distribution Ubuntu**. A la différence de l'outil apt-mirror utilisant wget, celui-ci réalise la synchronisation sur la base de l'outil rsync offrant de meilleurs performances. Ce paquet apporte une solution supportée par la communauté Ubuntu pour le maintient des miroirs synchronisés et uniformisés. Celui-ci a été introduit dans la distribution avec la release de [[:lucid|Lucid 10.04 LTS]].
+
+
+==== Recommandations particulières ====
+
+Pour créer et maintenir un miroir à jour et fonctionnel, il est recommandé de suivre ces indications :
+  * **Bien savoir dans quoi on s'engage.** Un miroir générera beaucoup d'activité réseau et plus, s'il est à vocation public. Dans un tel cas, l'administrateur ne devrait pas avoir de limite de trafic auprès de son fournisseur d'accès à Internet (FAI).
+  * **Être sûr de consacrer un espace disque suffisant pour accueillir le miroir.** Un peu après la sortie de [[:xenial|Xenial 16.04 LTS]], un petit dépôt (seulement pour les architectures x86 et amd64) fait déjà 970 Go pour 785000 fichiers. Il est recommandé de dédier un disque dur (min. 1500GB) ou, au minimum, une partition pour le stockage du miroir.
+  * **Rester à jour.** Il est recommandé de mettre à jour son miroir 4 fois par jour (ç-a-d. chaque 6 heures) pour la partie //archive//. Pour la partie //releases//, une fois par jour suffit. Le push mirroring est une alternative disponible.
+  * **Surveiller le résultat des synchronisations automatiques.** En cas de défaillance de la synchronisation automatique, l'administrateur devra réagir pour corriger les problèmes rencontrés lors de la synchronisation. Effectivement, l'absence de paquets est très mal perçue par les utilisateurs du miroir. Une solution automatisée est présentée à la fin de cet article.
+  * **Être ou ne pas être un miroir officiellement reconnu ?** Chaque contribution est toujours la bienvenue. Cependant, il est nuisible à l'image d'Ubuntu qu'un miroir ne soit pas de qualité (à jour, accessible, offrant une bande passante correcte). Publier officiellement son miroir démontre une volonté de fournir ce service sur un long terme et avec une bonne qualité. Ne le faites que si vous êtes prêts à vous y engager.
+
+===== Installation =====
+
+Il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>ubumirror]]**.
+
+Ce paquet comprend 5 (4 avant [[:xenial|Ubuntu 16.04 LTS]]) scripts shell pour les synchronisations et un unique fichier de configuration.
+
+==== Les scripts ====
+
+=== ubuarchive ===
+
+Le script //**/usr/bin/ubuarchive**// va synchroniser l'ensemble des paquets de la distribution pour les architectures officiellement supportées (i386, amd64, powerpc et sparc jusqu'à 6.10). Cette synchronisation se fait en deux temps. Premièrement, on synchronise //pool// contenant l'ensemble des paquets (.dsc, .diff.gz, .tar.gz et .deb), ainsi que //project//. Deuxièmement, on synchronise //indices// et //dists//. Ces deux synchronisations se font avec l'option <nowiki>--</nowiki>delete-after qui assure de supprimer les paquets qui ont disparu le plus tard possible (après la copie de tous les nouveaux fichiers). Ceci est important car les outils de gestion de paquets (tel que APT) se basent sur la seconde partie (indices et dists) pour déterminer quels sont les paquets disponibles sur le dépôt. L'absence de paquets dans le pool alors qu'ils seraient référencés dans indices et dists générera des erreurs chez l'utilisateur du dépôt.
+
+=== uburelease ===
+
+Le script //**/usr/bin/uburelease**// va synchroniser l'ensemble des images officielles (iso, img) nécessaires pour réaliser l'installation d'une machine sous Ubuntu ou sous une distribution fille officiellement supportée (Edubuntu et Kubuntu). Cette synchronisation se fait en un temps avec l'option <nowiki>--</nowiki>delete-after.
+
+=== ubucdimage ===
+
+Le script //**/usr/bin/ubucdimage**// va synchroniser l'ensemble des images (iso, img) nécessaires, quotidiennement mises à jour, pour réaliser l'installation d'une machine sous Ubuntu et les distributions filles officiellement supportées (Edubuntu et Kubuntu). Cette synchronisation se fait en un temps avec l'option <nowiki>--</nowiki>delete-after. Vu son caractère évolutif quotidien, cette synchronisation, en fonction de la variable UBUCDI_FLAVOUR expliquée ci-dessous, générera beaucoup de trafic.
+
+=== ubuports ===
+
+A l'image du script ubuarchive, celui-ci va synchroniser l'ensemble des paquets de la distribution pour les architectures non-officiellement supportées (armel, hppa, ia64, lpia, powerpc, sparc)
+
+=== ubucloudimage ===
+
+Ce script va synchroniser les images officielles développées par Ubuntu pour être exécutées sur les clouds publics certifiés Ubuntu
+
+==== Le fichier de configuration ====
+
+=== ubumirror.conf ===
+Le fichier //**/etc/ubumirror.conf**// est bien documenté en soi. En voici une traduction personnelle:
+<file sh /etc/ubumirror.conf>
+# Adresse e-mail utilisée pour avertir l'administrateur du miroir
+EMAIL=root@localhost
+
+# Le FQDN du serveur
+HOSTNAME=$(hostname -f)
+
+# Limite de bande passante utilisée pour tous les scripts (0 signifie sans limite)
+# La valeur est exprimée en Ko par seconde
+SPEED=0
+
+# Timeout pour chaque script - 600 secondes par défaut
+IO_TIMEOUT=600
+
+# UBUARC_DIR est la destination pour la base du répertoire archive
+# Le script ubuarchive ne s'exécutera pas si cette variable n'est pas définie
+#UBUARC_DIR="/srv/mirror/ubuntu"
+
+# UBUCDI_DIR est la destination pour la base du répertoire cdimage
+# Le script ubucdimage ne s'exécutera pas si cette variable n'est pas définie
+#UBUCDI_DIR="/srv/mirror/ubuntu-cdimage"
+
+# UBUREL_DIR est la destination pour la base du répertoire releases
+# Le script uburelease ne s'exécutera pas si cette variable n'est pas définie
+#UBUREL_DIR="/srv/mirror/ubuntu-releases"
+
+# UBUPOR_DIR est la destination pour la base du répertoire ports
+# Le script ubuports ne s'exécutera pas si cette variable n'est pas définie
+#UBUPOR_DIR="/srv/mirror/ubuntu-ports"
+
+# UBUCLOUD_DIR est la destination pour la base du répertoire des images cloud
+# Le script ubucloudimage ne s'exécutera pas si cette variable n'est pas définie
+#UBUCLOUD_DIR="/srv/mirror/ubuntu-ports"
+
+# LOGDIR est le répertoire où seront enregistrés tous les logs (journaux)
+LOGDIR="/var/log/ubumirror/"
+
+# UBUxxx_MIRROR est la destination rsync (au format hôte::répertoire/) sur le mirroir
+# de référence à partir duquel sera fait la synchronisation par les scripts d'ubumirror
+UBUARC_MIRROR=rsync://rsync.archive.ubuntu.com/ubuntu
+UBUCDI_MIRROR=rsync://rsync.cdimage.ubuntu.com/cdimage
+UBUREL_MIRROR=rsync://rsync.releases.ubuntu.com/releases
+UBUPOR_MIRROR=rsync://rsync.ports.ubuntu.com/ubuntu-ports
+UBUCLOUD_MIRROR=rsync://rsync.cloud-images.ubuntu.com/cloud-images
+
+# UBUxxx_EXCLUDE est une liste d'exclusions à appliquer lors la synchronisation
+UBUARC_EXCLUDE="\
+#  --exclude binary-powerpc/ --exclude binary-sparc/ \
+#  --exclude daily-installer-powerpc/ --exclude daily-installer-sparc/ \
+#  --exclude installer-powerpc/ --exclude installer-sparc/ \
+#  --exclude *_powerpc.deb --exclude *_powerpc.udeb \
+#  --exclude *_sparc.deb --exclude *_sparc.udeb \
+#  --exclude Contents-powerpc.gz --exclude Contents-sparc.gz \
+"
+
+UBUCDI_EXCLUDE="\
+#  --exclude *-powerpc.* --exclude *-sparc.* \
+#  --exclude source/ \
+"
+
+UBUREL_EXCLUDE="\
+#  --exclude *-powerpc.* --exclude *-sparc.* \
+"
+
+UBUPOR_EXCLUDE="\
+#  --exclude binary-powerpc/ --exclude binary-sparc/ \
+#  --exclude daily-installer-powerpc/ --exclude daily-installer-sparc/ \
+#  --exclude installer-powerpc/ --exclude installer-sparc/ \
+#  --exclude *_powerpc.deb --exclude *_powerpc.udeb \
+#  --exclude *_sparc.deb --exclude *_sparc.udeb \
+#  --exclude Contents-powerpc.gz --exclude Contents-sparc.gz \
+"
+
+UBUCLOUD_EXCLUDE=""
+</file>
+
+===== Configuration =====
+
+Ce fichier de configuration doit être adapté à vos besoins.
+  * EMAIL : Une adresse mail personnelle externe peut être introduite cependant il faudra avoir un agent de transport de courier configuré telque postfix (recommandé).
+  * SPEED : Il est recommandé de mettre une valeur basse (par exemple 128 KBytes par seconde) afin de ne pas étrangler le serveur à partir duquel la synchronisation se fait. Effectivement, il n'y a aucune urgence à ce que cette synchronisation se fasse dans les plus bref délais. Cette valeur basse devrait permettre de maintenir à jour un dépôt selon les recommandations d'une synchronisation chaque 6 heures. Comme annoncé dans les recommandations particulières, l'administrateur veillera au bon déroulement des synchronisations.
+  * UBNxxx_DIR : Les répertoires doivent exister avant de lancer les scripts de synchronisation
+  * Les variables suivantes dépendent des choix fait par l'administrateur du miroir. Effectivement, pour plusieurs raisons, il est bon de limiter la synchronisation aux parties dont on aura besoin. Par exemple, je souhaite avoir un miroir pour servir des machines x86 et amd64 uniquement. Je peux dés lors décommenter UBUARC_DIR et les exclusions qui s'y rapportent UBUARC_EXCLUDE. Il faudra s'assurer que le répertoire indiqué pour la variable UBUARC_DIR existe ou il faudra le créer.
+  * Pour plusieurs raisons ayant trait à la qualité du réseau, il est recommandé de bien choisir le serveur à partir duquel l'administrateur synchronisera le sien. Évidemment, il faudra veiller à ce que ce serveur supporte bien la synchronisation par rsync. Ce n'est pas le cas de tous les dépôts. Dans le cas d'un serveur national officiel, il est demandé que celui-ci se synchronise sur le serveur de base (Londres). Dans les autres cas, il est recommandé de synchroniser son serveur à partir du serveur national officiel ou d'un autre serveur proche (en terme réseau ç-à-d avec peu de hop) et bien maintenu à jour. La liste des miroirs Ubuntu est disponible sur Launchpad pour la partie [[https://launchpad.net/ubuntu/+archivemirrors|archive]] et pour la partie [[https://launchpad.net/ubuntu/+cdmirrors|cdimage]].
+
+===== Utilisation =====
+
+==== Mise en place ====
+=== Création d'un utilisateur ===
+Par sécurité, il est recommandé de synchroniser son miroir à partir d'un compte avec des droits restreints. Pour ce faire, l'administrateur pourra créer le compte système //mirror//.
+<code>sudo useradd -r -m -d /home/mirror -c "User to perform mirror synchronization" -s /bin/false mirror</code>
+=== Création du répertoire LOGDIR ===
+Il faut créer le répertoire de logs (cfr LOGDIR)  et donner les droits d'écriture à l'utilisateur //mirror//
+<code>sudo mkdir /var/log/ubumirror
+sudo chown mirror /var/log/ubumirror</code>
+=== Création des répertoires UBNxxx_DIR ===
+Il faut créer les répertoires qui accueillent la synchronisation (cfr UBNxxx_DIR) et donner les droits d'écriture à l'utilisateur //mirror//
+<code>sudo mkdir /srv/mirror/ubuntu
+sudo chown mirror /srv/mirror/ubuntu</code>
+
+==== Premier démarrage ====
+<code>sudo -u mirror -H ubuarchive</code>
+La première exécution sera longue. Si vous n'avez pas une IP fixe, votre connexion se coupera à un moment et l'administrateur recevra un mail d'avertissement que la synchronisation n'a pas réussie. Ce n'est pas grave. Il faudra juste relancer le script qui a échoué. Après avoir introduit votre mot de passe administrateur, s'il vous est demandé, l'exécution de la commande ci-dessus ne renverra rien sur la console (standard output aka stdout).  Vous pouvez alors envoyer ce processus à l'arrière plan avec la combinaison des touches CTRL et Z suivi de la commande bg. L'administrateur pourra alors suivre l'évolution de la commande dans le journal (fichier log) avec la commande
+<code>tail -f /var/log/ubumirror/ubuarchive.log</code>
+Vous pouvez quitter ce processus avec la combinaison des touches CTRL et C sans crainte d'arrêter le processus ubuarchive. Ce sont bien deux processus distincts. Une fois que la première synchronisation sera réussie, l'administrateur pourra automatiser les synchronisations avec un cron job et rendre le miroir accessible aux utilisateurs par http, ftp et/ou rsync.
+
+L'exécution des autres scripts est similaire.
+
+==== Automatisation ====
+
+Pour automatiser la synchronisation, il faut créer un [[:cron|cron job]] (tâche récurrente) pour l'utilisateur //mirror//
+<code>sudo crontab -u mirror -e</code>
+Et y ajouter la commande suivante
+<code>33 */6 * * * /usr/bin/ubuarchive >/dev/null 2>&-</code>
+En fonction des besoins, d'autres commandes y seront introduites pour lancer la synchronisation les autres parties du miroir.
+
+==== Automatisation améliorée ====
+
+Ceci a pour but de remplacer ce qui a été présenté ci-dessus. L'expérience a montré qu'avec une mauvaise bande passante chez le client, il arrive que le script /usr/bin/ubuarchive ne se termine pas en moins de 6 heures. Le cron job ci-dessus relance un second processus de synchronisation. Ces processus vont se battre la bande passante disponible et risquent de ne pas arriver à synchroniser le miroir. Ainsi de suite, de multiple processus de synchronisation vont être lancés chaque 6 heures. Au bout de 24 heures, la situation est pratiquement irrécupérable et l'administrateur devra gérer le problème manuellement. Le script proposé ci-dessous va d'abord vérifier si un processus de synchronisation existe avant d'en lancer un nouveau. De plus, lorsque la synchronisation échoue, elle est relancée immédiatement (après 60 secondes). L'administrateur recevra quand-même un mail d'avertissement mais ne devrait pas s'en inquiéter.
+
+<file - /home/mirror/ubuarchive.sh>#!/bin/sh
+
+PID=$$
+PIDFILE=$HOME/ubuarchive.pid
+
+if [ -e $PIDFILE ] ; then
+  currentPID=`cat $PIDFILE`
+  echo "Ubuarchive is already running with PID : $currentPID"
+  exit
+fi
+
+echo $PID > $PIDFILE
+
+exitCode=1
+
+until [ $exitCode -eq 0 ];
+do
+  nice -n 16 ubuarchive
+  exitCode=$?
+  sleep 60
+done
+
+rm $PIDFILE</file>
+
+Ce script pourra être sauvé sur /home/mirror/ubuarchive.sh et il sera lancé par un cron job (en remplacement du précédent).
+<code>33 */6 * * * /home/mirror/ubuarchive.sh >/dev/null 2>&-</code>
+
+==== Mise en ligne du miroir ====
+
+Afin de profiter de ce miroir comme source de téléchargement des paquets de la distribution, il faut le rendre accessible en http ou https. Pour ce faire, il faut installer et configurer un serveur Web. L'exemple qui suit est basé sur //lighttpd//.
+
+=== Installation de lighttpd ===
+Il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt://lighttpd|lighttpd]]**
+=== Création du fichier de configuration du site ===
+<file - /etc/lighttpd/conf-available/50-mirror.conf>
+# -*- depends: dir-listing -*-
+
+# Virtual host
+$HTTP["host"] == "mirror.example.com" {
+    server.document-root = "/mnt/mirror"
+}
+
+# Alias redirection
+alias.url += (
+    "/mirror" => "/mnt/mirror"
+)
+</file>
+  * La première ligne permet de charger le module //dir-listing// nécessaire.
+  * La section //Virtual host// permet d'accéder au service par un nom de domaine spécifique (http://mirror.example.com). Il faut cependant configurer un serveur DNS pour résoudre correctement le nom de domaine en adresse IP.
+  * La section //Alias redirection// permet d'accéder au service par l'adresse IP ou le nom du serveur (%%http://<Serveur IP>/mirror%%)
+
+<note>Les deux sections sont présentées ici à titre informatif. Il n'est pas nécessaire de conserver les 2 sections. Une des 2 peut être commentée.</note>
+
+=== Activation du site ===
+L'activation du site se fait avec la commande //lighttpd-enable-mod//
+<code>sudo lighttpd-enable-mod mirror
+Met dependency: dir-listing
+Enabling mirror: ok
+Enabling dir-listing: ok
+Run /etc/init.d/lighttpd force-reload to enable changes</code>
+=== Rechargement du serveur Web ===
+Comme suggérer par la commande précédent, il faut recharger le serveur //lighttpd// pour qu'il prenne en compte la modification.
+<code>sudo /etc/init.d/lighttpd force-reload</code>
+Le site est à présent accessible sur l'url http://mirror.example.com ou %%http://<Serveur IP>/mirror%%
+
+===== Voir aussi =====
+
+  * **(en)** [[http://packages.ubuntu.com/lucid/ubumirror|Détail du package ubumirror]]
+  * **(en)** [[https://launchpad.net/ubumirror|Projet Ubuntu Mirror Scripts sur Launchpad]]
+  * **(en)** [[https://help.ubuntu.com/community/Rsyncmirror|Utilisation de rsync pour la synchronisation des miroirs]]
+
+----
+//Contributeur principal : [[:utilisateurs:Qedinux]].//
+
+//Basé sur [[https://wiki.ubuntu.com/Mirrors|« Ubuntu Wiki Mirror »]] et [[https://help.ubuntu.com/community/UEC/Provisioning/Mirror|« UECProvisioningMirror »]] par Dustin Kirkland et Jonathan Davies.//

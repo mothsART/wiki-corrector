@@ -1,0 +1,472 @@
+
+{{tag>Trusty Xenial sécurité sauvegarde}}
+----
+
+====== Backup-manager : Un utilitaire simple et accessible de gestion de sauvegarde ======
+
+===== Avant-propos =====
+
+<note important>Depuis mars 2013, le site officiel n'existe plus, mais [[https://github.com/sukria/Backup-Manager|le dépôt GitHub est toujours actif]], il est possible d'y contribuer.</note>
+
+La perte de données est la chose qu'un utilisateur redoute le plus. Elle peut être due à plusieurs facteurs (mauvaise manipulation, disque dur hors service, malveillance, vol,...) et n'épargne personne. Ceux qui ont eu la désagréable surprise d'avoir un disque dur en "carafe" savent bien sûr à quel point les sauvegardes sont importantes. Dans cette amertume :-(, les bonnes résolutions du genre "je ferai des sauvegardes toutes les minutes !" apparaissent. Elles sont malheureusement du même genre que celles que l'on fait tous les jours de l'an ! ;-)
+
+
+C'est pour cela qu'il existe des gestionnaires de sauvegardes qui effectuent ces opérations répétitives pour nous et surtout sans nous !
+
+Avant de commencer, je voudrais vous informer que d'autres outils de sauvegarde existent tels que [[:rsync|rsync, avec lequel on peut mettre en place un serveur de synchronisation]], qui peut aussi être utilisé [[:tutoriel:sauvegarder_home_avec_rsync|pour la sauvegarde de "/home"]], et qui dispose d'une interface graphique, [[:tutoriel:sauvegarder_home_avec_grsync|Grsync]], [[:rdiff-backup]] et [[:dump]] mais ces outils répondent à d'autres besoins que backup-manager.
+
+En effet, dans le choix d'un gestionnaire de sauvegarde il faut connaître son besoin. Celui auquel répond (très bien) backup-manager est une sauvegarde de fichier locaux sous forme d'archives (méthode éprouvée) pouvant être exportée sur un serveur (via FTP, SSH, RSYNC,...) ou gravée sur CD/DVD. Il n'y a pas de procédure de restauration automatique, il suffit juste d'extraire les fichiers de l'archive pour pouvoir les utiliser. Backup-manager est donc efficace pour des ordinateurs "individuels" de particuliers et petites entreprises désireux d'une solution de sauvegarde **simple, automatique et relativement sûre**.
+
+Loin d'avoir testé toutes les solutions existantes, backup-manager a retenu mon attention car :
+  * Son paramétrage est relativement fourni, intuitif et bien renseigné
+  * Il génère des archives (donc facilement manipulables et c'est un moyen éprouvé !)
+
+Ce document n'est qu'une synthèse/traduction de la documentation officielle 7.2 disponible dans le paquet backup-manager-doc disponible dans les dépôts universe.
+
+{{icons:icontip.png  |Conseil}}
+> Si vous ne disposez pas du temps nécessaire à la configuration de Backup-Manager, reportez votre installation. Ça vous évitera [[http://forum.ubuntu-fr.org/viewtopic.php?pid=995699#p995699|la mésaventure suivante]]
+
+
+===== Présentation =====
+Backup-manager s'étoffe de versions en versions dans cette version il permet dès à présent :
+
+  * de sauvegarder vos données sous forme d'archive tar/dar (à intervalle régulier ou sur demande)
+  * d'effacer les vieilles sauvegardes.
+  * de compresser les sauvegardes, les découper en plusieurs fichiers de taille déterminée.
+  * de ne sauvegarder que les différences entre les sauvegardes (sauvegarde incrémentale)
+  * de graver automatiquement les sauvegardes sur CD/DVD
+  * d'exporter les sauvegardes sur une machine distante
+  * d'exécuter une commande avant et après la sauvegarde
+  * de créer plusieurs méthodes de sauvegarde grâce à divers outils de sauvegardes
+  * ...
+
+Ce gestionnaire de sauvegarde est donc suffisamment puissant pour un parc informatique ne comportant que quelques postes.
+
+Pour un parc informatique important, il est préférable de mettre en place des systèmes du genre [[:rsync]] (Serveur de sauvegarde, clients)
+
+
+===== Installation =====
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>backup-manager]]**
+
+Lors de l'installation, on vous demande quelques paramètres dont l'aide est fournie en français.
+
+Lorsque l'installation prend fin, backup-manager est dès à présent paramétré pour pouvoir faire des sauvegardes. Elles seront journalières, complètes (tous les fichiers seront sauvés à chaque fois) et sous forme d'archives compressées *.tar.gz. Leur durée de vie sera de 5 jours (après quoi elles seront supprimés). Si cela est ce que vous cherchiez vous pouvez vous arrêter là !
+
+<note tip>Vous pouvez installer **[[apt>backup-manager-doc]]** pour pouvoir consulter la documentation officielle complète en PDF et HTML dans /usr/share/doc/backup-manager-doc/. (en anglais)</note>
+
+
+===== Configuration =====
+
+La configuration de backup-manager se fait via l'édition d'un fichier manuellement :
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/etc/backup-manager.conf**.
+
+
+On va maintenant regarder ensemble la signification des divers paramètres
+
+<note tip>Utilisez le mode de coloration syntaxique de gedit (choisir Affichage->Mode de coloration->Scripts->sh) on y voit beaucoup mieux !</note>
+
+==== Répertoire et Sauvegarde ====
+=== Répertoire et ses droits===
+Backup-manager stocke les archives (sauvegardes) dans un **répertoire** lequel peut être protégé par des droits d'accès.
+== BM_REPOSITORY_ROOT ==
+Répertoire où toutes vos archives seront stockés.
+
+__Remarques :__
+Il est plus sûr :
+  * de stocker les archives sur un autre disque dur (crash de disque) si vous ne souhaitez pas les exporter sur un serveur.
+  * d'allouer une partition uniquement pour les sauvegardes qui peuvent prendre beaucoup de place et "gêner" les autres partitions (surtout si mauvais paramétrage)
+__Exemple :__\\
+<code bash>export BM_REPOSITORY_ROOT="/sauv"</code>
+== BM_REPOSITORY_SECURE ==
+Pour des raisons de sécurité le répertoire peut n'être accessible (lecture/écriture) que par une paire utilisateur/groupe.
+
+__Exemple :__\\
+<code bash>export BM_REPOSITORY_SECURE="true"
+export BM_REPOSITORY_USER="root"
+export BM_REPOSITORY_GROUP="root"</code>
+
+Dans la version 0.7.5 (branche en développement) présente sur feisty il est possible de choisir les permissions du dossier BM_REPOSITORY_ROOT :
+
+<code bash>export BM_REPOSITORY_CHMOD="770"</code>
+
+ainsi que les permissions des différentes archives :
+
+<code bash>export BM_ARCHIVE_CHMOD="660"</code>
+
+
+=== Sauvegardes ===
+== BM_ARCHIVE_TTL ==
+C'est la durée de vie (Time To Live) d'une archive avant qu'elle ne soit remplacée par une autre. Autrement dit si BM_ARCHIVE_TTL est à 5 vous aurez en permanence 5 archives ; la sixième sauvegarde remplacera la première, etc. Si vous avez programmé vos sauvegarde pour être quotidiennes, vous aurez donc au maximum 5 jours d'archives.
+
+__Exemple :__\\
+<code bash>export BM_ARCHIVE_TTL="5"</code>
+
+Dans la version 0.7.5 présente sur Feisty il est possible de choisir de purger récursivement l'ensemble du contenu de BM_REPOSITORY_ROOT lorsqu'une archive expire :
+<code bash>export BM_REPOSITORY_RECURSIVEPURGE="true"</code>
+
+== BM_ARCHIVE_PURGEDUPS ==
+Si deux archives (sauvegardes) successives sont identiques, backup-manager peut créer un lien au lieu de recréer une archive. (gain de place)
+
+__Exemple :__\\
+<code bash>export BM_ARCHIVE_PURGEDUPS="true"</code>
+== BM_ARCHIVE_PREFIX ==
+Donne un préfixe au nom de l'archive.
+
+__Exemple :__ ici le nom de l'ordinateur\\
+<code bash>export BM_ARCHIVE_PREFIX="$HOSTNAME"</code>
+== BM_ARCHIVE_METHOD ==
+La méthode permettant de créer les archives : (voir § suivant)
+  * **tarball**
+  * **tarball-incremental**
+  * **mysql**
+  * **svn**
+  * **pipe**
+  * **none**
+
+__Exemple :__\\
+<code bash>export BM_ARCHIVE_METHOD="tarball"</code>
+
+Note : Ici, l'on peut mettre plusieurs méthodes, et ainsi sauvegarder en tarball-incremental + sauvegarde mysql.
+
+__Exemple :__\\
+<code bash>export BM_ARCHIVE_METHOD="tarball-incremental mysql"</code>
+==== Méthode de sauvegarde ====
+
+Backup Manager offre à ses utilisateurs la possibilité de sauvegarder leur données sur des serveurs distant en utilisant : 
+
+    * FTP :  c'est un mode de transfert efficace, mais le seul problème ( pas un grand problème :) ) est que toutes les données passent en clair, c'est à dire qu'il n'y a aucune sécurité de transfert et toutes les données sont transmises en clair, pour cela, je vous présente la méthode comme suit : 
+
+
+     * export BM_UPLOAD_METHOD="ftp"
+     * export BM_UPLOAD_FTP_USER="votre_identifiant"
+     * export BM_UPLOAD_FTP_PASSWORD="votre_mot_de_passe"
+     * export BM_UPLOAD_FTP_HOSTS="adresse_ip_de_votre_serveur"
+     * export BM_UPLOAD_FTP_PURGE="true"
+     * export BM_UPLOAD_FTP_TTL="durée_de_vie_des_archives_dans_le_serveur"
+     * export BM_UPLOAD_FTP_DESTINATION="emplacement_de_sauvegarde(exemple /home)"
+    
+=== Tarball ===
+A chaque sauvegarde, elle liste les fichiers à sauvegarder dans un fichier texte et fabrique le fichier de sauvegarde. (vous pouvez faire vos propres scripts).\\
+  * **+** Facile à utiliser
+  * **-** gourmande en espace de disque !
+== BM_TARBALL_NAMEFORMAT ==
+Comment seront nommées les archives :
+  * **long** : chemin-complet-du-dossier.tar.gz
+  * **short** : dossierparent.tar.gz
+__Exemple :__
+<code bash>export BM_TARBALL_NAMEFORMAT="long"</code>
+== BM_TARBALL_FILETYPE ==
+C'est le type de compression désirée :
+  * **tar** : sans compression fait juste une archive de vos sauvegardes
+  * **tar.gz** : compression/décompression rapide
+  * **tar.bz2** : taux de compression plus élevé mais beaucoup plus lente
+  * **zip** : compression zip
+  * **dar** : compression et permet le découpage en plusieurs fichiers de taille définie (ne pas oublier de l'installer auparavant)
+__Exemple :__
+<code bash>export BM_TARBALL_FILETYPE="tar.gz"</code>
+== BM_TARBALL_DUMPSYMLINKS ==
+Est ce que backup-manager sauvegarde les répertoires pointés par des liens (raccourcis) ?
+
+__Attention :__ Peut considérablement augmenter la taille de votre archive. S'il y a une boucle de liens l'archive sera infinie! Soyez prudent !
+
+__Exemple :__
+<code bash>export BM_TARBALL_DUMPSYMLINKS="false"</code>
+
+== BM_TARBALL_DIRECTORIES ==
+Pour faire une sauvegarde, il faut lui dire le chemin où se trouvent les choses à sauvegarder :
+
+__Note :__ Pour sauvegarder plusieurs dossiers séparer les chemins d'un espace
+
+__Exemple :__\\
+<code bash>export BM_TARBALL_DIRECTORIES="/home/toto /home/tata"</code>
+
+<note tip>Pour sauvegarder son compte "Ubuntu One" dans lequel il y a une espace, utiliser : "/home/tota/Ubuntu?One"</note>
+
+== BM_TARBALL_BLACKLIST ==
+Donner une liste noire qui comporte certains dossiers et fichiers à ne pas sauvegarder.
+
+__Note :__ Séparer les chemins/fichiers d'un espace.
+
+__Exemple :__\\
+<code bash>export BM_TARBALL_BLACKLIST="/home/toto/temp/ *.mp3"</code>
+
+== BM_TARBALL_SLICESIZE ==
+Détermine la taille maximale des archives **dar** (si vous n'utilisez pas dar cette option n'est pas pour vous)
+
+__Exemple :__\\
+<code bash>export BM_TARBALL_SLICESIZE="1000M"</code>
+
+=== Tarball incrémentale ===
+Cette méthode est identique à tarball mais ne sauvegarde que les différences entre deux sauvegardes successives.
+Ici 2 sortes de sauvegarde sont mises en oeuvre :
+  - Sauvegardes complètes (full) : sauvegarde tous les fichiers comme une tarball à intervalle régulier.
+  - Sauvegardes différentielles : ce sont les sauvegardes entre 2 sauvegardes complètes. Elles contiennent juste la différence entre 2 sauvegardes successives.
+  * **+** Gain de place énorme
+  * **-** Toute votre sauvegarde n'est pas dans la même archive
+== BM_TARBALLINC_MASTERDATETYPE ==
+Détermine la fréquence des sauvegardes complètes : (temps entre 2 sauvegardes complètes)
+  * **weekly** : toutes les semaines
+  * **monthly** : tous les mois
+__Exemple :__\\
+<code bash>export BM_TARBALLINC_MASTERDATETYPE="weekly"</code>
+
+== BM_TARBALLINC_MASTERDATEVALUE ==
+Le jour des sauvegardes complètes :
+  * si weekly : mettre un nombre de 0->6 (dimanche -> samedi)
+  * si monthly : mettre un nombre de 1->31 (1<sup>er</sup> -> 31)
+__Exemple :__
+<code bash>export BM_TARBALLINC_MASTERDATEVALUE="1"</code>
+
+=== MySql ===
+La méthode tarball sur les repertoires contenant les bases des données MySql ne permettra pas de récupérer des bases de données intègres. Backup-manager propose donc une méthode de sauvegarde basée sur mysqldump (fichiers texte au standard SQL)
+
+== Définir la liste des bases à sauvegarder ==
+Les bases à sauvegarder sont notées dans la ligne "export BM_MYSQL_DATABASES=", séparées par un espace. Par exemple:
+<code bash>export BM_MYSQL_DATABASES="mysql mybase wordpress dotclear phpbb2"</code>
+Si on souhaite sauvegarder toutes les bases, on utilise:
+<code bash>export BM_MYSQL_DATABASES="__ALL__"</code>
+
+== Les paramètres de connexion MySql ==
+Il va falloir mettre en clair le mot de passe de connexion Mysql dans le fichier, D'autant que par défaut il propose root. (ça craint).
+
+Limitons les négligences de sécurité:
+Tout d'abord sécurisons le fichier de configuration de Backup-manager:
+<code>sudo chown root:root /etc/backup-manager.conf
+sudo chmod 640 /etc/backup-manager.conf</code>
+
+Créer un utilisateur MySql qui aura les droits minimums (tout lire, c'est énorme, mais déjà plus restrictif que les droits root)
+
+Pour se connecter en root au client mysql:
+<code>mysql -u root -p</code>
+Dans le prompt Mysql (pensez à remplacer "secret" par votre mot de passe):
+<code sql>GRANT SHOW DATABASES,SHOW VIEW,SELECT,LOCK TABLES ON *.* TO 'backupmanager'@'localhost' IDENTIFIED BY 'secret';
+exit;</code>
+
+Les paramètres de connexion aux bases dans le fichier /etc/backup-manager.conf
+
+L'utilisateur Mysql
+<code bash>export BM_MYSQL_ADMINLOGIN="backupmanager"</code>
+Son mot de passe:
+<code bash>export BM_MYSQL_ADMINPASS="secret"</code>
+
+== Compression des exports des bases ==
+
+par défaut c'est au format bzip2
+<code bash>export BM_MYSQL_FILETYPE="bzip2"</code>
+Pensez à installer le paquet bzip2 si vous souhaitez compresser les bases dans ce format:
+
+<code>sudo apt-get install bzip2</code>
+Ou laissez la valeur vide, si vous ne souhaitez pas compresser les bases de données.
+
+=== Autres ===
+Les autres méthodes sont  SVN, Generic method,...
+Ces méthodes ne sont pas (encore) expliquées dans ce wiki. N'hésitez pas à regarder la documentation officielle (très bien faite et en anglais de cuisine [[http://web.archive.org/web/20101028151801/http://wiki.backup-manager.org/index.php/Main_Page#Documentation]] (archive, le lien original ne semble plus fonctionner)
+
+== Méthode SVN ==
+
+Dans le fichier /etc/backup-manager.conf, il y a une section pour la configuration de la méthode de sauvegarde SVN. Deux paramètres :
+<code bash>BM_SVN_REPOSITORIES</code> qui doit contenir la liste des dépôts à sauvegarder, et
+<code bash>BM_SVN_COMPRESSWITH</code> qui indique la méthode de compression de l'archive des dépôts sauvegardés.
+
+A savoir que la méthode SVN utilise l'outil svnadmin dump pour sauvegarder les dépôts.
+
+Astuce : vous pouvez utiliser le paramètre suivant pour sauvegarder tous vos dépôts sans en indiquer les noms :
+<code bash>export BM_SVN_REPOSITORIES="`find /var/svn/  -maxdepth 1  -mindepth 1`"</code>
+
+(attention les `  = Alt GR + 7, très importants car permettent d'interpréter la commande entre)
+
+N'oubliez pas d'activer la méthode dans :
+<code bash>export BM_ARCHIVE_METHOD = ".... ... svn"</code>
+
+==== Méthode d'export des sauvegardes ====
+Il est possible d'exporter ses sauvegardes par différents protocoles (SSH, FTP et RSYNC). Ces méthodes ne sont pas (encore) expliquées dans ce wiki. N'hésitez pas à regarder la documentation officielle (très bien faite et en anglais de cuisine)
+
+
+
+
+
+
+==== Exportations sur média ====
+Dans cette version, seul l'enregistrement sur CD/DVD est supporté. D'autres enregistrements sont à l'étude.
+=== Gravure CD/DVD ===
+== BM_BURNING_METHOD ==
+Quel support voulez vous utiliser :
+  * **CDR** : pour les CD-R (enregistrables)
+  * **CDRW** : pour les CD-RW (réenregistrables)
+  * **DVD** : pour les DVD+R et DVD-R (enregistrables) et pour les DVD+RW (réenregistrables) n'ont pas besoin d'être effacés.
+  * **DVD-RW** : pour les DVD-RW (réenregistrables)
+  * **none** : désactive la procédure de gravage
+__Notes :__
+  * En commande automatique : backup-manager va essayer de mettre toutes les sauvegardes sur le support, s'il ne peut pas il mettra juste la dernière, sinon il ne gravera rien.
+  * En commande manuelle : backup-manager demandera autant de supports nécessaires à la copie de toutes les sauvegardes.
+  * CDRW et DVD-RW effacent d'abord le disque puis grave. Attention à ne pas laisser de support important dans le lecteur lors de la sauvegarde ! **(déconseillé en automatique)**
+__Remarque :__
+Je déconseille la gravure de support en mode automatique si vous n'avez pas un graveur dédié pour cela (donc mettez none dans ce fichier de configuration). En effet, elle pose des problèmes en cas de présence d'un CD-RW présent lors de la sauvegarde. Vous pourrez toujours faire des sauvegardes manuelles sur support (voir § suivant).
+
+__Exemple :__
+<code bash>export BM_BURNING_METHOD="none"   (recommandé)
+ou
+export BM_BURNING_METHOD="CDR"</code>
+
+== BM_BURNING_CHKMD5 ==
+(à compléter)
+Permet de vérifier après gravure si les données du support correspondent aux archives. 
+
+__Exemple :__
+<code bash>export BM_BURNING_CHKMD5="true"</code>
+
+== BM_BURNING_DEVICE ==
+Donne le chemin du lecteur qui est aussi le chemin du graveur (nécessaire pour le CHecK MD5).
+
+__Exemple :__
+<code bash>export BM_BURNING_DEVICE="/dev/cdrom"</code>
+
+== BM_BURNING_DEVFORCED ==
+Donne le chemin du graveur si aucun n'est renseigné, le graveur par défaut sera utilisé.
+
+__Exemple :__
+<code bash>export BM_BURNING_DEVFORCED="/dev/cdrom"</code>
+
+== BM_BURNING_MAXSIZE ==
+Donne la capacité maximale des supports : 
+  * pour un CD : 650 ou 700 ou 800
+  * pour un DVD (simple couche): 4700
+
+__Exemple :__
+<code bash>export BM_BURNING_MAXSIZE="700"</code>
+
+
+
+==== Options avancées ====
+=== Les logs ===
+(à compléter)
+== BM_LOGGER ==
+Voulez-vous que les sorties de backup-manager soient envoyées vers le syslog ?
+<code bash>export BM_LOGGER="true"</code>
+
+== BM_LOGGER_FACILITY ==
+(à compléter)
+<code bash>export BM_LOGGER_FACILITY="user"</code>
+
+
+
+
+
+==== Les commandes extérieures ====
+Un aspect très pratique de backup-manager est de pouvoir exécuter des commandes **avant** et **après** la sauvegarde.
+=== Commande pré ===
+== BM_PRE_BACKUP_COMMAND ==
+Ici vous renseignez la commande à effectuer **avant** une sauvegarde
+__Astuce :__
+
+Il peut être intéressant d'exécuter un petit script qui :
+  * copie des fichiers de configuration (fstab, xorg.conf, source.list, menu.lst,...) dans le dossier à sauvegarder
+  * génère la liste des paquets installés
+  * ...
+
+<code bash>export BM_PRE_BACKUP_COMMAND="sh /home/toto/script_de_pre_sauv.sh"</code>
+
+=== Commande post ===
+== BM_POST_BACKUP_COMMAND ==
+Ici vous renseignez la commande à effectuer **après** une sauvegarde.
+<code bash>export BM_POST_BACKUP_COMMAND="sh /home/toto/script_de_post_sauv.sh"</code>
+
+===== Utilisation =====
+
+
+
+
+
+
+
+
+
+==== Commandes ====
+Backup-manager peut uniquement être exécuté en tant que super-utilisateur.
+Vous pouvez obtenir de l'aide sur backup-manager grâce au classique **man** :
+<code>man backup-manager</code>
+
+Ou sous forme synthétique :
+<code>sudo backup-manager -h</code>
+
+Je ne traiterai pas de ces commandes car elles sont bien renseignées (et dans la langue de Molière !).
+
+== Quelques commandes utiles ==
+Faire une sauvegarde manuelle
+<code>sudo backup-manager</code>
+
+Utiliser un autre fichier de configuration :
+<code>sudo backup-manager -c /etc/backup-manager/backup_de_mon_home.conf</code>
+
+Graver toutes les archives du 6 novembre 2006 :
+<code>sudo backup-manager --burn 20061106</code>
+
+
+
+=== Restauration des sauvegardes ===
+
+Un pépin n'arrivant jamais au bon moment, le mieux est de s'assurer que les sauvegardes fonctionnent bien comme elles ont été prévues et que leurs restaurations soient facilitées.
+Backup-manager ne s'occupant que de créer des archives, ne permet aucune restauration.
+Il vous est donc primordial de connaître les outils de gestions d'archives.
+Si vos archives sont en :
+
+  * tar : tar -xvcf fichier.tar -C chemin_de_décompactage
+  * tar.gz : tar -xvzf fichier.tar -C chemin_de_décompactage
+  * tar.bz2 : tar -xvjf fichier.tar -C chemin_de_décompactage
+
+== Restaurer un backup incrémentiel (méthode "tarball-incremental") ==
+ 
+  * Disposer du plus ancien backup complet + jeu de backups incrémentiels postérieurs + du fichier snapshot créé par backup-manager ~.incremental-list.txt
+  * Détarer de manière classique le dernier backup complet 
+<code>tar -xvf backup_complet.tar</code>
+  * Détarer le premier backup incrémentiel qui suit dans l'ordre chronologique le backup complet en indiquant le fichier "snapshot" créé par backup-manager 
+<code>tar -xvf backup_incr1.tar --listed-incremental=backup.incremental-list.txt</code>
+  * Détarer de la même manière les backups incrémentiels suivants jusqu'au dernier et normalement, le backup récupéré est à jour ! :-P
+
+
+Vous pouvez aussi utiliser des outils graphiques tel que file roller pour les archives ci-dessus.
+
+  * dar : voir [[dar#restauration_d_une_archive_dar]]
+
+
+=== Automatisation avec CRON ===
+Par défaut backup-manager est déjà automatisé avec [[:cron]] et s'exécute tous les jours.
+Cette automatisation est faite grâce au script shell : "/etc/cron.daily/backup-manager"
+
+<note>Avec la version **0.7.9.3**, la tâche cron n'est plus installée, il faut donc ajouter un fichier backup-manager dans les tâches cron journalières (/etc/cron.daily) avec le contenu suivant:
+<code bash>#!/bin/sh
+# cron script for backup-manager
+test -x /usr/sbin/backup-manager || exit 0
+/usr/sbin/backup-manager</code>
+Il faut enfin la rendre éxécutable
+<code>sudo chmod 751 /etc/cron.daily/backup-manager</code>
+</note>
+
+__Exemple de sauvegarde multiple:__
+Partons du principe que vous voulez :
+  * sauver votre /home/toto/ tous les jours de façon incrémentielle
+  * sauver votre /mnt/musiques tous les mois de façon complète
+Il faut donc faire deux fichiers de configuration (sur la base de backup-manager.conf) :
+  * backup-manager_home.conf pour la sauvegarde du /home/toto
+  * backup-manager_musique.conf pour la sauvegarde du /mnt/musique
+Créer deux scripts qui lancent backup-manager dans :
+  * /etc/cron.daily/backup-manager_scripts_home :
+<code bash>
+#!/bin/sh
+/usr/sbin/backup-manager -c /chemin_du_fichier_de_conf/backup-manager_home.conf
+</code>
+  * /etc/cron.monthly/backup-manager_scripts_musique :
+<code bash>
+#!/bin/sh
+/usr/sbin/backup-manager -c /chemin_du_fichier_de_conf/backup-manager_musique.conf
+</code>
+
+===== Conclusion =====
+Une fois paramétré, le couple backup-manager/cron s'occupe de tout.
+J'espère que ce document vous aura été utile et si vous avez des critiques/suggestions (constructives) n'hésitez pas à me contacter. Si vous voulez compléter/améliorer ce document, je serai ravi de le voir évoluer  ! :-)
+
+<note important>Ne faites pas confiance aveuglément à un programme de sauvegarde et surtout à sa configuration ! Une fois que vous l'avez mise au point testez-la. Par exemple :  essayez de retrouver un fichier supprimé depuis 3 jours, ce n'est pas le jour où vous aurez besoin de ces sauvegardes qu'il va vous falloir regarder comment on les récupère ! (douloureux souvenir quand tu nous tiens ;-))
+Veillez aussi à éviter de donner comme cible de sauvegarde un répertoire qui pourrait remplir le disque dur de démarrage, ce qui bloquerait un futur démarrage de session.
+ 
+A noter que parfois les fichiers de type backup.incremental-list.txt ou *.incremental.bin peuvent ne pas être envoyé par ftp. Une solution ici : [[http://forum.ovh.com/showthread.php?p=542964]].</note>

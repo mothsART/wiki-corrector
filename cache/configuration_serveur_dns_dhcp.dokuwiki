@@ -1,0 +1,235 @@
+
+{{tag>serveur réseau dns}}
+
+----
+
+
+
+====== Comment configurer un serveur léger dns et dhcp alias Dnsmasq ?======
+
+DnsMasq est un petit serveur DNS (cache DNS) qui intègre un serveur DHCP. Peu gourmand en ressources et très simple à configurer, il est bien adapté à une installation sur une solution embarquée telle qu’un routeur ou point d’accès wifi (sous OpenWRT par exemple ; - )
+
+Pour la résolution des noms, il se base sur les DNS déclarés dans la configuration réseau (/etc/resolv.conf) ou sur le fichier /etc/hosts. Ce qui est bien pratique pour configurer une petite zone lan : il suffit d’éditer le fichier /etc/hosts comme nous le ferions pour une seule machine.
+
+Côté serveur DHCP, il nous faut faire un minimum de conf… Cela se passe dans le fichier /etc/dnsmasq.conf
+
+A minima, nous devrions configurer la plage dhcp, l’adresse d’un serveur DNS et une route par défaut (gateway).
+
+===== Installation =====
+
+On désactive la résolution DNS de //systemd-resolved//. Pour cela on édite avec les droits d'administrateur le fichier **/etc/systemd/resolved.conf**
+
+<file>
+[Resolve]
+DNSStubListener=no
+</file>
+
+Puis on relance le service systemd-resolved :
+
+<code>
+sudo systemctl restart systemd-resolved
+</code>
+
+Pour installer Dnsmasq on écrit dans un terminal :
+
+<code>
+sudo apt-get install dnsmasq
+</code>
+
+Ou on clique ici : **[[apt>dnsmasq]]**
+===== Configuration =====
+
+
+Pour le configurer on édite le fichier : [[:tutoriel:comment_editer_un_fichier|/etc/dnsmasq.conf]]
+
+Un exemple de dnsmasq pour un simple réseau :
+
+<file>
+domain-needed
+bogus-priv
+filterwin2k
+ 
+localise-queries
+local=/lan/
+domain=local.lan
+expand-hosts
+no-negcache
+resolv-file=/tmp/resolv.conf.auto
+ 
+dhcp-authoritative
+dhcp-leasefile=/tmp/dhcp.leases
+ 
+# use /etc/ethers for static hosts; same format as --dhcp-host
+read-ethers
+ 
+# Plage DHCP
+dhcp-range=192.168.1.100,192.168.1.150,12h
+# Netmask
+dhcp-option=1,255.255.255.0
+# Route
+dhcp-option=3,192.168.1.1
+</file>
+
+On édite le fichier [[:tutoriel:comment_editer_un_fichier|/etc/resolv.conf]]
+
+<file>
+# Le nom de domain local (n'existe pas sur internet)
+domain local.lan
+# Où les clients doivent chercher les pc sur le réseau local
+search local.lan
+# Serveur dns primaire fourni par mon provideur
+nameserver 195.238.2.21
+# Serveur dns secondaire fourni par mon provideur
+nameserver 195.238.2.22
+</file>
+
+
+
+On édite le fichier [[:tutoriel:comment_editer_un_fichier|/etc/hosts]]
+
+<file>
+127.0.0.1       localhost
+127.0.1.1       client-desktop
+192.168.1.1     mail
+192.168.1.1     mail.local.lan
+</file>
+
+Dans l'exemple ci-dessus, l'ordinateur sur le réseau local 192.168.1.1 aura comme nom dns mail et mail.local.lan.
+Pas besoin d'ajouter tous les ordinateurs, ceux ayant fait une demande dhcp auront leur nom dns directement configuré.
+
+
+
+===== Application de la nouvelle configuration =====
+
+On tape dans un terminal :
+
+<code>
+sudo /etc/init.d/dnsmasq restart
+</code>
+===== Plus d'info sur le fichier : /etc/dnsmasq.conf =====
+
+Quelques explications sur les options utilisées. Il en existe bien d’autres, je vous invite à consulter le man pour approfondir le sujet… Ce qui suit en est largement inspiré…
+
+**domain-needed** : Ne transmet pas les requêtes ne contenant pas un nom de domaine complet. Par exemple,une requête pour machine ne sera pas transmise aux serveurs DNS de votre FAI, alors qu’une requête pour machine.domain.com le sera.
+
+**bogus-priv** : Fausse résolution inverse pour les réseaux privés. Toutes les requêtes DNS inverses pour des adresses IP privées (ie 192.168.x.x, etc…) qui ne sont pas trouvées dans /etc/hosts ou dans le fichier de baux DHCP se voient retournées une réponse “pas de tel domaine” (”no such domain”) au lieu d’être transmises aux serveurs de nom amont (”upstream server”).
+
+**filterwin2k** : Les dernières versions de windows font des requêtes DNS périodiques auxquelles non seulement les serveurs DNS publics ne peuvent donner de réponse, mais qui, de surcroît, peuvent poser des problèmes en déclenchant des connexions intempestives pour des liens réseaux avec des connexions “à la demande”. Fournir cette option active le filtrage des requêtes de ce type. Les requêtes bloquées sont les requêtes pour les entrées de type SOA ou SRV, ainsi que les requêtes de type ANY avec des noms possédant des caractères sous-lignés (requêtes pour des serveurs LDAP).
+
+**localise-queries** : Retourne des réponses aux requêtes DNS dépendantes de l’interface sur laquelle la requête a été reçue, à partir du fichier /etc/hosts. Si un nom dans /etc/hosts a plus d’une adresse associée avec lui, et qu’une des adresses au moins est dans le même sous-réseau que l’interface sur laquelle la requête a été reçue, alors ne retourne que la(les) adresse(s) du sous-réseau considéré. Cela permet d’avoir dans /etc/hosts un serveur avec de multiples adresses, une pour chacune de ses interfaces, et de fournir aux hôtes l’adresse correcte (basée sur le réseau auquel ils sont attachés). Cette possibilité est actuellement limitée à IPv4.
+
+**domain** : Spécifie le domaine utilisé pour étendre la recherche de noms sans domaine. Utilisé également pour attribuer un domaine de recherche au clients DHCP.
+
+**expand-hosts** : Ajoute le nom de domaine aux noms simples (ne contenant pas de point dans le nom) contenus dans le fichier /etc/hosts, de la même façon que pour le service DHCP.
+
+**no-negcache** : Désactive le “cache négatif”. Le “cache négatif” permet à Dnsmasq de se souvenir des réponses de type “no such domain” fournies par les serveurs DNS en amont et de fournir les réponses sans avoir à re-transmettre les requêtes aux serveurs amont.
+
+**interface=eth0** : Indique quel carte réseaux est a l'écoute des requetes DHCP.
+
+**resolv-file** : Lis les adresses des serveurs de nom amont dans le fichier de nom <fichier>, au lieu du fichier /etc/resolv.conf. Pour le format de ce fichier, voir dans le manuel pour resolv.conf(5) les entrées correspondant aux serveurs de noms (nameserver). Dnsmasq peut lire plusieurs fichiers de type resolv.conf, le premier fichier spécifié remplace le fichier par défaut, le contenu des suivants est rajouté dans la liste des fichiers à consulter. Seul le fichier ayant la dernière date de modification sera chargé en mémoire.
+
+**dhcp-autoritative** : Cette option doit être donnée lorsque Dnsmasq est le seul serveur DHCP sur le réseau. Cela change le comportement par défaut qui est celui d’un strict respect des RFC, afin que les requêtes DHCP pour des baux inconnus par des hôtes inconnus ne soient pas ignorées. Cela permet à de nouveaux hôtes d’obtenir des baux sans tenir compte de fastidieuses temporisations (”timeout”). Cela permet également à Dnsmasq de reconstruire sa base de donnée contenant les baux sans que les clients n’aient besoin de redemander un bail, si celle-ci est perdue.
+
+**dhcp-leasefile** : Utilise le fichier dont le chemin est fourni pour stocker les informations de baux DHCP. Si cette option est fournie mais qu’aucune option de type dhcp-range n’est donnée, alors un comportement de type Dnsmasq version 1 est activé. Le fichier fourni est supposé être un fichier de baux DHCP de type ISC DHCPD et est parcouru à la recherche de baux contenant des noms d’hôtes. Les noms trouvés sont rajoutés au DNS. Cette fonctionalité peut être exclue de Dnsmasq à la compilation, auquel cas une erreur sera produite. Il est à noter que l’intégration avec un fichier de baux au format ISC est une fonctionalité obsolète. Elle ne devrait pas être utilisée dans les nouvelles installations et sera retirée dans une future version.
+
+**read-ethers** : Lis les informations d’hôtes DHCP dans le fichier /etc/ethers. Le format de /etc/ethers est une adresse matérielle suivie, soit par un nom d’hôte, soit par une adresse IP sous la forme de 4 chiffres séparés par des points. Lorsque lu par Dnsmasq, ces lignes ont exactement le même effet que l’option dhcp-host contenant les mêmes informations. /etc/ethers est relu à la réception d’un signal SIGHUP par Dnsmasq.
+
+**dhcp-range=adresse de début,adresse de fin,durée de bail par défaut** : Active le serveur DHCP. Les adresses seront données dans la plage comprise entre //adresse de début// et //adresse de fin// et à partir des adresses définies statiquement dans l’option dhcp-host.DHCP sur plus d’un réseau. Pour des réseaux directement connectés (c’est-à-dire des réseaux dans lesquels la machine sur laquelle tourne Dnsmasq possède une interface), le masque de réseau est optionnel. Il est par contre requis pour les réseaux pour lesquels le service DHCP se fait via un relais DHCP (”relay agent”).Si une durée de bail est donnée, alors les baux seront donnés pour cette durée. La durée de bail est donnée en secondes, en minutes (exemple : 45m), en heures (exemple : 1h) ou être la chaine de caractère “infinite” pour une durée indéterminée. Cette option peut être répétée, avec différentes adresses, pour activer le service. 
+
+**dhcp-option=[<identifiant_de_réseau>,[<identifiant_de_réseau>,]][vendor:[<classe_vendeur>],][<opt>|option:<nom d'option>],[<valeur>[,<valeur>]]** : Spécifie des options différentes ou supplémentaires pour des clients DHCP. Par défaut, Dnsmasq envoie un ensemble standard d’options aux clients DHCP : le masque de réseau et l’adresse de broadcast sont les mêmes que pour l’hôte sur lequel tourne Dnsmasq, et le serveur DNS ainsi que la route par défaut prennent comme valeur l’adresse de la machine sur laquelle tourne Dnsmasq. Si une option de nom de domaine a été définie, son contenu est transmis. Cette option de configuration permet de changer toutes ces valeurs par défaut, ou de spécifier d’autres options. L’option DHCP à transmettre peut être fournie sous forme d’un nombre décimal ou sous la forme “option:<nom d’option>”. Les nombres correspondants aux options sont définis dans la RFC2132 et suivants. Les noms d’options connus par Dnsmasq peuvent être obtenus via “Dnsmasq –help dhcp”. Par exemple, pour définir la route par défaut à 192.168.4.4, il est possible de faire –dhcp-option=3,192.168.4.4–dhcp-option = option:router, 192.168.4.4 ou encore, pour positionner l’adresse du serveur–dhcp-option = 42,192.168.0.4 ou –dhcp-option = option:ntp-server, 192.168.0.4 L’adresse 0.0.0.0 prends ici le sens “d’adresse de la machine sur laquelle tourne Dnsmasq”. Les types de données autorisées sont des adresses IP sous la forme de 4 chiffres séparés par des points, un nombre décimal, une liste de caractères hexadécimaux séparés par des 2 points, ou une chaîne de caractères. Si des identifiants de réseaux sont fournis, alors cette option n’est envoyée qu’aux réseaux dont tous les identifiants coïncident.
+
+Un traitement spécial est effectué sur les chaînes de caractères fournies pour l’option 119, conformément à la RFC 3397. Les chaînes de caractères ou les adresses IP sous forme de 4 chiffres séparés par des points donnés en arguments de l’option 120 sont traités conforméments à la RFC 3361. Les adresses IP sous forme de 4 chiffres séparés par des points suivies par une barre montante “/”, puis une taille de masque sont encodés conforméments à la RFC 3442.
+
+Attention : aucun test n’étant fait pour vérifier que des données d’un type adéquat sont envoyées pour un numéro d’option donné, il est tout à fait possible de persuader Dnsmasq de générer des paquets DHCP illégaux par une utilisation incorrecte de cette option. Lorsque la valeur est un nombre décimal, Dnsmasq doit déterminer la taille des données. Cela est fait en examinant le numéro de l’option et/ou la valeur, mais peut-être évité en rajoutant un suffixe d’une lettre comme suit : b = un octet, s = 2 octets, i = 4 octets. Cela sert essentiellement pour des options encapsulées de classes de vendeurs (voir plus bas), pour lesquelles Dnsmasq ne peut déterminer la taille de la valeur. Les données d’options consistant uniquement de points et de décimaux sont interprétées par Dnsmasq comme des adresses IP, et envoyées comme telles. Pour forcer l’envoi sous forme de chaîne de caractère, il est nécessaire d’utiliser des guillemets doubles. Par exemple, l’utilisation de l’option 66 pour fournir une adresse IP sous la forme d’une chaîne de caractères comme nom de serveur TFTP, il est nécessaire de faire comme suit : –dhcp-option=66,1.2.3.4
+
+Les options encapsulées de classes de vendeurs peuvent-être aussi spécifiées en utilisant –dhcp-option : par exemple –dhcp-option=vendor:PXEClient,1,0.0.0.0 envoie l’option encapsulée de classe de vendeur “mftp-address=0.0.0.0″ à n’importe quel client dont la classe de vendeur correspond à “PXEClient”. La correspondance pour les classes de vendeur s’effectue sur des sous-chaînes de caractères (voir –dhcp-vendorclass pour plus de détails). Si une option de classe de vendeur (numéro 60) est envoyée par Dnsmasq, alors cela est utilisé pour sélectionner les options encapsulées, de préférence à toute option envoyée par le client. Il est possible d’omettre complètement une classe de vendeur : –dhcp-option=vendor:,1,0.0.0.0 Dans ce cas l’option encapsulée est toujours envoyée. L’adresse 0.0.0.0 n’est pas traitée de manière particulière lorsque fournie dans une option encapsulée de classe de vendeur.
+
+**dhcp-option=3,192.168.1.1** : Indique la passerelle, ici 192.168.1.1, obligatoire quand la passerelle n'est pas le serveur dnsmasq car par défaut c'est l'adresse ip du serveur dnsmasq qui est fournie.
+
+**dhcp-option=6,192.168.7.2,192.168.70.1** Indique un serveur dns primaire et secondaire autre que l'ordinateur serveur dnsmasq, je déconseille de l'employer car notre but est justement d'utiliser notre serveur comme serveur dns.
+
+**dhcp-option=19,0** : Désactive l'IP forwarding 19,0 ou active l'IP Forwarding 19,1.Util sous les routers.
+
+**dhcp-option=44,192.168.1.200** : Indique qui est le server wins (netbios) sur le réseau.
+
+**dhcp-option=45,192.168.1.200** :Indique qui possède en mémoire le datagram du réseau netbios (le contenu du voisinage réseau sous windows)
+
+**dhcp-option=46,8** : Le type de node à utliser pour le TCP/IP sur NetBIOS. Si vous utilisez samba comme serveur wins, laissez-le à 8.
+
+**dhcp-option=47** : Active le Scope TCP/IP sur NetBios. Si vous utilisez samba comme serveur wins.
+
+
+==== Exemple de fichier de configuration =====
+
+Voici le fichier de configuration que j'utilise :
+
+<file>
+
+ Configuration file for dnsmasq.
+#
+# pour éviter de fournir du trafic DHCP/DNS inutile du coté internet
+##domain-needed
+bogus-priv
+filter-win2k
+# pour permettre à dnsmasq de suivre vos changements d'IP:
+# commentez cette ligne si vous avez une IP qui change
+no-poll
+# pour limiter l'écoute de requêtes DHCP du coté réseau local
+interface=eth0
+# nom de votre domaine pour dnsmasq
+domain=zonelibre.lan
+dhcp-authoritative
+dhcp-leasefile=/tmp/dhcp.leases
+# activez le serveur DHCP:
+dhcp-option=3,192.168.1.1
+dhcp-option=19,0
+dhcp-range=192.168.10.100,192.168.10.150,255.255.255.0,48h
+dhcp-option=44,192.168.1.200
+dhcp-option=45,192.168.1.200
+dhcp-option=46,8
+dhcp-option=47
+</file>
+
+===== Comment fixer une adresse ip à un client =====
+
+C'est simple, on ajoute dans [[:tutoriel:comment_editer_un_fichier|/etc/dnsmasq.conf]]
+
+<file>
+dhcp-host=00:16:d4:f5:5d:64,192.168.1.2
+</file>
+
+Dans le cas présent, je fixe l'adresse ip 192.168.1.2 pour l'ordinateur ayant la mac adresse 00:16:d4:f5:5d:64. Par souci de simplicité, j'attribue toujours les adresses ip fixes en dehors de mon dhcp-range.
+
+===== Configuration du cache DNS =====
+Pour configurer dnsmasq comme un démon de mise en cache DNS sur une seul ordinateur éditez ''/etc/dnsmasq.conf'' et décommentez la directive ''listen-address'', en ajoutant l'adresse IP localhost:
+<file>listen-address=127.0.0.1</file>
+Pour utiliser cet ordinateur pour écouter son adresse IP LAN pour d'autres ordinateurs sur le réseau:
+<file>listen-address=192.168.1.1    # IP Example</file>
+<note tip>Il est recommandé d'utiliser une IP LAN statique dans ce cas.</note>
+Pour plusieurs adresse IP séparez-les d'une virgule:
+<file>listen-address=127.0.0.1,192.168.1.1</file>
+
+===== Bloquer un domaine avec DNSMASQ =====
+Si vous souhaitez bloquer un domaine ou sous-domaine, dnsmasq permet cela simplement:\\
+Éditez 
+<file - /etc/NetworkManager/dnsmasq.d/local>
+#modèle:
+address=/sousdomaine.domaine/127.0.0.1
+#exemple:
+# bloque tous le domaine io
+address=/.io/127.0.0.1
+# bloque un site à éviter parmi tant d'autres
+address=/facebook.com/127.0.0.1
+</file>
+source [[https://askubuntu.com/questions/150135/how-to-block-specific-domains-in-hosts-file|sur askubuntu (en)]]
+===== Liens et ressources complémentaires =====
+
+
+Cet article est une copie et une adaptation de : [[http://www.jopa.fr/index.php/2008/10/30/dnsmasq-dns-cache-et-dhcp/|http://www.jopa.fr/index.php/2008/10/30/dnsmasq-dns-cache-et-dhcp/]]
+
+Explication très détaillée des dhcp-options en anglais : [[http://www.networksorcery.com/enp/protocol/bootp/options.htm]]
+
+Site officiel de DnsMasq : [[http://www.thekelleys.org.uk/dnsmasq/doc.html]]
+
+----
+//Contributeurs : Rédigée et maintenue par [[utilisateurs/RedLemon]]//

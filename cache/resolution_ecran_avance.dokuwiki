@@ -1,0 +1,245 @@
+
+{{tag>Xenial matériel ATI Nvidia Intel écran}}
+
+----
+
+======Résolution d'écran (avancé) ======
+
+<note tip>Référez vous d'abord à la page [[:configurer_son_ecran|Configurer son écran]] qui permet généralement de faire les réglages souhaités. Cette page traite surtout de problème lorsqu'une configuration basique n'a donné les résultats attendus.</note>
+
+Vous vous retrouvez avec une résolution de 640x480 alors que votre carte graphique peut faire bien mieux ? Votre carte graphique ou votre moniteur n'ont pas été bien détecté(s) ? Cette page va vous aider à résoudre ce problème. :-)
+
+:!:
+xorg.conf n'étant plus accessible sur les systèmes récents référez-vous à la page de [[:xrandr]] pour modifier votre résolution. 
+
+
+===== Exécuter à nouveau le script de détection automatique =====
+Voir la page [[:xorg]].
+
+===== Spécifications de l'écran non détecté =====
+[[:xorg#Comment régénérer un nouveau fichier xorg.conf en mode console ?|Créez en premier lieu un fichier xorg.conf]].
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/X11/xorg.conf** avec les [[:sudo|droits d'administration]].
+
+Recherchez dans ce fichier la section nommée ''Monitor''. Entre les lignes ''Section "Monitor"'' et ''EndSection'', vous devriez voir apparaître deux lignes qui débutent par les mots ''HorizSync'' et ''VertRefresh''. Si elles ne sont pas présentes, vous avez des chances que ce soit la raison de votre problème !
+
+Vous avez maintenant besoin de trouver l'information nécessaire, soit dans le manuel de votre écran, soit par la ligne de commande. Vous avez besoin de connaître la fréquence de synchronisation horizontale (''HorizSync'') (habituellement mesurée en kHz) et le taux de rafraîchissement vertical (''VertRefresh'') (normalement en Hz). Ces informations sont habituellement disponibles sous la forme "30-98 kHz" ou "50-160 Hz".
+
+
+Vous pouvez également [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>xresprobe]]** et lancer la commande :
+<code>sudo ddcprobe | grep monitorrange</code>
+
+<note tip>xresprobe ne paraît pas installé dans les dépôt pour Ubuntu 16.04 Xenial. Un fork est disponible, activer le ppa avant d'installer le paquet xresprobe :
+<code>sudo add-apt-repository ppa:sergiomejia666/xresprobe && sudo apt-get update</code></note>
+
+Si votre écran supporte cette commande (ce qui n'est pas toujours le cas), la première paire de chiffres affichée correspond au **taux HorizSync**, la seconde aux valeurs **VertRefresh**.\\
+FIXME n'est-ce pas plus simple avec xrandr??\\
+Attention, il arrive quelques fois que ddcprobe ne renvoie ni la résolution maximale (renvoie par exemple 1024x768 au lieu 1280x1024) ni les fréquences maximales  du moniteur. Sur certains moniteurs (en général des LCDs), dans le menu hardware du moniteur, il doit y avoir une fonction Reset. En utilisant la fonction Reset du moniteur, vous devriez obtenir les nouvelles résolutions et les nouvelles fréquences. (testé sur des vieux moniteurs XIOD LCD 17 pouces).
+
+
+Il y a deux manières d'entrer ces valeurs dans le fichier de configuration :
+
+  * En lançant la reconfiguration du serveur X mais avec le paramètre ''-plow'' en plus : <code>sudo dpkg-reconfigure -plow xserver-xorg</code>
+  * En entrant manuellement les valeurs dans le fichier **/etc/X11/xorg.conf**. Ajoutez donc les deux lignes ''HorizSync'' et ''VertRefresh'' selon l'exemple ci-dessous (mais avec **vos** valeurs bien sûr -- n'essayez surtout pas de mettre des valeurs au hasard, ça ne marchera pas !!) :
+<file>
+Section "Monitor"
+     Identifier    "FLATRON 995F"
+     Option        "DPMS"
+     HorizSync     30-96
+     VertRefresh   50-160
+EndSection</file>
+
+Fermer tous les programmes et redémarrez le serveur X (comme précédemment).
+
+La modification précédente n'est peut-être pas suffisante. Alors il vous faudra aussi mettre la résolution que vous souhaitez en l'ajoutant selon l'exemple ci-dessous (ici « ''1280x1024'' », mais avec **vos** valeurs bien sûr).
+
+<file>
+Section "Screen"
+	Identifier	"Default Screen"
+	Device		"Carte vidéo générique"
+	Monitor		"Écran générique"
+	DefaultDepth	24
+	SubSection "Display"
+		Depth		1
+		Modes		"1280x1024" "1024x768" "832x624" "800x600" "720x400" "640x480" "640x400" "640x350"
+	EndSubSection
+	SubSection "Display"
+		Depth		4
+		Modes		"1280x1024" "1024x768" "832x624" "800x600" "720x400" "640x480" "640x400" "640x350"
+	EndSubSection
+	SubSection "Display"
+		Depth		8
+		Modes		"1280x1024" "1024x768" "832x624" "800x600" "720x400" "640x480" "640x400" "640x350"
+	EndSubSection
+	SubSection "Display"
+		Depth		15
+		Modes		"1280x1024" "1024x768" "832x624" "800x600" "720x400" "640x480" "640x400" "640x350"
+	EndSubSection
+	SubSection "Display"
+		Depth		16
+		Modes		"1280x1024" "1024x768" "832x624" "800x600" "720x400" "640x480" "640x400" "640x350"
+	EndSubSection
+	SubSection "Display"
+		Depth		24
+		Modes		"1280x1024" "1024x768" "832x624" "800x600" "720x400" "640x480" "640x400" "640x350"
+	EndSubSection
+EndSection
+</file>
+
+===== Modifier les options du pilote =====
+
+Dans le cas ou l'ajout de modeline ne corrige pas votre problème de résolution, il est possible de rajouter certains paramètres dans la section ''Device'' du fichier de configuration de Xorg. Ces paramètres permettent de désactiver la reconnaissance automatique des paramètres de l'écran ( Plug'n'play ) et de forcer les résolutions définies.
+
+Ils dépendent du pilote utilisé.
+Pour le pilote propriétaire nvidia, vous pouvez utiliser :
+<file>
+    Option "UseEDID" "FALSE"
+    Option "UseDisplayDevice" "DFP"
+    Option "UseEDIDFreqs" "FALSE"
+    Option "ModeValidation" "NoEdidModes"
+</file>
+
+Exemple :
+
+<file>
+Section "Device"
+    Identifier    "NVIDIA Gforce 7650 GS"
+    Driver        "nvidia"
+    Busid        "PCI:2:0:0"
+    Videoram    262144
+    Option        "AddARGBVisuals"    "True"
+    Option        "AddARGBGLXVisuals"    "True"
+    Option "UseDisplayDevice" "DFP"
+    Option "UseEDIDFreqs" "FALSE"
+    Option "ModeValidation" "NoEdidModes"
+    Option "UseEDID" "FALSE"
+    Option        "NoLogo"    "True"
+EndSection
+</file>
+
+Pour le pilote libre radeon, vous pouvez utiliser :
+<file>
+    Option "IgnoreEDID" "True"
+    Option "DDCMode"    "False"
+</file>
+
+
+===== Configuration et ajout d'une nouvelle résolution d'écran =====
+
+Le principe de base est de  :
+  * Récupérer les paramètres de la résolution que l'on souhaite,
+  * Créer une nouvelle configuration de résolution et ajouter cette résolution aux résolutions actuelles,
+  * Activer cette résolution.
+
+
+Les paramètres de la résolution ou configuration de la résolution s'appellent Modeline sous Linux. La commande qui va nous servir est **xrandr**.\\
+Votre problème est que la ou les résolutions que vous souhaitez ne sont disponibles ni dans les paramètres d'affichage, ni sous ArandR. La commande **xrandr** vous liste les résolutions disponibles et vous constaterez que la résolution que vous souhaitez n’apparaît pas.\\
+Reportez-vous à la page [[:xrandr#Ajouter une résolution|xrandr]] pour la suite des manipulations.
+===== Modification du fichier de configuration Xorg.conf =====
+
+==== Résolutions ou rafraîchissements exotiques : les « Modelines » ====
+
+Il arrive que la résolution que l'on voudrait absolument utiliser refuse jusqu'ici de fonctionner. Il faut dans ce cas utiliser les //Modelines//.
+Pour générer cette modeline, on tape dans un terminal : <code>gtf largeur hauteur fréquence</code>
+
+Où largeur et hauteur sont exprimés en pixels, et la fréquence (de rafraîchissement verticale) en Hz. Par exemple :
+<code>gtf 1680 1050 75</code>
+devrait donner :
+<code>
+# 1680x1050 @ 75.00 Hz (GTF) hsync: 82.20 kHz; pclk: 188.07 MHz
+  Modeline "1680x1050_75.00"  188.07  1680 1800 1984 2288  1050 1051 1054 1096  -HSync +Vsync
+</code>
+
+On recopie alors la deuxième ligne (la première n'est qu'un commentaire) dans la section //Monitor// du fichier « xorg.conf » :
+
+<file>
+Section "Monitor"
+     Identifier    "FLATRON 995F"
+     Option        "DPMS"
+     HorizSync     30-96
+     VertRefresh   50-160
+     Modeline "1680x1050_75.00"  188.07  1680 1800 1984 2288  1050 1051 1054 1096  -HSync +Vsync
+EndSection
+</file>
+
+Et on renseigne la résolution dans la section « Screen » de « xorg.conf ».Et ceci pour chaque profondeur de couleur.
+
+<file>
+Section "Screen"
+	Identifier	"Default Screen"
+	Device		"Carte vidéo générique"
+	Monitor		"Écran générique"
+	DefaultDepth	24
+	SubSection "Display"
+		Depth		1
+		Modes		"1680x1050_75.00" "1280x1024" "1024x768" "832x624" "800x600" "720x400" "640x480" "640x400" "640x350"
+	EndSubSection
+	SubSection "Display"
+		Depth		4
+		Modes		"1680x1050_75.00" "1280x1024" "1024x768" "832x624" "800x600" "720x400" "640x480" "640x400" "640x350"
+	EndSubSection
+	SubSection "Display"
+		Depth		8
+		Modes		"1680x1050_75.00" "1280x1024" "1024x768" "832x624" "800x600" "720x400" "640x480" "640x400" "640x350"
+	EndSubSection
+	SubSection "Display"
+		Depth		15
+		Modes		"1680x1050_75.00" "1280x1024" "1024x768" "832x624" "800x600" "720x400" "640x480" "640x400" "640x350"
+	EndSubSection
+	SubSection "Display"
+		Depth		16
+		Modes		"1680x1050_75.00" "1280x1024" "1024x768" "832x624" "800x600" "720x400" "640x480" "640x400" "640x350"
+	EndSubSection
+	SubSection "Display"
+		Depth		24
+		Modes		"1680x1050_75.00" "1280x1024" "1024x768" "832x624" "800x600" "720x400" "640x480" "640x400" "640x350"
+	EndSubSection
+EndSection
+</file>
+
+Après ceci, il suffit de sauver votre xorg.conf et de redémarrer votre session graphique.
+
+<note>En complément de //gtf//, il existe des générateurs de //modelines// sur le net. Sachez également que les fréquences de rafraîchissement des écrans plats sont parfois mal reconnues et diffères de la valeur affichée dans l'outil de résolution d'écran. Pour connaître les fréquences réelles des écrans, il faut passer par les options via vos boutons de réglages SUR l'écran. Des modelines appropriés permette de résoudre le problème "Intput out of range".</note>
+
+Il faut rentrer autant de fois la commande ''gtf largeur hauteur fréquence'' que l'on veut de résolution (avec les paramètres pour chacune), et recopier la deuxième ligne (modelines) pour chaque résultat différent dans la section ''Monitor''. Il doit donc y avoir à la fin autant de ''modelines'' que de résolutions définies  dans ''Display''. (si vous voulez, par exemple définir une certaine fréquence pour une certaine résolution).
+Il n'est pas forcément indispensable de rentrer le ''mode'' pour chaque ''depth'' dans ''display'', celle par défaut: ''depth24'' peut suffire.
+
+=====Problèmes connus=====
+==== Problème de résolution uniquement sur l'écran de chargement du système (Grub) ====
+
+Il est possible que le problème d'affichage touche uniquement l'écran de sélection du système d'exploitation : l'affichage n'est pas encore configuré complètement et certains écrans à dimensions "spéciales" ne sont reconnus qu'après l'écran du Grub. 
+
+On peut alors tenter de modifier la [[:grub-pc#exempleresolution_d_affichage|résolution par défaut]], mais si cela ne fonctionne pas une solution radicale consiste à passer le menu Grub en mode "texte uniquement".
+Pour cela, taper dans un terminal (l'effet de sed est de décommenter la ligne "GRUB_TERMINAL=console"):
+<code>sudo sed -i -e 's/#GRUB_TERMINAL/GRUB_TERMINAL/g' /etc/default/grub</code>
+Puis sauvegarder les modifications :
+<code>sudo update-grub</code>
+
+==== Problème de Checksum des EDID avec certains écrans particuliers====
+
+Sur les dernières versions d'Ubuntu, certains écrans (particulièrement les HDMI) peuvent ne plus fonctionner correctement alors qu'il n'y avait aucun problème sur les distributions précédentes. Cela est dû au fait que Xorg fait maintenant une vérification de la checksum de l'EDID de votre écran. Quand cette vérification ne passe pas, votre écran qui marchait pourtant bien sur une ancienne distribution ne fonctionnera qu'en mode de secours (800x600) et rien ne vous indiquera vraiment pourquoi. Une simple vérification des logs pointera le problème.
+Pour résoudre cela, il suffit d'ajouter la ligne suivante dans la section ''Device'' du fichier [[:xorg|xorg.conf]] :
+<file>
+Option         "IgnoreEDIDChecksum" "CRT,DFP,TV"
+</file>
+
+==== Problème de fréquence avec Wine ====
+
+Si votre serveur X se coupe dès que vous lancez une application avec Wine et que votre écran affiche un message comme "fréquence trop élevée" ou "out of range", ajoutez cette option à la //Section "Device"// de votre fichier [[:xorg|xorg.conf]] :
+<file>
+Option         "ModeValidation" "NoXServerModes"
+</file>
+
+
+==== Profondeur de couleur incorrecte ====
+
+Il peut arriver que la configuration automatique règle la profondeur de couleur plus élevée que le matériel ne peut le supporter. Pour savoir si c'est votre cas, ouvrez le fichier **/etc/X11/xorg.conf** et recherchez le mot ''DefaultDepth''. La profondeur de couleur configurée est habituellement 24. Il est possible que cette valeur soit trop élevée; essayez alors de mettre cette valeur à 16.\\
+Si cela ne résout pas votre problème, vous pourrez ensuite la remettre telle qu'elle était.\\
+Enregistrez le fichier, fermez toutes les applications et redémarrez l'environnement graphique. Il ne reste plus qu'à espérer que vous puissiez vous reconnecter à la bonne résolution !
+===== Voir aussi =====
+  * **(en)** [[http://xtiming.sourceforge.net/cgi-bin/xtiming.pl|Générateur de modelines]]
+  * Tutoriel [[http://forum.ubuntu-fr.org/viewtopic.php?pid=2259389#p2259389|Résolution trop faible, écran pas reconnu]] sur le forum de discussion Ubuntu-fr
+
+
+----
+
+ //Contributeurs: Claude, [[utilisateurs:Fabien26]], [[:utilisateurs:_Enchained]], [[utilisateurs:Id2ndR]], [[utilisateurs:NioS]], [[utilisateurs:MpokLePuissant]], --- //[[:utilisateurs:b4rabbas|b4rabbas]] Le 03/09/2018, 19:39////

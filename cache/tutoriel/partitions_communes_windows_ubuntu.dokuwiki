@@ -1,0 +1,100 @@
+
+{{tag>disque_dur partitions}}
+--------
+====== Création d'une partition commune entre Windows et Ubuntu ======
+
+Souvent lors d'une [[:cohabitation_ubuntu_windows|cohabitation entre Windows et Ubuntu]], une des difficultés que l'on rencontre est l'accès commun aux données pour les deux systèmes.\\
+En effet, Windows ne sachant pas nativement lire les partitions [[:systeme_de_fichiers#|EXT4]] d'Ubuntu, vous ne pourrez pas, à partir d'un Windows, accéder à vos données stockées sur une partition Ubuntu. Il est donc nécessaire de créer une partition Windows en [[:systeme_de_fichiers#systemes_de_fichiers_fat32_et_ntfs|NTFS]]  qu'Ubuntu saura lire.
+
+
+Ce tutoriel décrit la marche à suivre pour créer cette partition.
+
+<note tip>Le seul dossier qui ne sera pas concerné par ce tutoriel est le dossier Bureau qu'il n'est pas préférable de changer d'endroit. Ainsi donc toutes les données que vous avez l'habitude d'enregistrer sur le **Bureau** Ubuntu ne seront pas accessible à Windows. Pour simplifier notre approche nous décrirons le processus pour un seul utilisateur. S'il y a plusieurs utilisateurs sur le système, il vous suffira alors de modifier les chemins en ajoutant des dossiers avec les noms des différents utilisateurs. Mais chaque utilisateur devra suivre cette procédure.</note>
+
+=====Création des partitions=====
+Normalement vous devriez déjà avoir au moins deux partitions, une en NTFS avec Windows et une autre en EXT4 pour Ubuntu. Étant donné que l'on ne souhaite pas stocker ses données sous Ubuntu, il n'est pas nécessaire de créer une partition [[:tutoriel:deplacer_home#avantages_d_unhome_separe|home]] séparée.\\
+Il faut donc créer une partition, que nous appellerons **Commun**, par convention. Pour cela il suffit de réduire la partition Windows avec [[:gparted]], ou l'outil Windows ET CRÉER UNE NOUVELLE PARTITION AVEC L'ESPACE LIBÉRÉ ET lui donner l'étiquette **Commun**.\\
+Si vous aviez déjà une autre partition NTFS avec vos données sous Windows, il vous faudra simplement lui donner l'étiquette **Commun**. 
+
+=====Monter la partition automatiquement au démarrage d'Ubuntu=====
+<note help>Si vous utilisez le script plus bas cette étape n'est pas nécessaire.</note>
+Pour éviter de devoir monter manuellement la partition **Commun** à chaque démarrage d'Ubuntu, il est possible de paramétrer un montage automatique comme décrit sur ce [[:tutoriel/monter_un_volume_automatiquement|tutoriel]]. Un outil très simple peut vous y aider il s'agit de [[:tutoriel:ntfs#avec_ntfs-config|ntfs-config]].
+
+
+=====Raccourci vers les dossiers du Dossier Personnel=====
+Pour faciliter l'accès aux dossiers des données personnelles et pour ne pas perdre l'enregistrement automatique des applications dans les dossiers par défaut (par exemple LibreOffice va enregistrer automatiquement les fichiers dans Documents, un logiciel pour ripper les CD dans Musique, etc) il est possible d'indiquer au système que l'emplacement a changé de place sous Windows, ou de créer des liens symboliques sous Ubuntu.\\
+Avant tous, pour les deux systèmes d'exploitation,  créez ces dossiers par défaut sur la partition appelée **Commun**.
+====Sous Windows====
+Allez dans le disque C, puis naviguez jusqu'à vos dossiers : **Utilisateurs -> Votre_nom_d'utilisateur** (C:\Users\utilisateurs). Faites un clic droit sur les dossiers concernés, par exemple Documents, puis dans l'onglet **Emplacement** cliquez sur **Déplacer**. Naviguez jusqu'au disque **Commun → Documents**. Voir cette [[https://www.mediaforma.com/windows-10-choisir-lemplacement-de-la-bibliotheque-documents/|page]].
+
+====Sous Ubuntu====
+
+ <note important>Nous considérons bien entendu, que vous venez à peine d'installer Ubuntu, et que vous n'avez donc encore aucun document dans vos dossiers.</note>
+
+===En modifiant un fichier===
+Une première méthode est de modifier les chemins vers les dossiers par défaut dans le fichier **.config/user-dirs.dirs** du dossier personnel.
+<note important>Si, pour une raison quelconque, la partition ne peut plus être montée, ce fichier [[https://forum.ubuntu-fr.org/viewtopic.php?pid=22132456#p22132456|est réinitialisé!]] Pour l'éviter:
+ <code>cp  -nv   /etc/xdg/user-dirs.conf    $HOME/.config
+sed -i 's/True/False/' $HOME/.config/user-dirs.conf</code></note>
+
+===Avec des liens symboliques===
+Une deuxième méthode consiste à créer des liens symboliques :
+  * Commencez par supprimer les dossiers par défaut, **Documents, Musique, Vidéos, Images, Téléchargements**,
+  * Créez un lien symbolique pour tous les dossiers précédemment supprimés, ici un exemple pour Documents : <code>ln -s /media/$USER/Commun/Documents Documents</code> Adaptez les chemins à vos dossiers.
+===Avec un script===
+Ce petit script peut faire le travail en une fois :
+<file bash Commun.sh>
+#! /bin/sh
+##Prérequis à l'exécution du script, création d'une partition ntfs avec pour étiquette Commun##
+##Cette commande monte automatiquement votre disque
+var=$(blkid -L Commun);
+echo "$var   /media/$USER/Commun    ntfs-3g rw,auto,uid=1000,user,fmask=0111,dmask=0000,noatime,nodiratime   0   0" | sudo tee -a /etc/fstab
+##Suppression des dossier personnels##
+rm -r $HOME/Documents $HOME/Musique $HOME/Vidéos $HOME/Images $HOME/Téléchargements
+##Création des dossiers communs##
+mkdir /media/$USER/Commun/Documents /media/$USER/Commun/Musique /media/$USER/Commun/Vidéos /media/$USER/Commun/Images /media/$USER/Commun/Téléchargements
+##Création des liens symboliques pour les dossiers communs##
+ln  -s /media/$USER/Commun/Documents $HOME/Documents
+ln  -s /media/$USER/Commun/Musique $HOME/Musique
+ln  -s /media/$USER/Commun/Vidéos $HOME/Vidéos
+ln  -s /media/$USER/Commun/Images $HOME/Images
+ln  -s /media/$USER/Commun/Téléchargements $HOME/Téléchargements
+##Création d'une corbeille##
+mkdir /media/$USER/Commun/.Trash-1000
+chown $USER /media/$USER/Commun/.Trash-1000</file>
+
+Si vous avez déjà utilisé Ubuntu depuis un certain temps et que vous avez déjà des données dans votre /home
+<file bash>
+#! /bin/sh
+##Prérequis à l'exécution du script
+##     Création d'une partition ntfs et avoir monté la partition commune sur le point de montage /media/Commun##
+##     Fermer ses applications.
+
+UTILISATEUR=$USER     #### Nom de l’utilisateur de /media/Commun  au cas où il ne serait pas identique à $USER
+for i  in  Bureau  Téléchargements Modèles Public  Documents  Musique  Images  Vidéos
+do
+   echo "Début de traitement de  $i "
+## déplacement des données existantes
+mkdir /media/$USER/Commun/$UTILISATEUR
+   mv -nv $HOME/$i/* /media/$USER/Commun/$UTILISATEUR/$i 
+## suppression du répertoire  
+   rm -Rv $HOME/$i
+## faire le lien sur le nouvel endroit 
+   ln -s /media/$USER/Commun/$UTILISATEUR/$i $HOME/$i
+   done
+## liste  pour vérifier les liens
+   ls -ls $HOME/$i   
+## Traiter MOZILLA #Est-ce utile si déjà précédemment home a été déplacé?
+mkdir /media/$USER/Commun/$UTILISATEUR/Mozilla
+mv -nv $HOME/.mozilla/* /media/$USER/Commun/$UTILISATEUR/Mozilla
+rm -Rv $HOME/.mozilla
+ln -s /media/$USER/Commun/$UTILISATEUR/Mozilla  $HOME/.mozilla
+</file>
+
+
+
+=====Créez une corbeille commune=====
+Pour terminer il est aussi possible de créer un corbeille commune à Ubuntu et à la partition Commun. Pour cela reportez-vous au tutoriel [[:tutoriel:creer_corbeille_partition_ntfs|suivant]].
+
+=====Conclusion=====
+Vous pourrez maintenant accéder à vos données que vous soyez sous  Windows ou sous Ubuntu de façon totalement transparente.

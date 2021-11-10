@@ -1,0 +1,171 @@
+
+{{tag>matériel sfr}}
+----
+
+====== Carte PCMCIA SFR 3G+ ======
+
+
+{{:pcmcia_sfr.jpeg?250}}
+
+===== Compatibilité =====
+
+//Si la procédure d'installation du matériel (ou le chipset) est commune à plusieurs périphériques, dressez une liste dans cette section.//
+
+  * PCMCIA SFR 3G+
+
+=====Pré-requis=====
+
+Installation paquet wvdial (jusqu'à Ubuntu 8.10 inclus)
+
+<note important>Vérifier la présence du programme wvdial (installé par défaut) qui permet de créer la connexion modem.</note>
+
+Ouvrir un Terminal, se connecter en « root » et taper :
+
+  wvdial 
+
+Si vous n’avez pas de réponse, [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt://wvdial|wvdial]]**.
+
+=====Installation=====
+
+Pour installer la carte PCMCIA.
+Le terminal déjà ouvert avec l'utilisateur root, nous allons afficher un fichier log pour connaitre le pilote que la carte utilise.
+
+  tail -10 /var/log/messages
+
+Mettre la carte PCMCIA dans son emplacement (port PCMCIA sur les côtés). Nous voyons apparaitre de nouvelles lignes :
+
+<code>
+Apr 20 15:57:10 test-laptop kernel: [16923.068000] pccard: CardBus card inserted into slot 0
+Apr 20 15:57:11 test-laptop kernel: [16923.536000] Initializing Nozomi driver 2.1 (build date: Apr 15 2007 05:40:45)
+Apr 20 15:57:11 test-laptop kernel: [16923.540000] nozomi 0000:04:00.0: Card type is: 2048
+Apr 20 15:57:11 test-laptop kernel: [16923.540000] PCI: Enabling device 0000:04:00.0 (0000 -> 0002)
+Apr 20 15:57:11 test-laptop kernel: [16923.540000] ACPI: PCI Interrupt 0000:04:00.0[A] -> GSI 19 (level, low) -> IRQ 19
+Apr 20 15:57:11 test-laptop kernel: [16923.540000] nozomi 0000:04:00.0: Nozomi driver nozomi_tty
+Apr 20 15:57:11 test-laptop kernel: [16923.540000] nozomi 0000:04:00.0: Version of card: 3
+Apr 20 15:57:11 test-laptop kernel: [16923.540000] nozomi 0000:04:00.0: Initialization OK!
+</code>
+
+Ici, nous voyons que notre système a installé le pilote nozomi, il faudra donc mettre /dev/noz0 pour le nom du périphérique du modem
+
+=====Configuration=====
+
+Pour configurer WVDIAL, [[:tutoriel:comment_modifier_un_fichier|ouvrez le fichier]] **/etc/wvdial.conf**, remplacez le contenu par le suivant :
+
+<code>
+[Dialer SFR]
+Modem = /dev/noz0
+Baud = 460800
+FLOWCONTROL= NOFLOW
+Init1 = ATZ
+Init2 = AT&F&D2&C1S0=0
+Init3 = AT+CGDCONT=1,”IP”,”websfr”
+Phone = *99***1#
+Username = vodafone
+Password = vodafone
+Ask Password = 0
+Dial Command = ATD
+Stupid Mode = 1
+Idle Seconds = 3000
+Auto DNS = 1
+</code>
+
+Enregistrer et quitter.
+
+
+===== Utilisation ====
+
+==== Lancer la connexion ====
+
+Dans un terminal en root, taper :
+
+  wvdial SFR
+
+Résultat :
+
+<code>
+–> WvDial: Internet dialer version 1.54.0
+–> Initializing modem.
+–> Sending: ATZ
+ATZ
+OK
+–> Sending: AT&F&D2&C1S0=0
+AT&F&D2&C1S0=0
+OK
+–> Sending: AT+CGDCONT=1,”IP”,”websfr”
+AT+CGDCONT=1,”IP”,”websfr”
+OK
+–> Modem initialized.
+–> Idle Seconds = 3000, disabling automatic reconnect.
+–> Sending: ATD*99***1#
+–> Waiting for carrier.
+ATD*99***1#
+CONNECT 57600
+–> Carrier detected. Starting PPP immediately.
+–> Starting pppd at Tue Apr 3 16:52:00 2007
+–> pid of pppd: 21251
+–> Using interface ppp0
+–> pppd: Phone
+–> pppd: Phone
+–> pppd: Phone
+–> pppd: Phone
+–> pppd: Phone
+–> pppd: Phone
+–> local IP address 10.162.132.126
+–> pppd: Phone
+–> remote IP address 10.64.64.64
+–> pppd: Phone
+–> primary DNS address 172.20.2.10
+–> pppd: Phone
+–> secondary DNS address 172.20.2.39
+–> pppd: Phone
+–> Script /etc/ppp/ip-up run successful
+–> Default route Ok.
+</code>
+
+La connexion est établie.
+
+===== Problème connu =====
+
+==== Problème lié au DNS ====
+
+<note important>
+Si vous êtes connecté mais que vous n'arrivez pas à aller sur internet, il faut vérifier que la résolution de nom se fasse bien car
+il se peut qu'il ne récupère pas convenablement la configuration du DNS.
+</note>
+
+Pour tester, ouvrir un terminal en root et taper:
+
+  ping doc.ubuntu-fr.org
+
+Vous n'avez pas de réponse, essayer:
+
+  ping 213.95.41.13
+
+Si vous avez une réponse, il est possible que le DNS se soit mal configuré,
+donc [[:tutoriel:comment_modifier_un_fichier|ouvrez le fichier]] **/etc/resolv.conf** et ajoutez :
+
+<file>
+nameserver 80.118.192.100 
+nameserver 80.118.196.36 
+</file>
+
+Il faut re tester le ping du site doc.ubuntu-fr.org :
+
+<code>
+ping doc.ubuntu-fr.org
+PING doc.ubuntu-fr.org (213.95.41.13) 56(84) bytes of data.
+64 bytes from lisa.ubuntu-eu.org (213.95.41.13): icmp_seq=1 ttl=52 time=71.8 ms
+64 bytes from lisa.ubuntu-eu.org (213.95.41.13): icmp_seq=2 ttl=52 time=71.9 ms
+64 bytes from lisa.ubuntu-eu.org (213.95.41.13): icmp_seq=3 ttl=52 time=73.8 ms
+64 bytes from lisa.ubuntu-eu.org (213.95.41.13): icmp_seq=4 ttl=52 time=70.5 ms
+</code>
+
+Maintenant vous pouvez surfer en 3G.
+
+===== Voir aussi =====
+
+  * FIXME
+
+----
+
+//Contributeur principal : [[utilisateurs:winnie31]].//

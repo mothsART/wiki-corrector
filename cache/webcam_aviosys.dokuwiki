@@ -1,0 +1,169 @@
+
+{{tag>Hardy matériel webcam}}
+
+<note>Cette page présente comment utiliser les webcam de la marque Aviosys fabricant de matériel de surveillance comme les Webcam IP de la série 9060</note>
+
+----
+
+
+
+
+====== Webcam Aviosys : série 9060 ======
+<note>Le but de cette procédure est de visualiser le flux vidéo de la webcam dans [[:vlc|vlc]] car les outils fournis par le constructeur ne fonctionnent que sous IE avec un activeX à la £#!%ù</note>
+
+===== Compatibilité =====
+
+//Les matériels suivant son compatibles avec cette procédure mais les autres modèles de la série 9060 le sont peut être aussi.//
+
+  * Aviosys 9060-I (A tester)
+  * Aviosys 9060-O
+
+
+
+
+===== Pré-requis =====
+
+//Installation de [[:vlc|vlc]]//
+
+
+//Encodage en base 64 ://
+
+Si vous vous connectez à votre webcam en utilisant le user guest et le mot de passe password, il faut encoder sous la forme user:password en base 64 :
+  printf "guest:password" | openssl base64
+
+On obtient :
+  Z3Vlc3Q6cGFzc3dvcmQ=
+
+Cette clé sera utilisée pour l'authentification.
+<note warning>Attention certain mot de passe ne fonctionnent pas correctement si problème faire l'essai avec guest:guest</note>
+
+===== Installation =====
+
+On va utiliser un programme qui va agir comme un proxy et va créer en local une socket diffusant le flux vidéo de la webcam.
+
+//Installation du relay ://
+  cd /usr/src
+  sudo mkdir relay
+  cd relay
+  sudo wget http://www.lavrsen.dk/twiki/pub/Motion/GadspotNC800Relay/relay-nc800.tar.gz
+  sudo tar -zxvf relay-nc800.tar.gz
+  sudo make all
+  sudo chmod +x relay-nc800
+  sudo mv relay-nc800 /usr/bin/
+
+
+
+
+
+
+
+===== Utilisation manuelle pour test =====
+
+Pour tester le bon fonctionnement de la webcam, on va démarrer le relay dans une console (il faut utiliser le code généré dans les pré-requis :
+  sudo /usr/bin/relay-nc800 -url="http://192.168.0.253:8080/cgi-bin/Stream?Video Authorization: Basic Z3Vlc3Q6cGFzc3dvcmQ=" -port=15000 -debug
+
+Le proxy diffuse le flux réseau sur le port 15000 (qui est modifiable bien sur !)
+<note important>Bien vérifier que le port est dispo avant de démarrer le relay</note>
+
+<note important>Pour la IP Kamera 9060-O un peu de wireshark m'a donné : GET /cgi-bin/Stream?Video Authorization: Basic Z3Vlc3Q6cGFzc3dvcmQ=?webcamPWD=RootCookie00000 donc adaptez vous en conséquence ;)</note>
+
+Une fois le relay démarré, il faut aller sour [[VLC|VLC]] pour visualiser le flux :
+  * Dans [[VLC|VLC]] faire fichier -> Ouvrir un flux réseau (Ctrl+N)
+  * Cocher HTTP/HTTPS/FTP/MMS
+  * Saisir l'url : http://127.0.0.1:15000
+  * cliquer sur le bouton OK
+
+Le flux de la webcam apparait.
+
+
+
+
+
+===== Utilisation =====
+
+//Pour une utilisation normale, il faut que le script se lance automatiquement//
+
+Il faut créer un fichier /etc/init.d/relay-nc800 :
+  sudo gedit /etc/init.d/relay-nc800
+
+et y ajouter :
+  #!/bin/sh
+  # /etc/init.d/relay-nc800 for Ubuntu
+  
+  start() {
+  if [ -x "/usr/bin/relay-nc800" ]; then
+  echo "Starting relay-nc800"
+  /usr/bin/relay-nc800 -url="http://192.168.0.253:8080/cgi-bin/Stream?Video Authorization: Basic Z3Vlc3Q6cGFzc3dvcmQ=" -port=15000 >/dev/null &
+  fi
+  }
+  
+  stop() {
+  sudo killall relay-nc800
+  }
+  
+  restart() {
+  stop
+  sleep 2
+  start
+  }
+  
+  case "$1" in
+  'start')
+  start
+  ;;
+  'stop')
+  stop
+  ;;
+  'restart')
+  restart
+  ;;
+  *)
+  start
+  esac
+
+Enfin rendre le script exécutable :
+  sudo chmod +x /etc/init.d/relay-nc800
+
+
+Démarrage :
+  sudo /etc/init.d/relay-nc800 start
+
+Arrêt :
+  sudo /etc/init.d/relay-nc800 stop
+
+Redémarrage :
+  sudo /etc/init.d/relay-nc800 restart
+
+===== Autres commandes utiles =====
+
+Faire une capture d'écran :
+  wget "http://192.168.0.253:8080/snapshot.jpg?res=3&qual=85 Authorization: Basic Z3Vlc3Q6cGFzc3dvcmQ=" -O snapshot.jpg
+Avec :
+res=
+  * 2 : 160x120
+  * 1 : 320x240
+  * 0 : 640x480
+  * 3 : 1600x1200
+
+qual=
+  * 50 : BASIC
+  * 70 : NORMAL
+  * 85 : FINE
+
+
+====== Modèle : 9100A ======
+<note warning>TODO</note>
+
+
+===== Voir aussi =====
+
+  * [[http://www.aviosys.com|Site officiel d'Aviosys]] (en)
+
+----
+
+//Contributeurs : [[utilisateurs:manusvs650|manusvs650]]//
+
+
+Basé sur :
+  * [[http://www.zoneminder.com/forums/viewtopic.php?p=43418#43418|Aviosys IP Kamera 9060 Working]]
+  * [[http://support.mafianumerique.com/index.php?_m=knowledgebase&_a=viewarticle&kbarticleid=39|FAQ de mafianumerique]]

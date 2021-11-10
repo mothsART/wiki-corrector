@@ -1,0 +1,113 @@
+
+{{tag>tutoriel paquet}}
+
+----
+
+
+====== Création d'un paquet deb à partir d'une archive ======
+<note>Ici il est expliqué comment créer un paquet .deb depuis une archive, pour créer un .deb depuis les sources, voir [[:tutoriel/creer_un_paquet|Création d'un paquet deb à partir des sources]]</note>
+Il peut être pratique de créer soit-même des paquets deb. Cela permet une diffusion plus pratique des programmes et surtout une désinstallation rapide dudit programme. La manière la plus commune de créer un paquet est de [[:tutoriel:compilation|compiler les sources]] du programmes. Mais parfois, il n'y a rien à compiler.
+
+Le cas m'est arrivé avec un programme python et avec des programmes simplement archivés.
+
+===== Le programme python =====
+
+Le programme en question ne demande qu'à être installé avec la fonction : ''python setup.py install''
+
+L'idée ici est de créer une archive au lieu de l'installer, pour pouvoir par la suite créer son paquet deb. On va donc dans un [[:terminal]] saisir la [[:commande_shell|commande]] suivante:
+<code>python setup.py bdist --format=gztar</code>
+Une fois l'archive créée, on procède comme pour le programme archivé. Ici, le format est tar.gz. On le décompressera en tapant: ''tar xvzf xxxx.tar.gz''
+
+
+[[http://www.python.org/doc/2.0.1/dist/built-dist.html|documentation python]]
+
+
+===== Le programme archivé =====
+
+Le second cas que j'ai rencontré est celui du programme archivé. Qui n'a jamais vu un tuto pour [[:firefox|installer la dernière version de firefox]] en le désarchivant dans /opt ?\\
+Au lieu de cela, on va créer un paquet deb pour pouvoir l'installer et le désinstaller correctement. En lieu et place de firefox, j'en choisi pour l'exemple la version libre [[http://www.gnu.org/software/gnuzilla/|icecat]].
+
+Une fois l'archive récupérée, on la décompresse :
+  wget http://ftp.gnu.org/gnu/gnuzilla/3.5.1/icecat-3.5.1-i386.tar.bz2   
+  tar xvjf icecat-3.5.1-i386.tar.bz2
+
+Le principe du fichier est le suivant :
+
+  * un dossier de travail,
+  * dans ce dossier, un dossier **DEBIAN** qui comporte un fichier ''contro''. Ce fichier comporte la description du paquet, ses dépendances, son nom...
+  * dans ce même dossier de travail, l'arborescence comme si l'on partait de /
+
+Créons le dossier de travail, et rendons-nous y : 
+  mkdir travail
+  cd travail
+
+Créons le dossier **DEBIAN** et l'arborescence souhaitée : <code>
+mkdir DEBIAN
+mkdir opt
+mkdir -p usr/share/applications
+mkdir usr/bin</code>
+  
+Déplaçons le dossier décompressé dans notre **opt** de travail : <code>mv ../icecat-3.5.1-i386 opt/icecat</code>
+
+Créons le fichier ''control'' : <code>nano DEBIAN/control</code>
+
+Ce fichier comporte une multitude de champs plus ou moins importants : <file>
+Package: icecat
+Version: 3.5.1
+Architecture: i386
+Maintainer: Gnuzilla Project
+Section: web
+Priority: optional
+Installed-Size: 29700
+Description: Decouvrez une version totalement libre de firefox
+IceCat est un fork totalement libre de Firefox, maintenu par le projet GnuZilla.</file>
+En l'occurrence, "Package" et "Version" permettront de remplacer un paquet d'un même nom par une version supérieure.
+
+<note important>A cette étape, si on voulait installer la dernière version sans effacer la version officielle des dépôts, on pourrait remplacer ''icecat'' par ''icecat-3.5.1'' par exemple. Ainsi pourraient cohabiter les deux versions d'un même programme. De même, à l'étape d'après, on remplacerait ''usr/bin/icecat'' par ''usr/bin/icecat-3.5.1'' etc.</note>
+
+On peut créer le lanceur dans **usr/bin** : <code>nano usr/bin/icecat</code>
+Et y coller : <file bash>
+#!/bin/bash
+cd /opt/icecat
+sh run-icecat.sh</file>
+
+Puis le rendre exécutable :
+  chmod +x usr/bin/icecat
+
+Ainsi que l'entrée dans le menu : <code>nano usr/share/applications/icecat.desktop</code>
+Et y coller : <file .desktop>
+#!/usr/bin/env xdg-open
+  
+[Desktop Entry]
+Version=3.5.1
+Encoding=UTF-8
+Name=IceCat
+GenericName=IceCat
+Comment=Navigateur Web (Firefox totalement libre)
+Exec=icecat
+Icon=/opt/icecat/icons/mozicon128.png
+Terminal=false
+Type=Application
+Categories=Application;Network;
+Name[fr_FR]=IceCat
+</file>
+Enfin, tous les ingrédients pour créer le paquet deb sont prêts. Il suffit de le créer par la fonction :
+  cd ..
+  dpkg -b travail/ icecat_3.5.1_i386.deb
+
+Voilà, le paquet est créé et peut être installé normalement : ''sudo dpkg -i icecat_3.5.1_i386.deb''
+
+De la même manière, il est plus facilement diffusable sur les autres ordinateurs de votre famille voire à d'autres sur internet.
+
+[[http://www.linuxfordevices.com/c/a/Linux-For-Devices-Articles/How-to-make-deb-packages/|How to make deb packages]]
+
+===== Ressources =====
+
+  * IceCat, [[http://www.gnu.org/software/gnuzilla/|the GNU version of the Firefox browser]]
+  * [[http://www.python.org/doc/2.0.1/dist/built-dist.html|documentation python]]
+  * [[http://www.linuxfordevices.com/c/a/Linux-For-Devices-Articles/How-to-make-deb-packages/|How to make deb packages]]
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=334554|Le paquet de billou]] pour l'exemple spécifique de firefox/icecat que je voulais mettre en avant.
+
+----
+
+//Contributeurs : [[utilisateurs:SkeRoy]].//

@@ -1,0 +1,317 @@
+
+{{tag>sécurité pare-feu ips}}
+----
+
+====== Suricata :  Système de détection et de prévention d'intrusion  ======
+{{http://openinfosecfoundation.org/images/stories/suricata.png?175 }}
+
+Le Moteur Suricata est un moteur de détection et de prévention des intrusions de nouvelle génération.
+
+Ce moteur n'est pas destiné à simplement remplacer ou imiter les outils existants dans l'industrie, mais apportera de nouvelles idées et technologies sur le terrain.
+
+Le moteur Suricata et la bibliothèque HTP sont disponibles sous GPLv2.
+
+Le moteur Suricata est un IDS/IPS Open Source.
+
+Nouveauté : intégration de LUA, ce qui permet par exemple de faire des recherches plus poussées, [[http://blog.inliniac.net/2012/09/08/first-impressions-of-luajit-performance-in-suricata/|des regex]] etc ...
+
+Site officiel : http://openinfosecfoundation.org/index.php/download-suricata
+===== Installation =====
+====Par launchpad (conseillé)====
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] [[apt://suricata|suricata]].
+
+La dernière version est disponible sur le [[:ppa|dépôt ppa]] [[https://launchpad.net/~honeynet/+archive/nightly|ppa:honeynet/nightly]], puis recharger la liste des paquets, Philipp Seidel maintient les mises à jour de Suricata pour [[lucid|Ubuntu Lucid]], [[maverick|Ubuntu Maverick]].
+
+==== Compilation ====
+
+  * [[http://openinfosecfoundation.org/index.php/download-suricata|Télécharger les sources]].
+  * Dépendances : 
+  * Compiler.
+
+<code>
+echo " compilation "
+
+echo "http://bailey.st/blog/2010/07/03/suricata-1-0-0-setup-on-ubuntu-10-04/"
+
+suricataversion=suricata-1.0.5
+sudo apt-get -y install libpcre3 libpcre3-dbg libpcre3-dev build-essential autoconf automake libtool libpcap-dev libnet1-dev libyaml-0-2 libyaml-dev zlib1g zlib1g-dev libcap-ng-dev libcap-ng0
+sudo apt-get -y install libnetfilter-queue-dev libnetfilter-queue1 libnfnetlink-dev libnfnetlink0
+cd
+mkdir suricata-1.0.5
+wget http://people.redhat.com/sgrubb/libcap-ng/libcap-ng-0.6.4.tar.gz
+tar -xzvf libcap-ng-0.6.4.tar.gz
+cd libcap-ng-0.6.4
+./configure && make && sudo make install
+apt-get install libhtp1
+apt-get install libhtp-dev
+wget http://www.openinfosecfoundation.org/download/$suricataversion.tar.gz
+tar -xvzf $suricataversion.tar.gz
+cd suricata-1.0.0
+./configure --enable-nfqueue
+sudo mkdir /var/log/suricata/
+make
+make install
+mkdir /etc/suricata
+apt-get install checkinstall
+checkinstall
+dpkg -i suricata_1.0.0-1_i386.deb
+cp classification.config suricata.yaml /etc/suricata/
+mkdir /etc/suricata/rules
+cd /etc/suricata/rules
+wget http://www.emergingthreats.net/rules/emerging-attack_response.rules
+wget http://www.emergingthreats.net/rules/emerging-scan.rules
+wget http://www.emergingthreats.net/rules/emerging-exploit.rules
+wget http://www.emergingthreats.net/rules/emerging-current_events.rules
+wget http://www.emergingthreats.net/rules/emerging-voip.rules
+wget http://www.emergingthreats.net/rules/emerging-malware.rules
+wget http://www.emergingthreats.net/rules/emerging-dos.rules
+wget http://www.emergingthreats.net/rules/emerging-drop.rules
+wget http://www.emergingthreats.net/rules/emerging-compromised.rules
+wget http://www.emergingthreats.net/rules/emerging-dshield.rules
+wget http://www.emergingthreats.net/rules/emerging-botcc.rules
+wget http://www.emergingthreats.net/rules/emerging-rbn.rules
+wget http://www.emergingthreats.net/rules/emerging-virus.rules
+cd /etc/suricata/
+sudo vi suricata.yaml
+suricata -D  -c /etc/suricata/suricata.yaml -s /etc/suricata/classification.config -i wlan0
+</code>
+
+====Script mise à jour automatique====
+
+<code>
+#!/bin/bash
+cd /tmp
+rm -rf /tmp/suricata
+mkdir suricata
+cd suricata
+/usr/bin/git clone git://phalanx.openinfosecfoundation.org/oisf.git
+cd oisf
+./autogen.sh
+./configure && make && make install
+</code>
+=====Configuration=====
+
+==== Choix de la configuration 'hote ou forwarding====
+<code>
+echo "Mode host situation = firewall sur le pc"
+
+sudo iptables -I INPUT -j NFQUEUE
+sudo iptables -I OUTPUT -j NFQUEUE
+
+echo "Mode gateway-scenario forwarding = firewall en entré de DMZ ( réseau entreprise ) "
+echo "sudo iptables -I FORWARD -j NFQUEUE"
+</code>
+==== Copie du fichier de configuration====
+<code>
+sudo cp /etc/suricata/suricata-debian.yaml /etc/suricata/suricata.yaml
+
+</code>
+
+==== Effectuer une mise à jour des règles====
+
+<code>
+echo "update rules"
+
+cd /etc/snort/rules
+
+echo "http://www.emergingthreats.net"
+sudo wget http://www.emergingthreats.net/rules/emerging.rules.tar.gz
+sudo tar xvf emerging.rules.tar.gz
+sudo rm emerging.rules.tar.gz
+sudo cp rules/* .
+
+echo " http://sagan.softwink.com/ "
+sudo wget http://sagan.softwink.com/rules/sagan-rules-current.tar.gz
+sudo tar xvf sagan-rules-current.tar.gz
+sudo rm sagan-rules-current.tar.gz
+sudo cp sagan-rules/* .
+
+echo "rules from suricata"
+sudo wget https://redmine.openinfosecfoundation.org/projects/suricata/repository/revisions/master/changes/rules/decoder-events.rules
+sudo wget https://redmine.openinfosecfoundation.org/projects/suricata/repository/revisions/master/changes/rules/stream-events.rules
+sudo wget https://redmine.openinfosecfoundation.org/projects/suricata/repository/revisions/master/changes/rules/smtp-events.rules
+sudo wget https://redmine.openinfosecfoundation.org/projects/suricata/repository/revisions/master/changes/rules/http-events.rules
+</code>
+
+==== Editer le fichier de configuration====
+<code>
+sudo gedit /etc/suricata/suricata.yaml
+</code>
+Chercher : "rule-files:"
+
+Et ajouter ou retirer des règles.
+
+Vous pouvez ajouter ces règles provenant d'emergingtreat :
+par défaut :
+<code>
+ - emerging-attack_response.rules
+ - emerging-dos.rules
+ - emerging-exploit.rules
+ - emerging-game.rules
+ - emerging-inappropriate.rules
+ - emerging-malware.rules
+ - emerging-p2p.rules
+ - emerging-policy.rules
+ - emerging-scan.rules
+ - emerging-virus.rules
+ - emerging-voip.rules
+ - emerging-web.rules
+ - emerging-web_client.rules
+ - emerging-web_server.rules
+ - emerging-web_specific_apps.rules
+ - emerging-user_agents.rules
+ - emerging-current_events.rules
+</code>
+Toutes les règles
+<code>
+ - emerging-activex.rules
+ - emerging-attack_response.rules
+ - emerging-botcc.rules
+ - emerging-chat.rules
+ - emerging-ciarmy.rules
+ - emerging-compromised.rules
+ - emerging-current_events.rules
+ - emerging-deleted.rules
+ - emerging-dns.rules
+ - emerging-dos.rules
+ - emerging-drop.rules
+ - emerging-dshield.rules
+ - emerging-exploit.rules
+ - emerging-ftp.rules
+ - emerging-games.rules
+ - emerging-icmp_info.rules
+ - emerging-icmp.rules
+ - emerging-imap.rules
+ - emerging-inappropriate.rules
+ - emerging-malware.rules
+ - emerging-misc.rules
+ - emerging-mobile_malware.rules
+ - emerging-netbios.rules
+ - emerging-p2p.rules
+ - emerging-policy.rules
+ - emerging-pop3.rules
+ - emerging-rbn-malvertisers.rules
+ - emerging-rbn.rules
+ - emerging-rpc.rules
+ - emerging-scada.rules
+ - emerging-scan.rules
+ - emerging-shellcode.rules
+ - emerging-smtp.rules
+ - emerging-snmp.rules
+ - emerging-sql.rules
+ - emerging-telnet.rules
+ - emerging-tftp.rules
+ - emerging-tor.rules
+ - emerging-trojan.rules
+ - emerging-user_agents.rules
+ - emerging-virus.rules
+ - emerging-voip.rules
+ - emerging-web_client.rules
+ - emerging-web_server.rules
+ - emerging-web_specific_apps.rules
+ - emerging-worm.rules
+</code>
+
+Vous pouvez ajouter ces règles provenant de l'ips sagan :
+<code>
+ - apache.rules
+ - apc-emu.rules
+ - arp-normalize.rulebase
+ - arp.rules
+ - asterisk.rules
+ - attack.rules
+ - bash.rules
+ - bind.rules
+ - bonding.rules
+ - bro-ids.rules
+ - cacti-thold.rules
+ - cisco-ios.rules
+ - cisco-normalize.rulebase
+ - cisco-pixasa.rules
+ - classification.config
+ - courier.rules
+ - dns-normalize.rulebase
+ - dovecot.rules
+ - fortinet.rules
+ - ftpd.rules
+ - grsec.rules
+ - hordeimp.rules
+ - hostapd.rules
+ - imapd.rules
+ - imap-normalize.rulebase
+ - ipop3d.rules
+ - juniper.rules
+ - kismet.rules
+ - knockd.rules
+ - milter.rules
+ - mysql.rules
+ - nginx.rules
+ - ntp.rules
+ - openssh-normalize.rulebase
+ - openssh.rules
+ - ossec-mi.rules
+ - ossec.rules
+ - php.rules
+ - postfix.rules
+ - postgresql.rules
+ - pptp.rules
+ - proftpd.rules
+ - pure-ftpd.rules
+ - racoon.rules
+ - reference.config
+ - roundcube.rules
+ - rsync.rules
+ - sagan-sid-msg.map
+ - samba.rules
+ - sendmail.rules
+ - smtp-normalize.rulebase
+ - snort.rules
+ - solaris.rules
+ - sonicwall-normalize.rulebase
+ - sonicwall.rules
+ - squid.rules
+ - su.rules
+ - syslog.rules
+ - tcp.rules
+ - telnet.rules
+ - tripwire.rules
+ - vmpop3d.rules
+ - vmware.rules
+ - vpopmail.rules
+ - vsftpd.rules
+ - weblabrinth.rules
+ - windows.rules
+ - wordpress.rules
+ - xinetd.rules
+ - zeus.rules
+
+</code>
+
+=====Utilisation=====
+====Lancement====
+
+<code>
+sudo suricata -D -c /etc/suricata/suricata.yaml -q 0
+</code>
+
+<note>Si vous avez un message du genre " NFQUEUE support not found ! Please ensure the nfnetlink_queue module is loaded or built in kernel."</note>
+
+Il vous faudra modifier le fichier "/etc/init.d/suricata" via la commande : 
+   sudo nano /etc/init.d/suricata
+
+Puis rechercher la ligne :
+   if [ ! -e /proc/net/netfilter/nf_queue ]; then
+
+Afin de la modifier en :
+   if [ ! -e /proc/net/netfilter/nfnetlink_queue ]; then
+====Monitoring / Lire les logs====
+Les log sont dans /var/log/suricata
+
+====Tester l'ids / ips====
+
+Aller avec un navigateur internet sur le site : http://www.testmyids.com
+=====Liens =====
+
+
+----
+**Contributeurs principaux :** //[[:utilisateurs:psychederic|Psychederic]]//

@@ -1,0 +1,104 @@
+
+{{tag> Trusty xenial réseau partage nfs sécurité tutoriel }}
+----
+
+====== Fixer les ports pour un partage NFS ======
+
+Vous pouvez avoir besoin de fixer les [[wpfr>Port_(logiciel)|ports]] utilisés par [[:NFS]] , lorsque votre [[:partage]] doit se faire à travers un [[:Firewall|pare-feu]] matériel ou logiciel ou un autre équipement filtrant.
+
+{{/nfs-ufw.png}}
+
+
+<note tip>Pour sécuriser votre [[:partage]] [[:NFS]] à l'aide d'un [[:firewall|pare-feu]] vous pouvez suivre ce [[http://wiki.debian.org/SecuringNFS|tutoriel debian]] en utilisant [[:ufw]] plutôt que [[:Shorewall]].
+</note>
+
+
+===== Partage NFS  =====
+
+Le principe de partage fonctionne sur la notion de serveur/client.\\
+Le serveur est celui qui propose l'accès à ses données.\\
+Le client est celui qui y accède pour les lire ou les modifier. \\
+
+<note important>Toutes les manipulations indiquées dans cette page se font sur le serveur.</note>
+
+===== Fixer les ports =====
+
+Il s'agit de déterminer le port qui sera toujours utilisé pour le [[:partage]] [[:NFS]]. On appel cela <<fixer un port>>.
+
+==== pour mountd ====
+Pour déterminer le port, [[:tutoriel:comment_modifier_un_fichier|ouvrez le fichier]] **/etc/default/nfs-kernel-server**\\
+commentez  (mettre un # devant) ''RPCMOUNTDOPTS=--manage-gids''  et mettez à la place:
+<file> RPCMOUNTDOPTS="--port 42002" </file>
+
+==== Pour STATD ====
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] ** /etc/default/nfs-common **\\
+<file> STATDOPTS="--port 42000" </file>
+vous pouvez aussi fixer le port de sortie pour STATD en modifiant la ligne précédente par celle-ci:
+<file> STATDOPTS="--port 42000 --outgoing-port 42001" </file>
+
+==== Pour QUOTAD ====
+La gestion des [[:quota|quotas]] n'est pas activée par défaut. Fixer ce port est donc optionnel.
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] ** /etc/default/quota **\\
+<file> RPCRQUOTADOPTS="-p 42769" </file>
+
+==== pour LOCKD ====
+Pour éviter l'altération des données si plusieurs //clients// se connectent en même temps\\ [[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/etc/modprobe.d/options.conf** et y mettre cette ligne:
+<file> options lockd nlm_udpport=42010 nlm_tcpport=42010 </file>
+<note> Si le nom de fichier options.conf ne vous conviens pas, vous pouvez le nommer comme bon vous semble tant qu'il fini par **.conf**</note>
+==== si LOCKSD prend toujours des ports aléatoires apres reboot ====
+Voir [[https://www.ens-lyon.fr/PSI/technique/doku.php?id=debian:security|ici]]
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/etc/sysctl.conf**
+<file>
+fs.nfs.nlm_tcpport=42010
+fs.nfs.nlm_udpport=42010
+</file>
+
+en fixant les mêmes ports pour UDP et TCP, **cela peut servir pour le parefeu UFW**.
+
+===== Prise en compte des modifications =====
+Afin de prendre en compte les modifications par le système, il faudra redémarrer votre machine.
+
+Sinon vous pouvez essayer les étapes suivantes :
+  *  Relancer le serveur NFS : <code>sudo invoke-rc.d nfs-kernel-server restart</code>
+  * Relancer portmap : <code>sudo invoke-rc.d portmap restart</code>
+  * Relancer le service rpc : <code>sudo rmmod sunrpc
+sudo modprobe sunrpc</code>
+===== Vérification ======
+
+Pour connaitre les ports de communication utilisés par le **PC1**, dans un [[:terminal]] saisissez:
+<code>rpcinfo -p</code>
+La commande devrait vous donner un résultat proche de celui-ci:
+<code>program no_version protocole  no_port
+    100000    2   tcp    111  portmapper
+    100000    2   udp    111  portmapper
+    100021    1   udp  42010  nlockmgr
+    100021    3   udp  42010  nlockmgr
+    100021    4   udp  42010  nlockmgr
+    100021    1   tcp  42010  nlockmgr
+    100021    3   tcp  42010  nlockmgr
+    100021    4   tcp  42010  nlockmgr
+    100003    2   udp   2049  nfs
+    100003    3   udp   2049  nfs
+    100003    4   udp   2049  nfs
+    100003    2   tcp   2049  nfs
+    100003    3   tcp   2049  nfs
+    100003    4   tcp   2049  nfs
+    100005    1   udp  42002  mountd
+    100005    1   tcp  42002  mountd
+    100005    2   udp  42002  mountd
+    100005    2   tcp  42002  mountd
+    100005    3   udp  42002  mountd
+    100005    3   tcp  42002  mountd</code>
+    
+On constate que les ports ne sont plus attribués aléatoirement mais bien comme nous les avons [[#fixer les ports|fixé]].
+Il sera alors possible de configurer votre [[:firewall]] en utilisant ces ports.
+
+=====Voir aussi=====
+  * https://www.ens-lyon.fr/PSI/technique/doku.php?id=debian:security
+  * [[wpfr>Network_File_System|NFS]]
+
+----
+//Contributeurs :[[utilisateurs:ool]]//

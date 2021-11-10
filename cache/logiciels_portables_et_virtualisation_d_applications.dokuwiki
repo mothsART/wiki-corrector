@@ -1,0 +1,261 @@
+
+{{tag>logiciels entreprise réseau sécurité administration serveur BROUILLON}}
+----
+
+====== Logiciels portables et virtualisation d'applications sous Ubuntu Linux ======
+
+Les applications portables sont de plus en plus utilisées auprès du grand public pour leur avantage : 
+  * Pouvoir transporter son application, ses données, et sa configuration avec soi, par exemple sur une clé USB. 
+
+D'un point de vue plus technique :
+  * Cela permet de garder un système stable : **les applications virtualisées s'exécutent dans leurs environnements et avec leurs dépendances** (aucune installation de librairie). 
+
+
+Au niveau professionnel, la virtualisation d'applications peut garantir :
+  * La stabilité des applications.
+  * La sécurité et la mise à jour du parc informatique (par exemple : en distribuant ces applications facilement par réseau, en faisant du [[http://fr.wikipedia.org/wiki/Logiciel_en_tant_que_service|saas]], ou de l'[[http://en.wikipedia.org/wiki/Application_streaming|application à la demande]]).
+
+Dernier avantage pour le monde linux : la virtualisation d'applications permet de **distribuer des logiciels - quelle que soit la version d'ubuntu, et même quelle que soit la distribution linux**. (([[http://ldn.linuxfoundation.org/lsb/make-your-app-portable|(en)Make Your App Portable , linuxfoundation]]))
+
+La virtualisation d'applications est aussi utilisée pour les téléphones portables.
+
+<note help>Note pour la compréhension complète du sujet :  les applications portables peuvent être empaquetées ou non.
+
+En entreprise il serait préférable d'utiliser des applications empaquetées - et compatibles linux nativement (sans logiciel tierce)((ce qui est fait avec thinapp sous windows entre autre)).
+
+Les applications portables connues du grand public ne sont que rarement empaquetées.
+
+  * L'avantage de l'empaquetage est que le paquet ne pourra être corrompu. (stabilité, sécurité, contrôle)
+  * L'avantage de ne pas empaqueter est de permettre la mise à jour du logiciel, et ses dépendances facilement (voire même automatiquement par exemple avec firefox).
+
+**Toutes deux restent totalement portables** , et sauvegardent les configurations personnelles dans l'endroit spécifié : dans le même répertoire que l'application portable ou un autre répertoire.
+</note>
+
+<note warning>**Attention : Exécuter du code provenant d'une source externe à Ubuntu peut être dangereux.**
+
+**Veuillez vous reporter sur des sites de confiance.**
+
+Merci de rapporter toute problématique de sécurité.
+</note>
+
+===== Solution Linux natif =====
+
+Concurrent de Vmware thinApps(windows), et des applications portables libres basées sur nsis (nullsoft), et autres.
+
+   * [[CDE]] ([[http://www.pgbovine.net/cde.html|site]])([[http://linuxfr.org/redirect/69829.html|source]])([[http://vimeo.com/16684443|video]])(GNU GPL v3) basé sur strace, encapsule tous les fichiers nécessaires à l'exécution du binaire : Code, Données, Environnement. Ainsi, lors de l'exécution de la commande $ cde a.out sur la machine A, CDE va exécuter a.out, surveiller ses accès (bibliothèques dynamiques, fichiers de configuration, polices, etc.), copier ces fichiers dans un sous-répertoire et créer un fichier a.out.cde. L'ensemble des fichiers de ce sous-répertoire peut être transféré sur une machine B. Lors de l'exécution de a.out.cde, l'environnement est changé (comme avec chroot) et ce sont les bibliothèques fournies dans le sous-répertoire qui sont utilisées. 
+ 
+==== Sites d'applications portables ====
+  * [[http://www.portablelinuxapps.org/|PortableLinuxApps.com]]
+
+==== Applications portables officielles ====
+
+==== Méthode pour la création d'applications portables sous linux ====
+
+
+=== 0) Télécharger les scripts ===
+
+Vous pouvez télécharger les scripts, ou copier ce qui suit dans des fichiers (en leur donnant les droits d'exécution).
+
+**Les scripts ne demanderont pas les droits root, gage de non compromission possible du système.**
+
+Vous n'aurez qu'à changer le nom du paquet que vous voulez rendre portable. (cela peut devenir plus compliqué avec des applications complexes).
+
+=== 1) Lister et copier les dépendances ===
+
+Lister les dépendances (exécuter dans la racine du projet) : 
+<code>
+#!/bin/sh 
+# Version 
+# 1.0 Bêta : fonctionne même pour des applications relativement complexe.
+
+# PortableApplicationCreator.sh Portable - portableTools for Linux
+#
+# Script Made by:
+#	Eric Chaudy (Psychederic)
+#
+# Licensed:
+#	PortableApplicationCreator - GNU GPLv2 !
+
+
+#Choisir le paquet que vous désirez transformer en application portable
+lenomdupaquet=firefox-3.5
+
+#Creation des dossiers selon la convention de nommage
+mkdir App Data Other
+
+#Listage des dépendances - par défaut toutes les dépendances
+for p in `apt-cache depends $lenomdupaquet | awk '{print $NF}' | sed -e "s/<//" -e "s/>//" | sort | uniq`; do apt-cache show $p; done | grep Filename | sed "s/Filename: /wget http:\/\/fr.archive.ubuntu.com\/ubuntu\//" > dependances.sh
+
+#Note vous pouvez ajouter des dépendances à cet endroit, sous cette forme (pour trouver des dépendances vous pouvez utiliser dpkg,ldd)
+# sed -i 1i\ 'wget http://fr.archive.ubuntu.com/ubuntu/pool/....deb'  dependances.sh
+
+#téléchargement des dépendances
+sh dependances.sh
+mv dependances.sh /Other
+
+mkdir tmp
+#Dépaquetage deb, des dépendances
+for p in `find -name "*.deb"` 
+do
+fakeroot dpkg --extract  $p tmp
+done
+
+#On efface les deb
+rm *.deb
+
+#On copie dans les bons répertoires
+mv ./tmp/* ./App/
+
+
+</code>
+
+((ldd))
+=== 2) Adapter le script de lancement ===
+
+Script basé sur le principe utilisé par http://www.portools.com/
+
+Le point important est de sauver le profile ( dernière ligne ) et de bien définir les variables. Il vous faudra ici créer le répertoire firefox-profile dans Data : <code>mkdir App/firefox-profile</code>
+
+Vous pouvez trouver un exemple plus simple après celui-ci.
+
+<code>
+#!/bin/sh
+
+eval 'exec perl -x -S ./$0 ${1+"$@"}'
+  if 0; 
+
+#!perl
+
+# NOMAPPS Portable - portableTools for Linux
+#
+# Packaged / Made Portable by:
+#	Nom Prenom (www.site.com)
+#
+# Licensed:
+#	NOMAPPS - MPL, Portable Code - GPL.
+#
+# Portable Logic:
+#	> quelque dépendance packagé et problématique de .conf ...
+#	> besoin de  passer le répertoire profile pour garder les configurations. 
+
+use Cwd;
+
+# Modifiable variables.
+$executable = 'firefox';
+$program_name = 'Firefox';
+
+# Internal variables. These usually do not need to be changed.
+$executable_dir = 'App/usr/lib/firefox-3.5.5/';
+$executable_full = $executable_dir . $executable;
+$arguments = join '', @ARGV;
+
+print "Bienvenue sur $program_name Portable.\n\n";
+
+if (!-e $executable_full) {
+    die "Quelque chose n'a pas fonctionné. L'executable principale est manquant. Avez vous copié tous les fichiers ?\n";
+} elsif(!-x $executable_full) {
+    chmod 0755, $executable_full || die "Je n'ai pas pus changer les permissions de '$executable'. Avez vous copié ou extrait en tant qu'utilisateur normal ?\n";
+}
+
+$cwd = getcwd();
+
+#Conf - variable de lancement
+system("mv App/etc/gre.d/1.9.1.5.system.conf App/etc/gre.d/1.9.1.5.system.conf.bak");
+open(CONF, ">App/etc/gre.d/1.9.1.5.system.conf");
+print CONF "[1.9.1.5]
+GRE_PATH=$cwd/usr/lib/xulrunner-1.9.1.5
+xulrunner=true
+abi=x86-gcc3";
+
+#Environnement
+chdir($executable_dir);
+system("./$executable $arguments -no-remote -profile \"$cwd/Data/firefox-profile\" 2>/dev/null");
+
+</code>
+
+Voici par exemple le lanceur pour xterm :
+<code>
+#!/bin/sh
+
+eval 'exec perl -x -S ./$0 ${1+"$@"}'
+  if 0; 
+
+#!perl
+
+# XTerm Portable 237 - portableTools for Linux
+#
+# Packaged / Made Portable by:
+#	Daniil Kulchenko (www.portools.com)
+#
+# Licensed:
+#	XTerm - MIT/X, Portable Code - GPL.
+#
+# Portable Logic:
+#	XTerm does not have any non-standard runtime dependencies, and does
+#	not save any config files anywhere. Therefore, none.
+
+# Modifiable variables.
+$executable = 'xterm';
+$program_name = 'XTerm';
+
+# Internal variables. These usually do not need to be changed.
+$executable_dir = 'App/bin/';
+$executable_full = $executable_dir . $executable;
+$arguments = join '', @ARGV;
+
+print "Welcome to XTerm Portable.\n\n";
+
+if (!-e $executable_full) {
+    die "Something went wrong. The main executable is missing. Perhaps you didn't copy all the files?\n";
+} elsif(!-x $executable_full) {
+    chmod 0755, $executable_full || die "I could not change the permissions of '$executable'. Did you copy the files as a regular user?\n";
+}
+
+chdir ($executable_dir);
+system("./$executable $arguments");
+</code>
+===3) Empaquetage : Au choix ===
+
+<note warning>En cour de développement</note>
+
+===== Solutions avec une application tierce =====
+
+Nécessite la présence de l'application tierce - l'exécuteur - ou l'émulateur (qui n'est pas présent par défaut sur les distributions Linux) pour lancer le "logiciel portable" / l'application virtualisée.
+
+
+====Runz ====
+  * [[http://hacktolive.org/wiki/Portable_Applications_%28Linux%29|hacktolive.org]]
+====Zero Install ====
+  * [[http://en.wikipedia.org/wiki/Zero_Install|sur Wikipedia]]
+
+====Wine + Applications portables Windows ====
+
+En utilisant [[Wine]], il serait possible d'émuler les applications portables Windows : et peut-être avec moins de problèmes de bibliothèques manquantes.
+
+Cependant cela reste une solution insatisfaisante au regard de l'utilisation d'une version native, notons par exemple une intégration à Ubuntu imparfaite, des applications qui peuvent souffrir de bogues ou de fonctionnalités inopérantes, voire ne fonctionnant pas du tout (certains mentionnent également la possibilité d'infection par des virus Windows, mais ceci n'est pas vérifié). 
+
+
+===== Solutions de serveur applicatif =====
+
+Concurrent de [[http://en.wikipedia.org/wiki/ClickOnce|ClicOnce]] (microsoft) ou [[http://en.wikipedia.org/wiki/Java_Web_Start|Java Web Start]] ( sun ).
+
+<note help>Nous ne parlerons pas ici des solutions de serveur applicatif en ligne, basé le plus souvent sur java, voir plutôt la page consacré. Merci.</note>
+
+===== Liens =====
+
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=358366|Retour d'expérience sur la création d'Application portable sur le forum ubuntu]].
+
+
+  * [[http://en.wikipedia.org/wiki/Application_virtualization|(en)Application virtualization]] (wikipedia en)
+  * [[http://fr.wikipedia.org/wiki/Intergiciel|Serveur d'application (interficiel sur wikipedia)]]
+
+  * [[http://en.wikipedia.org/wiki/Application_streaming|(en)Application streaming]]
+  * [[http://fr.wikipedia.org/wiki/Logiciel_en_tant_que_service|Le logiciel en tant que service ou en anglais le Software as a Service (SaaS) (saas)]]
+  * [[http://www.linuxfoundation.org/collaborate/workgroups/lsb/make-your-app-portable|(en)Make Your App Portable , linuxfoundation]] (mise à jour lien mort)
+
+  * [[http://sardes.inrialpes.fr/ecole/livre/pub/|Intergiciel et Construction d'Applications Réparties]] (livre libre de l'inria)
+
+
+----
+
+//Contributeurs :  [[:utilisateurs:psychederic|Psychederic]].//

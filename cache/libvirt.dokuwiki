@@ -1,0 +1,72 @@
+
+{{tag>virtualisation BROUILLON}}
+
+====== libvirt ======
+
+libvirt est le démon utilisé par [[virt-manager]] pour gérer les hyperviseurs qui font tourner les machines virtuelles
+
+===== Configuration =====
+
+==== NAT IPv4, et routage IPv6 avec autoconfiguration d'adresse ====
+
+<note important>Le support d'IPv6 dans libvirt dépend de la version de libvirt et dnsmasq. Cette configuration a été testé sous Debian 7 avec libvirt 1.1.4 et dnsmasq 2.68.</note>
+<file>
+<network>
+  <name>default</name>
+  <uuid>#un identifiant#</uuid>
+  <forward mode='nat'/>
+  <bridge name='virbr0' stp='on' delay='0'/>
+  <mac address='#Une MAC#'/>
+  <ip address='192.168.122.1' netmask='255.255.255.0'>
+    <dhcp>
+      <range start='192.168.122.2' end='192.168.122.254'/>
+    </dhcp>
+  </ip>
+  <ip family='ipv6' address='#L'IPv6 de l'hôte sur le réseau virbr0#' prefix='64'>
+  </ip>
+</network>
+</file>
+
+Explications :
+  * En IPv4, dnsmasq fournira les adresses via le DHCP, avec les informations de passerelle par défaut, et configurera le routage dans IPTable sur l'hôte
+  * En IPv6
+    * le NAT n'existe pas, mais le fait de garder //nat// dans le //forward mode// configure dnsmasq pour faire du routage : il répond aux requêtes NDP des VM, et leur fourni une route par défaut pour sortir de leur lien local
+    * Avec un préfixe en /64, les VM sont capables de déterminer automatiquement une adresse IP à partir de leur adresse MAC (autoconfiguration IPv6 sans état). Ceci remplace le dhcp, d'où l’absence de directive éponyme dans le second bloc <ip>
+
+L'adresse IPv6 de l'hôte sur le réseau virbr0 une adresse arbitraire du réseau IPv6 attribuée par le FAI, mais sera différente de l'adresse de la carte réseau physique.
+
+===== Astuces =====
+
+==== Serveur DHCP fixe ====
+
+Ceci nécessite des connaissances en système et l'utilisation de la [[tutoriel:console_ligne_de_commande|ligne de commande]].
+
+Préparation du système :
+<code>
+sudo mkdir /var/lib/libvirt/dnsmasq/
+sudo touch /var/lib/libvirt/dnsmasq/default.hostsfile
+</code>
+
+Idée pour enregistrer l'association d'une IP avec une adresse MAC et le nom d'hôte de la machine :
+<code>
+vm_mac=
+vm_ip=
+vm_hostname=
+
+CONF_libvirt_network="/etc/libvirt/qemu/networks/default.xml"
+VAR_libvirt_network="/var/lib/libvirt/network/default.xml"
+VAR_dnsmask="/var/lib/libvirt/dnsmasq/default.hostsfile"
+
+for file in $CONF_libvirt_network $VAR_libvirt_network; do
+	sudo sed -r -i "s@(^ +</dhcp>)@      <host mac=\"$vm_mac\" name=\"$vm_hostname\" ip=\"$vm_ip\" />\n\1@" $file
+done
+echo "$vm_mac,$vm_ip,$vm_hostname" | sudo tee -a $VAR_dnsmask >/dev/null
+
+# Prise en compte par dnsmasq des nouveaux paramètres
+sudo kill -HUP `pidof dnsmasq`
+</code>
+<note tip>En ajoutant de la même façon le paramétrage dans /etc/hosts, on utilise la completion des noms en se connectant en ssh à la machine.</note>
+
+----
+
+//Contributeurs principaux : [[utilisateurs:Id2ndR]].//

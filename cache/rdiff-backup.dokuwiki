@@ -1,0 +1,188 @@
+
+{{tag>Trusty sécurité sauvegarde}}
+
+----
+
+
+
+====== rdiff-backup : Solution de sauvegarde incrémentielle ======
+
+Faire des sauvegardes différentielles journalières de son ''/home'' et supprimer les sauvegardes vieilles d'une semaine par exemple. Ceci est réalisé via le logiciel **rdiff-backup**. J'explique également comment tout automatiser.
+
+Rdiff-backup peut être utilisé sur Linux, MacOsX et Windows, ce qui vous permet d'installer ce logiciel sur n'importe quel ordinateur, et sauvegarder ces ordinateurs sur votre serveur via SSH. [[http://download.savannah.gnu.org/releases/rdiff-backup|Téléchargement pour un "non ubuntu"]].
+
+===== Installation =====
+
+Pour installer **rdiff-backup**, il vous suffit de lancer la commande suivante :
+<code>
+sudo apt-get install rdiff-backup
+</code>
+Depuis Ubuntu « Gutsy Gibbon » 7.10 il suffit de [[apt://rdiff-backup|cliquer ici]].
+
+===== Utilisation =====
+
+
+
+
+
+
+
+
+==== Faire la sauvegarde ====
+Voici la commande qui permet de faire une sauvegarde :
+  rdiff-backup --exclude /home/mon_login/.aMule /home/mon_login /repertoire_de_sauvegarde
+
+Ici on sauvegarde tout le ''/home/mon_login'' sauf le repertoire ''/home/mon_login/.aMule'' dans le dossier de destination ''/repertoire_de_sauvegarde''.
+
+Si ''/repertoire_de_sauvegarde'' n'est pas vide, un message nous indique qu'il faut utiliser l'option ''--force'' et dans ce cas, son contenu est supprimé. Donc attention, dans ce cas, à sauvegarder le contenu de ''/repertoire_de_sauvegarde'' au préalable.
+
+=== Exemples ===
+
+Sauvegarder uniquement les répertoires /usr/local et /var :
+
+  rdiff-backup --include /usr/local --include /var --exclude '**' / /backup
+
+Idem, mais la liste des répertoires à sauver dans un fichier nommé include-list.txt qui contient :
+
+  /var
+  /usr/bin/gzip
+
+La commande sera alors :
+
+  rdiff-backup --include-globbing-filelist include-list.txt --exclude '**' / /backup
+
+
+Pour plus d'infos, voir [[http://www.nongnu.org/rdiff-backup/examples.html|ici]]
+
+==== Supprimer des sauvegardes ====
+Pour supprimer les différences accumulées au fur et à mesure que l'on a ajouté des sauvegardes :
+  rdiff-backup --remove-older-than 1W --force /repertoire_de_sauvegarde
+
+Ici on enlève toutes les modifications enregistrées vieilles de plus d'une semaine. On peut mettre ''D(ay)'',''W(eek)'', ''M(onth)'' et ''Y(ear)''.
+
+S'il il y a plusieurs sauvegardes à supprimer, la commande échoue. C'est pourquoi il faut rajouter le paramètre ''--force'' pour ne pas prendre cette erreur en compte et que **rdiff-backup** effectue bien ce qu'on lui demande.
+
+
+
+
+
+==== Tester un backup ====
+Pour vérifier que nos sauvegardes fonctionnent bien, on peut restaurer une sauvegarde :
+  rdiff-backup -r now /repertoire_de_sauvegarde /repertoire_de_restauration
+
+L'option ''-r now'' permet de remettre la version de la sauvegarde la plus récente. On peut remonter dans les sauvegardes, par exemple remettre le repertoire d'il y a 3 jours avec l'option ''-r 3D''.
+
+<note tip>Rdiff-backup fait une replication parfaite des fichiers dans leur dernière version. Ainsi pour restaurer des données, il suffit de faire ''cp -a /backupDir /restoredDir''</note>
+
+
+
+
+
+==== Voir la liste des sauvegardes ====
+Liste simple :
+   rdiff-backup -l /repertoire_de_sauvegarde
+
+
+Liste en tableau avec la taille de chaque incrément :
+   rdiff-backup --list-increment-size /repertoire_de_sauvegarde
+
+==== Voir les statistiques des sauvegardes ====
+
+   rdiff-backup-statistics /repertoire_de_sauvegarde
+
+
+==== Sauvegarder sur une machine distante, via SSH ====
+
+Remplacer
+
+  /repertoire_de_sauvegarde
+
+par
+
+  <utilisateur>@<adresse_ip_de_la_machine_distante>::<repertoire_de_sauvegarde_sur_la_machine_distante>
+
+Plus d'infos sur [[SSH|SSH ici]]
+
+===== Automatiser les sauvegardes =====
+Voici la partie vraiment intéressante : comment faire pour que nos commandes précédentes se lancent de façon automatique, de façon à ce que l'on ait pas à les faire manuellement chaque jour ?
+
+
+==== Journaliser les tâches ====
+
+Tout d'abord quelques mots sur les logiciels de journalisation de tâches. Actuellement on dispose de trois outils sous Linux pour cela :
+  * **[[:at]]** qui permet de définir des tâches à réaliser à un instant précis et si la machine est éteinte à ce moment là, la tâche sera réalisée au prochain démarrage. Utilisable par tout le monde.
+  * **[[:cron]]** peut définir des tâches périodiques mais c'est un daemon donc si la machine est éteinte, la commande ne se lancera pas du tout. Utilisable par tout le monde.
+  * **[[:anacron]]** lance des tâches de facon périodique et si l'ordinateur n'était pas allumé au moment voulu, la tâche s'exécutera au prochain démarrage. Utilisable uniquement par root.
+
+Dans notre cas, nous allons utiliser [[:cron]], cron utilise la crontab qui permet d'indiquer les tâches que l'on veut réaliser et à quelle fréquence.
+
+Pour éditer la crontab, il suffit de faire :
+  crontab -e
+
+Pour journaliser notre tâche, on indique à [[:cron]] d'exécuter le script ''~/sauve_mon_dossier.sh'' chaque jour à 20h00. 
+
+On met donc la ligne suivante dans notre crontab :
+  00    20    *    *     *    ~/sauve_mon_dossier.sh
+
+Celle-ci signifie //tous les jours à 20h00 lance le script ''/root/sauve_mon_dossier.sh'' //. **Ce sont bien les minutes d'abord et les heures ensuite, il n'y a pas d'erreur.** Pour plus d'informations sur le formalisme du ''crontab'', je vous invite à consulter [[:cron|cette page]].
+
+
+
+==== Le script ====
+
+Ensuite, il reste à faire le script pour lancer les sauvegardes.
+On édite donc le fichier ''~/sauv_mon_dossier.sh'' avec son éditeur favori et on y insère les lignes suivantes :
+  #!/bin/sh
+  nice -n 19 rdiff-backup --exclude /home/login/.aMule /home/login /mnt/save && nice -n 19 rdiff-backup --remove-older-than 1W --force /mnt/save
+
+Le ''nice -n 19'' signifie que lorsqu'on lance les commandes, elles s'exécutent avec la priorité la plus petite par rapport aux autres processus, ceci afin d'éviter que l'ordinateur ne se mette à ramer tous les jours à 20h00.
+
+On sauvegarde le script et on n'oublie pas de mettre les droits d'exécution sur le fichier :
+  chmod +x ~/sauv_mon_dossier.sh
+
+Voilà c'est fini ! On peut simplement vérifier que le script fonctionne bien en le lançant :
+  ~/sauve_mon_dossier.sh
+
+Normalement **rdiff-backup** se lance, fait sa sauvegarde et vous informe ensuite qu'il a ou non supprimé les sauvegardes plus vieilles d'une semaine.
+
+
+
+
+===== Trucs & astuces ======
+
+* Pour éviter des problèmes de droit sur les fichiers, je vous conseille de faire ceci avant de lancer la sauvegarde :
+  sudo chown -R votre_nom.users $HOME/* && chmod u+r -R $HOME/*
+
+* Dans le cas d'une utilisation simultanée de "max-file-size" et "exclude" il faut mettre "exclude" en premier sinon il sera ignoré. Par exemple :
+  rdiff-backup /home --max-file-size 1000 --exclude /home/me repertoire_de_sauvegarde
+
+ne prendra pas en compte "--exclude /home/me". Par contre :
+  rdiff-backup /home --exclude /home/me --max-file-size 1000 repertoire_de_sauvegarde
+
+sauvegardera tous les fichiers de /home de moins de 1 Ko sauf ceux présents dans /home/me. Plus d'explications [[http://www.mail-archive.com/rdiff-backup-users@nongnu.org/msg03909.html|ici]]
+
+* Pour afficher les listes des sauvegardes :
+  rdiff-backup -l repertoire_de_sauvegarde
+
+* Pour Gnome, il y a une interface : [[http://andrewprice.me.uk/projects/pybackpack|pybackpack]]
+
+* Naviguer dans les snapshots : [[rdiff-backup-fs|https://code.google.com/p/rdiff-backup-fs/]] en montant les snapshots dans un dossier
+  # dans les dépôts depuis la 12.04 : 
+  sudo apt-get install rdiff-backup-fs
+Pour avoir un dossier par snapshot dans le point de montage :
+  rdiff-backup-fs  mnt_path  backup_path
+===== Références =====
+Un bon site qui m'a permis de construire ce tutoriel :
+[[http://www.nongnu.org/rdiff-backup/examples.html|Rdiff-backup (en)]]
+
+===== Voir aussi =====
+
+Vous pouvez consulter le(s) site(s) suivant(s) pour obtenir un complément d'information...
+
+  * (fr) [[http://www.it-connect.fr/sauvegarde-et-restauration-avec-rdiff-backup%ef%bb%bf/|Utilisation de Rdiff-backup ]]
+
+----
+
+//Contributeurs : [[utilisateurs:Herbie]], [[utilisateurs:ostaquet]] //
+
+//Basé sur [[http://debuntu.tuxfamily.org]]//

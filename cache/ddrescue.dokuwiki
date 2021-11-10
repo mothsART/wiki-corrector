@@ -1,0 +1,338 @@
+
+{{tag>récupérer système sauvegarde}}
+
+----
+
+====== ddrescue ======
+
+**GNU ddrescue** (abrégé ici en ddrescue) est un outil de récupération de données sous licence GNU GPL.
+
+ddrescue copie les données d'un fichier ou disque (disque dur, SSD, CD-ROM, etc.) vers un autre. À la différence de [[dd]] qui lit les données séquentiellement, **ddrescue saute les zones endommagées** dont la lecture est lente afin de récupérer rapidement un maximum de données. **Il revient ensuite récupérer** ce qui peut l'être dans les **zones endommagées**. Il est donc **particulièrement adapté pour sauvegarder un disque dur en fin de vie**, qui peut cesser de fonctionner avant la fin de la récupération.
+
+ddrescue dispose notamment une **intéressante fonction de "fusion" **qui permet d'obtenir **une copie saine** d'un disque ou fichier **à partir de plusieurs copies endommagées** dudit disque ou fichier.
+
+Son interface en ligne de commande et ses nombreuses options en font un outil à destination des utilisateurs avertis.
+
+===== Préparation du système =====
+
+==== Préparation du matériel ====
+
+Vérifiez votre matériel. Un disque est parfois endommagé à cause d'un contrôleur de disque défectueux, vous risquez d'aggraver la situation en continuant à l'utiliser pour la récupération. De la mémoire vive défectueuse peut avoir endommagé les données du disque à sauvegarder puis corrompre des données encore valides qui seront copiées sur le nouveau disque.
+
+Vérifiez que le disque sur lequel vous enregistrez le fichier cible et le fichier journal soit en bon état ! 
+<code bash>smartctl -a /dev/disque_recepteur</code>
+  
+Vérifiez que l'espace libre soit supérieur à la taille du périphérique à sauver !
+<code bash>df -h</code>
+  
+ 
+ Il est inutile de continuer à faire des tests automatiques de qualité sur le disque défectueux. La désactivation se fait par la commande:
+<code bash>smartctl -o   off    /dev/disque_emetteur.</code>
+
+
+==== Installation  de ddrescue ====
+=== Dans une instance opérationnelle ou la version liveusb 21.10. ===
+Pour installer ce logiciel, il suffit d'[[:tutoriel:comment_installer_un_paquet#paquet_present_dans_les_depots|installer le paquet]] **[[apt>gddrescue|gddrescue]]**.
+
+<note important>
+Il existe un paquet nommé ''ddrescue'' **qu'il ne faut pas installer**. Le paquet ''ddrescue'' contient un logiciel nommé //dd_rescue//, plus ancien que celui présenté ici.
+</note>
+V
+ 
+=== Dans une instance "live" avant la version 21.10. ===
+En ligne de commande
+<code bash>sudo add-apt-repository "deb http://archive.ubuntu.com/ubuntu $(lsb_release -sc) universe"
+sudo apt-get update
+sudo apt install gddrescue</code>
+                                                     
+                                                           
+
+
+==== Configuration du système ====
+
+Désactivez le //montage// automatique des partitions, afin d'éviter que le système n'essaye de réparer une partition endommagée, risquant ainsi de l'endommager encore plus.
+<code bash>gsettings set org.gnome.desktop.media-handling automount false</code>
+  
+Évitez d'utiliser une partition NTFS pour accueillir une image disque de taille importante (plus de quelques Go). Plusieurs personnes ont rapporté que la récupération ralentit au fur et à mesure de la récupération, à telle point qu'il est impossible de finir la récupération.
+
+
+==== Installation des utilitaires associés ====
+
+=== ddrescueview ===
+
+Vous pouvez utiliser **[[apt>ddrescueview]]** pour suivre l'avancement de la sauvegarde de façon graphique. Le résultat est présenté sous la forme d'une grille de couleur à la manière des outils de défragmentation sous Windows.
+
+
+ ===== Principe de fonctionnement de ddrescue =====
+
+
+ddrescue  fonctionne de la  [[https://www.gnu.org/software/ddrescue/manual/ddrescue_manual.html#Algorithm | façon suivante]]:
+
+- Si le fichier map est vide, dire que le traitement  est à faire sur la totalité du support entrée, sinon récupérer ce qui a déjà été analysé. Ecrire régulièrement l’état de la récupération.
+
+- Le premier passage lit la totalité du support d’entrée  en faisant des demandes de lecture de taille très importante ( probablement   plusieurs Mo). Si la lecture est possible, la duplication a lieu. Si cette lecture  est impossible,  la totalité des secteurs de cette zone  est marquée « ignorée».  Quel que soit le résultat, la grande zone suivante est alors traitée. Cela jusqu'à la fin du support entrée.
+
+- Le second passage vérifie que les zones marquées "ignorée" sont peut-être devenues lisibles pour certaines d'entre elles en partant de la fin du support entrée (Cette phrase est à confirmer).
+
+
+- Le troisième passage appelé rognage (Trimming) reprend chaque entité de  taille très importante  en traitant **secteur par secteur** (Secteur logique ?  Secteur physique?). On traite le premier secteur :
+  *        Si le secteur est lisible, il est dupliqué et le secteur suivant est lu.
+  *        Si le secteur  suivant est illisible, on traite le dernier secteur  de l’entité.
+  *        Si le dernier secteur est lisible , il est dupliqué et le secteur précédant est lu.
+  *        Si le secteur précédant  est illisible, on passe au traitement de l’entité suivante de grande taille.
+
+- Le quatrième passage appelé grattage (Scraping)  lit **chaque secteur**  non encore dupliqué :
+  *       Si le secteur est lisible, il est dupliqué et le secteur suivant est lu.
+  *       Si le secteur est  illisible, il est marqué défectueux et le  secteur suivant est lu.
+  *       Lorsque le dernier secteur est traité, l’opération est terminée.
+
+- Cependant, un secteur considéré comme défectueux peut quelquefois être relu. Il est donc possible (souhaitable?) de redemander un certain nombre de fois l’exécution du quatrième passage.
+Lorsque le dernier secteur est  traité, l’opération de grattage continue en commençant par la fin pour se terminer au début, elle repart du début jusqu’à ce que le nombre de passages prévus soit atteint. Cependant il est possible d’interrompre l’exécution à tout instant si le taux de récupération est jugé insuffisant en appuyant sur les touches **Crtl C**.
+=====Utilisation=====
+Si le disque usagé est un disque assez classique, il peut être équipé de pas mal de partitions **dont une seule contient les données de l'utilisateur.**
+Dans un tel contexte, il ne faut dupliquer que cette partition. Dans l'ensemble cette partition est "moins abimée" que les partitions contenant les O.S.  Il est alors inutile de vouloir dupliquer le disque entier.
+
+====Fonctionnement de base====
+L'application est lancée depuis une [[console]] ou un [[terminal]] :
+<code bash>sudo ddrescue <nom_fichier_source> <nom_fichier_cible>.img <nom_fichier_journal></code>
+  
+Avec:\\
+''<nom_fichier_source>'' = le nom du fichier ou du périphérique à tenter de sauver, par exemple machin.ext, /media/disk, /dev/sda, etc. (Pour un CD ou un DVD, rentrer le chemin du périphérique, par exemple /dev/dvd ). N'essayez pas de monter le disque endommagé ! Pour connaître le nom du périphérique, vous pouvez utiliser la commande ''dmesg | tail'' lorsque vous le branchez. \\ 
+''<nom_fichier_cible>'' = le nom du fichier où sauver le résultat. Si le nom du fichier n'est pas spécifié et que le fichier cible est simplement un disque dur ou une partition, le contenu sera écrasé par la sauvegarde.  \\
+''<nom_fichier_journal>'' = le nom du fichier de log comportant la liste des secteurs récupérés et de ceux à relire. Très fortement recommandé, voir ci-dessous.
+
+J'ai essayé de suivre votre tuto, je n'ai rien obtenu à part le message :"Too many files". Vous devriez écrire un vrai exemple de commande pour sauvegarder les fichiers Image et log sur une clé USB. Car là, ce n'est vraiment pas clair. 
+
+Pour obtenir une liste exhaustive des fonctions du logiciel, se reporter au site officiel ou à sa documentation:
+<code bash> man ddrescue</code>
+ou encore
+<code bash>info ddrescue</code>
+
+  
+ ====Utiliser un fichier log====
+
+Il est vivement conseillé d'utiliser un fichier de log, soit pour pouvoir l'exploiter ultérieurement et analyser l'état matériel du disque, soit pour pouvoir interrompre puis reprendre une récupération.
+<code bash>sudo ddrescue <nom_fichier_source> <nom_fichier_cible>.img <chemin_fichier_log></code>
+  
+ Avec:\\
+<chemin_fichier_log> = chemin absolu ou relatif vers l'endroit où vous désirez enregistrer le log. Attention, il peut atteindre une taille conséquente pour une récup d'un support très endommagé.
+
+(on peut avoir un exemple? Pour les novices c'est très abstrait)
+
+====Support endommagé====
+
+Si vous savez que votre support est fortement endommagé, considérez avant tout l'option de faire appel à un professionnel. Le taux de réussite d'une récupération sur support très malade est très supérieur lors de la première tentative. Si vous avez des données vitales, réfléchissez à deux fois avant de vouloir agir seul.
+
+ddrescue intègre un certain nombre d'options intéressantes pour traiter des cas de supports partiellement endommagés, dont "l'état de santé est stable". Les principales sont citées ci-dessous, mais il y en a d'autres à envisager, consultez le man avant d'agir :
+
+=== Option -n ===
+
+<code bash>sudo ddrescue <source> <cible>.img <log> -n</code>
+
+permet de s'occuper en priorité des zones non endommagées et de revenir traiter celles-ci après.
+
+=== Option -T ===
+
+<code bash>sudo ddrescue <source> <cible>.img <log> -T</code>
+
+permet de reprendre une copie qui a été interrompue du fait de la disparition du matériel (déconnexion brutale, matériel instable qui "disparaît"). En fait, reprend toutes les zones qui n'ont pas encore été explorées.
+Dans le cas général, pour interrompre une copie il faut utiliser Ctrl+C et reprendre avec la même ligne que celle utilisée pour lancer la première copie, avec le fichier de log bien sûr.
+
+=== Option -r ===
+<code bash>sudo ddrescue <source> <cible>.img <log> -r1</code>
+
+Reprend la copie en se concentrant sur les zones considérées comme erronées en première lecture : le chiffre derrière r est un paramètre qui spécifie combien de tentative d'accès doivent être effectuées à chaque erreur rencontrée.    
+
+=== Option -S ===
+`--sparse'
+ 
+Utilisez des écritures éparses (sparse) pour le fichier de sortie. (Les blocs de zéros ne sont pas réellement alloués sur le disque). Peut économiser beaucoup d'espace disque dans certains cas. Tous les systèmes ne le prennent pas en charge.
+
+=== récupération d'un RAID1 ===
+Si votre [[tutoriel:raid1_logiciel_sur_installation_existante|RAID-1]] est devenu inutilisable car les deux disques sont en mauvais état, ddrescue est capable de récupérer les secteurs en bon état du premier disque et d'aller chercher les secteurs en mauvais état sur le second disque.
+
+
+     
+==== ddrescue par des exemples ====
+D'abord, il faut déterminer si la  technique  "sauvetage des partitions" est  possible.   Si oui, c'est la solution à privilégier car on peut fabriquer les partitions de duplication de taille identique sur d'autres supports avec l'application  [[:gnome-disk-utility|Disques]] en fournissant la taille exacte de chaque partition en précisant que l'unité est le **Kio**. Cela sous-entend que la commande " **sudo fdisk -l** "    a pu fonctionner. Il suffit de diviser par deux, le nombre de secteurs indiqués.
+
+<note important>Une bonne astuce est de commencer à écrire des zéros dans l'espace destiné à recevoir la récupération. Cela permet de vérifier immédiatement que la zone de sortie  est saine. Cela évite d'avoir à dérouler la procédure de mise à zéro  des zones qui n'ont pas pu être copiées.
+La commande sera du style    <code bash>sudo  dd  if=/dev/zero  of=/dev/Le_support_de_sortie bs=64k status=progress</code> </note>
+ 
+
+=== Sauvegarde du disque interne "sda" sur un disque externe "sde" avec une liveusb__PERSISTANTE__ ===
+La taille du secteur est de 512 bytes.
+== Faire la copie des secteurs de bonne qualité ==
+<code bash>sudo mkdir /home/ubuntu/dd
+sudo ddrescue             -f    -n        -b512        /dev/sda     /dev/sde   /home/ubuntu/dd/suivi
+sudo ddrescue             -f  -c1      -b512       /dev/sda     /dev/sde   /home/ubuntu/dd/suivi</code>
+ATTENTION  : Si la cible est un disque dur, toutes les données de ce disque dur (ici /dev/sde) seront écrasées donc perdues. Pour que ce ne soit pas le cas il faut que la cible soit un fichier par exemple /dev/sde/chemin/fichier_de_recup.img
+== Faire la copie des secteurs endommagés ==
+<code bash>sudo ddrescue       -d  -f  -R  -r3   -b512  -c1          /dev/sda    /dev/sde    /home/ubuntu/dd/suivi
+sudo ddrescue       -d  -f  -R  -r27   -b512  -c1          /dev/sda    /dev/sde    /home/ubuntu/dd/suivi</code>
+== Connaître la liste des blocs qui n'ont pas été copiés ==
+<code bash> touch /home/ubuntu/dd/badblocs
+sudo ddrescuelog -l- -b512 /home/ubuntu/dd/suivi >/home/ubuntu/dd/badblocs</code>
+==Fabriquer les secteurs qui n'ont pas été copiés ==
+- Avec mise d'un commentaire personnel. 
+<code bash>ddrescue --fill-mode=- <(printf "SECTEUR ILLISIBLE On va marquer au fer rouge  tous ces secteurs faussement  défectueux  afin de rechercher dans les fichiers ceux qui sont impactés par SECTEUR ILLISIBLE") --force /dev/sde /home/ubuntu/dd/suivi </code>
+- ou avec écriture de zéros.
+<code bash>ddrescue --fill-mode=- --force --synchronous /dev/zero /dev/sde /home/ubuntu/dd/suivi</code>
+
+
+=== Sauvegarde d'une partition dans une partition avec un livecdrom ===
+La taille du secteur est de 4096 bytes.
+La partition est celle contenant les données de l'utilisateur (sda6). 
+Le disque externe a été formaté avec au moins deux partitions;  sde1 pour le suivi du processus (taille 1 Go) et sde2 pour recevoir la duplication (la taille étant au moins égale à sda6).
+== Faire la copie des secteurs de bonne qualité ==
+<code bash>sudo mount /dev/sde1 /media/ubuntu
+sudo mkdir /media/ubuntu/dd
+sudo ddrescue -f -N -n        -b4096 -K524288 /dev/sda6 /dev/sde2 /media/ubuntu/dd/suivi6
+sudo ddrescue -f -c1  -b4096  /dev/sda6 /media/ubuntu/dd/suivi6</code>
+== Faire la copie des secteurs endommagés ==
+<code bash>sudo ddrescue -d -f -R -r27 -b4096 -c1 /dev/sda6 /dev/sde2 /media/ubuntu/dd/suivi6</code>
+== Connaître la liste des blocs qui n'ont pas été copiés ==
+<code bash> touch /media/ubuntu/dd/badblocs6
+sudo ddrescuelog -l- -b4096 /media/ubuntu/dd/suivi6 >/media/ubuntu/dd/badblocs6</code>
+== Fabriquer les secteurs qui n'ont pas été copiés ==
+- Avec mise d'un commentaire personnel. 
+<code bash>ddrescue --fill-mode=- <(printf "SECTEUR ILLISIBLE On va marquer au fer rouge  tous ces secteurs faussement  défectueux  afin de rechercher dans les fichiers ceux qui sont impactés par SECTEUR ILLISIBLE") --force /dev/sde2 /media/ubuntu/dd/suivi6 </code>
+- ou avec écriture de zéros.
+<code>ddrescue --fill-mode=- --force --synchronous /dev/zero /dev/sde2 /media/ubuntu/dd/suivi6</code>
+
+
+=== Copier une partition dans un fichier ===
+<code bash>sudo ddrescue  -b 512   --log-rates=/mnt/rescueRate.log      /dev/disk/by-id/ata-MAXTOR_STM3160215A_9RA8V0BK-part1       /mnt/disk.img          /mnt/rescue.map</code>
+=== copier un support entier dans un fichier et le relire ===
+<code bash>sudo ddrescue    -f  -p    /dev/sdb     SDB.img   SDB.log
+sudo sfdisk -lV SDB.img
+sudo losetup -P  -v -f     SDB.img
+lsblk | grep loop
+sudo mount /dev/loop123 /mnt
+ls /mnt</code>
+
+===== Remarques concernant le forçage en écriture des secteurs qui n'ont pas pu être copiés. =====
+Ces secteurs du  support de sortie contiennent donc des informations sans rapport avec le support d'entrée.
+Lire de telles données peut donc se révéler problématique si elles sont accidentellement de même [[https://www.cgsecurity.org/wiki/Formats_de_fichier_r%C3%A9cup%C3%A9r%C3%A9s_par_PhotoRec|type de format]] puisque les logiciels de lecture vont alors pouvoir lire normalement les fichiers.
+
+Pour un film, ce n'est pas très grave. Personne  ne verra qu'un paquet de 512 bytes est remplacé par une autre animation.  
+
+Pour une image, cela pourrait être visible avec une petite zone sans rapport avec le dessin.
+
+Pour une musique, les experts pourraient entendre une fausse note.
+
+Pour un document du style writer,   on pourra s'apercevoir que 512 octets ne sont pas dans la même langue  ou qu'ils sont sans rapport avec l'histoire racontée.
+
+Pour un document du style  calc, il va être plus difficile de s'apercevoir que les chiffres ne sont pas valables. Si par malheur cela concerne le tableau final.......
+
+Pour toutes ses raisons, il est tentant de mettre des données fictives (des zéros ou autre chose) dans ces secteurs. Cependant c'est à double tranchant pour les logiciels car ceux-ci pourraient ne plus lire le fichier abîmé. __Il faudrait alors utiliser la version moins un du fichier  qui est très certainement inexistante. 
+__
+
+
+A titre d'exemple avec le visionneur d'images.    Mettre  16 blocs  à zéro à partir du bloc 100  provoque l'erreur  suivante
+//"Erreur fatale de lecture du fichier d'image XXXX.png     IDAT.CRC error//". Mais en mettre seulement 8 permet l'ouverture du fichier avec seulement l'affichage du début.
+
+Il est fort probable que chaque logiciel de lecture dispose de sa propre logique.
+
+
+
+==== Connaître les fichiers impactés par les blocs défectueux dans une partition EXT4 ====
+Le fichier **badblocks** qui a été généré contient les adresses des blocs illisibles par rapport au début du disque ou de la partition.
+
+Pour connaitre les fichiers impactés, nous avons vu qu'il était possible d'utiliser **DDR_UTILS**, mais il n'est pas facile à installer. Il existe d'autres solutions, mais les outils sur lesquels elles reposent vont dépendre de la nature des partitions : NTFS, FAT, EXTn, RAIDS, BTRFS, etc.
+
+Voici au moins un exemple pour le type de partition le plus répandu : EXT4. Le fichier badblocks a été généré par une duplication de la partition, à laquelle les adresses qu'il contient font référence. Il est donc possible d'utiliser par exemple les commandes suivantes pour obtenir la liste des fichiers (le nom de la partition est à adapter à votre cas).
+<code bash>### Ajouter la commande testb
+sed 's|^|testb |' sdb2.badblocks > sdb2.testb.in
+sudo debugfs -f sdb2.testb.in /dev/sdb2 > sdb2.testb.out
+### Mettre la commande icheck
+grep "marked in use" sdb2.testb.out | cut -d ' ' -f 2 | sed 's|^|icheck |' > sdb2.icheck.in
+sudo debugfs -f sdb2.icheck.in /dev/sdb2 > sdb2.icheck.out
+### Ajout de la commande inode
+sed '/ck/d' sdb2.icheck.out | cut -d $'\t' -f 2 | sed 's|^|ncheck |' > sdb2.ncheck.in
+sudo debugfs -f sdb2.ncheck.in /dev/sdb2 > sdb2.ncheck.out
+### Sélection des fichiers
+grep "/" sdb2.ncheck.out | cut -d $'\t' -f 2 | sort -u > sdb2.files
+cat sdb2.files</code>
+==== Connaître les fichiers stockés dans une partition NTFS impactés par les blocs défectueux. ====
+Pour obtenir la liste des fichiers qui sont encore corrompus, il est nécessaire d'avoir récupéré en  totalité le répertoire des noms de fichiers. La première action à faire est de s'assurer que ce répertoire est en bon état. Cette action peut se faire pendant la dernière phase de récupération lorsque les tentatives de récupération deviennent de plus en plus longues.  La commande suivante doit se terminer sans signaler d'erreurs. 
+<code bash>sudo   ntfsfix  -n -b -d   <nom_partition_cible></code>
+Si cette commande répond que la structure des répertoires  est en mauvais état, il faut retenter de récupérer des secteurs illisibles.    Sinon, on peut obtenir la liste des fichiers non totalement récupérés avec ces commandes
+<code bash>sudo apt install ddrutility
+sudo ddru_ntfsfindbad -V  <nom_partition_cible> <chemin_fichier_log> </code>
+Le retour de cette liste permettra de savoir s'il est souhaitable de continuer la récupération.
+===== Suivi de l'exécution de DDRESCUE =====
+==== Sur l'écran de la session  terminal en exécution ====
+
+Pendant toute la durée de l'exécution, une grille permettant un suivi est affichée. 
+Il n'est pas possible de la mettre dans la discussion en cours  avec la technique  copier/coller  puisque  la grille se met à jour régulièrement.   Il est nécessaire de tuer le process pour en effectuer une capture!
+<code>GNU ddrescue 1.22
+Press Ctrl-C to interrupt
+Initial status (read from mapfile)
+rescued: 524288 B, tried: 65536 B, bad-sector: 0 B, bad areas: 0
+
+     ipos:  823101 MB, non-trimmed:        0 B,  current rate:       0 B/s
+     opos:  823101 MB, non-scraped:    1177 GB,  average rate:    517 kB/s
+non-tried:        0 B,  bad-sector:  764151 MB,    error rate:  19472 kB/s
+  rescued:   59093 MB,   bad areas:       27,        run time:  1d  7h 42m
+pct rescued:    2.95%, read errors:217072202,  remaining time:         n/a
+                              time since last successful read:  3h  6m 11s
+Scraping failed blocks... (forwards) </code>  
+Signification de quelques zones:
+
+**Initial status**: Lorsque ddrescue est relancé suite à une interruption, le fichier de log permet de continuer l'action en cours. La ligne qui suit fait un récapitulatif de tout ce qui a déjà été traité. Les deux lignes ne sont pas présentes lors du premier lancement. 
+
+**ipos opos**   Indique la position début dans le support entrée et le support sortie. Zéro lors du premier lancement.
+
+**Current rate  Average rate**   Débit actuel et débit moyen d'écriture dans le support sortie. Une valeur faible signifie une difficulté de lecture du support émetteur.
+
+** rescued pct rescued**    Taille déjà récupérée  ainsi que le pourcentage par rapport à la totalité de l'espace émetteur.
+
+**run time** Temps écoulé depuis le début de la commande exprimé en  jours heures minutes. 
+
+**remaining time**  Temps estimé pour la fin de la commande exprimé en jours heures minutes ou N/A lorsque ce n'est pas connu.
+
+**time since last successful read** Temps écoulé depuis une dernière lecture réussie exprimé en heures minute seconde.   
+
+**Scraping failed blocks... (forwards)**   Type d'action actuellement en cours. Evolue en fonction de l'avancement de la récupération. Dans ce cas, on est à l'étape de lecture des blocs qui n'ont pas été lus lors du premier passage rapide.
+====  Sur l'écran d'une autre session  terminal ====
+
+Il est possible de transmettre facilement, l'état d'exécution dans une discussion du forum  en demandant un extrait du fichier de suivi avec cette commande
+<code bash>ddrescuelog  -tvv  <nom_fichier_journal> </code>
+Il est possible de connaitre la liste exhaustive de numéros de secteurs non encore récupérés (à ne pas faire pendant le premier passage) avec cette commande
+d<code bash>drescuelog -l-    <nom_fichier_journal></code>
+===== Pour continuer la récupération avec d'autres outils =====
+
+Une fois les données récupérées depuis le ou les supports endommagés, il est conseillé de faire une copie de la récupération et de travailler sur cette copie. Les outils suivants peuvent vous être utiles :
+
+  * [[dd]] pour faire la copie de travail ;
+  * [[kpartx]] pour monter une partition de l'image d'un disque comprenant plusieurs partitions ;
+  * [[fsck]] pour réparer le système de fichier ;
+  * [[testdisk]] pour récupérer des partitions disparues ;
+  * [[photorec]] pour récupérer les fichiers qui n'apparaissent plus dans le système de fichiers ;
+  * [[mount]] et [[umount]] pour accéder au contenu des partitions ;
+  * [[convmv]] pour convertir les noms de fichiers en UTF8 ;
+=====Restaurer une sauvegarde d'un disque====
+Pour restaurer une sauvegarde effectuée par ddrescue, soit vous utilisez la commande [[dd]] soit cette commande ddrescue:
+<code bash>sudo ddrescue -f <nom_de_votre_fichier_de_sauv>.img /dev/sdx restore.logfile</code>
+modifier sdx par le disque sur lequel vous souhaitez restaurer l'image de sauvegarde.
+
+===== Désinstallation =====
+
+Pour supprimer ddrescue, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer le paquet]] **gddrescue**.
+
+===== Voir aussi =====
+
+  * [[probleme_de_disque|Problème de disque ou partition]]
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=92840&p=1|Discussion « Bilan : comment récupérer des données perdues » sur le forum Ubuntu-fr]], très utile pour la récupération de données sur un disque dur endommagé
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=447877|Discussion « Topic unique récupération de données » sur le forum Ubuntu-fr]], à consulter pour y soumettre votre cas et trouver de l'aide
+  * [[http://linuxfr.org/news/ddrescue-dd_rescue-myrescue-recuperer-ses-donnees-apres-un-crash-disque]], autre cas, plus récent, de récupération de données
+  * **(en)** [[http://www.gnu.org/software/ddrescue/ddrescue.html|page officielle de GNU ddrescue]]
+  * **(en)** [[http://www.gnu.org/software/ddrescue/manual/ddrescue_manual.html|Aide en ligne de GNU ddrescue]]
+  * [[safecopy]] Limite les Erreur I/O
+  * Identifier le fichier utilisant le [[https://www.vincentliefooghe.net/content/linux-corriger-des-secteurs-d%C3%A9fecteux-sur-un-disque|bloc défectueux]]
+
+----
+//Contributeurs principaux : ...//
+
+//basé sur [[http://www.gnu.org/software/ddrescue/ddrescue.html|la page officielle]].//

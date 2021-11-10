@@ -1,0 +1,395 @@
+
+{{tag>Lucid Precise matériel énergie}}
+
+----
+
+====== Network UPS Tools (NUT) ======
+
+NUT est un ensemble d'outils permettant de monitorer un système relié à un ou des onduleurs((en anglais UPS (Uninterruptible Power Supply) signifie [[http://fr.wikipedia.org/wiki/Alimentation_sans_interruption|onduleur]])).
+Il se compose de plusieurs éléments :
+  * le démon //nut// lancé au démarrage du système
+  * le démon //upsd// qui permet d'interroger l'onduleur, il est lancé sur le PC relié à l'onduleur
+  * le démon //upsmon// qui permet de monitorer et lancer les commandes nécessaires sur le réseau ondulé (arrêt de machines ...)
+  * différents programmes pour envoyer des commandes manuellement à l'onduleur : upsc, upsdrvctl ...
+
+**upsd** peut communiquer avec plusieurs onduleurs si nécessaire.
+
+**upsmon** interroge à intervalle régulier la machine du réseau sur laquelle est lancée upsd.
+
+Pour une configuration domestique, //**upsd**// et //**upsmon**// sont lancés sur la même machine, elle même connectée à l'onduleur.
+C'est la configuration supposée tout au long de cette présentation pour les exemples de fichiers de configuration.
+
+
+===== Pré-requis =====
+
+Disposer d'un onduleur reconnu par NUT.
+
+Consulter [[http://www.networkupstools.org/stable-hcl.html|la liste des onduleurs supportés par NUT]] et vérifier que le vôtre est dans la liste.
+Noter le nom du pilote associé à votre modèle dans la 3ième colonne.
+
+
+===== Installation =====
+
+Installer le paquet [[apt://nut|nut]].
+
+<note>À partir de Ubuntu 9.04, la version de nut est issue de la branche 2.4.
+Cette présentation est basée sur la version 2.4.1-2 livrée avec Ubuntu 9.04 Jaunty.</note>
+
+<note important>Les options des fichiers de configuration de la version 2.4 ont été modifiées par rapport à la version 2.2 fournie avec Ubuntu 8.10 et antérieurs.
+Consulter le [[http://ovanhoof.developpez.com/upsusb/|tutoriel de Olivier Van Hoof sur le site developpez.com]] (fr) pour réaliser l'installation dans cette version de nut.</note>
+
+
+===== Configuration =====
+
+
+==== Onduleur USB ====
+
+Si l'onduleur est branché en USB, **débrancher puis rebrancher le cable USB**.
+Repérer l'emplacement de l'onduleur avec **''lsusb''**.
+
+Par exemple, ''lsusb'' doit détecter l'onduleur (ou le convertisseur USB>Série) :
+<file>
+Bus 001 Device 008: ID 045e:0745 Microsoft Corp. 
+Bus 001 Device 007: ID 0ac8:301b Z-Star Microelectronics Corp. ZC0301 WebCam
+Bus 001 Device 002: ID 04cc:1520 Philips Semiconductors 
+Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 002 Device 006: ID 0665:5161 Cypress Semiconductor USB to Serial 
+Bus 002 Device 005: ID 04f9:01ce Brother Industries, Ltd DCP-135C
+Bus 002 Device 004: ID 0db0:6970 Micro Star International Bluetooth adapter
+Bus 002 Device 003: ID 046d:c50e Logitech, Inc. MX-1000 Cordless Mouse Receiver
+Bus 002 Device 001: ID 1d6b:0001 Linux Foundation 1.1 root hub
+</file>
+
+Ici, l'onduleur est connecté au bus n°002, et est le périphérique n°006.
+> ''**Bus 002 Device 006: ID 0665:5161 Cypress Semiconductor USB to Serial**''
+
+Vérifier les droits sur le périphérique (remplacer 002 par le bus qui convient pour votre configuration).
+<code>ls -l /dev/bus/usb/002</code>
+<file>
+total 0
+crw-rw-r-- 1 root root 189, 128 2009-06-20 08:31 001
+crw-rw-r-- 1 root root 189, 130 2009-06-21 14:58 003
+crw-rw-r-- 1 root root 189, 131 2009-06-20 08:31 004
+crw-rw-r-- 1 root root 189, 132 2009-06-20 08:31 005
+crw-rw-r-- 1 root nut  189, 133 2009-06-21 14:58 006
+</file>
+
+Le périphérique 006 est bien associé au groupe **nut**.
+> ''%%crw-rw-r--%% 1 root **nut**    189, 133 2009-06-21 14:54 **006**''
+
+<note help>Si ce n'est pas le cas, reportez-vous au paragraphe << [[#Le périphérique USB n'appartient pas au groupe nut|Problèmes & solutions - Le périphérique USB n'appartient pas au groupe nut]] >> de cette page pour corriger ce problème !</note>
+
+==== Configuration du service NUT ====
+
+NUT doit être installé sur toutes les machines du réseau qui :
+  * communiquent avec les onduleurs,
+  * monitorent le réseau ondulé (envoi de mail, notification utilisateurs ...),
+  * doivent lancer des commandes d'arrêt de serveur.
+
+Cependant, **//upsd//** et **//upsmon//** n'ont pas à être lancés dans tous les cas.
+Le fichier de configuration **nut.conf** permet d'identifier à NUT le cas présent.
+
+<note>Le fichier de configuration **nut.conf** permet depuis la version 2.4 de NUT, d'unifier les configurations sur les distributions Debian ou RedHat. Ainsi il n'est plus nécessaire de créer un fichier /etc/default/nut pour indiquer les démons à lancer.</note>
+
+
+=== nut.conf ===
+
+Le fichier **nut.conf** permet de déterminer le comportement du démon NUT.
+Il ne contient que le paramètre MODE qui peut prendre les valeurs suivantes :
+  * none : C'est la valeur par défaut après l'installation du paquet, elle indique que NUT n'a pas été configuré.
+  * standalone : 
+    * Dans ce mode, l'onduleur est relié à la machine actuelle.
+    * Le monitorage de l'onduleur est effectué depuis cette même machine.
+    * Le démon nut doit lancer upsd et upsmon (en mode "master").
+  * netserver : 
+    * Dans ce mode, l'onduleur est relié à la machine actuelle.
+    * La gestion de l'onduleur est effectuée depuis un poste client sur le réseau.
+    * Le démon nut doit lancer upsd et upsmon (en mode serveur, c'est à dire en tant que "master").
+  * netclient : 
+    * Dans ce mode, l'onduleur n'est pas relié à la machine actuelle.
+    * La gestion de l'onduleur est réalisée depuis la machine actuelle vers la machine à laquelle est connectée l'onduleur via le réseau.
+    * Le démon nut doit lancer uniquement upsmon (en mode client, c'est à dire en tant que "slave").
+
+[[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **''/etc/nut/nut.conf''** et modifier la valeur du paramètre MODE.
+Pour une configuration domestique, le mode //standalone// est le plus adapté.
+<file>
+MODE=standalone
+</file>
+
+
+==== Configuration du démon upsd ====
+
+**//upsd//** est le démon responsable de la communication avec l'onduleur.
+Il est lancé lorsque NUT est configuré dans le mode //standalone// ou //netserver//.
+3 fichiers de configuration sont nécessaires : **ups.conf**, **upsd.conf** et **upsd.users**.
+
+
+=== ups.conf ===
+
+Le fichier **''/etc/nut/ups.conf''** permet de déclarer les différents onduleurs.
+[[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **''/etc/nut/ups.conf''** et renseigner les paramètres pour chaque onduleur.
+Des explications sont disponibles dans le fichier d'exemple [[file:///etc/nut/ups.conf.sample|/etc/nut/ups.conf.sample]].
+<file>
+[myups]
+    driver = megatec_usb
+    port = auto
+    desc = "Mustek PowerMust Office 650"
+</file>
+
+  * Le nom entre crochets est libre, mais doit être un mot unique : il définit le nom de l'onduleur sur le réseau.
+  * Le paramètre de //driver// doit être le pilote associé à votre modèle d'onduleur (voir [[http://www.networkupstools.org/stable-hcl.html|ici]]).
+
+
+=== upsd.conf ===
+
+Configuration pour le démon //**upsd**//.
+[[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **''/etc/nut/upsd.conf''** et renseigner les paramètres nécessaires.
+Des explications sont disponibles dans le fichier d'exemple [[file:///etc/nut/upsd.conf.sample|/etc/nut/upsd.conf.sample]].
+<file>
+MAXAGE 15
+LISTEN 127.0.0.1 3493
+MAXCONN 1024
+</file>
+
+  * MAXAGE : permet de définir l'intervalle maximum au-delà duquel l'état de l'onduleur sera considéré comme périmée.((Le pilote de l'onduleur doit pouvoir répondre dans un temps inférieur. Si ce n'est pas le cas, augmenter la valeur de MAXAGE))
+  * LISTEN : permet de déclarer les PC qui pourront commander les onduleurs via upsd
+  * MAXCONN : permet de définir le nombre de clients, d'onduleurs et d'adresses maximum supportés.
+
+
+=== upsd.users ===
+
+Ce fichier permet de configurer les accès au démon //**upsd**//.
+Seul les utilisateurs présents dans upsd.users seront habilités à connaitre l'état de l'onduleur. 
+[[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **''/etc/nut/upsd.users''** et renseigner les paramètres pour l'administrateur et au moins un utilisateur de type "master".
+Des explications sont disponibles dans le fichier d'exemple [[file:///etc/nut/upsd.users.sample|/etc/nut/upsd.users.sample]].
+<file>
+[admin]
+    password = adminpass
+    actions = SET
+    instcmds = ALL
+
+[upsmonitor]
+    password  = userpass
+    upsmon master
+</file>
+
+"//upsmonitor//" peut être modifié à votre guise mais doit rester un mot unique. Il identifie le nom d'utilisateur associé au moniteur.
+La valeur "master" ou "slave" du paramètre //upsmon// permet de définir le jeu de commandes par défaut auquel l'utilisateur aura droit.
+
+<note warning>Remplacer les valeurs "adminpass" et "userpass" pour plus de sécurité !</note>
+
+
+==== Configuration du démon upsmon ====
+
+Le démon **//upsmon//** permet d'interroger à travers le réseau les différents démon //**upsd**// pour connaître l'état du réseau ondulé.
+**//upsmon//** permet également de lancer des commandes spécifiques lorsque certains événements surviennent, comme l'extinction des machines lorsque la batterie des onduleurs devient trop faible.
+
+
+=== upsmon.conf ===
+
+Ce fichier permet de configurer upsmon. Il faut y déclarer les caractéristiques du réseau ondulé et des différents démons upsd lancés sur les machines du réseau.
+
+[[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] **''/etc/nut/upsmon.conf''**, et ajouter les paramètres suivants (les valeurs indiquées sont celles par défaut).
+Des explications sont disponibles dans le fichier d'exemple [[file:///etc/nut/upsmon.conf.sample|/etc/nut/upsmon.conf.sample]].
+<file>
+MONITOR myups@localhost 1 upsmonitor userpass "master"
+MINSUPPLIES 1
+
+FINALDELAY 5
+SHUTDOWNCMD "/sbin/shutdown -h +0"
+------------------------------------------------
+# POLLFREQ <n>
+# Fréquence d'interrogation en secondes en fonctionnement normal de l'onduleur.
+# La valeur par défaut est de 5 secondes.
+POLLFREQ 5
+------------------------------------------------
+# POLLFREQALERT <n>
+# Fréquence d'interrogation en secondes pendant que l'onduleur est sur batterie.
+# La valeur par défaut est de 5 secondes.
+POLLFREQALERT 5
+------------------------------------------------
+HOSTSYNC 15
+DEADTIME 15
+POWERDOWNFLAG /etc/killpower
+RBWARNTIME 43200
+NOCOMMWARNTIME 300
+
+</file>
+
+<note warning>Le fichier doit comporter un paramètre **MONITOR** et **MINSUPPLIES** au minimum.</note>
+
+La déclaration des différents démons //**upsmon**// serveurs à écouter et de la puissance nécessaire au réseau ondulé se fait grâce aux options suivantes :
+  * MONITOR <system> <powervalue> <username> <password> <type>
+    * <system> : définit le nom d'un onduleur et de la machine qui le contrôle. Par défaut, l'onduleur est supposé accessible depuis la machine actuelle (localhost).
+    * <powervalue> : un entier qui définit le nombre d'onduleurs contrôlés. Sauf cas particulier, la valeur est supposée de 1.
+    * <username> : le nom d'utilisateur utilisé pour interroger **upsd**. Il doit être définit dans le fichier **upsd.users** sur la machine qui contrôle l'onduleur.
+    * <password> : le mot de passe associé à l'utilisateur sur la machine qui contrôle l'onduleur.
+    * <type> : le type de monitorage tel que définit dans le fichier **upsd.users** de la machine qui contrôle l'onduleur.
+  * MINSUPPLIES : un entier qui définit le nombre d'onduleurs nécessaires pour que le système fonctionne ; en général, 1 onduleur.
+
+
+Lorsque le nombre d'onduleurs nécessaires pour maintenir le système (MINSUPPLIES) devient inférieur au nombre d'onduleurs en statut "sur secteur" (ONLINE) ou "sur batterie" (ONBATT) sans être en statut "batterie faible" (LOWBATT), le réseau ondulé entre dans un état critique. En d'autres termes, le dernier onduleur pour maintenir le système vient de passer en statut "batterie faible" (LOWBATT), et l'alimentation va donc cesser prochainement : le but est donc d'éteindre proprement le système pour éviter une perte de données, il n'y a plus le temps d'attendre que le courant revienne !
+À ce moment là, les paramètres suivants seront utilisés :
+  * FINALDELAY : délai en secondes entre la notification aux utilisateurs et le lancement de la commande d'arrêt du système.
+  * HOSTSYNC : délai laissé aux autres upsmon sur les postes clients pour s'arrêter correctement, au delà de ce délai l'//**upsmon**// serveur est stoppé et ne répond plus aux clients.
+  * SHUTDOWNCMD : définit la commande qui sera exécutée pour éteindre la machine actuelle.
+  * POWERDOWNFLAG : définit le fichier qui sera écrit juste avant la procédure d'arrêt. Il est possible de tester la présence de ce fichier dans vos scripts init pour accélérer la phase d'arrêt.
+
+
+Pour permettre à l'//**upsmon**// client d'interroger le démon //**upsmon**// serveur ou le démon //**upsd**// et obtenir des informations "fraiches" sur l'état de (ou des) l'onduleur(s), il faut vérifier les paramètres suivants, et les adapter en fonction du pilote utilisé :
+  * POLLFREQ : intervalle de temps avant rafraîchissement des données sur l'état de l'onduleur.
+  * POLLFREQALERT : intervalle de temps avant rafraichissement une fois l'onduleur en statut "sur batterie" (ONBATT). Doit être inférieur ou égal à POLLFREQ.
+  * DEADTIME : délai maximal pendant lequel un onduleur peut être déclaré "absent" avant d'être déclaré "mort". Passé ce délai, si l'onduleur était précédemment en statut "sur batterie" (ONBATT) il sera considéré en statut "batterie faible" (LOWBATT), ce qui peut causer l'arrêt du système. Le délai doit être un multiple de POLLFREQ et POLLFREQALERT.
+  * NOCOMMWARNTIME : délai d'attente avant notification de la perte de communication avec l'onduleur.
+  * RBWARNTIME : lorsqu'un onduleur indique un changement de batterie, une notification sera envoyée toutes les RBWARNTIME secondes.
+
+<note tip>Pour fixer la valeur du paramètre DEADTIME :\\ Prendre la plus grande valeur entre POLLFREQ et POLLFREQALERT et multiplier par 3.</note>
+
+<note tip>Dans certains cas, il est nécessaire de modifier la commande d'extinction. En effet, il peut être nécessaire de rajouter un sudo pour que celle-ci soit prise en compte : \\ SHUTDOWNCMD "sudo /sbin/shutdown -h +0"</note>
+
+<note important>**Augmenter** la valeur de POLLFEQ permet :
+  * d'éviter un trop grand nombre de notifications si votre réseau électrique subit des micro-coupures,
+  * de désengorger le réseau local si votre débit est faible ou si vous avez un grand nombre de machines.
+Par contre, si la valeur est trop élevée, vous risquez de perdre des informations d'état importantes (passage sur batterie ...).
+
+**Réduire** la valeur permet d'obtenir un suivi plus fin dans l'évolution de l'état de l'onduleur (charge, etc) mais il ne faut pas descendre en dessous du seuil de rafraichissement du pilote (en général de 2 secondes).</note>
+===== Utilisation =====
+
+Le démon NUT sera lancé au prochain redémarrage, mais il est possible après la configuration de tester la communication entre le pilote et l'onduleur.
+
+
+==== Lancer le démon NUT manuellement ====
+
+De cette façon, le démon //upsd// et le moniteur //upsmon// seront lancés simultanément :
+<code>sudo invoke-rc.d nut start</code>
+
+
+==== Interroger l'état des démons ====
+
+Une fois les démons lancés, interroger leur état :
+<code>sudo invoke-rc.d nut status</code>
+
+<note important>Sous Ubuntu 9.04 Jaunty Jackalope, NUT indique qu'aucun démon n'est lancé, malgré la présence des processus. Ce bug n'apparait plus depuis Ubuntu 9.10 Karmic Koala.</note>
+
+
+==== Lancer le pilote manuellement ====
+
+Pour lancer les pilotes des onduleurs manuellement :
+<code>upsdrvctl start</code>
+ou pour ne lancer qu'un seul onduleur :
+<code>upsdrvctl start myups</code>
+
+En cas de problème, il est possible de lancer le pilote en mode verbeux (voir très verbeux) :
+<code>upsdrvctl -DDDD start</code>
+
+
+==== Obtenir la liste des onduleurs déclarés ====
+
+Pour connaitre la liste des onduleurs déclarés sur la machine :
+<code>upsc -L</code>
+ou si l'onduleur est sur une machine distante ayant pour alias nom_de_la_machine_distante :
+<code>upsc -L nom_de_la_machine_distante</code>
+
+==== Connaître l'état d'un onduleur ====
+
+Pour connaitre l'état d'un onduleur :
+<code>upsc myups</code>
+ou si l'onduleur est sur une machine distante :
+<code>upsc myups@nom_de_la_machine_distante</code>
+
+Pour connaître un paramètre en particulier, ici le statut de l'onduleur((OL = On Line\\ OB = On Battery\\ LB = Low Battery)) :
+<code>upsc myups ups.status</code>
+
+==== Envoyer une commande à l'onduleur ====
+
+Pour connaître la liste des commandes supportées par le pilote et l'onduleur :
+<code>upscmd -l myups@localhost</code>
+
+Par exemple pour le pilote megatec_usb :
+<file>
+Instant commands supported on UPS [myups]:
+
+beeper.toggle - Toggle the UPS beeper
+load.off - Turn off the load immediately
+load.on - Turn on the load immediately
+reset.input.minmax - Reset minimum and maximum input voltage status
+reset.watchdog - Reset watchdog timer
+shutdown.return - Turn off the load and return when power is back
+shutdown.stayoff - Turn off the load and remain off
+shutdown.stop - Stop a shutdown in progress
+test.battery.start - Start a battery test
+test.battery.start.deep - Start a deep battery test
+test.battery.stop - Stop the battery test
+</file>
+
+Pour envoyer une commande, 
+<code>upscmd -u <username> -p <password> <system> <command></code>
+
+Par exemple, pour demander un test de batterie sur l'onduleur "myups" situé sur la machine actuelle :
+<code>upscmd -u admin -p adminpass myups@localhost test.battery.start</code>
+
+
+==== Et ensuite ? ====
+
+Il est possible de configurer plus en détail //**upsmon**// pour la notification de changement d'état, ainsi que pour les actions à réaliser.
+Pour aider dans la planification de ces actions (utilisation de timer), le programme //**upssched**// est installé avec le paquet NUT.
+Le [[http://ovanhoof.developpez.com/upsusb/|tutoriel d'Olivier Van Hoof]] peut vous aider dans sa mise en place.
+
+Pour éviter de lancer continuellement la commande "upsc" pour connaître l'état de votre onduleur, il existe [[http://www.networkupstools.org/client-projects/|plusieurs clients]] :
+  * soit par une interface fenêtrée : [[http://www.knut.noveradsl.cz/knutclient/|KNutClient]] (pour KDE), [[http://www.lestat.st/informatique/projets/nut-monitor|NUT-Monitor]] (basé sur la classe python [[http://www.lestat.st/informatique/projets/pynut|PyNut]]), [[:onduleur_mge_ups_systems_psp|MGE UPS SYSTEMS Personal Solution Pac]], etc
+  * soit par une interface web : via l'installation du paquet nut-cgi (tuto [[http://wiki.monserveurperso.com/wakka.php?wiki=NutInstall|ici]] [en]), via un script php, etc.
+  * soit sous forme de plugin : pour [[:gdesklets]], [[:GKrellM]], etc.
+
+
+===== Problèmes & solutions =====
+
+==== Le périphérique USB n'appartient pas au groupe nut ====
+
+Si le périphérique USB correspondant à l'onduleur n'a pas été associé au groupe << nut >>, vous devrez changer les privilèges donnés par défaut.
+
+Par exemple, si vous obtenez :
+<code>ls -l /dev/bus/usb/002</code>
+> ''%%crw-rw-r--%% 1 root **vboxusers** 189, 133 2009-06-21 14:58 006''
+
+
+== Si seul NUT doit accéder à l'onduleur ==
+
+Dans ce cas, vous pouvez fixer le groupe du périphérique correspondant à l'onduleur avec la commande :
+<code>sudo chgrp nut /dev/bus/usb/002/006</code>
+
+<note important>Adaptez le numéro du bus (''002'') et le numéro de périphérique (''006'') selon votre cas.
+Voir le paragraphe [[#Onduleur USB]] pour plus de détail.</note>
+
+== Si NUT ainsi que le groupe actuel doivent accéder à l'onduleur ==
+
+Dans le cas où vous souhaiteriez monitorer l'onduleur dans [[:VirtualBox]], il faut laisser le groupe **vboxusers** propriétaire du périphérique, et ajouter l'utilisateur **nut** au groupe **vboxusers** :
+<code>sudo adduser nut vboxusers</code>
+
+==== Onduleur non détecté ====
+
+Si malgré avoir indiqué le bon pilote dans le fichier **''/etc/nut/ups.conf''**, vous avez l'erreur //<< Data Stale >>//, ou que votre onduleur USB n'est pas détecté :
+  * Créez un périphérique spécial :<code>sudo mknod /dev/usb/hiddev0 c 180 96</code>
+  * Indiquer le chemin vers ce périphérique dans le fichier **''/etc/nut/ups.conf''** :<file>
+[myups]
+    driver = megatec_usb
+    port = /dev/usb/hiddev0
+    desc = "Mustek PowerMust Office 650"
+</file>
+  * Relancer les démons NUT pour prendre en compte les modifications :<code>sudo invoke-rc.d nut restart</code>
+
+===== Désinstallation =====
+
+Il vous suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer le paquet]] NUT.
+Les fichiers de configuration présents dans le dossier ''/etc/nut/'' sont à supprimer manuellement.
+
+
+===== Liens =====
+
+Pour plus d'informations sur la mise en place de NUT :
+  * Le site officiel : http://www.networkupstools.org [en]
+  * Le tutoriel [[http://ovanhoof.developpez.com/upsusb/|Installation et gestion d'un UPS USB en réseau sous linux]] [fr] d'Olivier Van Hoof.
+  * Installation de NUT sur plusieurs machines : [[http://www.crn.com/white-box/199000818?pgno=1|Linux UPS Without Tears]] [en] par A. Lizard.
+
+----
+
+ --- //[[:utilisateurs:draco31.fr|draco31.fr]] 2009/06/23 22:50//

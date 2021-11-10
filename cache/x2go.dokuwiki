@@ -1,0 +1,104 @@
+
+{{tag>Xenial bureau_a_distance}}
+
+====== x2go ======
+
+x2go est un logiciel client-serveur libre((sous licence GNU GPL v2)) qui permet de se connecter à un ordinateur serveur linux distant. C'est un projet qui s'appuie sur le protocole libre [[freenx]], lui-même issu du protocole NX créé par la société NoMachine. Ce protocole est très performant (beaucoup plus que [[vnc]]) et la navigation est fluide même avec une connexion à faible débit.
+
+Il permet d'avoir accès au bureau en utilisant la carte vidéo et audio du client. La connexion est sécurisée par le protocole ssh.
+
+===== Pré-requis =====
+
+  * Vous devez disposer des [[:sudo|droits d'administration]] sur le serveur ET le client.
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Avoir [[:tutoriel:comment_installer_un_paquet|installé les paquets]] **[[apt>python-software-properties,software-properties-common|python-software-properties et software-properties-common]]**.
+  * Il est conseillé d'installer un bureau léger pour travailler à distance, comme [[:xfce]] [en débranchant l'économiseur d'écran] . Un [[http://lists.x2go.org/pipermail/x2go-user/2014-June/002313.html|post]] qui en parle sur le forum X2go.
+
+===== Installation du serveur =====
+
+====Version ≥ 18.04====
+Cette installation est à effectuer sur le serveur sur lequel vous souhaitez vous connecter à distance.
+
+À partir d'Ubuntu Bionic 18.04 il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>x2goserver]]** :
+<code>sudo apt install x2goserver</code>
+
+====Version < 18.04====
+Sur les versions précédentes (Xenial 16.04) vous aurez besoin d'ajouter un [[:PPA]] :
+  * [[:PPA|Ajouter le PPA]] **ppa:x2go/stable**((https://launchpad.net/~x2go/stable)) dans vos sources de logiciels; 
+  * [[:tutoriel:comment_modifier_sources_maj#recharger_la_liste_des_paquets|Recharger la liste des paquets]];
+  * [[:tutoriel:comment_installer_un_paquet|Installer le paquet]] [[apt>x2goserver, x2goserver-xsession]].
+
+====Partage de bureau====
+Pour un accès complet au bureau (comme TeamViewer), installer le paquet **[[apt>x2goserver-desktopsharing]]** :
+<code>sudo apt install x2goserver-desktopsharing</code>
+Démarrage du programme avec :
+<code>x2godesktopsharing</code>
+Plus d'infos [[https://wiki.x2go.org/doku.php/doc:usage:desktop-sharing|ici]], notamment redirection du port 22 sur votre routeur.
+===== Installation du client =====
+Il est nécessaire d'installer le client **[[apt>x2goclient]]** sur le poste depuis lequel vous souhaitez vous connecter à distance
+ :
+<code>sudo apt install x2goclient</code>
+
+
+===== Utilisation et configuration du client =====
+
+Lancez l'application comme indiqué [[:tutoriel:comment_lancer_application|ici]] ou via le [[:terminal]] (toutes [[:versions]] ou [[:variantes]] d'Ubuntu) avec la [[:commande_shell|commande]] suivante : <code>x2goclient</code>
+
+Démarrer le client x2go.
+
+  * Créer un nouveau profil
+  * Dans "host" entrer l'adresse IP ou le nom de domaine du serveur sur lequel vous souhaitez vous connecter
+  * dans "identifiant" entrer son nom d'utilisateur (celui sur le serveur distant).
+  * dans "session type" sélectionner "custom desktop" et dans "command" entrer <code>gnome-session</code> ou <code> xfce4-session </code> ou <code>lxsession -s Lubuntu -e LXDE</code>
+
+===== Problème connu =====
+Si vous  rencontrez le problème suivant :
+<file>Can not connect to ip-ou-ndd-du-serveur
+
+kex error : no match for method mac algo client->server: server [hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,umac-128-etm@openssh.com,hmac-sha2-512,hmac-sha2-256,hmac-ripemd160], client [hmac-sha1]</file>
+
+pour corriger ce "bug", il suffit de [[:tutoriel:comment_modifier_un_fichier|modifier la configuration]] du serveur ssh via le fichier **/etc/ssh/sshd_config** en commentant les 3 dernières lignes, elles doivent ressembler à ceci
+
+<note>
+Ceci n'est pas à proprement parlé d'un bug, mais d'une incompatibilité :) 
+
+Pour que la connexion se fasse, il faut que le client et le serveur se mettent d'accord sur les algorithmes de chiffrement à utiliser.
+
+Évidement, cela ne peut se faire qu'entre ceux connus par les deux membres, et par défaut le serveur SSH considère que tous ceux que connaît le client X2Go ne sont plus assez sûr :
+
+
+Le serveur souhaite utiliser des algorithmes de chiffrement plus sûrs. 
+'' hmac-sha2-512-etm@openssh.com, hmac-sha2-256-etm@openssh.com, umac-128-etm@openssh.com, hmac-sha2-512,hmac-sha2-256, hmac-ripemd160''
+
+Le client X2Go connaît peu de MACs et aucune contenant -etm 
+''hmac-sha2-256, hmac-sha2-512, hmac-sha1''
+
+//The algorithms that contain "-etm" calculate the MAC after encryption (encrypt-then-mac).  These are considered safer and their use recommended.//(([[man>sshd_config]]))
+
+La méthode suivante permet certes d'utiliser X2Go mais en **abaissant le niveau de sécurité** du serveur.
+
+À savoir donc avant de la mettre en place.
+
+</note>
+
+<file /etc/ssh/sshd_config>Ciphers aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes128-ctr
+
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,umac-128-etm@openssh.com,hmac-sha2-512,hmac-sha2-256,hmac-ripemd160
+
+KexAlgorithms diffie-hellman-group-exchange-sha256,diffie-hellman-group14-sha1,diffie-hellman-group-exchange-sha1</file>
+
+et pour vous faire plaisir, on relance le serveur ssh :
+
+<code>service ssh reload</code>
+
+===== Désinstallation =====
+
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée. Les journaux du système, et les fichiers de préférence des utilisateurs dans leurs dossiers personnels sont toujours conservés.
+===== Voir aussi =====
+
+  * [[bureau_a_distance | Bureau à distance]]
+  * ''**(en)**''[[http://wiki.x2go.org/doku.php| Le site officiel du projet x2go]]
+
+----
+
+//Contributeurs principaux : [[:utilisateurs:piel]], [[:utilisateurs:andykimpe]].//

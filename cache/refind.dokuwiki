@@ -1,0 +1,587 @@
+
+{{tag>Bionic installation}}
+
+====== rEFInd ======
+
+rEFInd est un utilitaire qui crée une interface graphique de démarrage permettant, à l'instar de [[:GRUB]], de mettre en place un //dual boot//.\\
+Comme son nom l'indique, rEFInd n'est compatible qu'avec les ordinateurs disposant d'un [[:uefi|EFI]]. Si votre ordinateur est ancien, son BIOS classique ne supportera pas rEFInd, et vous devrez vous contenter de [[:GRUB]].
+
+Autrement dit, pour un ordinateur disposant de plusieurs systèmes d'exploitation, rEFInd affiche un menu qui permet de choisir celui que l'on veut démarrer.
+
+Les nombreuses spécificités des systèmes %%EFI%% rendent rEFInd puissant, personnalisable, et installable depuis de nombreux OS. Son gros avantage par rapport à grub est qu'il détecte automatiquement les systèmes d'exploitation au démarrage. Ainsi, il n'y a plus de problème de configuration.
+
+<note warning>Ne pas oublier que rEFInd n'ira pas inspecter les partitions FAT32 qui n'ont pas de drapeau BOOT ou ESP</note>
+
+<note tip> **Une autre façon de présenter rEFInd provenant de [[https://launchpad.net/ubuntu/groovy/amd64/refind/0.12.0-1|refind 0.12.0-1 (amd64 binary) in ubuntu groovy]]**
+
+Un gestionnaire de démarrage graphique pour les ordinateurs EFI et UEFI, tels que tous les Mac Intel et les PC récents (la plupart de 2011 et plus récents). rEFInd présente un menu de démarrage affichant tous les chargeurs de démarrage EFI sur les partitions accessibles par EFI, et éventuellement les partitions de démarrage BIOS sur les Mac et les entrées de démarrage du BIOS sur les PC UEFI avec CSM. Les systèmes d'exploitation compatibles EFI, y compris Linux, fournissent des chargeurs de démarrage que rEFInd peut détecter et lancer. rEFInd peut lancer des chargeurs de démarrage Linux EFI tels que les noyaux ELILO, GRUB Legacy, GRUB 2 et 3.3.0 et versions ultérieures avec prise en charge de stub EFI. Les pilotes de système de fichiers EFI pour ext2 / 3 / 4fs, ReiserFS, Btrfs, NTFS, HFS + et ISO-9660 permettent également à rEFInd de lire les chargeurs de démarrage à partir de ces systèmes de fichiers. La capacité de rEFInd à détecter les chargeurs de démarrage au moment de l'exécution le rend très facile à utiliser, en particulier lorsqu'il est associé à des noyaux Linux prenant en charge les stub EFI.
+</note>
+
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et active.
+  * Disposer d'un ordinateur équipé d'un firmware de type %%EFI%%.
+  * [[#faire_un_peu_de_menage|Désactiver GRUB (ou de le supprimer)]] après avoir installé rEFInd.
+  * une distribution Ubuntu 18.04 ou plus.
+
+===== Installation (avec secure boot désactivé) =====
+<note important>FIXME réécrire sérieusement ce truc, avec autre chose que des successions d'approximations ("La commande est du style...")</note>
+
+==== À partir d'une session installée ====
+=== Lorsque le boot se fait sans problème ===
+Le remplacement de grub par rEFInd est une solution qui apportera une présentation graphique avec la possibilité d'un choix tactile pour certains écrans.
+Cette installation va installer rEFInd et l'activer avant Grub qui sera toujours installé mais inactif.
+
+[[:tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt>refind]]**
+
+=== Lorsque le boot ne peut pas se faire ===
+L'installateur a parfaitement installé Ubuntu, mais il a lamentablement échoué à installer le grub EFI signé.
+L'installation de REFIND peut alors être une alternative pratique pour booter de façon plus aisée que les  autres techniques.
+Voici comment installer refind en complément du grub dans ce contexte particulier.
+<note tip>Il est possible d'utiliser un [[https://forum.ubuntu-fr.org/viewtopic.php?pid=22435128#p22435128|script]] disponible dans le forum.</note>
+Booter avec le support d'installation, choisir d'essayer avant d'installer, ouvrir une session, mettre le clavier en français et frapper quelques commandes pour télécharger le logiciel non présent dans le support d'installation:
+<code bash>sudo add-apt-repository "deb http://archive.ubuntu.com/ubuntu $(lsb_release -sc) universe"
+sudo apt update
+sudo apt install refind</code>
+Accepter l'installation des paquets efibootmgr et refind.
+
+**Refuser** d'installer refind dans la partition ESP. Ce n'est pas la peine qu'il reçoive la même fin de non-recevoir que le  grub de la part du bios EFI. Il faudra donc positionner le curseur sur **Non** avant de valider. {{:refind:refind0.png?200|}}
+
+Installer manuellement le logiciel dans la structure de boot standard avec ces commandes:
+<code bash>sudo mount -v $(sudo blkid | grep vfat | cut -d: -f1) /mnt  # Monter la partition de boot ESP.  
+sudo  cp -rv /usr/share/refind/* /mnt/EFI/boot   # Installer refind dans le répertoire de boot.
+sudo  cp -v  /mnt/EFI/refind/refind_x64.efi  /mnt/EFI/Boot/bootx64.efi # Dire qu'il devient le fichier de boot officiel.
+exit </code>
+
+<note tip>Si le lancement de cette instance n'est pas possible de façon standard, pensez à la technique [[https://doc.ubuntu-fr.org/chroot|chroot.]]</note>
+
+==== Installer directement refind sur clé USB ====
+
+Il peut être intéressant de disposer de rEFInd sur une clé USB. Cette clé USB pourra alors aller inspecter les ordinateurs EFI à la recherche d'OS déjà installés mais incapable de démarrer. C'est une solution alternative à [[https://www.supergrubdisk.org/super-grub2-disk|SG2D]]  pour les cas simples.
+
+ ** Sur un ordinateur de travail sachant démarrer sans rEFInd qui peut être celui de l'installation, faire le travail de préparation de l'installation.** 
+  - Télécharger une version 64 bits et faire **une clé USB** avec les outils habituels ([[:unetbootin]], liliusbcreator, etc..) qui préservent la structure USB. Éviter des outils du style etcher transformant la clé en image de CDROM.
+  - Booter avec la clé et choisir "essayer avant d'installer".
+  - Ouvrir un terminal.
+  - Si besoin, mettre le clavier en français avec la commande **setxkbmap fr**.
+  - Faire connaître le logiciel à l'installateur avec les commandes suivantes:<code bash># Pour versions antérieures à la version 18.04.1
+sudo add-apt-repository ppa:rodsmith/refind
+sudo apt-get update  </code><code bash>## De la version 18.04.1 à la version 19.04
+sudo add-apt-repository "deb http://archive.ubuntu.com/ubuntu $(lsb_release -sc) universe"
+sudo apt-get update</code><code bash>## De la version 19.10 à la version 21.10
+sudo add-apt-repository universe
+sudo apt-get update </code>
+  - [[:tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt>refind]]**
+  - Répondez **No** à la [[http://pix.toile-libre.org/upload/original/1515194544.png|grille]] proposant d'installer REFIND dans la partition ESP de cet ordinateur. (Il suffit de tabuler pour passer de Yes à No).
+  - Identifiez la clé avec la commande ''mount | grep media''. Elle doit être trouvée montée sur ''/media/ubuntu/XXXX-XXXX/'' (XXXX-XXXX est l'identifiant de la clefs usb). Si elle n'est pas visible, débranchez la clé USB, attendez 10 secondes, rebranchez-la, attendez 10 secondes, refaite la commande ci-dessus. Elle devrait alors être [[https://forum.ubuntu-fr.org/viewtopic.php?pid=21920342#p21920342|visible]]. Par la suite les commandes doivent être modifiées pour que le chemin vers votre clé corresponde au nom de **votre** clé.
+  - Transférez le logiciel rEFInd : <code bash>sudo cp -rv /usr/share/refind/refind/* /media/ubuntu/XXXX-XXXX/EFI/boot</code>
+  - Copiez le fichier ''/media/ubuntu/XXXX-XXXX/EFI/boot/refind.conf-sample'' vers ''/media/ubuntu/XXXX-XXXX/EFI/boot/refind.conf''
+  - Modifiez les paramètres dans le fichier ''/media/ubuntu/XXXX-XXXX/EFI/boot/refind.conf'' afin d'améliorer la présentation si vous le souhaitez.
+Cependant, il est impératif d'ajouter le paramètre ''also_scan_dirs EFI/boot'' car par défaut, le répertoire contenant rEFInd n'est pas examiné. Dans ce contexte particulier, il contient aussi ''grubx64.efi'' qu'il est nécessaire de choisir pour faire l'installation.
+  - Écrasez le fichier de boot existant avec le fichier de boot de refind.<code bash>sudo cp -v /media/ubuntu/XXXX-XXXX/EFI/boot/refind_x64.efi /media/ubuntu/XXXX-XXXX/EFI/boot/BOOTx64.efi</code>
+  - Arrêtez l'ordinateur (commande ''sudo shutdown now'' par exemple)
+
+ ** Il ne reste plus qu'à aller sur l'ordinateur cible ne sachant pas booter de façon standard et à booter avec cette clé USB puis faire l'installation.**
+  - Si l'ordinateur propose le choix des fichiers de boot, c'est le fichier standard **EFI\boot\grubx64.efi** de la partition FAT32 de la clé usb. La liste des fichiers est présentée très classiquement par leurs icônes. 
+  - Choisissez le manchot de l'extrême droite (fichier **EFI\BOOT\grubx64.efi** de la partition FAT32 de la clé USB).
+  - Le menu classique qui permet le choix d'essayer ou d'installer s'affiche. Lorsque les essais sont faits et que l'installation est terminée, il faut installer l'application **rEFInd** sur l'ordinateur à partir de cette clé USB d'installation. Pour cela, il est nécessaire de faire les actions suivantes :
+  - Identifiez la clé d'installation avec la commande <code bash>mount | grep media</code>
+  - Vérifiez où est la partition %%EFI%% du (des) disque(s) dur(s) via la commande <code bash>sudo blkid | grep vfat</code>
+  - Montez une partition %%EFI%% d'un disque dur dans le répertoire /mnt.<code bash>sudo mount -v /dev/sdXN /mnt</code>
+  - Si besoin, créez le répertoire de réception avec une commande de ce style <code bash>sudo mkdir -p /mnt/EFI/REPERTOIRE</code> Le nom peut être Refind ou Boot ou Microsoft/Boot suivant le besoin.
+  - Copiez l'application de la clé USB dans la partition ESP via une commande de ce style <code bash>sudo cp -Rv /media/ubuntu/XXXX-XXXX/EFI/BOOT/* /mnt/EFI/REPERTOIRE</code>
+  - Fabriquez l'entrée de boot %%EFI%% via une commande de ce style <code bash>sudo efibootmgr --create --disk /dev/sdX --part N --label "Mettre le nom voulu" --loader "\EFI\REPERTOIRE\grubx64.efi"</code>
+  - Vérifiez via la commande <code bash>sudo efibootmgr -v</code>
+  - Arrêtez l'ordinateur via la commande <code bash>shutdown now</code>
+  - Débranchez la clé et rebootez normalement.
+
+==== Depuis Ubuntu, avec un EFI 32 bits ====
+<note>C'est un cas rare:  l'architecture de la machine EFI est en 32 bits et a déjà éliminé le boot en LEGACY.  Ubuntu ne propose rien.</note>
+
+La version 32 bits est parfois nécessaire pour faire démarrer des ordinateurs vendus à petit prix : certains ont un EFI en 32 bits bien qu'ils soient capables d'exécuter des applications 64 bits.
+Cette procédure va considérer que l'installation se fait  avec un  support d'installation [[Xenial]] ou [[Bionic]].
+
+=== Version 18.04.3 Lubuntu en 32 bits. ===
+
+Le paquet refind 32 bits est retrouvable à partir cet endroit:  https://launchpad.net/ubuntu/bionic/+package/refind
+     
+C'est donc ce lien http://launchpadlibrarian.net/348134537/refind_0.11.2-1_i386.deb
+      
+Cependant, il est maintenant inutile de faire cette procédure car le produit est disponible comme [[PPA]]!
+
+  - Télécharger une version 32 bits et faites une clé USB avec vos outils habituels ([[unetbootin]], liliusbcreator) qui ne détruisent pas la structure disque de la clé USB.
+  - Booter avec la clé USB sur un ordinateur capable de booter normalement en legacy puisqu'on dispose d'une version non EFI.
+  - Choisir "essayer avant d'installer".
+  - Si besoin, mettre le clavier en français avec la commande <code>setxkbmap fr</code>
+  - Démonter le support d'installation avec la commande <code>sudo umount -vlrf /cdrom</code>
+  - Le démontage va identifier la partition de la clé USB  <code>umount: /cdrom (/dev/sdX1) unmounted </code>
+  - Monter la partition afin de pouvoir  y écrire  via la commande <code>sudo mount -v /dev/sdX1  /mnt </code>
+  - Créer les répertoires absents via la commande<code>sudo mkdir -p /mnt/EFI/Boot</code>
+  - Se positionner dans ce répertoire via la commande<code>cd /mnt/EFI</code>
+  - Télécharger le fichier nécessaire via la commande<code>sudo wget http://launchpadlibrarian.net/348134537/refind_0.11.2-1_i386.deb</code>
+  - Installer l'application via la commande <code>sudo apt install ./refind_0.11.2-1_i386.deb</code>
+  - Lorsque cette question sera posée "//It is necessary to install rEFInd to the EFI System Partition (ESP) for it to control the boot process?//", choisisser  **No**. C'est inutile de pertuber l'ordinateur qui fabrique le support. Il n'y a aucun risque. Il n'est pas EFI.
+  - Le résultat sera celui-ci <code>lubuntu@lubuntu:/mnt/EFI$ sudo apt install ./refind_0.11.2-1_i386.deb
+Reading package lists... Done
+Building dependency tree       
+Reading state information... Done
+Note, selecting 'refind' instead of './refind_0.11.2-1_i386.deb'
+The following NEW packages will be installed:
+refind
+0 upgraded, 1 newly installed, 0 to remove and 0 not upgraded.
+Need to get 3356 kB of archives.
+After this operation, 5262 kB of additional disk space will be used.
+Get:1 http://archive.ubuntu.com/ubuntu bionic/universe i386 refind i386 0.11.2-1 [3356 kB]
+Fetched 3356 kB in 3s (1277 kB/s) 
+Selecting previously unselected package refind.
+(Reading database ... 131513 files and directories currently installed.)
+Preparing to unpack .../refind_0.11.2-1_i386.deb ...
+Unpacking refind (0.11.2-1) ...
+Setting up refind (0.11.2-1) ...
+** Not installing rEFInd to the ESP! **
+If you want rEFInd to control the boot process, you can do so by runing:
+ 
+dpkg-reconfigure refind
+
+Processing triggers for man-db (2.8.3-2ubuntu0.1) ...
+lubuntu@lubuntu:/mnt/EFI$</code>
+  - Notons donc la phrase "Note, selecting 'refind' instead of './refind_0.11.2-1_i386.deb'.En clair,ll n'est plus nécessaire d'identifier le paquer refind, de le télécharger. Il suffit d'utiliser directement le ppa installé.   Voici donc ce que cela donnera après avoir supprimé (sudo apt purge refind) <code>sudo apt install refind
+Reading package lists... Done
+Building dependency tree       
+Reading state information... Done
+The following NEW packages will be installed:
+refind
+0 upgraded, 1 newly installed, 0 to remove and 0 not upgraded.
+Need to get 3356 kB of archives.
+After this operation, 5262 kB of additional disk space will be used.
+Get:1 http://archive.ubuntu.com/ubuntu bionic/universe i386 refind i386 0.11.2-1 [3356 kB]
+Fetched 3356 kB in 3s (1283 kB/s) 
+Preconfiguring packages ...
+Selecting previously unselected package refind.
+(Reading database ... 131513 files and directories currently installed.)
+Preparing to unpack .../refind_0.11.2-1_i386.deb ...
+Unpacking refind (0.11.2-1) ...
+Setting up refind (0.11.2-1) ...
+** Not installing rEFInd to the ESP! **
+If you want rEFInd to control the boot process, you can do so by runing:
+
+dpkg-reconfigure refind
+
+Processing triggers for man-db (2.8.3-2ubuntu0.1) ...
+lubuntu@lubuntu:/mnt/EFI$</code>
+  - Récupérer  la génération  faite dans la structure  EFI<code>sudo cp -rv /usr/share/refind/refind/* .</code>
+  - Préparation facultative des fichiers du répertoire de boot: Si le bios EFI est de qualité, il doit proposer le choix de bootere avec le fichier **refind_ia32.efi**. Normalement cela doit suffire pour booter sur l'ordinateur cible avec cette clé et détecter la clé de l'installation en 64 bits si elle est faite avec une table de partition GPT.
+  - Il peut être tentant de dupliquer tous ces fichiers dans la structure de boot FAT32 de l'ordinateur cible ou de la clé USB d'installation. Le fichier de configuration par défaut n'est pas nécessairement bien adapté.   On va donc le créer à partir  de l'exemple fourni:<code>sudo cp refind.conf-sample refind.conf</code>
+  - Il faudra alors le modifier pour décommenter quelques lignes;<code>#enable_mouse
+#scanfor internal,external,optical,manual</code>
+  - Il est possible que l'ordinateur cible ne sache booter que par le fichier /EFI/Boot/bootia32.efi, on va donc aussi préparer la structure de boot officielle. <code>sudo cp -rv  /usr/share/refind/refind/* Boot
+sudo mv  -v  Boot/refind_ia32.efi       Boot/bootia32.efi
+sudo cp  -v  refind.conf                Boot </code>
+  - Quitter le répertoire ,  Démonter la partition et arrêter l'ordinateur  via les commandes <code>cd /
+sudo umount /dev/sdX1
+shutdown now </code>
+  - Il ne vous reste plus qu'à aller sur l'ordinateur cible de l'installation et à le faire démarrer avec cette clé afin d'avoir le menu de refind, de brancher la clé 64 bits et de la faire détecter par refind afin de lancer son grub puis l'installation ou de choisir d'essayer le lubuntu 32 bits de cette clé usb et de dupliquer la structure EFI dans la partition de boot de l'ordinateur, au besoin la créer avec gparted. Lorsqu'on a vérifié que l'ordinateur boote correctement, on peut récupérer cette clé pour installer une version 64 bits d'un autre O.S.
+
+On ne peut pas installer le paquet 32 bits  dans un ubuntu 64 bits.
+
+==== À partir d'une live-usb en automatisé ====
+
+Il peut être intéressant de disposer de rEFInd sur l'ordinateur cible **avant d'installer ubuntu**. Cette installation mettra rapidement en évidence que l'ordinateur est capable de gérer le dual boot de façon standard ou qu'il faut s'attendre à des ennuis pour faire fonctionner un dual boot. __Ce qui permet de conserver un windows opérationnel le temps de mettre en place le mécanisme.
+__
+  - Télécharger une version 64 bits et faire une clé USB avec les outils habituels (unetbootin, liliusbcreator, multisystem...)
+  - Booter et choisir "essayer avant d'installer".
+  - Mettre le clavier en français si nécessaire avec la commande **setxkbmap fr.**
+  - Faire connaître le logiciel à l'installateur. Voir le point N°5  [[https://doc.ubuntu-fr.org/refind#installer_directement_refind_sur_cle_usb|du paragraphe 2.2]]
+  - [[:tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt>refind]]**
+Un message propose d'installer directement dans la partition **ESP** d'un disque dur.
+C'est plus simple d'
+[[http://pix.toile-libre.org/upload/original/1515194544.png|accepter]]!
+
+Il faut maintenant identifier cette partition **ESP** 
+<code bash>sudo blkid | grep vfat</code>
+Exemple de réponse:
+/dev/**sda1**: UUID="1042-95CF" TYPE="**vfat**" PARTLABEL="**EFI System Partition" PARTUUID**="aaaaaaaa-bbbb-dddd-fffff-eeeeeeeeeeee"
+
+Avec cette réponse, le NomDuDisque sera **sda** et le N°DeLapartition sera **1**
+
+Certains EFI utilisent seulement le fichier de boot standard. Ce fichier va être systématiquement modifié même si cela est le plus souvent inutile. C'est l'équivalent de la séquence "fix-windows-boot" du logiciel "boot-repair". 
+
+  * Montez la partition de boot avec une commande de ce style : <code bash>sudo mount -v /dev/XXXXXX /mnt</code>
+  * Sauvez le fichier de boot standard avec cette commande : <code bash>sudo mv -v /mnt/efi/Boot/bootx64.efi /mnt/efi/Boot/Bootx64$(date +"-%Y-%m-%d-%H-%M-%S").efi</code>
+  * Mettez la structure de boot de refind dans la structure de boot standard avec cette commande : <code bash >sudo cp -Rv /mnt/efi/refind/* /mnt/efi/Boot</code>
+  * Mettez le fichier de boot de rEFInd à la place du fichier standard avec cette commande : <code bash>sudo cp -v /mnt/efi/Boot/refind_x64.efi /mnt/efi/Boot/bootx64.efi</code>
+ 
+Il faut maintenant fabriquer l'entrée de boot dans la NVRAM qui n'a pas été faite.
+<code bash>sudo efibootmgr -c -d /dev/NomDuDisque -p N°DeLaPartition -L "Refind" -l "\EFI\refind\refind_x64.efi"
+sudo efibootmgr -v </code>
+
+Au boot suivant **rEFInd** va diriger la manœuvre si le système EFI n'est pas en **mode secure**. Il sera alors possible d'installer ubuntu en ayant une bonne certitude que le dual boot fonctionnera au besoin en déactivant le mode secure pour se tirer d'affaire. 
+
+==== Depuis Windows ====
+
+<note important>Ne faire ça que si vous n'avez pas d'autre possibilité (par exemple si votre système Ubuntu n'est pas encore installé) : c'est généralement plus compliqué que de passer par votre système Ubuntu !</note>
+
+Il est possible d'installer rEFInd depuis Windows. Il est d'abord nécessaire de télécharger [[https://www.rodsbooks.com/refind/getting.html|la version "ZIP" disponible pour Windows.]], puis il faut dézipper le fichier.
+
+<note tip>Ce [[http://www.rodsbooks.com/refind/installing.html#windows|document]] (fourni par le développeur de rEFInd, en anglais) explique comment faire l'installation, cette partie s'en inspire.</note>
+
+  - Dans l'explorateur de fichiers, se positionner dans le répertoire qui a reçu le dézippage ci-dessus. Par exemple, ça peut être ''C:/Utilisateurs/xxxxxxxxx/Téléchargements/refind-bin-0.11.4/refind-bin-0.11.4''
+  - Toujours dans l'explorateur de fichiers, cliquez **Fichier > Ouvrir Windows PowerShell > Ouvrir Windows PowerShell en tant qu'administrateur**.
+  - Puis entrez les commandes suivantes :
+    * Montez la partition de boot, dite "partition ESP" : <code>mountvol S: /S</code>
+    * Copiez les fichiers vers la partition ESP (surtout ne pas oublier de terminer par un anti-slash) : <code>xcopy /E refind S:\EFI\refind\</code>
+    * Ouvrez le dossier "refind" de la partition ESP : <code>cd S:\EFI\refind</code>
+    * Listez le contenu du dossier "refind" de la partition ESP : <code>dir</code> À ce stade, il y a normalement divers dossiers avec des drivers, et un exemple de fichier de paramétrage, que l'on va utiliser tel quel pour paramétrer rEFInd :
+    * <code>copy refind.conf-sample refind.conf</code>
+    * Afin de conserver le gestionnaire de démarrage de Windows, créez un nouveau gestionnaire de démarrage avec la commande suivante : <code>bcdedit /copy '{current}' /d 'Refind'</code> Cette commande va retourner un identifiant (le GUID) qu'il faudra copier.
+    * Dans la commande qui suit (ne la validez pas telle quelle !), mettez cet identifiant à la place du libellé **GUID**, et remplacez aussi **???** par X64 ou IA32 (suivant l'environnement : il s'agira généralement de X64, mais certains ordinateurs exécutent un EFI 32 bits) : <code>bcdedit /set '{GUID}' path \EFI\refind\refind_???.efi</code> Les guillemets simples et les accolades font bien partie de la commande.
+    * Il reste à mettre cette entrée en place dans la NVRAM par la commande suivante (toujours en remplaçant GUID par l'identifiant adéquat) <code>bcdedit /bootsequence '{GUID}' /addfirst</code>
+  - Redémarrez pour vérifier que rEFInd fonctionne.
+
+<note>Ces informations sont données à partir d'un Windows à jour au 14/01/2019.</note>
+<note important>La création d'une entrée semble être déconseillée. Voir [[https://desvigne.org/2019/09/22/installer-linux-sur-un-portable-hp-probook-x360-g1-11-ee/|cet avis]]</note>
+
+===== Installation avec le secure boot activé =====
+
+Le //secure boot// (parfois appelé "mode sécurisé" dans la suite de cette page) est une protection pour compliquer l'accès à l'EFI et sa modification. Il peut généralement [[:desactiver_secure_boot|être désactivé]].
+
+==== Memo ====
+
+https://gist.github.com/Brainiarc7/dfff8321b94fd666eb64eda0382f6813
+
+http://www.rodsbooks.com/refind/secureboot.html#caveats
+
+http://www.rodsbooks.com/refind/secureboot.html#shim
+
+En cours de test avec version 17.10:
+Pour faire très simple, il faut d'abord installer la version Ubuntu. Vérifier qu'elle fonctionne et demander au shim de lancer rEFInd au lieu du grub.
+
+Message possible d'erreur https://askubuntu.com/questions/900207/verification-failed-15-access-denied-error
+==> https://bugs.launchpad.net/ubuntu/+source/shim/+bug/1692373
+
+Pour le moment, c'est un peu bloqué, 
+
+Pour le micro-ordinateur portable, cela semble ne pas vouloir donner de réponse. https://www.aioboot.com/wp-content/uploads/2017/11/Grub2-Secure-Boot-Perform-MOK-management.jpg
+
+Pour la tour, je découvre un problème semblant connu https://answers.launchpad.net/ubuntu/+question/658088 ( **"Hash failed (did you select a valid EFI binary?): (14) Not Found.**)
+
+==== Méthode 1 ====
+
+Une façon d'installer qui peut fonctionner pour certains ordinateurs et pas pour d'autres.
+  * Installer normalement Ubuntu en mode sécurisé.
+  * Installer normalement rEFInd (voir ci-dessus).
+  * Remplacer le logiciel de démarrage GRUB par le logiciel de démarrage rEFInd à l'aide des lignes de commandes suivantes :
+<code>sudo -i</code>
+<code>cd /boot/efi/EFI/ubuntu
+cp -Rv /boot/efi/EFI/refind .
+cp grubx64.efi grubx64.efi.ANCIEN
+cp refind_x64.efi grubx64.efi
+exit</code>
+  * Booter de nouveau.
+  * Shimx64.efi va enfin lancer rEFInd et détecter qu'il n'est pas sécurisé. Il va donc refuser de le faire (Voir dans les mémos).
+  * Shimx64.efi va donc lancer MMX64.EFI (successeur de Mokmanager.efi) ou tenter de le faire ((Voir dans les mémos).
+  * MMX64.EFI va donc vous permettre de fournir la signature de rEFInd.
+  * Choisir de préférence la signature HASH lorsqu'elle fonctionnera (voir dans les mémos), à défaut, choisir la signature KEY (voir dans les mémos)
+  * Rebootez : La première entrée de la NVRAM non sécurisée ne sera pas opérationnelle et la seconde prendra le relais. Shim se lancera et activera le GRUB.
+  * Utilisez rEFInd pour choisir l'OS à lancer.
+
+==== Méthode 2 ====
+
+Une façon d'installer qui peut fonctionner pour certains ordinateurs et pas pour d'autres. (**Testée en version 16.04**).
+  * Installer normalement Ubuntu en mode sécurisé.
+  * Remplacer le logiciel de démarrage GRUB par le logiciel de démarrage REFIND à l'aide des lignes de commandes suivantes:
+<code>sudo -i</code>
+<code>cd /boot/efi/EFI/ubuntu
+cp -Rv /boot/efi/EFI/refind .
+cp grubx64.efi grubx64.efi.ANCIEN
+cp refind_x64.efi grubx64.efi
+exit</code>
+  * Booter de nouveau **en prenant le soin de déactiver le secure-boot**.
+  * La première entrée de la NVRAM va permettre de lancer rEFInd.
+  * Utiliser la fonctionnalité utilitaire (un petit verrou sur la gauche de la seconde ligne) pour sélectionner l'application MMX64.EFI.
+  * MMX64.EFI va vous permettre de fournir la signature de rEFInd.
+  * Choisir de préférence la signature HASH lorsque celle-ci fonctionnera (voir dans les mémos), à défaut, choisir la signature KEY qui fonctionne. (voir les mémos).
+  * Booter de nouveau **en prenant le soin de d'activer le secure-boot**. La première entrée de la NVRAM non sécurisée ne sera pas opérationnelle et la seconde prendra le relais. Shim se lancera et activera le grub.
+  * Utiliser rEFInd pour choisir l'OS à lancer.
+
+==== Méthode 3 ====
+Utiliser un  installateur nouvelle version non encore disponible dans les distributions ubuntu.
+Le script est testé avec succès en version 21.04. Il fait aussi booter la version 20.10, la version 20.04 et probablement d'autres plus anciennes. Il est récupérable par copier dans le [[https://forum.ubuntu-fr.org/viewtopic.php?pid=22435128#p22435128|forum.]] 
+==== Fabrication du module rEFInd sécurisé.====
+
+Traduction approximative de ce document http://www.rodsbooks.com/efi-bootloaders/controlling-sb.html ; **last update: 7/7/2018**
+
+Secure Boot fonctionne en installant un ensemble de clés dans le microprogramme de l'ordinateur. Ces clés (ou plus précisément, leurs contreparties privées) sont utilisées pour signer les chargeurs de démarrage, les pilotes, les ROM en option et les autres logiciels que le microprogramme exécute. La plupart des ordinateurs de bureau (ordinateurs de bureau, ordinateurs portables, tablettes et serveurs) vendus aujourd'hui incluent des clés que Microsoft contrôle. En effet, les clés de Microsoft sont les seules à être plus ou moins installées dans votre firmware, du moins sur les ordinateurs de bureau et portables.
+Ainsi, pour installer votre distribution Linux préférée, vous devez désactiver le démarrage sécurisé, trouver un chargeur de démarrage Linux signé avec les clés de Microsoft ou remplacer les clés standard de votre ordinateur par celles que vous contrôlez. Cette page concerne cette dernière option, mais les deux autres options ont leurs mérites.
+**La désactivation de l'amorçage sécurisé est rapide et vous permet d'exécuter facilement n'importe quel outil EFI que vous aimez, mais il vous laisse également vulnérable aux logiciels malveillants pré-amorçage qui pourraient apparaître**.
+**L'utilisation d'un chargeur de démarrage pré-signé, tel que le populaire programme Shim, peut être encore plus simple que la désactivation de Secure Boot**, si votre distribution fournit un tel programme. Sinon, vous aurez besoin de sauter à travers les cerceaux. En outre, l'utilisation d'un chargeur de démarrage pré-signé avec l'ensemble de clés par défaut signifie que votre ordinateur acceptera comme chargeurs de démarrage Microsoft valides et tous les autres que Microsoft décide de signer.
+
+Maintenant à l'action! La première étape pour remplacer le jeu de touches standard de votre ordinateur consiste à générer vos propres clés. Pour ce faire, vous aurez besoin de plusieurs paquets installés sur votre ordinateur Linux. 
+En particulier, vous avez besoin d'**openssl** et d'**efitools**. Le premier est disponible dans un paquet de ce nom sur la plupart des distributions,
+mais efitools est moins commun. Il est disponible dans le référentiel d'Ubuntu et les versions de plusieurs distributions sont disponibles sur OpenSUSE Build Service (OBS).
+Si nécessaire, vous pouvez le compiler à partir du code source; vérifiez ici pour la source. Notez qu'efitools dépend de sbsigntool (aka sbsigntools), donc vous devrez peut-être l'installer aussi. Voir [[https://git.kernel.org/pub/scm/linux/kernel/git/jejb/sbsigntools.git/|ici]] le code source de sbsigntool
+
+**Il est donc nécessaire d'installer des outils complémentaires pour pouvoir fabriquer des clés.
+Sachant que tous les ordinateurs EFI ne réagissent pas de la même manière, il est préférable de ne pas s'aventurer dans cette logique et de conserver le SHIM que Microsoft maintient.
+La suite ne sera donc pas abordée dans ce document.**
+
+=====  Booter avec rEFInd =====
+==== Détection de la clé USB d'installation de Ubuntu par refind si le bios EFI ne sait pas  la détecter ====
+
+Après avoir mis en place rEFInd dans une partition de boot soit d'un disque interne (voir installation de refind par windows),  soit d'une autre clé USB  ne contenant que rEFInd, soit de la même clé contenant aussi rEFInd et préparé votre clé USB bootable, branchez la clé USB si elle ne l'est pas.
+
+Demander à refind de se rafraîchir en appuyant sur la touche **ECHAP** du clavier.
+
+Patienter quelques dizaines de secondes qui est le temps nécessaire  pour que rEFInd inspecte les supports physiques de l'ordinateur.
+
+Se positionner  sur la première  icône  stylisée comme étant un manchot  et vérifier le fichier qu'il propose de booter.
+Si le fichier a comme nom **/EFI/Boot/Bootx64.efi**, appuyer sur l'icône pour  valider le boot. Sinon passer à l'icône suivante.
+
+Faire l'installation. Au boot suivant, rEFInd saura proposer ubuntu sous forme d'icône de couleur orange avec des cercles.
+
+==== Détection du ubuntu s'il est bien installé en EFI par refind. ====
+
+Au démarrage, rEFInd inspecte les partitions des disques internes.
+
+Pour que ubuntu soit détecté facilement, il est nécessaire qu'il soit installé dans une partition**  [[https://doc.ubuntu-fr.org/ext4|ext4]]**   (** [[https://doc.ubuntu-fr.org/btrfs|btrfs]]** est cependant possible) et que l'installateur de ubuntu ait fabriqué des fichiers de boot ressemblant à ces noms.
+  /boot/initrd.img-N.N.N-N-genericxxxxx
+  /boot/vmlinuz-N.N.N-N-genericxxxxx
+ 
+L'icône symbolisant ubuntu est de couleur orange.   Il faut appuyer sur l'icône pour lancer le boot  du dernier noyau.
+
+Il faut appuyer sur la touche  **F2** pour avoir la liste des noyaux. Avec les touches de positionnement on peut choisir une ligne de la liste.  Puis appuyer sur** Entrée** pour valider le démarrage s'il n'y a pas besoin de la modifier, sinon:
+
+Il faut encore appuyer sur la touche **F2** pour modifier la commande de boot lorsqu'on a besoin de transmettre une modification       souvent du style **nomodeset    recovery   etc..** et valider par **Entrée**.
+      
+Il est aussi possible de consulter ce [[http://ikewdu.free.fr/creer-un-dual-boot-windows-winre-en-uefi/|document]]
+===== Faire un peu de ménage =====
+
+Comme vous avez décidé de vous affranchir de GRUB, vous pouvez éviter qu'il recherche les OS et qu'il se mette à jour en entrant les trois commandes [[https://doc.ubuntu-fr.org/tutoriel/grub2_parametrage_manuel#ne_pas_installer_la_structure_de_boot|Suivantes]]
+<code>sudo chmod -x /etc/grub.d/30_os-prober
+sudo chmod -x /usr/sbin/grub-install 
+sudo chmod -x /etc/kernel/postinst.d/zz-update-grub </code>
+
+Puisque vous avez décidé de ne plus utiliser GRUB, vos prochaines installations d'Ubuntu risquent de détruire le boot rEFInd si vous ne faites rien.
+Pour éviter cette situation, la solution est de détruire ou renommer **shimx64.efi** directement dans le support d'installation. Ce fichier est stocké à l'adresse suivante:
+**/pool/main/s/shim-signed/shim-signed_xxxxxxxxxxxxxxxxxxx_amd64.deb**
+
+Vous pouvez préférer supprimer GRUB complètement (ça évite des mises à jour inutiles par la suite) :
+
+  * pour systèmes 64 bits : <code>sudo apt purge grub-common grub-efi-amd64</code>
+  * pour systèmes 32 bits :\\ La version 32 bits n'existe pas avec [[http://releases.ubuntu.com/bionic/|Ubuntu]]
+
+===== Personnalisation. =====
+Un fichier de paramétrage de référence est fourni et indique les valeurs retenues par défaut.
+
+Pour  changer une valeur, il est nécessaire de fabriquer le vrai  fichier de référence.
+<code bash>sudo  cp /boot/efi/EFI/refind/refind.conf-sample   /boot/efi/EFI/refind/refind.conf</code>
+
+==== Options classiques ====
+
+Si vous lisez le contenu du fichier ''/boot/efi/EFI/refind/refind.conf'', vous constaterez qu'il y a de quoi avoir quelques "headhaches" car il n'est pas écrit en français.
+
+  * En tout début de fichier, vous verrez la commande permettant de définir le temps d'attente avant le lancement du boot du dernier OS utilisé :
+  timeout 30
+
+Vous pouvez le modifier et vous pouvez aussi ajouter immédiatement après quelques options telles que les suivantes:
+
+  * Réduire la taille des icônes si elles elles vous semblent trop grandes.
+<code>small_icon_size 32
+big_icon_size 64</code>
+  * Permettre d'utiliser la souris (il est annoncé que cela peut ne pas fonctionner si l'EFI ne gère pas la souris) :
+<code>enable_mouse</code>
+  * Ne pas afficher le contenu de la partition de Windows Recovery :
+<code>dont_scan_volumes "WindowsRecovery"</code> Assurez-vous que le nom de cette partition est bien celle indiquée.
+  * Ne pas afficher les programmes présents de la partition de boot :
+<code>dont_scan_dirs ESP:/EFI/boot,EFI/Dell,EFI/memtest86</code> Assurez-vous que les répertoires indiqués ont du sens dans votre cas : l'exemple de Dell ne vaut que pour les machines Dell !
+<code>dont_scan_files shimx64.efi,MokManager.efi,fwupx64.efi,mmx64.efi,bootmgr.efi,bkpbootx64.efi,grubx64.efi,bootx64.efi,memtest.efi</code> Cette commande permet de ne pas afficher ces programmes s'ils sont présents dans les partitions FAT32.
+  * Lister tous les anciens noyaux encore présents que votre OS a oublié de supprimer lorsqu'il en a installé un nouveau :
+<code>fold_linux_kernels false</code> Vous pouvez avoir une liste très importante qu'il est possible de réduire en entrant la commande ''sudo apt autoremove''
+
+Il est donc possible d'avoir une présentation épurée ressemblant à [[http://pix.toile-libre.org/?img=1514470497.jpg|cela]].
+
+==== Options pour partition racine chiffrée ====
+
+<note>La partition servant au boot n'est PAS chiffrée.</note>
+
+Le contexte retenu est une partition racine chiffrée et une partition de boot au format EXT2 ou EXT4 en version 18.04.1 car le formatage EXT2 ou EXT3 n'existe plus. 
+
+La clé de chiffrement retenue a été choisie pour avoir des caractères compatibles aux claviers QWERTY et AZERTY. 
+
+Refind détecte automatiquement la partition EXT2 et lance l'initialisation de la partition RACINE comme si elle était dans la même partition. Cela ne fonctionne donc pas. Il va donc être nécessaire de fournir un peu de paramétrage permettant de dire que c'est une installation chiffrée et que la partition racine est ailleurs. Ce n'est pas très compliqué. 
+
+Le nom du fichier est ''refind_linux.conf'' et il est stocké au premier niveau de la partition de boot directement sous la racine **/boot**. Il faut récupérer le UUID de la partition enveloppe de la racine (''sudo blkid | grep LUKS'') ainsi que le nom logique de la partition contenant la racine ( sudo fdisk -l | grep mapper ). Les deux lignes à mettre dans le fichiers seront de ce style
+<code>     "Boot standard"   "crypt_root=2721a6bb-36c5-4d4c-a604-2f7db99d1f87 root=/dev/mapper/sdb2_crypt  ro quiet splash vt.handoff=7"  
+     "Boot RECOVERY"   "ro recovery nomodeset crypt_root=2721a6bb-36c5-4d4c-a604-2f7db99d1f87 root=/dev/mapper/sdb2_crypt" 
+     "Boot with minimal options"   "ro root=/dev/mapper/sdb2_crypt"
+</code> 
+
+Cependant, si vous décidez de dé-installer rEFInd puis de le réinstaller, il fabriquera alors automatiquement ce fichier.
+<note help>La saisie du mot de passe de sécurité peut devenir compliquée suite à un clavier pas nécessairement QWERTY et sans touche numérique. On ne dispose que de trois tentatives avant mise en sommeil de 60 secondes et de nouveau trois tentatives avant plantage de ubuntu (version 18.04.1)</note>
+
+**La structure de boot est aussi chiffrée pour plus de sécurité.**
+
+==== Relancer un Ubuntu qui s'est arrêté par hibernation ====
+
+Il suffit de choisir l'Ubuntu en question pour booter. La fonctionnalité "RESUME" sera automatiquement ajoutée.
+
+==== Options du noyau ====
+
+Lorsqu'il y a des problèmes de démarrage, il est possible de modifier dynamiquement la première ligne.
+
+En effet dans certains cas, il peut être nécessaire d'ajouter manuellement l'option ou les options manquantes. Cette possibilité concerne en particulier [[https://doc.ubuntu-fr.org/kernel#exemples_de_parametres_pour_le_noyau_linux|ces options]].
+
+Pour cela, la première fois, il est nécessaire de modifier la première ligne qui est proposée pour mettre l'option en début de ligne.
+
+Par la suite, ce serait pénible de toujours refaire cette même manipulation. Pour éviter cela, il est possible de mémoriser l'option voulue de la façon suivante :
+
+Lorsque l'instance est opérationnelle, utilisez votre éditeur de texte favori pour modifier le fichier ''/boot/refind_linux.conf'' et ajoutez ce qui manque au début de la première ligne. Par exemple :
+<code>"Boot with standard options" "ro nomodeset modprobe.blacklist=nouveau acpi=off root=UUID=7d0360b4-ed6a-4617-9f5d-30890418ef82"</code>
+
+==== Mode recovery ====
+
+Utilisez votre éditeur de texte favori pour modifier le fichier ''/boot/refind_linux.conf'', et ajoutez une ligne pour simplifier le choix du démarrage en mode recovery, par exemple :
+<code>"Boot en mode recovery" "recovery nomodeset ro root=UUID=7d0360b4-ed6a-4617-9f5d-30890418ef82"</code>
+
+<note help>Si vous décidez de dupliquer la partition contenant l'%%OS%% et de changer changer son UUID, il est impératif de mettre à jour ce fichier ou de le supprimer, sinon **rEFInd** essayera de booter à partir de l'UUID erroné décrit dans cette table.</note>
+
+L'option de démarrage en mode recovery n'existe pas de façon standard. Cependant il est possible de l'utiliser. Voici la procédure à suivre :
+  * Sélectionner le noyau que vous souhaitez utiliser.
+  * Lire en bas de l'écran la liste des touches possibles à utiliser pour modifier le noyau. Par exemple F2.
+  * Appuyer sur la touche F2.
+  * Constater qu'on dispose d'une grille de choix.
+  * Choisir le démarrage normal.
+  * Appuyer de nouveau sur la touche F2.
+  * Constater que la ligne qui s'affiche commence par "ro blablabla...."
+  * Se positionner et modifier pour que la ligne devienne " ro recovery nomodeset blabla....."
+  * Se positionner tout à la fin de la ligne. Ne pas rester sur nomodeset car la modification ne sera pas prise en compte!
+  * Faire entrée pour lancer le boot.
+Aux dernières nouvelles, le concepteur va livrer l'option recovery.
+<note important>La version Ubuntu 19.10 “Eoan Ermine” inclut cette option    couplée à l'option NOMODESET</note>
+
+==== Options moins fréquentes ====
+  * Il est possible de choisir de vouloir booter tel ou tel OS automatiquement en fonction d'un créneau horaire (En fonction des jours n'est pas possible!).
+
+Cet exemple permet booter le 8ème OS de la liste, sauf entre 8 heures et midi puis entre 14 heures et 18 heures 30 où cela bootera Windows. Entre midi et 14 heures, cela bootera le premier de la liste et entre 21 heures 45 et 23 heures 15, cela bootera le dernier qui avait été lancé auparavant.
+<code>
+default_selection 8
+default_selection Microsoft 8:00 12:00
+default_selection 1 12:00 14:00
+default_selection Microsoft 14:00 18:30
+default_selection +  21:45 23:15
+</code>
+
+  * Il est aussi possible de faire des menus très personnalisés. Ce n'est pas si facile que cela. A titre d'exemple:
+
+
+    menuentry "Installer Windows edition familliale " {
+    icon \EFI\refind\icons\os_win.png
+    volume "INSTWIN1607"
+    ostype "Windows" 
+    loader \EFI\Boot\bootx64.efi 
+    }
+
+    menuentry "ubuntu" {
+    icon     /EFI/refind/icons/os_linuxmint.png
+    volume   ubuntu1904
+    loader   /boot/vmlinuz-5.0.0-13-generic 
+    initrd    /boot/initrd.img-5.0.0-13-generic 
+    options   "root=UUID=241d5f72-5e3a-44db-8715-b11b2cf78dd2 rw "
+    }
+
+
+  * Il est aussi possible que l'EFI, malgré le secure boot désactivé, interdise la modification de la NVRAM.
+
+Dans ce contexte, il faut positionner l'option use_nvram sur false, off ou 0 (seulement disponible à partir de la version 19.04). 
+
+==== Utiliser rEFInd pour installer un autre O.S. sans utiliser une clé USB ====
+
+  * Il est possible de demander l'installation d'une version d'Ubuntu. Pour cela, il faut télécharger la version voulue, créer une partition **EXT4** de 2 Go environ, ouvrir le fichier téléchargé avec l'application monteur d'image disque et copier/coller les répertoires trouvés dans la partition nouvellement créée ce qui nécessite d'avoir le droit d'écrire dedans. Le lancement proposé sera l'équivalent de "essayer avant d'installer".
+
+
+  * Il est possible de demander l'installation d'une version de Windows . Pour cela, il faut télécharger la version voulue, créer une partition **FAT32** de 5 Go environ, ouvrir le fichier téléchargé avec l'application monteur d'image disque et copier/coller les répertoires trouvés dans la partition nouvellement créée ce qui nécessite d'avoir le droit d'écrire dedans. Le lancement proposé est celui de l'installateur Microsoft.
+
+
+==== Booter une installation Ubuntu 32 bits avec un rEFInd 64 bits ====
+
+Cela ne semble pas possible.
+
+==== Booter avec une installation Windows bridée ====
+<note tip>Il est possible d'utiliser un [[https://forum.ubuntu-fr.org/viewtopic.php?pid=22435128#p22435128|script]] disponible dans le forum.</note>
+
+ L'installation de refind de façon classique a été faite. Cependant des problèmes persistent car le bios EFI est bridé pour ne lancer que windows. 
+
+  * Il est possible que la commande de création de l'entrée rEFInd dans la NVRAM soit refusée.
+  * Il est possible que la commande de création de l'entrée rEFInd dans la NVRAM soit marquée "unknown".
+  * Il est possible que tout soit bon et pourtant c'est Windows qui mette en route!
+
+La solution classique est de se faire passer pour Windows. De déplacer le fichier de boot de Windows et de prendre en charge le lancement de ce nouveau fichier. 
+  - Booter avec le support d'installation et choisir essayer avant d'installer. Ouvrez un terminal.
+  - Identifier la partition de boot avec cette commande : **sudo blkid | grep vfat** Ne pas confondre avec celle du support USB!
+  - Monter la partition de boot avec une commande de ce style : **sudo mount -v /dev/XXXXXX /mnt**
+  - Par prudence, sauver le fichier de boot de windows avec cette commande : **sudo cp -v /mnt/efi/Microsoft/Boot/bootmgfw.efi /mnt/efi/Microsoft/Boot/bootmgfw$(date +"-%Y-%m-%d-%H-%M-%S").efi**
+  - Ouvrir le fichier de paramétrage avec cette commande : **sudo nano /mnt/efi/refind/refind.conf**
+  - Y insérer les lignes suivantes:
+<code>menuentry "Windows 10" {
+    icon \EFI\refind\icons\os_win.png
+    loader \EFI\Microsoft\Boot\bkbootmgfw.efi
+}</code>
+  - Sauvegarder le fichier et quitter nano.
+  - Mettre la structure de boot de refind dans la structure de boot de windows avec cette commande: **sudo cp -Rv /mnt/efi/refind/* /mnt/efi/Microsoft/Boot**
+  - Mettre le fichier de boot de windows à l'endroit prévu par refind avec cette commande: **sudo cp -v /mnt/efi/Microsoft/Boot/bootmgfw.efi /mnt/efi/Microsoft/Boot/bkbootmgfw.efi**
+  - Mettre le fichier de boot de refind à la place de celui de windows avec cette commande: **sudo cp -v /mnt/efi/Microsoft/Boot/refind_x64.efi /mnt/efi/Microsoft/Boot/bootmgfw.efi**
+  - Quitter le support d'installation et booter.
+
+Lorsque Windows fera une grosse mise à jour, il se remettra prioritaire. Il faudra de nouveau rectifier en refaisant uniquement les deux dernières commandes.
+
+==== Détecter d'autres OS installés sur des partitions BTRFS ====
+
+Il faut activer l'option permettant de le faire.
+
+Voir une description en anglais dans le paragraphe **Troubleshooting** de cette [[https://wiki.archlinux.org/index.php/REFInd|documentation (pour ArchLinux)]].
+
+<note help>Ce détail n'est pas développé ici, car il est extrêmement rare qu'une installation sur ce type de partition existe en dehors de quelques utilisateurs avancés, qui seront bien capables de lire la documentation en anglais.</note>
+
+===== Installations ultérieures =====
+
+==== Installation d'Ubuntu ====
+
+Une nouvelle installation d'Ubuntu, faite sans précaution, installerait automatiquement son logiciel de boot (GRUB). Cela est inutile et même gênant car il se mettrait prioritaire. Pour éviter cet effet indésirable, il ne faut pas lancer l'installation d'Ubuntu en cliquant sur l'icône qui symbolise l'installation.
+
+L'installation sera simplement lancée avec la commande suivante:
+  ubiquity -b
+
+L'option indique de ne pas installer de bootloader.
+
+==== Installation de Windows ====
+
+L'ordinateur dispose de rEFInd et d'Ubuntu. Vous désirez installer Windows ou une nouvelle version de Windows. Rien de plus simple.
+
+Sous Ubuntu :
+  * Récupération d'une version de windows dans son site de téléchargement.
+  * Création d'une partition NTFS d'une taille de 5 Go (pas de format FAT car un fichier dépasse 4 Go). Y mettre une étiquette pour reconnaissance facile.
+  * Ouverture de cette partition avec l'application **disques**.
+  * Ouverture du fichier téléchargé en choisissant l'utilitaire de montage d'image disque.
+  * Transfert à la souris des répertoires et fichiers présents (8) .
+  * Nouveau boot.
+
+Sous rEFInd :
+Choisir le fichier de boot de la partition NTFS. Il ne reste plus qu'à suivre les consignes d'installation de cet %%OS%%.
+ 
+===== Voir aussi =====
+  * [[grub|]], un chargeur de boot alternatif à rEFInd
+  * [[tutoriel:remplacer_grub_par_refind|Remplacer grub par Refind]]
+
+===== Liens externes =====
+
+  * (en) [[http://www.rodsbooks.com/refind/getting.html|Le site officiel de rEFind]]
+  * (en) [[http://www.rodsbooks.com/refind/installing.html|Procédure détaillée d'installation]]
+  * (en) [[http://www.rodsbooks.com/refind/installing.html#packagefile|Procédure détaillée pour ubuntu]]
+  * (en) [[https://launchpad.net/~rodsmith/+archive/ubuntu/refind|Le logiciel rEFind]]
+  * (en) [[http://refit.sourceforge.net/|Site de Refit, dont refind est le fork]]
+
+-----
+
+//Contributeurs : bougron, roschan
+, ...//

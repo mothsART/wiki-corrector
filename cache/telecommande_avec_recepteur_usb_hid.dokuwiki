@@ -1,0 +1,445 @@
+
+
+Karmic, matériel, télécommande, BROUILLON 
+
+===== Objet =====
+
+
+Grâce à la réalisation proposée, l'utilisateur pourra commander la lecture de musique et de vidéo, avec Totem par exemple, à l'aide d'une télécommande IR de salon (TV, DVD, ….) .
+
+La télécommande utilisée pour ce tutoriel est une Thomson RCT 311 SB1G mais l'utilisation de la plupart des télécommandes de différents protocoles (RC5, RC6, …) sont possibles avec des adaptations.
+
+=====  Pré-requis =====
+
+
+
+Les pré-requis sont nécessaires pour la suite des opérations sont :
+
+  * Disposer des droits d'administration (sudo).
+  * Disposer d'une connexion à Internet configurée et activée.
+ 
+
+=====  Réalisation matérielle =====
+ 
+
+
+La réalisation matérielle du récepteur USB HID  à base d'un microcontrôleur PIC Microchip est décrite sur le site :
+http://pagesperso-orange.fr/IR.solutions/  
+
+Le montage est préprogrammé pour une télécommande avec un protocole RC5. 
+
+Vérifiez le bon fonctionnement du récepteur avec sa télécommande :
+  * La base USB branchée sur un port USB, la Led verte doit s'allumer à chaque appui sur une touche de la télécommande.
+  * le récepteur doit être identifié par Linux.
+
+Pour vérifier la prise compte de ce matériel par Linux, utilisez la commande lsusb .
+
+Terminal : 
+
+    alain@alain-desktop:~$ lsusb
+    Bus 002 Device 015: ID 1234:2009 
+
+Le matériel est ici reconnu : ID 1234:2009.
+
+<note>Éventuellement, déclarez votre télécommande dans le fichier /var/lib/misc/usb.ids .
+
+Terminal :
+
+    alain@alain-desktop:~$ sudo gedit /var/lib/misc/usb.ids
+
+l'application Gedit s'ouvre, insérez alors en respectant l'ordre des produits :
+
+Gedit :
+
+    1234 Personnal Remote
+              USB IR DECODER
+
+Enregistrez ce fichier usb.ids .
+
+Vérifiez de nouveau la présence de votre télécommande :
+
+Terminal :
+
+    alain@alain-desktop:~$ lsusb 
+    Bus 002 Device 015: ID 1234:2009 Personal Remote USB IR DECODER 
+
+Parfait, le récepteur est identifié par Linux.
+</note>
+
+=====  Installation logicielle =====
+ 
+
+
+Ce récepteur est un récepteur HID qui n'est pas supporté en natif par LIRC.
+
+Un 'mappeur' générique HID a été développé par Coldsource et décrit sur le site de XBMC : http://forum.xbmc.org/showthread.php?t=88560 . Il peut convertir n'importe quel signal HID à un événement clé. 
+
+Le mode opératoire détaillé ci-dessous est repris de cet auteur et adapté ici à ce matériel.
+
+Plusieurs étapes sont nécessaires :
+  *   téléchargement du logiciel
+  *   installation du logiciel
+  *   apprentissage des événements HID
+  *   vérification du bon fonctionnement
+
+====  Téléchargement  ====
+
+
+Téléchargez le logiciel hid_mapper_beta.tar.gz sur le répertoire de votre choix à l'adresse suivante : 
+
+[[http://www.coldsource.net/hid_mapper_beta.tar.gz]] 
+
+Attention de bien télécharger la dernière version.
+
+Terminal :
+
+    alain@alain-desktop:~$ cd /home/alain/Documents
+    alain@alain-desktop:~/Documents$ wget http://www.coldsource.net/hid_mapper_beta.tar.gz
+    --2011-03-24 10:29:11--  http://www.coldsource.net/hid_mapper_beta.tar.gz
+    Résolution de www.coldsource.net... 91.121.16.105
+    Connexion vers www.coldsource.net|91.121.16.105|:80... connecté.
+    requête HTTP transmise, en attente de la réponse... 200 OK
+    Longueur: 26735 (26K) [application/x-gzip]
+    Enregistrement vers: `hid_mapper_beta.tar.gz'
+    
+    100%[======================================>] 26 735       123K/s   ds 0,2s 
+    
+    2011-03-24 10:29:11 (123 KB/s) - « hid_mapper_beta.tar.gz » sauvegardé [26735/26735]   
+
+ ==== Installation ==== 
+
+
+Ensuite, installez le hid_mapper. Pour cela, placez l'archive sur répertoire de votre choix et décompressez l'archive sur ce répertoire.
+
+Terminal :
+
+    alain@alain-desktop:~/Documents$ tar -zxvf hid_mapper_beta.tar.gz
+    hid_mapper_beta/
+    hid_mapper_beta/main.cpp
+    hid_mapper_beta/include/
+    hid_mapper_beta/include/uinput_device.h
+    hid_mapper_beta/include/config.h
+    hid_mapper_beta/include/EventMapping.h
+    hid_mapper_beta/include/hid.h
+    hid_mapper_beta/include/signals.h
+    hid_mapper_beta/include/Keys.h
+    hid_mapper_beta/include/keys_definition.h
+    hid_mapper_beta/include/MapReader.h
+    hid_mapper_beta/include/Exception.h
+    hid_mapper_beta/include/MapReaderMouse.h
+    hid_mapper_beta/include/LinkedList.h
+    hid_mapper_beta/EventMapping.cpp
+    hid_mapper_beta/uinput_device.c
+    hid_mapper_beta/hid.c
+    hid_mapper_beta/signals.c
+    hid_mapper_beta/Keys.cpp
+    hid_mapper_beta/asus-spinel.map
+    hid_mapper_beta/MapReader.cpp
+    hid_mapper_beta/Exception.cpp
+    hid_mapper_beta/LICENSE
+    hid_mapper_beta/MapReaderMouse.cpp
+    hid_mapper_beta/Makefile
+    hid_mapper_beta/keys_definition.cpp
+
+
+Ensuite allez au répertoire hid_mapper, par exemple : cd /home/...../hid_mapper_beta. Ensuite, tapez 'make' pour compiler le pilote. 
+
+Terminal :
+
+    alain@alain-desktop:~/Documents$ cd /home/alain/Documents/hid_mapper_beta
+    alain@alain-desktop:~/Documents/hid_mapper_beta$ sudo make
+    [sudo] password for alain: 
+    g++ -c -Iinclude main.cpp
+    gcc -c -Iinclude uinput_device.c
+    gcc -c -Iinclude hid.c
+    gcc -c -Iinclude signals.c
+    g++ -c -Iinclude keys_definition.cpp
+    g++ -c -Iinclude EventMapping.cpp
+    g++ -c -Iinclude Keys.cpp
+    g++ -c -Iinclude Exception.cpp
+    g++ -c -Iinclude MapReader.cpp
+    g++ -c -Iinclude MapReaderMouse.cpp
+    g++  main.o uinput_device.o hid.o signals.o keys_definition.o EventMapping.o Keys.o Exception.o MapReader.o MapReaderMouse.o -o hid_mapper
+
+
+Enfin, tapez ./hid_mapper --list-devices pour voir si votre appareil est reconnu. Par exemple, j'ai : 
+
+Terminal :
+
+    alain@alain-desktop:~/Documents/hid_mapper_beta$ sudo ./hid_mapper --list-devices
+    Found HID device at /dev/hidraw0 
+    Manufacturer : Padix Co. Ltd. 
+    Product name : Manette de jeu 
+   
+    Found HID device at /dev/hidraw1 
+    Manufacturer : MICROCHIP
+    Product name : USB IR DECODER
+
+
+====   Apprentissage des événements HID  === 
+
+
+Ensuite, vous devez utiliser hid_mapper en mode apprentissage pour capturer les événements HID : 
+./hid_mapper --learn --manufacturer 'MICROCHIP' --product 'USB IR DECODER' --map ' '
+
+
+Si vous appuyez sur la touche "OK" de la télécommande par exemple vous recevrez une suite d'octets comme ci-dessous :
+
+
+Terminal :
+
+    alain@alain-desktop:~/Documents/hid_mapper_beta$ ./hid_mapper --learn --manufacturer 'MICROCHIP' --product 'USB IR DECODER' --map ''
+    Found HID device at /dev/hidraw0 
+    02 0c 00 00 00 00 c0 30 
+
+Tapez CTRL C pour terminer.
+
+A ce premier événement « touche OK enfoncée" correspond le code événement. Capturez tous les événements dont vous avez besoin et reliez les à une clé utilisable par Linux (KEY_UP par exemple) afin d'écrire un fichier 'map' de votre télécommande. Pour une meilleure compréhension, le mapping obtenu pour ma télécommande et le fichier rc5_thomson_rct_311.map créé à partir de là sont donnés en annexe.
+
+Pour une autre télécommande ou pour une autre utilisation, la liste des touches possibles (KEY_UP par exemple) peut être trouvée dans /usr/include/linux/input.h. 
+
+ ==== Vérification du bon fonctionnement  ====
+
+
+La dernière étape consiste à exécuter le 'mappeur' : 
+
+Nota : l'option - -disable-repetition évite la répétition des touches. 
+
+Terminal : 
+
+    alain@alain-desktop:~/Documents/hid_mapper_beta$ sudo ./hid_mapper --manufacturer 'MICROCHIP' --product 'USB IR DECODER' --disable-repetition --map 'rc5_thomson_rct_311.map' 
+    Loaded map file rc5_thomson_rct_311.map 
+    Found HID device 
+    Opened HID interface on /dev/hidraw1 
+    Generic USB mapper driver setup
+
+À ce stade, la télécommande devrait fonctionner : appuyez sur la touche 1 de votre télécommande, le lien avec KEY_1 devrait faire apparaître 1 (ou & si votre clavier est en majuscule) sur terminal.
+
+<note>Si vous avez le message suivant (pour ma part, il apparaît à chaque reboot) :
+
+Terminal :
+
+    alain@alain-desktop:~/Documents/hid_mapper_beta$ sudo ./hid_mapper --manufacturer 'MICROCHIP' --product 'USB IR DECODER' --disable-repetition --map 'rc5_thomson_rct_311.map' 
+    Loaded map file rc5_thomson_rct_311.map 
+    Found HID device 
+    Unable to setup event device
+
+Vérifiez si 'uinput' est installé.
+
+Terminal :
+
+    alain@alain-desktop:~/Documents/hid_mapper_beta$ ls -l /dev/uinput 
+    ls: ne peut accéder /dev/uinput: Aucun fichier ou dossier de ce type
+
+Dans ce cas il faut l'installer par la commande modprobe :
+
+Terminal :
+
+    alain@alain-desktop:~/Documents/hid_mapper_beta$ sudo modprobe uinput
+
+
+Une vérification :
+
+Terminal :
+
+    alain@alain-desktop:~/Documents/hid_mapper_beta$ ls -l /dev/uinput
+    crw-r----- 1 root root 10, 223 2011-03-15 10:30 /dev/uinput
+
+
+Cette fois-ci, vous devriez obtenir un bon fonctionnement :
+
+Terminal :
+
+    alain@alain-desktop:~/Documents/hid_mapper_beta$ sudo ./hid_mapper --manufacturer 'MICROCHIP' --product 'USB IR DECODER' --map 'rc5_thomson_rct_311.map' 
+    Loaded map file rc5_thomson_rct_311.map 
+    Found HID device 
+    Opened HID interface on /dev/hidraw1 
+    Generic USB mapper driver setup
+
+C'est OK</note>
+
+
+<note tip>Comme le pilote hidraw est générique, ce 'mappeur' devrait fonctionner avec n'importe quel récepteur HID, même si elle n'est pas une télécommande. HID est utilisé pour les claviers, les souris, les manettes de jeu ... </note>
+
+ ===== Script de lancement =====
+
+
+Pour vous éviter d'écrire la longue ligne de commande précédente, vous pouvez utiliser ce petit script à créer avec Gedit : script_remote1.sh et à placer dans le répertoire hid_mapper_beta (à adapter en fonction de votre configuration) :
+
+Gedit :
+
+    #!/bin/bash 
+    # script_remote version 1 
+    # 18/03/2011 
+    sudo modprobe uinput 
+    cd /home/alain/Documents/hid_mapper_beta 
+    sudo ./hid_mapper --manufacturer 'MICROCHIP' --product 'USB IR DECODER' --disable-repetition --map 'rc5_thomson_rct_311.map' 
+    exit 0
+
+Ainsi pour profiter de votre télécommande :
+  * branchez votre récepteur USB
+  * lancez juste le script avec le terminal sur son emplacement
+
+Terminal :
+
+    alain@alain-desktop:~$ cd /home/alain/Documents/hid_mapper_beta 
+
+    alain@alain-desktop:~/Documents/hid_mapper_beta$ bash script_remote1.sh 
+    [sudo] password for alain: 
+    Loaded map file rc5_thomson_rct_311.map 
+    Found HID device 
+    Opened HID interface on /dev/hidraw1
+    Generic USB mapper driver setup 
+
+Pour arrêter , faites simplement CRTL C dans le terminal.
+
+
+
+===== Annexes =====
+
+
+Annexe 1 : Mapping avec la télécommande Thomson RCT 311 SB1G et la clé MICROCHIP USB IR DECODER : 
+
+Code trouvée par le 'mappeur'  --> Touche de la télécommande
+
+    02 0c 00 00 00 00 50 b8 pwr on 
+    02 0c 00 00 00 00 50 fc pwr off 
+    02 0c 00 00 00 00 50 20 radio 
+    02 0c 00 00 00 00 50 f2 dec  
+    02 0c 00 00 00 00 20 f2 dvd 
+    02 0c 00 00 00 00 c0 f4 tv 
+    02 0c 00 00 00 00 c0 94 vol_up 
+    02 0c 00 00 00 00 c0 54 vol_down 
+    02 0c 00 00 00 00 c0 a4 ch_up 
+    02 0c 00 00 00 00 c0 e4 ch_down 
+    02 0c 00 00 00 00 c0 a0 mute  
+    02 0c 00 00 00 00 c0 14 back 
+    02 0c 00 00 00 00 c0 7c  exit 
+    02 0c 00 00 00 00 c0 8c  menu 
+    02 0c 00 00 00 00 c0 d0  up 
+    02 0c 00 00 00 00 c0 b0  down 
+    02 0c 00 00 00 00 c0 6c  left 
+    02 0c 00 00 00 00 c0 ec  right 
+    02 0c 00 00 00 00 c0 30 ok 
+    02 0c 00 00 00 00 c0 9c red/open.close 
+    02 0c 00 00 00 00 c0 dc green/zoom/list 
+    02 0c 00 00 00 00 c0 1c yellow/info 
+    02 0c 00 00 00 00 c0 a8 blue/guide 
+    02 0c 00 00 00 00 c0 78 purple/text 
+    02 0c 00 00 00 00 c0 00 1 
+    02 0c 00 00 00 00 c0 10 2 
+    02 0c 00 00 00 00 c0 08 3 
+    02 0c 00 00 00 00 c0 80 4
+    02 0c 00 00 00 00 c0 90 5
+    02 0c 00 00 00 00 c0 88 6
+    02 0c 00 00 00 00 c0 40 7
+    02 0c 00 00 00 00 c0 50 8
+    02 0c 00 00 00 00 c0 48 9
+    02 0c 00 00 00 00 c0 70 0
+    02 0c 00 00 00 00 c0 18 av
+    02 0c 00 00 00 00 c0 04 rev
+    02 0c 00 00 00 00 c0 84 play
+    02 0c 00 00 00 00 c0 c4 fwd
+    02 0c 00 00 00 00 c0 34 rec
+    02 0c 00 00 00 00 c0 b4 stop
+    02 0c 00 00 00 00 c0 74 pause
+    02 0c 00 00 00 00 c0 c0 again
+    02 0c 00 00 00 00 c0 68 live
+    02 0c 00 00 00 00 c0 60 advance
+
+
+Ce fichier est à compléter de la même façon avec avec c0 (pour tv) remplacé par 50 (pour dvd) et par 20 (pour dec).
+
+
+----
+
+
+Annexe 2 Fichier rc5_thomson_rct_311.map à éditer avec Gedit
+    020c000000002094:KEY_VOLUMEUP 
+    020c000000002054:KEY_VOLUMEDOWN 
+    020c0000000020a0:KEY_MUTE 
+    020c0000000020d0:KEY_UP 
+    020c0000000020b0:KEY_DOWN 
+    020c00000000206c:KEY_LEFT 
+    020c0000000020ec:KEY_RIGHT 
+    020c000000002030:KEY_ENTER 
+    020c000000002000:KEY_1 
+    020c000000002010:KEY_2 
+    020c000000002008:KEY_3 
+    020c000000002080:KEY_4
+    020c000000002090:KEY_5 
+    020c000000002088:KEY_6 
+    020c000000002040:KEY_7 
+    020c000000002050:KEY_8 
+    020c000000002048:KEY_9 
+    020c000000002070:KEY_0 
+    020c000000002004:KEY_REWIND 
+    020c000000002084:KEY_PLAY 
+    020c0000000020c4:KEY_FORWARD 
+    020c000000002034:KEY_RECORD
+    020c0000000020b4:KEY_STOP
+    020c000000002074:KEY_PLAYPAUSE
+    020c000000005094:KEY_VOLUMEUP 
+    020c000000005054:KEY_VOLUMEDOWN 
+    020c0000000050a0:KEY_MUTE
+    020c0000000050d0:KEY_UP
+    020c0000000050b0:KEY_DOWN 
+    020c00000000506c:KEY_LEFT 
+    020c0000000050ec:KEY_RIGHT 
+    020c000000005030:KEY_ENTER
+    020c000000005000:KEY_1 
+    020c000000005010:KEY_2 
+    020c000000005008:KEY_3 
+    020c000000005080:KEY_4 
+    020c000000005090:KEY_5 
+    020c000000005088:KEY_6 
+    020c000000005040:KEY_7 
+    020c000000005050:KEY_8 
+    020c000000005048:KEY_9 
+    020c000000005070:KEY_0 
+    020c000000005004:KEY_REWIND 
+    020c000000005084:KEY_PLAY 
+    020c0000000050c4:KEY_FORWARD 
+    020c000000005034:KEY_RECORD 
+    020c0000000050b4:KEY_STOP 
+    020c000000005074:KEY_PLAYPAUSE 
+    020c00000000c094:KEY_VOLUMEUP 
+    020c00000000c054:KEY_VOLUMEDOWN 
+    020c00000000c0a0:KEY_MUTE  
+    020c00000000c0d0:KEY_UP 
+    020c00000000c0b0:KEY_DOWN 
+    020c00000000c06c:KEY_LEFT 
+    020c00000000c0ec:KEY_RIGHT 
+    020c00000000c030:KEY_ENTER 
+    020c00000000c000:KEY_1 
+    020c00000000c010:KEY_2 
+    020c00000000c008:KEY_3 
+    020c00000000c080:KEY_4 
+    020c00000000c090:KEY_5 
+    020c00000000c088:KEY_6 
+    020c00000000c040:KEY_7 
+    020c00000000c050:KEY_8 
+    020c00000000c048:KEY_9 
+    020c00000000c070:KEY_0 
+    020c00000000c004:KEY_REWIND 
+    020c00000000c084:KEY_PLAY
+    020c00000000c0c4:KEY_FORWARD 
+    020c00000000c034:KEY_RECORD 
+    020c00000000c0b4:KEY_STOP 
+    020c00000000c074:KEY_PLAYPAUSE
+
+----
+
+//Contributeurs principaux : Alain_the_cat//
+
+//Ce tutoriel est basée sur  l'adaptation de deux réalisations 
+ * partie matérielle : 
+  * **(fr)** [[ http://pagesperso-orange.fr/IR.solutions/]] 
+
+ * Partie logicielle
+* **(en)** [[http://forum.xbmc.org/showthread.php?t=88560]]  par Coldsource//
+
+
+
+
+

@@ -1,0 +1,310 @@
+
+{{tag>tutoriel}}
+----
+====== I) Installation des paquets nécessaires : ======
+
+
+<code>
+sudo apt-get install ltsp-server-standalone
+sudo apt-get install openssh-server
+</code>
+
+**
+Si serveur dhcp présent sur le réseau (sans standalone) puis sautez toutes les étapes pour suivre celles à partir V:**
+
+
+<code>
+sudo apt-get install ltsp-server
+sudo apt-get install openssh-server
+</code>
+
+====== II) Configuration des interfaces : ======
+
+===== 1) Network interfaces =====
+
+<code>
+gksudo gedit /etc/network/interfaces
+</code>
+
+Remplacez le contenu de votre fichier par celui-ci ou adaptez le votre.
+
+<code>
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet static
+address 192.168.0.1
+netmask 255.255.255.0
+broadcast 192.168.0.255
+gateway 192.168.0.1
+</code>
+
+==== 2) DHCP3-server ====
+
+
+<code>
+gksudo gedit /etc/default/dhcp3-server
+</code>
+
+Remplacez le contenu de votre fichier par celui-ci ou adaptez le votre, **eth0** correspond à votre carte réseau qui est-elle même reliée au client léger:
+
+<code>
+# Defaults for dhcp initscript
+# sourced by /etc/init.d/dhcp
+# installed at /etc/default/dhcp3-server by the maintainer scripts
+
+#
+# This is a POSIX shell fragment
+#
+
+# On what interfaces should the DHCP server (dhcpd) serve DHCP requests?
+#	Separate multiple interfaces with spaces, e.g. "eth0 eth1".
+INTERFACES="eth0"
+</code>
+
+
+
+
+
+====== IV) Activation DHCP: ======
+
+<code>
+gksudo gedit /etc/ltsp/dhcpd.conf
+</code>
+
+Remplacez le contenu de votre fichier par celui-ci ou adaptez le votre:
+
+<code>
+# 
+# Default LTSP dhcpd.conf config file. 
+# 
+authoritative; 
+subnet 192.168.0.0 netmask 255.255.255.0 { 
+range 192.168.0.3 192.168.0.27; 
+option domain-name "*"; 
+option domain-name-servers 192.168.0.1; 
+option broadcast-address 192.168.0.255; 
+option routers 192.168.0.1; 
+option subnet-mask 255.255.255.0; 
+option root-path "/opt/ltsp/i386"; 
+if substring( option vendor-class-identifier, 0, 9 ) = "PXEClient" { 
+filename "/ltsp/i386/pxelinux.0"; 
+} else { 
+filename "/ltsp/i386/nbi.img"; 
+} 
+}
+</code>
+
+
+
+====== V) Activation internet uniquement si deux carte réseaux sont présentes (wifi+ethernet par exemple) ======
+
+
+**Attention**: Aucun autre serveur DHCP ne doit être sur le réseau des clients. Si toutefois on veut ajouter l’accès Internet via une box il faudra la connecter à une 2e carte réseau sur le serveur. Ensuite il faudra activer le routage:
+
+<code>
+echo "1" > /proc/sys/net/ipv4/ip_forward
+</code>
+
+
+
+====== VI) Redémarrer les interfaces serveur: ======
+
+
+<code>
+sudo /etc/init.d/networking restart
+sudo /etc/init.d/dhcp3-server restart
+</code>
+
+Attention, pour le 11.04, les commandes sont les suivantes:
+<code>
+sudo /etc/init.d/networking restart
+sudo service isc-dhcp-server restart
+</code>
+
+====== VII) Construction de l'image serveur: ======
+
+<code>
+sudo ltsp-build-client
+sudo apt-get update
+sudo apt-get upgrade
+sudo ltsp-update-kernels
+sudo ltsp-update-image
+sudo ltsp-update-sshkeys
+</code>
+
+
+
+====== IX) Préparation de la machine cliente pour carte pxe: ======
+
+Pour que la machine cliente puisse démarrer depuis le réseau il faut paramétrer correctement le BIOS du client. Il faut activer la fonction de démarrage à partir du réseau. Cette fonction n’est pas accessible au même endroit selon le BIOS mais la plupart du temps il faut activer les options Onboard Lan et Onboard Lan Boot ROM. Ensuite dans le menu de sélection des périphériques de boot il faut sélectionner LAN pour le First Boot Device. Attention il se peut que redémarrage soit nécessaire entre ces deux réglages.
+
+{{http://pixupload.free.fr/upload/6jzvt4_4580902434_ec2edab4a6_z.jpg}}
+
+On redémarre ensuite la machine et si celle-ci est correctement paramétrée elle va démarrer et exécuter le système. On peut voir la machine cliente récupérer une adresse IP ainsi qu’une passerelle. La passerelle lui indique qu’elle doit télécharger le fichier pxelinux.0. Ce fichier contient les informations au boot par le réseau.
+
+Voilà maintenant tout PC relié à la carte réseau du serveur via un switch ou autre démarrera par le réseau en client LTSP.
+
+
+====== X) Création disquette démarrage pour carte non pxe ======
+
+
+Pour les cartes PCI, il faut choisir le pilote correspondant exactement à l'identifiant PCI de la carte et de son fabricant. 
+La plupart du temps, on peut facilement récupérer ces informations, car elles sont imprimées sur la carte et correspondent à la description du pilote. Mais il arrive qu'on ne puisse pas les retrouver. 
+Dans ce cas, si le client léger est équipé d'un lecteur de disquette, on peut y insérer une disquette tomsrtbt (Tom's Root Boot). Ou bien, si le client léger dispose d'un lecteur CD-ROM, on peut démarrer avec un CD Linux, comme Knoppix. S'il n'est pas possible de lancer Linux sur le client léger pour découvrir le type de le carte réseau, le seul moyen restant est d'installer la carte réseau sur une machine où cela est possible. 
+
+Lorsque Linux est chargé, vous pouvez alors utiliser la commande lspci avec l'option -n. 
+
+<code>
+[root@jamlap root]# lspci -n
+0000:00:00.0 Class 0600: 8086:7190 (rev 03)
+0000:00:01.0 Class 0604: 8086:7191 (rev 03)
+0000:00:03.0 Class 0607: 104c:ac1c (rev 01)
+0000:00:03.1 Class 0607: 104c:ac1c (rev 01)
+0000:00:07.0 Class 0680: 8086:7110 (rev 02)
+0000:00:07.1 Class 0101: 8086:7111 (rev 01)
+0000:00:07.2 Class 0c03: 8086:7112 (rev 01)
+0000:00:07.3 Class 0680: 8086:7113 (rev 03)
+0000:00:08.0 Class 0401: 125d:1978 (rev 10)
+0000:01:00.0 Class 0300: 1002:4c4d (rev 64)
+0000:06:00.0 Class 0200: 8086:1229 (rev 09)
+</code>
+
+Dans l'exemple ci-dessus, lspci affiche une ligne pour chaque carte PCI installée dans la machine. La seule ligne qui compte concerne les composants de classe Class 0200. 
+0000:06:00.0 Class 0200: 8086:1229 (rev 09)
+Les identifiants PCI recherchés sont 8086:1229. Le premier champ 8086 correspond à l'identifiant du fabricant. Dans cet exemple, il s'agit d'Intel Corporation. Le deuxième champ, 1229 est l'identifiant de la carte, et il s'agit ici d'une EtherExpress 100 card. NDLT : Voir aussi lspci avec l'option -v. 
+Les identifiants récupéraient se rendre sur [[http://www.rom-o-matic.net/gpxe/gpxe-git/gpxe.git/contrib/rom-o-matic/]] puis choisir le NIC correspondant à la carte.
+Une fois sauvegardé sur le disque dur (get image), il faut ensuite copier le bootrom (gpxe-1.0.1+xxx.dsk) sur une disquette. Insérez une disquette dans le lecteur et lancez la commander suivante : 
+
+<code>
+dd if=Etherboot_Image of=/dev/fd0 
+</code>
+
+                 * Si vous avez besoin d'écrire l'image disquette à partir d'un poste Windows, vous pouvez utiliser RawWrite : [[http://grpnov.unige.ch/divdocs/Doc-Aepli/RawWrite.html]].
+
+__
+
+====== XI)  Configuration avancé optionnelle (lts.conf): ======
+
+
+
+===== 1) LTS.CONF =====
+
+
+Le fichier lts.conf est utilisé pour la configuration des paramètres des clients légers LTSP. Pour les versions de LTSP inférieures à 5.0.39, il est situé dans chaque environnement $CHROOT/etc/lts.conf (par défaut $CHROOT=/opt/ltsp/i386). Pour la version 5.0.39 et supérieur, le fichier se trouve dans le répertoire du TFTP lié à l'environnement /var/lib/tftpboot/ltsp/<arch> (par défaut <arch>=i386). Cette différence de localisation s'explique par le passage de NFS à NBD comme système de fichier monté sur les clients.
+
+Quel que soit son emplacement, ce fichier devra être protégé au niveau lecture pour éviter que n'importe quel utilisateur puisse lire les informations inscrites, surtout si vous utilisez les options d'ouverture automatique de ldm. 
+
+À savoir aussi : ce fichier, dans les versions 5.0.39 et plus, est envoyé en clair via tftp en UDP sur le réseau.
+
+<code>
+################
+# Section défaut, elle est 
+# commune à tous les clients
+################
+[default]
+    SERVER=192.168.0.1
+    X_COLOR_DEPTH=16
+    LOCALDEV=True
+    SOUND=True
+    NBD_SWAP=True
+    SYSLOG_HOST=server
+    XKBLAYOUT=fr
+
+################
+#[ADRESSE MAC]: Paramètre spécifique par client
+################
+[00:11:25:84:CE:BA]
+    XSERVER = vesa
+    X_MOUSE_DEVICE=/dev/ttyS0
+    X_MOUSE_PROTOCOL=intellimouse
+
+###############
+# Partage d'une imprimante par un client léger
+# (utilisation du terminal F7 en shell à la place 
+# d'une session X, permettant les réglages)
+###############
+[00:11:25:93:CF:00]
+    PRINTER_0_DEVICE=/dev/usblp0
+    SCREEN_07=shell
+
+###############
+# Le client exécutera un script 
+#après l'ouverture de session
+###############
+[00:11:25:93:CF:02]
+    LDM_REMOTECMD=/usr/bin/myloginscript
+</code>
+
+==== 2)Explication des options du lts.conf ====
+
+
+Le fichier se décompose en deux sections principales : une section commune à tous les clients légers [default] et une autre partie qui est la configuration qui sera utilisée pour chaque client individuellement. La deuxième section est facultative dans un environnement simple : avec des clients presque identiques seule la section [default] sera utile. Une option dans la section [default] peut être inversée dans la section d'une machine, exemple SOUND=True dans [default] active le son sur tous les clients, mais SOUND=False dans la section [00:11:25:93:CF:02] désactivera le son pour cette machine si nécessaire.
+
+=== a)Section [default]: ===
+
+
+
+Nous n'allons pas détailler toutes les options possibles car beaucoup ne sont que rarement utilisées. Reportez vous au Manuel d'Edubuntu pour avoir l'ensemble.
+
+  * SERVER : cette option sert à spécifier l'adresse IP du serveur LTSP. Elle n'est pas obligatoire si le serveur TFTP est sur le serveur LTSP, mais si vous avez plusieurs serveurs vous devez spécifier quel sera le serveur LTSP utilisé par le client.
+
+  * SYSLOG_HOST : spécifie l'adresse IP du serveur pour enregistrer les logs des clients. Si c'est votre serveur LTSP qui est utilisé mettez la valeur à "server" sinon indiquez l'adresse IP de votre serveur Syslog.
+
+  * NBD_SWAP : cela permet d'activer ou non le swap par le réseau sur le serveur LTSP, les valeurs sont "True" pour l'activation, "False" pour la désactivation. L'utilisation du swap est recommandée car si votre client n'a pas assez de mémoire pour l'ensemble des processus, le système peut devenir instable.
+
+  * LOCALDEV : cette option va activer la détection des périphériques disques. Elle est nécessaire si vous voulez utiliser les clés USB sur vos clients. Les valeurs sont "True" pour l'activer et "False" pour l'inverse.
+
+  * SOUND : active ou non le son pour les clients, valeur "True" ou "False"
+
+  * XKBLAYOUT : configure le clavier pour les clients au niveau de la session graphique valeur; Pour les claviers azerty choisir fr ; attention pour les sessions types "shell" cette valeur n'est pas utilisée.
+
+  * X_COLOR_DEPTH : fixe la profondeur de couleur pour la configuration graphique des clients. Valeur : 8, 16, 24 ou 32. Attention à ne pas mettre une valeur trop élevée car cela provoque un écran noir au lancement de la session graphique. La valeur 16 est fréquemment un bon compromis par rapport au besoin des clients.
+
+  * XSERVER : cette option est utile pour fixer la valeur du serveur graphique à utiliser. Par défaut la configuration du serveur xorg sur les clients se passe automatiquement, il y a une détection de la carte vidéo et une configuration optimisée en fonction des paramètres comme X_COLOR_DEPTH dans le lts.conf. Mais il arrive que certaines cartes ne soient pas faciles à détecter donc, afin d'éviter un crash du serveur X, vous pouvez fixer la valeur, par exemple ati, vesa, .... Pour connaître toutes les valeurs reportez-vous au manuel d'Edubuntu paragraphe "X-Windows Parameters".
+
+  * SCREEN_02, ...,SCREEN_07 : cette option vous permet de spécifier quel type de session sur tel terminal (Ctrl-Alt-F1 à Ctrl-Alt-F7). Par défaut le terminal F7 est pour la session graphique. Vous pouvez modifier ces paramètres en fonction de vos besoins pour activer ou non un shell de débuggage ou désactiver la session graphique sur un poste qui par exemple vous sert de machine pour partager une imprimante. Les valeurs possibles sont shell, ldm, sdm, startx, telnet. Mais les plus utiles/utilisées sont ldm et shell.
+<note tip>Dans le cas classique si vous faites des tests ou du dépannage fixez SCREEN_02=shell et SCREEN_07=ldm. Attention à ne pas oublier de fixer ldm sinon vous n'aurez que le shell. Ainsi vous aurez un shell "root" sur le client pour pouvoir analyser les problèmes éventuels. Attention par defaut le clavier sera en qwerty car les locales de root sont en "POSIX", pour passer en fr utilisez la commande "loadkeys fr".</note>
+
+  * PRINTER_0_DEVICE : permet d'activer une imprimante branchée sur un client léger et de la partager avec les autres clients via le serveur CUPS du serveur.
+
+    * X_MODE_0 = 800x600 permet de choisir la résolution
+
+
+
+=== b) Options spécifiques LDM : ===
+
+
+Si vous n'utilisez pas ldm pour le client les options suivantes ne seront pas actives.
+
+  * LDM_AUTOLOGIN=True : connecte automatiquement l'utilisateur décrit par les options LDM_USERNAME et LDM_PASSWORD. Attention, ce fichier est transmis en clair sur le réseau et il peut être impossible de déconnecter un tel compte...
+
+  * LDM_USERNAME : spécifie le nom d'utilisateur que le client devra utiliser pour une ouverture de session automatique. Le nom doit être un compte réel du serveur.
+
+  * LDM_PASSWORD : spécifie le mot de passe à utiliser pour l'ouverture automatique de session. Il faut le taper en clair et il doit être associé avec le nom utilisé pour LDM_USERNAME.
+
+  * LDM_ALLOW_GUEST=True : fait apparaitre un bouton "Login as Guest" sur l'écran de connection. Cliquer sur ce bouton connecte l'utilisateur décrit par les options LDM_USERNAME et LDM_PASSWORD.
+
+  * LDM_LANGUAGE : permet de fixer les locales de l'utilisateur connecté automatiquement avec les options ci-dessus.
+
+  * LDM_DIRECTX : quand on utilise ldm comme "Display Manager" les sessions sont cryptés via un tunnel ssh entre le serveur et le client. Le problème est que cela demande beaucoup de ressource donc en utilisant cette option vous limitez le cryptage à l'ouverture où le mot de passe sont transmis et le reste de la session ne sera pas crypté. L'utilisation dépendra de la sécurité de votre réseau.
+
+  * LDM_REMOTECMD : cette option permet de lancer un script après l'ouverture de session sur le client léger.
+
+
+====== XII) Sources: ======
+
+[[http://edin.no-ip.com/content/ltsp-ubuntu-intrepid-mini-howto]]
+
+[[http://brainstorms.in/?p=438]]
+
+[[http://www.gizeek.com/2010/05/08/tutoltsp-serveur-linux-et-clients-legers/]]
+
+[[http://technocollege.info/wp-content/uploads/file/divers/Reseau_UBUNTU_8_04_LTSP.pdf]]
+
+[[http://edubuntu.org/documentation/ltsp-live]]
+
+[[http://www.rom-o-matic.net/etherboot/etherboot-git/etherboot.git/contrib/rom-o-matic/]]
+
+[[http://www.linbox.com/ucome.rvt/any/fr/Produits/LRS/details/doc/ch02.html]]

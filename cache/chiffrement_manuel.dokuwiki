@@ -1,0 +1,318 @@
+
+{{tag>sécurité chiffrement}}
+
+====== Chiffrer votre système manuellement avec le swap aléatoire ======
+
+===== Tutoriel prenant en compte certains facteurs  =====
+
+Afin de protéger au mieux vos données personnelles, il peut être nécessaire de chiffrer vos partitions utilisateurs. En effet, si via le système il est impossible d’accéder aux fichiers qui ne vous appartiennent pas, un simple passage sur un live cd permet d’accéder à n’importe quel fichier de votre système. Le chiffrement de partition permet d’éviter ça. Il est aussi possible en live cd de changer votre mot de passe utilisateur et si vous en avez un différent pour le super utilisateur **root**, c'est également possible. Ce genre de pratique vous protège contre les accès physiques à votre ordinateur.
+
+Ubuntu intègre en standard les outils nécessaires à une gestion simple de votre sécurité. 
+
+<note>N.B. Que ce tutoriel peut s'appliquer à d'autres systèmes **GNU/Linux**.</note>
+
+Le premier point dont il faut tenir compte est la structure de vos partitions, le type de **BIOS** et quel genre de table des partitions que vous allez choisir. Quelques références sur le sujet se trouvent en bas de la page. Je vais aussi vous faire installer les modules **lvm** et **cryptsetup**.
+
+<note>N.B. Que ce tutoriel suppose que vous travaillez avec un disque en **GPT** et un **BIOS** de type **Unified EFI**. Vous aurez quelques recherches à faire de ce côté avant de continuer.</note>
+
+Avec le gestionnaire de disque d'Ubuntu changer votre table des partitions de **MBR** a une en **GPT**. Si votre disque dur n'est pas déjà de ce type.
+
+Voici la structure des partitions que je vous conseille de créer avec le logiciel **Gparted**(**GNOME Partition Editor**) en tenant compte de ce qui se trouve plus haut :
+
+**sda1** : 1Mo de type **Unformated** avec comme flag **bios_grub**.
+
+**sda2** : 500Mo en **ext4** pour accueillir **GRUB**.
+
+**sda3** : De la taille de votre choix qui sera l'espace d’échange **swap**.
+
+**sda4** : Partition pour la racine système **/** elle aussi en **ext4**, qui sera de la taille de votre choix.
+
+Si **Gparted** n'est pas installé faite-le avec cette commande :
+
+<code>sudo apt-get install gparted</code>
+
+<note>N.B. Qu'il vous est impossible de chiffrer la partition de **GRUB**. Sinon, votre nouveau système ne pourra pas démarrer.</note>
+
+<note>N.B. Que ce tutoriel prend en compte que vous voulez un **swap** chiffré aléatoirement à chaque redémarrage.</note>
+
+==== Préparations de votre disque avant installation ====
+
+Démarrer votre distribution en live.
+
+Ouvrez un terminal et placez-vous en **root** permanent :
+
+<code>sudo su</code>
+
+Lancez un update de la liste des paquets :
+
+<code>apt-get update</code>
+
+Installez les outils nécessaires :
+
+<code>apt-get install lvm2 cryptsetup</code>
+
+Pour la suite, il vous faudra vous informer sur les types de chiffrement. Moi j'utilise un chiffrement de type **aes-xts-plain64** :
+
+<code>cryptsetup luksFormat -c aes-xts-plain64 -s 512 -h sha512 /dev/sda4</code>
+
+La commande **cryptsetup** vous invitera à taper **YES** en majuscule pour continuer. Ensuite, il vous demandera de choisir un **passphrase**. Je vous conseille de mettre quelque chose de difficile à trouver et de mettre 64 caractères en tout. __Prévoyez aussi le type de clavier que vous utilisez__. Sinon, vous pourrez avoir de mauvaise surprise...
+
+Il vous faut maintenant ouvrir la partition chiffrée comme suit :
+
+<code>cryptsetup luksOpen /dev/sda4 crypt</code>
+
+**Cryptsetup** vous demandera votre **passphrase** choisi précédemment...
+
+Formatez la partition chiffrée en **ext4** :
+
+<code>mkfs.ext4 /dev/mapper/crypt</code>
+
+==== Installation de la distribution ====
+
+Maintenant, fermez le terminal et lancer l'installation.
+
+Durant l'installation, choisissez le partitionnement manuel.
+
+Suivez les trois prochaines étapes pour configurer l'installation sur les partitions créées précédemment.
+
+1. Prenez la partition montée sur **/dev/mapper/crypt** pour **/** (votre racine système...). 
+
+2. Ensuite, sélectionnez la partition pour **GRUB** qui doit être montée sur **/boot**. 
+
+3. Sélectionnez la partition pour le swap.
+
+Finalement, suivez les instructions de l'installateur et choisissez d'installer le chargeur d’amorçage du disque sur **sda**.
+
+<note>N.B. A la fin de l'installation, choisissez de continuer a tester la distribution.</note>
+
+==== Dernières manipulations avant redémarrage ====
+
+Ouvrez __deux__ terminaux et placez-vous en root permanent comme ceci :
+
+<code>sudo su</code>
+
+<note>N.B. Un des deux sert à travailler avec le **chroot**(votre nouvelle installation) et l'autre avec le système live.</note>
+
+Maintenant, placez-vous dans le répertoire ou nous allons monter votre nouvelle installation système avec la commande qui suit :
+
+<code>cd /mnt</code>
+
+Créez un répertoire pour monter votre système :
+
+<code>mkdir root</code>
+
+Si votre partition système (montée sous le nom de **crypt** dans mon cas) et celle du boot(qui par exemple est sur **sda2**) sont tout les deux de type **ext4** tapez ces commandes :
+
+<code>mount -t ext4 /dev/mapper/crypt root</code>
+<code>mount -t ext4 /dev/sda2 root/boot</code>
+
+Monter aussi la partition **/dev** afin de permettre à la commande **update-initramfs** de s'exécuter correctement par la suite :
+
+<code>mount -o bind /dev root/dev</code>
+
+Notez bien qu'il est possible que l'internet ne soit pas fonctionnel quand vous allez changer de root. Pour ne prendre de chance lancer cette commande :
+
+<code>cp /etc/resolv.conf /mnt/root/etc/resolv.conf</code>
+
+Changez de root, pour permettre de travailler sur votre installation :
+
+<code>sudo chroot root</code>
+
+Testez si la connexion fonctionne avec un **ping** sur Google :
+
+<code>ping www.google.com</code>
+
+Montez ce qui est nécessaire avant de poursuivre :
+
+<code>mount -t proc proc /proc</code>
+<code>mount -t sysfs sys /sys</code>
+<code>mount -t devpts devpts /dev/pts</code>
+
+Lancez l'update des paquets et installez **lvm** et **cryptsetup** :
+
+<code>apt-get update</code>
+<code>apt-get install lvm2 cryptsetup</code>
+
+Maintenant, ouvrez **Gparted** une autre fois. Désactivez le swap. Supprimez-le et recréer une partition de type **Unformated**. Sinon, à chaque démarrage sur un disque live il pourra être utilisé. Même que certaines données concernant votre système pourraient être récupérées. Ce qui peut causer des problèmes de sécurité... En plus votre swap(chiffré aléatoirement) risque d'avoir des problèmes de montage.
+
+Dans un autre terminal lancez cette commande :
+
+<code>cryptsetup -d /dev/urandom create cryptswap /dev/sdXX</code>
+
+Remplacer les deux **XX** par la partition en question (ex. **sda3**)...
+
+Dans le même terminal lancez cette commande :
+
+<code>blkid</code>
+
+Repérez l'**UUID** de votre partition système.
+
+Dans l'autre terminal. Avec votre nouvelle installation montez dans chroot. Ouvrez **nano** et éditez le fichier **crypttab** :
+
+<code>sudo nano /etc/crypttab</code>
+
+Insérez-y l'**UUID** obtenu avec la commande **blkid** dans le fichier ouvert comme ceci :
+
+<code>crypt UUID=XXXX none luks</code>
+
+<note>N.B. les **XXXX** doivent être remplacés par l'**UUID**.</note>
+
+Rajoutez __au tout début du fichier__ une ligne supplémentaire pour le **swap**. Par exemple :
+
+<code>cryptoswap /dev/sdXX /dev/urandom cipher=aes-xts-plain64:sha512,hash=ripemd160,size=512,swap</code>
+
+Remplacez les deux **XX** par la partition correspondante.
+
+Il faut maintenant monter le **swap** dans **fstab** :
+
+<code>sudo nano /etc/fstab</code>
+
+<code>/dev/mapper/cryptoswap 	none	swap	sw	0	0</code>
+
+Après ces modification il vous faut updater le système d'initiation comme ceci :
+
+<code>update-initramfs -u</code>
+
+Assurez-vous d'avoir indiqué à votre fichier **crypttab** de monter la partition système, comme indiqué un peu plus haut.
+
+Si vous n'avez pas obtenu de message d'erreur c'est que la dernière commande s'est bien passée. Vous pouvez finalement redémarrer votre système. ;-)
+
+<note>Une dernier chose en vous laissant. Si vous voulez installer plusieurs systèmes chiffrés, utilisez **GRUB2**. Il est plus approprié.. Le but est d'avoir une partition **/boot** différente par système. Le logiciel **GRUB Customizer** peut vous aider. Rajouter tout simplement des scripts de chargeur en chaîne au **GRUB** principal.</note>
+
+==== Si vous devez réinstaller une distribution ====
+
+S'il vous est nécessaire un jour de tout réinstaller votre ou vos système et que vous ne changer pas les tailles de vos partitions. Vous n’êtes pas obliger d'effacer votre disque dur avec la commande **shred**. Au cas ou vous serez obliger, voici la commande qui vous sera utile et qui utilise 35 pass :
+
+<code>sudo shred -n 35 /dev/sda</code>
+
+La raison pour laquelle il ne faut pas l'utiliser dans l'autre cas. C'est tout simplement parce que les même espace seront chiffrés sur votre disque dur... Donc, c'est inutile.
+
+
+==== Au cas où vous redémarrez votre ordinateur après l'installation ====
+
+Il peut vous arrivez de ne pas y penser et que vous sélectionnez "Redémarrer maintenant". Pas de panique. Il vous suffit juste de redémarrer votre session live et monter votre système comme cela :
+
+<code>sudo su</code>
+
+<code>apt-get update</code>
+
+<code>apt-get install lvm2 cryptsetup</code>
+
+<code>cryptsetup luksOpen /dev/sda4 crypt</code>
+
+Tapez votre **passphrase** que vous aviez choisi avant l'installation.
+
+Ensuite, reprenez le tuto à l'étape **1.3**...
+
+==== Dual boot avec Windows 7 chiffré via VeraCrypt ====
+
+Il est recommandé de prendre un disque dur au complet pour **Windows 7**. Commencez par installer **Windows** sur le disque **sda**. Ensuit, installez **Linux** comme indiqué plus haut __MAIS__ sur **sdb**. Ensuite prenez le disque de restauration de **VeraCrypt** pour restaurer le boot de **Windows**.
+
+Finalement, au démarrage de l'ordinateur, devant l'écran de boot de **VeraCrypt**, tapez sur la touche **Esc** pour basculer directement sur **GRUB**. Vous avez quelques recherche à faire de ce côté. La référence à **VeraCrypt** se trouve en bas de cette page.
+
+==== Dual boot avec d'autre système Linuxiens chiffrés ====
+
+Il faut installer un chargeur en chaine sur la première partition bootable qui contient une installation de **GRUB** et il faut impérativement créer une partition **/boot** pour un autre **GRUB** et ce pour chaque système qui est rajouté sur la machine. La marche à suivre est pour **GRUB2**.
+
+Il faut éditez en **root** le fichier **40_custom** qui se trouve sur **/etc/grub.d/** comme suit :
+
+<code>sudo nano /etc/grub.d/40_custom</code>
+
+N'enlevez rien de ce qui se trouve déjà dedans ce fichier. Rajouter seulement vos modifications à la fin.
+
+Voici un exemple de chargeur en chaine que vous pouvez rajouter au fichier **40_custom** :
+
+<code>menuentry "Kali Linux" {
+	insmod chain
+	insmod ext2
+	set root=(hd0,gpt7)
+	chainloader +1
+}</code>
+
+**Explication :**
+
+La première ligne ajoute le nom de la distribution choisi au menu de **GRUB**.
+
+La deuxième ligne indique **insmod chain** et elle signifie qu'il s’agit d'un chargeur en chaine.
+
+La troisième ligne indique **insmod ext2** initie la partition en **ext2**.
+
+La ligne **set root=(hd0,gpt7)** indique la partition ou se trouve l'autre **GRUB** installé(**hd0** signifie qu'il s’agit du disque principale **sda** (**0 = a, 1 = b, 2 = c, & etc**). La numérotation par nombre commence avec le chiffre **0**.
+**gpt7** indique que la partition est de type __GUID Partition Table__ mais attention lors de l'identification des numéros de partition. Car, elles débutent à *1*. Ça ne se note pas comme pour les numéros de disque dur...)
+
+La dernière ligne **chainload** redirige vers l'autre partition.
+
+<note>N.B. Qu'il existe beaucoup de variantes dans ce procéder. Je vous conseil de faire une recherche sur le Web pour obtenir plus d'informations sur le sujet.</note>
+
+Quand vous avez fini d'éditer le fichier **40_custom** lancer une mise à jour de **GRUB** comme suit :
+
+<code>sudo update-grub</code>
+
+Finalement, redémarrer votre ordinateur pour constater les changements. 
+
+<note>N.B. Que si vous n'avez pas changer la valeur du paramètre **GRUB_TIMEOUT=0** pour une valeur plus élevé vous ne verrez pas le menu de boot à moins de tenir la touche **Shift** durant le démarrage. Pour changer ce paramètre il faut éditer le fichier **/etc/default/grub** et relancer une autre fois la mise à jour de **GRUB**.</note>
+===== Rapport d'erreur lors du chiffrement manuel =====
+
+==== update-initramfs disabled on read-only media ====
+
+Il peut  vous arriver d'obtenir ce message d'erreur lors de l'exécution de la command **update-initramfs -u**.
+
+Il faut tout simplement lancer directement l'update du module de cette manière ;
+
+<code>sudo /usr/sbin/update-initramfs.orig.initramfs-tools -u</code>
+
+Cela peut vous arriver lors de l'installation de Debian ou de Kali Linux.
+
+Je n'ai pas noté cette erreur sur une autre distribution...
+
+==== Issues possible ====
+
+=== '_' === Si vous obtenez ce genre de message d'erreur veillez formatez la partition en **ext4** avec la commande qui suivra :
+
+**//mount: wrong fs type, bad option, bad superblock on /dev/mapper/kali,
+       missing codepage or helper program, or other error
+       In some cases useful info is found in syslog - try
+       dmesg | tail  or so//**
+       
+<code>mkfs.ext4 /dev/mapper/crypt</code>
+
+Kyzis le style est un Easter Eggs, mais pas l'information.
+
+**Réponse de Kyzis...** :
+
+Si vous obtenez ce genre de message c'est que vous avez sauté une des étapes décrite plus haut...
+
+===== Autre information =====
+
+**TrueCrypt** n'étant plus d'actualité, utilisez **VeraCrypt**. 
+
+Il vous est aussi possible de monter une partition (ou disque) créé avec **TrueCrypt** à l'aide de **VeraCrypt**.
+
+Voir les liens plus bas pour la page officiel de téléchargement de **VeraCrypt**.
+
+===== Liens =====
+
+* **Fr** : Reference sur cryptsetup : [[:cryptsetup]]
+
+* **Fr** : Reference sur GRUB 2 : [[:grub-pc]]
+
+* **Fr** : Reference sur GRUB Customizer : [[:grub-customizer]]
+
+* **Fr** : Reference sur les BIOS : [[wpfr>Basic_Input_Output_System]]
+
+* **Fr** : Reference sur les table de partition en GPT : [[wpfr>GUID_Partition_Table]]
+
+* **Fr** : Comment réinstaller GRUB ? : [[:tutoriel/comment_restaurer_grub#comment_reinstaller_grub]]
+
+* **Ang** : HOWTO: Purge and Reinstall Grub 2 from the Live CD : [[http://ubuntuforums.org/showthread.php?t=1581099]]
+
+* **Ang** : Truecrypt : [[http://www.truecrypt.org/downloads]]
+
+* **Ang** : VeraCrypt : [[https://www.veracrypt.fr/en/Home.html]]
+
+* **Ang** : GNU GRUB Manual 2.02 [[https://www.gnu.org/software/grub/manual/grub/grub.html]]
+
+* **Ang** : Gparted (GNOME Partition Editor) [[https://gparted.org/]]
+----
+
+**// Kyzis 2013-2019 //**

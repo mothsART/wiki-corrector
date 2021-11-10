@@ -1,0 +1,106 @@
+
+{{tag>programmation BROUILLON}}
+----
+
+====== PICkit2 ======
+Le PICKit 2 est un programmateur de PIC de chez [[http://www.microchip.com/stellent/idcplg?IdcService=SS_GET_PAGE&nodeId=1406&dDocName=en023805|Microchip]]. Ce tutoriel traite de la façon d'utiliser et de programmer avec un controleur 16f88.
+
+===== Pk2cmd : le programme de communication =====
+Pk2cmd est un programme open source pour communiquer avec le PICkit2.
+
+Il est disponible sur le site internet de Microchip à la page [[http://www.microchip.com/stellent/idcplg?IdcService=SS_GET_PAGE&nodeId=1406&dDocName=en023805]]
+
+Le lien de téléchargement direct pour le noyau 2.6 et plus est [[http://ww1.microchip.com/downloads/en/DeviceDoc/pk2cmdv1-20Linux2-6.tar.gz]]
+
+
+==== Installation à partir du code source ====
+Les sources étant disponibles depuis le site de Microchip, nous allons les télécharger, les compiler, puis les installer.\\
+Dans un [[:terminal]] saisissez:
+<code>
+sudo apt-get install libusb-dev
+wget http://ww1.microchip.com/downloads/en/DeviceDoc/pk2cmdv1.20LinuxMacSource.tar.gz
+tar xvf pk2cmdv1.20LinuxMacSource.tar.gz
+cd pk2cmdv1.20LinuxMacSource
+make linux
+sudo make install
+</code>
+J'ai tester sur une 16.04 sa fonctionne bien même tester sur une configuration ARM en processeur (raspberry pi)
+==== Utilisation ====
+Branchez le PICkit2 sur le port USB pour tester s'il est bien détecté.
+<code>pk2cmd -P
+Auto-Detect: Found part PIC16F88.
+
+Operation Succeeded
+</code>
+Quelques commandes utiles :
+Activer le courant :
+<code>pk2cmd -PPIC16F88 -T</code>
+Couper le courant:
+<code>pk2cmd -PPIC16F88 -A0</code>
+Programmer le PIC avec le fichier program..hex:
+<code>pk2cmd -PPIC16F88 -M -Fprogram.hex</code>
+
+=====  Dwarf : une interface graphique pour pk2cmd =====
+Pour ceux qui n'aiment pas les lignes de commande, le site du projet est ici :[[http://tuxtronics.com/node/1]]
+
+Il suffit de décompresser l'archive **dwarf.tgz** dans le dossier de votre choix, et de lancer le script nommé **dwarf**.
+Sur 16.04 penser à rendre éxécutable le script et le lancer dans une console ouverte dans le dossier "dwarf master"
+<code>
+utilisateur@pc~ ./dwarf
+</code>
+=====  Gpasm : le compilateur pour PIC =====
+Gpasm est un compilateur pour générer du code pour notre PIC. Il prend en entrée un fichier assembleur et produit du code machine.\\
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>gputils|gputils]]** 
+
+=====  Premier Code =====
+Écrivons notre premier programme.
+[[:tutoriel:comment_modifier_un_fichier|Créez un fichier]] **//hello.asm//** contenant:
+<code>
+    #include <p16f88.inc>          ; fichier include (définition controleur)
+
+    ;La directive CONFIG sert à mettre en fonction des fusibles de fonction
+    __CONFIG _CONFIG1, _CP_OFF & _DEBUG_OFF & _WRT_PROTECT_OFF & _CPD_OFF & _LVP_OFF & _BODEN_ON & _MCLR_OFF & _PWRTE_ON & _WDT_OFF & _INTRC_IO
+    __CONFIG _CONFIG2, _IESO_OFF & _FCMEN_OFF
+    
+    ;la directive CBLOCK sert à donner le point de départ des variables (RAM)
+    CBLOCK  0x20        ;Début de la zone (0x20 à 0x6F)
+        Delay1          ;Déclaration variable Delay1 dans banque 0
+        Delay2
+        ENDC            ;Fin de la zone
+
+    ORG 0		;la directive ORG adresse de démarrage du code (ROM)
+    bsf     STATUS,RP0	;sélection banque 1
+    bcf     TRISB,3	;bit 3 de TRISB = 0
+    movlw b'01100010'	;charge la valeur binaire dans W
+    movwf   OSCCON	;écrit la valeur dans registre OSCCON (horloge interne = 4Mhz)
+    bcf     STATUS,RP0	;retour en banque 0
+boucle			;étiquette ou label
+    bsf     PORTB,3	;bit 3 de PORTB = 1
+    call delay		;appel sous routine delay
+    bcf     PORTB,3	;bit 3 de PORTB = 0
+    call delay
+    goto    boucle	;saut à boucle
+delay
+    decfsz Delay1,f     ;Dés-incrémente et saut si égal à 0 de Delay1 dans Delay1
+    goto delay          ;Tant que delay1 n'est pas égal à 0 on boucle
+    decfsz Delay2,f
+    goto delay
+    end
+</code>
+Compilez :
+<code>gpasm hello.asm -p p16f88</code>
+Programmer le 16f88 :
+<code>pk2cmd -P PIC16F88 -M -F hello.hex</code>
+Lancez le programme en activant l'alimentation:
+<code>pk2cmd -P PIC16F88 -T</code>
+Si tout se passe correctement  la LED câblée sur le PORTB 3 clignote.
+<code>pk2cmd -P PIC16F88 -A0</code>
+Avec cette commande on coupe alimentation du contrôleur.
+On utilise le contrôleur sur une bread board avec le câblage ci dessous:
+=====  Voir aussi =====
+  * [[piklab]]
+  * [[conception_electronique]]
+
+----
+//Contributeurs: FIXME //
+

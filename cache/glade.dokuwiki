@@ -1,0 +1,113 @@
+
+{{tag>Xenial programmation}}
+
+----
+
+{{  https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Glade_3_logo.svg/langfr-220px-Glade_3_logo.svg.png?200}}
+====== Glade : la ligne de code ouvre les fenêtres ======
+
+Glade est un outil interactif de conception d'interface graphique GTK+. \\
+Il prend en charge toute la partie de gestion/génération de l'interface, pour permettre au développeur de se concentrer presque exclusivement sur la partie développement de son application.
+
+**Glade** enregistre les interfaces graphiques en générant des fichiers XML. \\ **GtkBuilder** permet de lire ces fichiers dynamiquement, entendez à l'exécution de l'application.
+
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+===== Installation =====
+
+Il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>glade]]**.
+La version par défaut de Glade ne permet pas d'ouvrir les fichiers créés sous les versions antérieures il faut donc installer le paquet [[apt>glade-gtk2]] et le lancer via la commande :<code>glade-gtk2</code>
+À partir d'[[:xenial|Ubuntu 16.04]], le paquet n'est plus dans les [[:dépôts]], mais vous pouvez télécharger la dernière version sur UbuntuUpdates.org[[https://www.ubuntuupdates.org/pm/glade|les binaires de Glade]].
+
+===== Exemple de programmation =====
+
+Pour gagner du temps, nous allons utiliser directement une boîte de dialogue qui comporte déjà 2 parties utiles.  \\ A savoir :
+  * une partie vide puis 
+  * une autre dédiée spécifiquement aux boutons. 
+Réalisons donc une interface ressemblant à ceci, avec une arborescence identique à celle proposée sur l’image ci-dessous. Le fichier Glade est disponible dans l’archive et se nomme ''PasswordGenerator.glade''.
+
+
+Une fois l’interface réalisée, il faut maintenant l’exploiter avec le code Java et lui faire réaliser les actions que l’on souhaite. \\ Tout d’abord, qu’est-ce que l’on voit sur cette interface GTK+ ? \\ On remarque qu’il y a 4 checkboxes correspondant à l’utilisation (case cochée, par défaut) ou non (case décochée) des types de caractères. \\ On voit aussi une barre pour choisir la taille du mot de passe (valeur par défaut 8). On sait tous qu’un vrai mot de passe se compose d’au moins 8 caractères avec alternance majuscules, minuscules, chiffres et caractères spéciaux. Enfin, il y a 3 boutons, un bouton Quitter (qui veut tout dire), un Actualiser qui va permettre de générer le mot de passe (qui se situera dans la champ de texte) et un bouton Copier pour copier le mot de passe dans le presse-papier. Tous ces boutons sont des boutons “basiques” dont l’icône, le label et le mnemonic sont déjà définis. Nous allons donc voir seulement les actions associées à ses boutons. Pour le reste il vous suffira de voir le code. Ce n’est pas très complexe et il y a des commentaires.
+
+Commençons par le bouton Quitter. Ce dernier a pour effet de terminer le programme. Voici un exemple de code rattaché à une instance de bouton Exit
+.
+<file C++>
+    // Exit button
+    Button exitButton = (Button) _glade.getWidget("exit_button");
+    exitButton.connect(new Button.Clicked() {
+        @Override
+        public void onClicked(Button source) {
+            Gtk.mainQuit();
+        }
+    });
+
+</file>
+On récupère l’élément bouton et au clic sur ce bouton on applique l’action Gtk.mainQuit() qui termine la boucle lancée par Gtk.main().
+
+Après ceci, occupons-nous du bouton Actualiser qui lancera la génération du mot de passe. Idem on récupère le bouton mais au clic on lui applique une autre méthode que l’on a créée auparavant.
+
+<file C++>
+    // Refresh button
+    Button applyButton = (Button) _glade.getWidget("apply_button");
+    applyButton.connect(new Button.Clicked() {
+        @Override
+        public void onClicked(Button source) {
+            GtkInterface.this.generatePassword();
+        }
+    });
+</file>
+
+C'est La méthode generatePassword() qui va vraiment se charger de récupérer un mot de passe et d’actualiser le champ de texte de l’interface.
+<file C++>
+    private void generatePassword() {
+        boolean[] checks = { _digitCheck.getActive(), _upperCheck.getActive(),
+                _lowerCheck.getActive(), _specialCheck.getActive() };
+        int length = (int) _lengthScale.getValue();
+
+        if (!checks[0] && !checks[1] && !checks[2] && !checks[3])
+            this.errorDialog(Languages.ERROR, Languages.CHECKBOX_ERROR);
+        else {
+            String password = Password.randomPassword(length, checks);
+            _passwordEntry.setText(password);
+        }
+    }
+</file>
+On récupère la longueur du mot de passe. Et là un test, si on a décoché toutes les cases, on signale une erreur à l’utilisateur via une fenêtre spéciale appelée par la méthode errorDialog(String title, String text).
+
+Pour finir, on définit l’action du bouton Copier. On va bien entendu copier le mot de passe dans le presse-papier dans le but de le coller plus tard.
+<file C++>
+    // Copy button
+    Button copyButton = (Button) _glade.getWidget("copy_button");
+    copyButton.connect(new Button.Clicked() {
+        @Override
+        public void onClicked(Button source) {
+            GtkInterface.this.copyToClipboard(_passwordEntry.getText());
+        }
+    });
+</file>
+C’est la méthode copyToClipboard(String text) qui va copier le contenu du champ texte dans le presse-papier si bien entendu l’environnement le supporte. Mais ça ne devrait pas poser de problème. Voici le contenu de cette méthode.
+<file C++>    private void copyToClipboard(String password) {
+        try {
+            StringSelection selection = new StringSelection(
+                    password == null ? "" : password);
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(
+                    selection, null);
+        } catch (IllegalStateException e) {
+            this.errorDialog(Languages.ERROR, Languages.COPY_ERROR);
+        }
+    }
+</file>
+
+N’oubliez pas surtout de regarder tous les autres fichiers pour comprendre le code et tous les appels de méthodes. Et normalement, après compilation (via le script Ant), Il ne reste qu’à dézipper le fichier .zip généré, donner les droits d’exécution au script shell et le lancer (on peut aussi utiliser le Run de Eclipse). Après tout ceci, on obtient notre joli générateur de mot de passe sans aucun problème.
+Si vous avez des questions, besoin de plus d’explication, n’hésitez pas à demander.
+
+===== Voir aussi =====
+
+
+  * [[http://daniel.coquette.free.fr/dotclear/index.php/post/2006/12/11/Creer-des-interfaces-graphique-avec-PyGTK-et-Glade|Créer des interfaces avec Pygtk]],
+  * [[http://daniel.coquette.free.fr/dotclear/index.php/post/2006/12/18/Construire-une-application-avec-PyGTK-et-Glade|Construire une application avec-PyGTK et Glade]],
+  * [[http://python-gtk-3-tutorial.readthedocs.io/en/latest/builder.html|Créer une interface avec Glade et l'utiliser en python]] (en)
+  * [[https://openclassrooms.com/courses/pygtk/glade|Glade sur openclassrooms]],
+  * [[https://wiki.gnome.org/Apps/Glade/Tutorials|Documentation officielle]] sur le [[http://glade.gnome.org/|site officiel]] (en).

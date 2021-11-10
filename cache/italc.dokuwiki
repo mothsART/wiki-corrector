@@ -1,0 +1,102 @@
+
+{{tag>Xenial éducation serveur}}
+
+----
+
+====== ITALC ======
+
+ITALC((//Intelligent Teaching and Learning with Computers//)), à l'instar du propriétaire Netsupport school ou de PC-DUO, permet, depuis un poste maître, de surveiller les écrans des élèves d'un seul coup d’œil, leur envoyer des messages ou fichiers, prendre la main sur un des ordinateurs, ou de montrer l'écran maître pour faire une démonstration. Et tout ça, sans aucune connaissance en informatique !
+
+===== Installation =====
+
+==== Poste maître ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>italc-master]]**.
+
+Générez les clés nécessaires à la connexion sécurisée en saisissant dans un [[:terminal]] la commande suivante : <code>sudo ica -createkeypair</code>
+
+Cela va créer les clés publiques et privées dans le dossier « /etc/italc/keys/ ».
+
+[[:users-admin#ajouter_un_nouveau_groupe_administrateurs_seulement|Créez ensuite un groupe]] **italc** en y inscrivant votre utilisateur qui doit contrôler Italc-maître. 
+
+Puis associez la clé privée à ce groupe :<code>sudo chgrp -R italc /etc/italc/keys/private/ 
+sudo chmod -R 640 /etc/italc/keys/private/
+sudo chmod -R ug+X /etc/italc/keys/private/</code>
+  
+<note>Si vous êtes sous KDE, il faut que vous demandiez au service ica de se lancer automatiquement au démarrage de la session: Configuration du système -> Démarrage et Arrêt -> Démarrage automatique -> Ajouter un programme -> ica -> OK</note>  
+
+À ce stade, il est nécessaire de se reconnecter à sa session pour valider ces changements.
+
+Le poste maître est installé, Italc est accessible via le via le [[:unity#tableau_de_bord_dash|tableau de bord]] (Unity). Il reste à installer les clients.
+
+==== Clients ====
+
+Tout d'abord, désactiver le [[bureau à distance]] sur les postes clients (ceux des élèves), s'il est configuré, car Italc ne pourra pas se lancer, le port 5800 étant occupé. Décocher aussi le bureau à distance dans les [[:tutoriel:application_démarrage|applications au démarrage]].
+
+Puis [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>italc-client]]**.
+
+Il reste à copier la clé publique créée sur le poste maître dans le poste client et à la rendre accessible. Pour cela, copiez le fichier **/etc/italc/keys/public/teacher/key** depuis le poste maître au même emplacement dans chaque poste client.
+Par exemple, si le fichier se trouve dans une clé USB d'étiquette « cleusb », il suffit de saisir la commande suivante dans un [[:terminal]] :
+
+  sudo cp /media/cleusb/key /etc/italc/keys/public/teacher/key
+
+Le programme est démarré avec la session ; on le retrouve dans les programmes au démarrage.
+<note>Il faut que le fichier de la clé publique appartienne à root pour que la connexion puisse se réaliser quel que soit la session en cours</note>
+
+<note>Si vous êtes sous KDE, il faut que vous demandiez au service ica de se lancer automatiquement au démarrage de la session: Configuration du système → Démarrage et Arrêt → Démarrage automatique → Ajouter un programme → ica → OK </note>
+
+
+===== Utilisation =====
+
+Au lancement du poste maître, créez la salle qui contient les ordinateurs clients (attention de la créer à côté de //auto-detected computer// et pas dedans pour qu'elle perdure) et créez les ordinateurs clients dans cette salle. Pour cela, il suffit de renseigner le nom d'hôte de chacun (c'est celui qui apparaît après le @ dans le terminal).
+
+====Allumer les ordinateurs avec le poste maître====
+En renseignant l'adresse MAC dans Italc, on peut utiliser le [[:wakeonlan]] pour allumer les postes clients. Cela ne fonctionne pas avec le wifi.
+Il faudra pour cela que leur BIOS soit configuré correctement. Mais cela ne suffit pas si les postes sont sous Ubuntu. Par souci de sécurité les cartes réseaux sont en effet désactivées par le système lorsqu'on éteint l'ordinateur.
+
+===Il faut tout d'abord vérifier si le bios supporte cette fonctionnalité :===
+Au démarrage se rendre dans le bios et chercher la fonction à valider (normalement dans le menu power)  "power on by PCI/PCIE devices" ou "Wake-on-lan" cela dépend du bios qui équipe votre matériel, on peut se renseigner en ligne en précisant le bios en question. Valider ensuite cette fonctionnalité.
+
+===Ensuite dans Ubuntu il faut avoir installé [[apt://ethtool]]===
+On vérifie que la carte supporte bien le WOL en tapant dans le terminal :
+  sudo ethtool eth0
+Attention à bien remplacer eth0 par le nom de votre connexion qui peut être différent (voir l'infobulle de l’icône de notification du réseau sur le tableau de bord)
+Vous devez obtenir la ligne suivante : Supports Wake-on: g
+On va laisser la carte allumée à l'extinction de l'ordinateur par
+  sudo ethtool -s eth0 wol g
+Mais il faut que cela soit paramétré pour l'avenir :
+on va utiliser l'éditeur de texte avec les droits administrateur pour éditer le fichier /etc/rc.local : après un Alt+F2 on tape gksudo gedit /etc/rc.local et on tape ethtool -s eth0 wol g avant la dernière ligne.
+
+===enfin il faut renseigner l'adresse Mac===
+On la trouve dans les informations de connexion dans les paramètres du poste que l'on souhaite pouvoir allumer.
+
+Plus d'informations : voir l'article [[wakeonlan|Wakeonlan : démarrer un ordinateur à distance]]
+====supprimer la classe autodetected====
+Italc côté maître crée au démarrage une salle autodetected qui va être gênante si l'on utilise les adresses fixes car elle fait apparaître les ordinateurs en double. 
+La solution pour supprimer cette salle est une modification dans le fichier usr/bin/italc-launcher du poste maître (à éditer avec les droits administrateur). Chercher la ligne contenant : autodetect_clients=not subprocess.Popen… et supprimer le not (et l'espace qui suit). la fonctionnalité se trouve invalidée.
+La solution pour empêcher la détection des postes clients un par un : sans faire la modification précédente, la création sur le poste client (avec les droits d'administration) du fichier texte /etc/italc/italc.conf
+il suffit d'écrire :
+PUBLISH_CLIENT=no
+dans ce fichier et au prochain démarrage le poste ne sera plus détecté
+
+====Aller plus loin====
+
+Pour plus d'informations consultez [[http://italc.sourceforge.net/wiki/index.php?title=Fr:Page_principale|le wiki]] et le [[http://italc.sf.net/italc-manual-20070129.pdf|manuel d'Italc]] (en anglais).
+
+Italc permet de gérer des parcs hétérogènes (il peut être installé sous Windows XP et même des OS plus récents même si la version 1.0.9 n'est pas prévue pour voir [[http://www.fleith.fr/blog/?p=33|ici]].
+
+===== Désinstallation =====
+
+Sur tous les postes, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer le paquet]] **italc-client**. Sur le poste maître, [[:tutoriel:comment_supprimer_un_paquet|supprimer le paquet]] **italc-master**.
+
+Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée. Les journaux du système, et les fichiers de préférence des utilisateurs dans leurs dossiers personnels sont toujours conservés. 
+
+===== Voir aussi =====
+
+ * (en) [[http://italc.sourceforge.net/|Site officiel d'Italc]].
+
+À partir de Precise Pangolin (Ubuntu 12.04 LTS) la version Edubuntu intègre [[http://www.epoptes.org|Epoptes]] qui est un nouvel outil de gestion de salle informatique disponible uniquement pour distributions linux.
+
+----
+
+//Contributeurs principaux : [[:utilisateurs:nicolas11|Nicolas11]].//

@@ -1,0 +1,92 @@
+
+{{tag>tutoriel amorçage lvm installation reseau netboot netinstall }}
+
+----
+
+====== Installer Ubuntu sans iso, avec l'image netboot ======
+
+Ce tutoriel permet d'installer une version d'Ubuntu ou de Debian sans télécharger d'iso, sans rien graver, sans clef usb.
+
+L'objectif est de booter directement sur le kernel de l'installation [[:netboot]] de votre distribution préférée via [[:grub-pc|grub]].
+Ainsi il est possible d'amorcer l'installation d'une nouvelle distribution (netinstall) avec un minimum de téléchargement.
+===== Pré-requis =====
+
+  * Disposer d'une connexion à Internet
+  * Avoir déjà un OS fonctionnel avec grub installé et fonctionnel
+  * Avoir une partition ou un volume LVM de 12Mo minimum
+
+===== Préparation =====
+
+Créer une partition ou un volume lvm qui contiendra le noyau netboot (100 Mo dans notre exemple, mais 20 Mo suffiront ).
+
+Le noyau netboot permet d'amorcer l'installation par le réseau d'une distribution.
+
+Créer une [[:tutoriel/partitionner_manuellement_avec_installateur_ubuntu|partition]], puis la formater
+  # sudo mkfs.ext4 /dev/sda2 
+
+
+Ou bien via un volume LVM
+  # sudo lvcreate -n volnetboot -L 100M mon_volume_group
+  # sudo mkfs.ext4 /dev/mon_volume_group/volnetboot 
+
+Telecharger le kernel et l'initrd.gz de la distribution choisie en version netboot.
+
+Seuls les fichiers "linux" et "initrd.gz" nous intéressent.
+
+Pour Ubuntu Trusty :
+http://archive.ubuntu.com/ubuntu/dists/trusty/main/installer-amd64/current/images/netboot/ubuntu-installer/amd64/
+
+Pour Debian Wheezy
+http://ftp.fr.debian.org/debian/dists/wheezy/main/installer-amd64/current/images/netboot/debian-installer/amd64/
+
+Déposer les fichiers téléchargés dans le volume créé.
+  # sudo mount /dev/sda2 /mnt                       avec LVM :  #sudo mount /dev/mon_volume_group/volnetboot /mnt
+  # sudo mv linux /mnt/
+  # sudo mv initrd.gz /mnt/
+===== Ajout de l'installation netboot dans grub2 =====
+
+[[:tutoriel:comment_modifier_un_fichier|Ajouter ceci au fichier]] **/etc/grub.d/40_custom** avec les [[:sudo|droits d'administration]]
+
+Avec une partition DOS:
+
+<file bash /etc/grub.d/40_custom>
+menuentry "netboot de ma distribution preferee" {
+     insmod part_msdos
+     insmod ext2
+     set root=(hd0,msdos2)
+     linux /linux
+     initrd /initrd.gz
+ }
+</file>
+
+<note> Ici (hd0,msdos2) dans le grub correspond au disque zéro, partition 2, ce qui correspond a /dev/sda2 </note>
+
+
+
+Avec un volume LVM :
+
+<file bash /etc/grub.d/40_custom>
+menuentry "netboot de ma distribution preferee" {
+     insmod lvm
+     insmod part_msdos
+     insmod ext2
+     set root=(mon_volume_group-volnetboot)
+     linux /linux
+     initrd /initrd.gz
+ }
+</file>
+
+<note> Dans les deux cas,  le kernel n'a pas besoin de paramètres ! (spécifique à une installation netboot uniquement)</note>
+
+Mettre à jour le grub2 avec la nouvelle entrée qu'on vient juste de créer :
+  # sudo update-grub
+
+
+Enfin, **rebooter**, sélectionner l'entrée "netboot de ma distribution préférée" : le tour est joué !
+
+
+===== Sources =====
+
+  * [[https://help.ubuntu.com/community/Installation/NetbootInstallFromInternet|Wiki officiel]]
+
+----

@@ -1,0 +1,156 @@
+
+{{tag>Xenial Trusty réseau}}
+
+----
+====== Système Satellite pour Postfix ======
+
+===== Description =====
+
+Un système satellite pour Postfix signifie simplement que les mails du système seront envoyés automatiquement à un serveur SMTP.
+Ceci vous permettra d'utiliser la commande mail (du package mailx) directement pour envoyer des emails.
+
+Il pourra par la suite être utilisé pour envoyer des emails automatiquement comme par exemple des fichiers de logs grâce à cron.
+
+ 
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+
+===== Installation =====
+
+Commençons par [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>postfix]]**.
+
+Un assistant va alors se lancer, et vous allez devoir répondre à quelques questions.
+
+Si l'assistant ne se lance pas ou si Postfix est déjà installé sur votre système, faites un
+
+  sudo dpkg-reconfigure postfix
+
+
+===== Configuration de Postfix =====
+
+Voici comment configurer postfix grâce à assistant:
+
+Lorsque l'assistant se lance, un premier panneau vous explique chaque configuration possible.
+Donc faisons OK.
+
+  - La première question correspond justement au type d'installation de Postfix que vous souhaitez effectuer, ici Système Satellite. 
+  - La question suivante permet de choisir le nom suivant le symbole @ pour les expéditeurs de vos courriels. Choisissez donc ici le nom de votre machine par exemple (qualifié, c'est-à-dire machine.nomdomaine.org par exemple). Si vous désirez recevoir des email de @chezguillaume.fr, entrez chezguillaume.fr
+  - Ensuite, cette question est le point clé de l'assistant, elle permet de saisir le SMTP de votre FAI. Donc, mettez l'adresse du serveur smtp. Si vous devez préciser un port différent du port 25, ajouter : puis le numéro du port. Par exemple, si je dois utiliser le port 1234 je doit mettre **smtp.serveur.org:1234**
+  - Le courrier de root doit être envoyé en alias sur un autre utilisateur, saisissez donc ce nom d'utilisateur à la question suivante (au quotidien, lorsque l'utilisateur root du système enverra un mail, il sera transféré sous le nom de l'utilisateur choisi ici). Donc mettez votre compte pour que les emails de root soit directement renvoyés vers votre boite mail, ou expédié par votre boite mail.
+  - Ensuite, choisissez les noms d'hôtes qui seront acceptés lorsqu'un utilisateur local souhaitera envoyer un courrier (le nom de votre machine devrait suffire ici).
+  - Répondez Oui à la question "Forcer des mises à jour synchronisées de la file d'attente des courriels ?"
+  - Il est fortement recommander de n'accepter les envois de courrier que sur la boucle locale, à savoir "127.0.0.0/8" pour la question suivante.
+  - La taille maximale des boites aux lettres peut être mise à 0, si vous êtes sûr des utilisateurs de votre machine.
+  - Le caractère "+" est très bien pour signifier une adresse locale, laissez donc ce champ à la question suivante.
+  - Enfin, tous les protocoles Internet méritent d'être activés, choisissez donc "tous" à la question suivante.
+
+Le serveur Postfix va alors redémarrer, et l'envoi de mail est désormais fonctionnel.
+
+===== Authentification =====
+
+Si le serveur SMTP que vous allez utiliser possède un jeu de login et mot de passe, il faut le préciser dans le fichier de configuration de postfix :
+
+==== Modifier le fichier « main.cf » ====
+
+Il faut donc [[:tutoriel:comment_editer_un_fichier|éditer le fichier]] **/etc/postfix/main.cf** :
+<code>sudo vim /etc/postfix/main.cf</code>
+
+et ajouter les lignes suivante à la fin :
+
+<file>
+smtp_sasl_auth_enable = yes
+smtp_sasl_password_maps = hash:/etc/postfix/sasl/sasl_passwd
+smtp_sasl_security_options = noanonymous
+</file>
+
+Vous pouvez également activer le chiffrement de la connexion grâce à TLS/SSL en ajoutant les lignes suivantes (notez qu'il est recommandé de l'activer si le serveur SMTP auquel vous vous connectez le supporte) :
+
+<file>
+smtp_use_tls = yes
+smtp_enforce_tls = yes
+smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
+</file>
+
+Vérifiez également le port de connexion à votre serveur SMTP (celui-ci étant parfois différent quand on utilise une connexion sécurisée) en éditant la ligne suivante :
+
+<file>
+relayhost = [smtp.serveur.org]:1234
+</file>
+Conserver cette syntaxe avec les crochets
+
+Puis sauvegardez le fichier.
+
+Si vous n'arrivez pas à envoyer de message avec cette configuration vous pouvez désactiver smtp_enforce_tls mais sachez que Postfix ne vérifiera pas le certificat qui lui est présenté par votre serveur SMTP. Il se contentera de l'accepter pour chiffrer la connexion et éviter ainsi de transmettre vos identifiant et mot de passe en clair mais ne vérifiera pas qu'il dialogue avec le bon serveur et non avec un serveur pirate. Ne désactivez donc cette option que si votre serveur SMTP présente un certificat qui pose problème.
+
+Il faut ensuite s'assurer que la base des certificats est à jour en exécutant les commandes suivantes :
+
+<code>
+sudo update-ca-certificates
+sudo c_rehash /etc/ssl/certs/
+</code>
+
+==== Créer le fichier « sasl_passwd » ====
+
+Maintenant, il ne reste plus qu'à [[:tutoriel:comment_editer_un_fichier|créer le fichier]] **/etc/postfix/sasl/sasl_passwd** qui contiendra les informations de connexion, et seul root pourra le lire et y écrire :
+
+<file>
+[smtp.serveur.org]:1234 nom_utilisateur:mot_de_passe
+</file>
+Conserver la syntaxe avec les crochets
+
+Le « nom_utilisateur » peut aussi être une adresse de courriel.
+
+Puis exécutez la commande suivante :
+<code>
+sudo postmap /etc/postfix/sasl/sasl_passwd
+</code>
+
+et n'autoriser que root lui-même à y accéder en lecture et écriture :
+<code>sudo chmod -R 600 /etc/postfix/sasl</code>
+
+Il ne reste plus qu'à redémarrer le serveur Postfix pour qu'il prenne les nouveaux paramètres :
+
+  sudo /etc/init.d/postfix restart
+===== Tester l'envoi d'email =====
+
+Pour tester que tout s'est bien passé, [[:tutoriel:comment_installer_un_paquet|installez]] le paquet **[[apt://mailx|mailx]]**. ((bsd-mailx sur [[Karmic]] et versions supérieures d'Ubuntu))
+
+Puis dans un terminal :
+
+  echo "test" | mail -s "Sujet Test" votreadresse@mail
+
+Vous devriez recevoir votre email sans problème. Attention cependant, si vous n'avez pas choisi de nom qualifié pour votre serveur, les mails risquent très fortement (voire toujours) d'être interceptés par le SMTP de votre FAI. Pour cela, vous pouvez utiliser une autre petite technique, la translation d'adresse de courriel (cf. infra).
+
+===== Translation de courriel =====
+
+Pour cela, [[:tutoriel:comment_editer_un_fichier|éditez le fichier]] **/etc/postfix/main.cf**.
+
+Ajoutez-y :
+
+<file>
+smtp_generic_maps = hash:/etc/postfix/generic
+</file>
+
+[[:tutoriel:comment_editer_un_fichier|Créer maintenant le fichier]] **/etc/postfix/generic** et placez-y :
+
+<file>
+nom-utilisateur adresse-mel@valide
+</file>
+
+Enfin, exécutez les commandes suivantes :
+
+  sudo postmap /etc/postfix/generic
+  sudo service postfix restart
+
+
+===== Liens et références =====
+
+  * **''(en)''** [[http://www.postfix.org/|Le site officiel de Postfix]]
+  * **''(fr)''** [[http://x.guimard.free.fr/postfix/|Documentation en français de Postfix]]
+  * **''(fr)''** [[wpfr>Postfix|Article encyclopédique (Wikipédia)]]
+
+----
+
+//Contributeur principal : [[:utilisateurs:Zedtux]].//

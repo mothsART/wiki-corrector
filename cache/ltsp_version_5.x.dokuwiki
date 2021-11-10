@@ -1,0 +1,147 @@
+
+{{tag>Bionic serveur ltsp BROUILLON}}
+
+
+======Installer un serveur LTSP======
+
+L'installation d'un serveur [[:LTSP]] permet de raccorder facilement des ''postes clients légers''. Ces postes peuvent être de vieux ordinateurs, dépourvus de disque dur, le principal étant qu'ils disposent d'une carte vidéo et d'une carte réseau. En connectant ces ordinateurs au serveur LTSP, vous obtenez un parc de machines qui utilisent les ressources de votre serveur, et partagent les mêmes applications. Ainsi, les mises à jour se font uniquement sur le serveur, et non plus sur chacun des postes.
+=====Installation=====
+<note tip>Le dépôt des écoles grecques est maintenu par les développeurs de LTSP. Il offre les nouvelles versions qui sont bien plus stables que celles proposées dans les dépôts d'Ubuntu.
+Pour ajouter ce dépôt à vos sources, exécutez les commandes suivantes dans un terminal (//LTSP.org//) :
+<code>add-apt-repository --yes ppa:ts.sch.gr
+apt update</code> </note>
+
+En ce qui concerne la variante [[:Edubuntu]], LTSP est déjà installé par défaut. Ce qui suit concerne donc les autres [[:variantes]]. Installez les serveurs dhcp, tftp, ssh, pour cela [[:tutoriel:comment_installer_un_paquet|installez les paquets]] **[[apt>ltsp-server-standalone,openssh-server]]**. 
+
+Ensuite exécutez la commande suivante dans un [[:terminal]] : <code>sudo ltsp-build-client</code>
+Ce script crée un système complet dans /opt/ltsp/i386 (dans le cas le plus fréquent où les postes clients sont de type "i386" ainsi que le serveur).
+Dans le cas où le serveur est de type "amd64" et que les clients sont de type "i386", il faut saisir : <code>sudo ltsp-build-client --arch i386</code> si toutes vos machines sont des amd64 remplacez i386 par amd64. Attention à modifier ensuite le fichier "dhcpd.conf" en conséquence en y remplaçant les chemins "amd64" par "i386".
+
+Si vous avez un mirroir local ou un cédérom il faudra le spécifier à la commande comme suit : <code>sudo ltsp-build-client --mirror=file:///home/mirror/ubuntu/ --security-mirror=file:///home/mirror/ubuntu/ --updates-mirror=file:///home/mirror/ubuntu/ (ou --mirror file://cdrom si c'est un DVD)</code>
+
+en n'oubliant pas de copier les sources.list du serveur en chroot. Soyez patient, selon la vitesse de votre connexion Internet et la puissance de votre serveur, la construction peut prendre plusieurs minutes … 
+
+
+=====Configuration=====
+La procédure d'installation automatique d'Ubuntu a déjà installé et configuré le serveur LTSP pour vous. Nous allons cependant voir comment en affiner sa configuration.
+    * Ouvrez un [[:terminal]] et reconfigurez le paquet **tzdata** en choisissant la zone géographique avec la commande suivante : <code>dpkg-reconfigure tzdata</code>
+    * [[:tutoriel:comment_modifier_un_fichier|Éditez le fichier]] **/etc/ltsp/dhcpd.conf** (seul les commentaires ne sont correspondent pas au fichier ils sont là pour vous donner des indications) : <file># Cette ligne tente de donner la priorité sur un autre serveur dhcp
+authoritative;
+
+# Sous réseau autorisant les adresses 192.168.0.1 à 192.168.0.254
+subnet 192.168.0.0 netmask 255.255.255.0 {
+# plage d'adresses possibles pour les clients légers (affectation en décroissant)
+  range 192.168.0.20 192.168.0.250;
+# Adresse de base du serveur : ''192.168.0.1''
+  option domain-name "example.com";
+  option domain-name-servers 192.168.0.1;
+  option broadcast-address 192.168.0.255;
+  option routers 192.168.0.1;
+  option subnet-mask 255.255.255.0;
+# Emplacement du noyau dans le répertoire /var/lib/tftpboot. Selon le client, un noyau PXE ou Etherboot est fourni.
+  filename "/ltsp/pxelinux.0";
+# Emplacement du système alternatif spécial clients légers
+  option root-path "/opt/ltsp/i386";
+}</file>
+    * Vérifiez maintenant que les adresses IP correspondent à l'adresse que vous avez rentré lors de l'installation. Si vous avez utilisé une adresse en ''192.168.0'', vous avez bien fait. Sinon, utilisez Ctrl-R pour rechercher et remplacer les occurrences par celle que vous avez utilisé. Par exemple, remplacez ''192.168.0'' par ''10.0.0''.
+    * Vous pouvez également personnaliser le domaine de votre école, en remplaçant la ligne : <file>option domain-name "example.com";</file> par <file>option domain-name "ltsp.monecole.com";</file>
+    * Si vous installez le serveur Edubuntu au sein d'un réseau existant, vous pouvez paramétrer les options ''domain-name-servers'' et ''routers'' en fonction de votre configuration interne.
+    * Vous pouvez enregistrer et fermer ce fichier.
+    * Si vous avez deux cartes réseau et que vous voulez que le serveur dhcp ne soit actif que sur une carte, ajoutez cette carte dans le fichier ''/etc/default/dhcp3-server'' et relancez le DHCP
+
+    * [[:tutoriel:comment_modifier_un_fichier|Créez ensuite le fichier]] **'/opt/ltsp/i386/lts.conf**, ou avec amd64 si vous êtes en 64 bits.
+    * Ce fichier permet de passer des options spécifiques aux postes clients légers lors de leur démarrage. Nous allons préciser ici que nous souhaitons utiliser par défaut un clavier français dans l'environnement graphique des postes clients légers. Ajoutez pour cela les lignes suivantes :<file>
+[DEFAULT]
+        XkbLayout = fr</file>
+    * Vous pouvez enregistrer et fermer ce fichier.
+    * Il faut maintenant lancer le serveur DHCP, en charge de configurer les postes clients légers lors de leur démarrage. Dans votre console, tapez :<code>sudo systemctl restart networking</code> FIXME pour cette commande ou sudo service isc-dhcp-server start
+    * puis : <code>sudo ltsp-update-sshkeys
+sudo ltsp-update-image</code>
+    * Si vous n'avez pas fait d'erreur, la commande devrait renvoyer le message **OK**. Vous pouvez maintenant essayer de raccorder poste client léger et de le démarrer. Pour ce faire, si le bios de votre client léger ne propose pas l'option de démarrage sur le réseau (//NETWORK//), il vous faudra créer une disquette de démarrage spécifique, fonction de la carte réseau présente sur ce poste. Vous pouvez créer cette disquette à partir du site suivant : http://www.etherboot.org.
+
+Trucs : 
+    * Par défaut Ubuntu fournit au client léger un noyau de type PXE. Il faut donc choisir une image Rom compatible avec la norme PXE, [[http://rom-o-matic.net/5.4.1/|la version 5.4.1 par exemple]].
+    * [[http://www.ltsp.org/documentation/ltsp-4.1/ltsp-4.1-fr.html#AEN78|La liste des cartes disponibles]] est longue, le site  nous indique comment trouver l'identifiant de la carte.
+
+===== Configuration du dhcpd.conf sur un autre serveur =====
+
+Dans le cas où vous installez le serveur ltsp sur un réseau déjà équipé d'un serveur DHCP, vous ne pourrez pas l'utiliser sous peine de créer des conflits sur le réseau. Vous devez dans ce cas configurer le fichier ///etc/dhcpd.conf// ou ///etc/dhcp3/dhcpd.conf// en fonction du serveur. Attention, les paramètres ne sont valables que dans le cas du DHCP de l'ISC.
+Vous serez obligés d'utiliser le serveur DHCP en mode adressé ou statique, ce qui veut dire qu'il faudra entrer les adresses ethernet des clients et l'adresse IP correspondante dans le fichier //dhcpd.conf//.
+
+Sur le serveur LTSP, ne modifiez pas le fichier ///etc/ltsp/dhcpd.conf// installé par défaut ainsi le serveur ne se lancera pas. [[:tutoriel:comment_modifier_un_fichier|Éditez le fichier]] du serveur DHCP **/etc/dhcpd.conf**, et créez un groupe pour gérer vos clients légers ensemble :
+<file>
+  group {
+          option root-path "/opt/ltsp/i386";  
+          next-server 192.0.0.1;
+          if substring( option vendor-class-identifier, 0, 9 ) = "PXEClient" {
+                       filename "/ltsp/i386/pxelinux.0";
+                       }
+                       else{
+                       filename "/ltsp/i386/nbi.img";
+                       };
+</file>
+La différence principale avec la configuration décrite plus haut est **next-server** qui donne l'adresse du serveur LTSP aux clients légers ainsi une fois qu'ils ont récupéré leurs adresse IP, ils savent qui contacter.
+
+La suite de votre fichier va concerner les machines incluses dans ce groupe, voici un exemple.
+
+<file>
+        # PC (Salle multimedia) eleve 1               ##c'est un champ commentaire
+	host lnt-d00050 {                             ##c'est le nom réseau ou DNS du client léger
+		hardware ethernet 00:1a:a0:34:44:af;  ##c'est l'adresse ethernet (ou adresse MAC) du client léger.  
+		fixed-address 192.0.0.10;             ##c'est l'adresse IP attribuée au client léger
+		}
+	# PC (Salle multimedia) eleve 2
+	host lnt-d00049 {
+	        hardware ethernet 00:1a:a0:34:45:97;
+		fixed-address 192.0.0.11;
+		}
+	# PC (Salle multimedia) eleve 3
+	host lnt-d00059 {
+		hardware ethernet 00:1a:a0:34:45:d1;
+		fixed-address 192.0.0.12;
+		}
+       }
+</file>
+
+Il faut faire attention à ne pas oublier une { ou }
+
+=== Sélection d'un pilote pour une carte réseau PCI ===
+
+Pour les cartes PCI, il faut, par contre, choisir le pilote correspondant exactement à l'identifiant PCI de la carte et de son fabricant.
+
+La plupart du temps, on peut facilement récupérer ces informations, car elles sont imprimées sur la carte et correspondent à la description du pilote. Mais il arrive qu'on ne puisse pas les retrouver.
+
+Dans ce cas, si le client léger est équipé d'un lecteur de disquette, on peut y insérer une disquette **tomsrtbt** (//Tom's Root Boot//). Ou bien, si le client léger dispose d'un lecteur CD-ROM, on peut démarrer avec un CD Linux, comme Knoppix. S'il n'est pas possible de lancer Linux sur le client léger pour découvrir le type de le carte réseau, le seul moyen restant est d'installer la carte réseau sur une machine où cela est possible.
+
+===Linux===
+
+Lorsque Linux est chargé, vous pouvez alors utiliser la commande ''lspci'' avec l'option ''-n''.
+  [root@jamlap root]# lspci -n
+  0000:00:00.0 Class 0600: 8086:7190 (rev 03)
+  0000:00:01.0 Class 0604: 8086:7191 (rev 03)
+  0000:00:03.0 Class 0607: 104c:ac1c (rev 01)
+  0000:00:03.1 Class 0607: 104c:ac1c (rev 01)
+  0000:00:07.0 Class 0680: 8086:7110 (rev 02)
+  0000:00:07.1 Class 0101: 8086:7111 (rev 01)
+  0000:00:07.2 Class 0c03: 8086:7112 (rev 01)
+  0000:00:07.3 Class 0680: 8086:7113 (rev 03)
+  0000:00:08.0 Class 0401: 125d:1978 (rev 10)
+  0000:01:00.0 Class 0300: 1002:4c4d (rev 64)
+  0000:06:00.0 Class 0200: 8086:1229 (rev 09)
+
+Dans l'exemple ci-dessus, lspci affiche une ligne pour chaque carte PCI installée dans la machine. La seule ligne qui compte concerne les composants de classe ''Class 0200''.
+<file>0000:06:00.0 Class 0200: 8086:1229 (rev 09)</file>
+
+Les identifiants PCI recherchés sont ''8086:1229''. Le premier champ 8086 correspond à l'identifiant du fabricant. Dans cet exemple, il s'agit d'//Intel Corporation//. Le deuxième champ, 1229 est l'identifiant de la carte, et il s'agit ici d'une //EtherExpress 100 card//. NDLT : Voir aussi ''lspci'' avec l'option ''-v''.
+
+Pour pouvoir copier le bootrom sur une disquette, choisissez l'option ''Floppy Bootable ROM Image''. Ceci va insérer un en-tête de 512 octets dans dans le bootrom. Lorsque le client léger démarre, cet en-tête charge le bootrom en mémoire, où il est exécuté.
+
+Une fois sauvegardé sur le disque dur, il faut ensuite copier le bootrom sur une disquette. Insérez une disquette dans le lecteur et lancez la commander suivante :
+
+  dd if=Etherboot_Image of=/dev/fd0 
+
+    * Si vous avez besoin d'écrire l'image disquette à partir d'un poste Windows, vous pouvez utiliser RawWrite : http://grpnov.unige.ch/divdocs/Doc-Aepli/RawWrite.html.
+    * Si votre client léger n'a pas encore de carte réseau, achetez une carte capable de démarrer directement en PXE. Exemple : ''DLINK DFE-554CP PXE BOOTROM F/DFE-550TX'' ou ''3com 905CX-TX-M'' (attention, beaucoup de cartes ont le support ROM BOOT, mais il faut le rajouter ; dans le cas de la Dlink précédemment citée, le module DFE-550TX est ainsi vendu sparément ; la 3com est complète).
+
+=====Voir aussi=====
+Le [[http://wiki.ltsp.org/wiki/Installation/Ubuntu|wiki officiel]]

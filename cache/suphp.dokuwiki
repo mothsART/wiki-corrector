@@ -1,0 +1,303 @@
+
+{{tag>php LAMP serveur apache}}
+
+----
+
+====== suPHP ======
+
+> suPHP est un outil pour executer des scripts PHP avec les droits de leur proprietaire. Il est composé d'un module Apache (mod_suphp) et d'un //setuid root binary// (suphp) appelé par le module Apache pour changer l'uid du processus executant l'interprétateur PHP.((traduction approximative de la description faite sur [[http://www.suphp.org/Home.html|le site officiel]])).
+
+===== Utilisations =====
+
+Plus concrètement, suPHP permet de limiter l'action des scripts php lancés sur votre serveur en les exécutant avec les droits de leur propriétaire, au lieu des droits d'Apache. Ainsi un site ne peut pas avoir d'action sur les fichiers d'un autre site. Cela est particulièrement utile dans le cas d'installations d'outils vulnérables comme des forums ou des CMS.
+
+C'est également utile pour la gestion d'un grand nombre de sites différents si vous êtes l'administrateur d'un serveur d'hébérgement mutualisé. suPHP permet de lancer les scripts avec les droits du propriétaire des fichiers, même si celui-ci n'existe pas réellement. C'est-à-dire s'il ne s'agit pas d'un utilisateur système mais d'un utilisateur virtuel, avec un simple UID numérique par exemple. Cette solution peut être combinée avec un serveur ftp administré par une base de données.
+
+Enfin suPHP permet également de faire cohabiter plusieurs versions de php si vous souhaitez par exemple pouvoir exécuter php4 et php5 sur le même serveur facilement.
+
+===== Installation =====
+
+<del>
+À l'heure où j'écris ces lignes, la version actuelle d'Apache est 2.2 et celle de suPHP et 0.6.3 et ces deux versions sont totalement compatibles l'une avec l'autre.
+</del> 
+Ces informations ont été mises à jour pour la version 0.7.1.1 de suPHP (pour Ubuntu à partir de la version 10.04), qui cohabite toujours aussi bien avec apache et qui corrige notamment une incompatibilité avec phpMyAdmin.
+
+Il faut savoir que suPHP nécessite d'utiliser php dans sa version CGI. Le mod_php restera néanmoins nécessaire pour exécuter les applications php installées dans le système, c'est-à-dire non lié à un utilisateur, telles que phpMyAdmin, car suPHP interdit par défaut l'exécution de scripts php par un utilisateur avec un uid inférieur à 100 (c'est le cas de l'utilisateur www-data utilisé par apache dans Ubuntu).
+
+Afin d'installer suPHP vous devez déjà disposer d'[[apache2|Apache installé sur votre serveur]].
+
+<note>
+Pour toutes les commandes qui vont suivre vous devez être superutilisateur root, donc vous pouvez soit faire précéder chaque commande de sudo, soit taper "sudo -s" une bonne fois pour toute.
+</note>
+
+==== Installation de php5 ====
+
+Il ne sera pas traité ici de la manière de faire cohabiter php4 et php5 du fait que php4 est voué à disparaître progressivement et que tous les efforts devraient être mis en place pour ne plus utiliser que php5.
+
+Pour installer php5 en version CGI il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt://php5-cgi|php5-cgi]]**.
+
+<note tip>
+N'oubliez pas que php utilise des fichiers php.ini différents, lorsqu'il est utilisé en tant que module apache ou bien en tant que script cgi. Si vous avez effectués des modifications dans /etc/php5/apache2/php.ini, n'oubliez pas de les transposer dans le fichier /etc/php5/cgi/php.ini.
+</note>
+
+==== Installation de suPHP ====
+
+=== Par le paquet ===
+
+Il est plus simple de l'installer directement par le paquet : **[[apt://libapache2-mod-suphp|libapache2-mod-suphp]]**
+
+Après l'installation du paquet suPHP, il vous faudra apporter une modification à la configuration de suPHP et/ou mod php, selon votre version d'Ubuntu. En effet, la configuration installée par défaut rend inutilisable les applications php installées dans /usr/share, telles que la version de phpMyAdmin qui se trouve dans les paquets d'Ubuntu. En effet, les scripts php situés dans ces répertoires ne sont plus exécutés et votre navigateur vous proposera donc de les télécharger...
+
+Ce problème a été [[http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=519005|reporté]] et corrigé dans la version 0.7.1.1 de suPHP, qui est incluse dans les paquets à partir de la version 10.04 d'Ubuntu (Lucic Lynx). Cette correction semble cependant partielle, veuillez donc suivre les instructions ci-après pour faire cohabiter joyeusement suPHP et phpMyAdmin (ou autre), si vous rencontrez le problème décrit.
+
+== Ubuntu 10.04 et suivantes ==
+
+Au moment de l'écriture de cette section, la dernière version d'Ubuntu est la 10.10. Si vous utilisez une version ultérieure, vérifiez que le problème existe toujours avant d'appliquer cette solution (il est probablement judicieux de vérifier de toutes façons).
+
+La solution, pour ces versions, consiste à éditer le fichiers /etc/apache2/mods-available/php5.conf et à encadrer tout le contenu du fichier (qui doit normalement commencer par <IfModule mod_php5.c> et finir par </IfModule>) par les lignes :
+<code>
+<Directory /usr/share>
+</code>
+et
+<code>
+</Directory>
+</code>
+Ces deux lignes doivent donc être la première et la dernière du fichier. Redémarrer apache (sudo /etc/init.d/apache2 restart), et tout doit alors être en place pour utiliser suPHP.
+
+== Ubuntu 9.10 et précédentes ==
+
+Si vous utilisez une version d'Ubuntu plus ancienne que la 10.04, vous allez avoir un peu plus de travail, car vous allez devoir effectuer vous-même les modifications suggérées dans le [[http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=519005#10|message #10 du rapport de bug]], exposées aussi sur [[http://serverfault.com/questions/211935/running-phpmyadmin-and-suphp|cette page]]. En voici la traduction (cette méthode n'a été testée que sur la version 10.10 d'Ubuntu, mais il apparait que ces modifications correspondent effectivement à la configuration fonctionnelle installée sur la version 10.10).
+
+Ces modifications sont bien entendu à effectuer après avoir installé le paquet libapache2-mod-suphp. Elles ont pour but de permettre la cohabitation de mod_php, qui sera utilisé pour les scripts dans le dossier /usr/share, et php cgi, qui sera utilisé par suPHP pour les autres scripts.
+
+Dans le fichier /etc/suphp/suphp.conf, remplacez la ligne suivante :
+
+<code>
+application/x-httpd-php="php:/usr/bin/php-cgi"
+</code>
+
+par :
+
+<code>
+application/x-httpd-suphp="php:/usr/bin/php-cgi"
+</code>
+
+Dans /etc/apache2/mods-available/suphp.conf, remplacez :
+
+<code>
+AddType application/x-httpd-php .php .php3 .php4 .php5 .phtml
+suPHP_AddHandler application/x-httpd-php
+</code>
+
+par :
+
+<code>
+AddType application/x-httpd-suphp .php .php3 .php4 .php5 .phtml
+suPHP_AddHandler application/x-httpd-suphp
+</code>
+
+Dans le même fichier, ajoutez les lignes suivantes à l'intérieur de la balise <IfModule mod_suphp.c>...</IfModule> (juste avant la ligne </IfModule>, par exemple) :
+
+<code>
+# By default, disable suPHP for debian packaged web applications as files
+# are owned by root and cannot be executed by suPHP because of min_uid.
+<Directory /usr/share>
+    suPHP_Engine off
+</Directory>
+</code>
+
+Enfin, dans le fichier /etc/apache2/mods-available/php5.conf, encadrez tout le contenu du fichier (qui doit normalement commencer par <IfModule mod_php5.c> et finit par </IfModule>) par les lignes :
+<code>
+<Directory /usr/share>
+</code>
+et
+<code>
+</Directory>
+</code>
+Ces deux lignes doivent donc être la première et la dernière du fichier.
+
+Redémarrer apache (sudo /etc/init.d/apache2 restart), et tout doit alors être en place pour utiliser suPHP.
+
+=== Par la compilation ===
+
+<note important>
+La méthode donnée ci-après n'inclut pas la correction du problème d'incompatibilité entre suPHP et les applications php installées dans /usr/share, telles que phpMyAdmin lorsqu'il est installé par les paquets. Veuillez vous reporter aux messages et aux pages cités dans la partie précédente, qui concerne l'installation par les paquets. Si vous ne comprenez pas comment appliquer vous-même les modifications dans les fichiers de configuration, préférez l'installation par les paquets et l'application des modifications telles qu'elles sont décrites ci-dessus.
+</note>
+
+Bien qu'il soit plus simple d'installer suPHP par apt, il est tout à fait possible de le compiler soi-même pour l'adapter à ses besoins. Cette procédure reste néanmoins un peu plus délicate et n'est conseillée que si vous savez ce que vous faites. Veuillez noter que, dans ce cas, la procédure décrite ici est surtout destinée à illustrer les différentes étapes nécessaires et demanderont probablement quelques ajustements de votre part.
+
+== Installation d'apxs ==
+
+La manière la plus simple d'installer mod_suphp et de le compiler en tant que module chargé dynamiquement (//dynamically loadable module ou DSO//). Si votre version d'Apache a été compilée avec le support des DSO et que "apxs" est soit dans votre dossier, soit vous avez spécifié son dossier en lançant la commande "configure", alors mod_suphp sera automatiquement compilé par la suite et installé sur votre serveur apache((traduction approximative de la documentation officielle)).
+
+Comme nous voulons installer suPHP en tant que DSO, nous allons installer apxs2. Il est fourni par le paquet **[[apt://apache2-prefork-dev|apache2-prefork-dev]]** [[:tutoriel:comment_installer_un_paquet|qu'il faut donc installer]].
+
+== Installation de suPHP ==
+
+Pour télécharger la dernière version tapez les commandes suivantes :
+
+<code>
+cd /tmp
+wget http://www.suphp.org/download/suphp-current.tar.gz
+tar -xf suphp-current.tar.gz
+cd suphp-0.6.3
+</code>
+
+Cela nous permet de nous placer dans le répertoire temporaire (qui sera vidé au prochain redémarrage de votre machine), de récupérer la dernière version de suPHP depuis [[http://www.suphp.org/Download.html|le site de l'auteur]], de le décompresser et de nous placer dans son répertoir (remplacez 0.6.3 par votre version).
+
+A ce stade il faut maintenant configurer suPHP avec les options qui nous intéressent avant de le compiler. Je vous propose la configuration suivante :
+
+<code>
+mkdir /etc/suphp
+mkdir /var/log/suphp
+./configure --prefix=/usr --sysconfdir=/etc/suphp --with-apache-user=www-data --with-setid-mode=owner --with-apxs=/usr/bin/apxs2 --with-min-uid=33 --with-min-gid=33 --with-logfile=/var/log/suphp
+</code>
+
+mais vous pouvez également taper la commande suivante pour en savoir plus sur les options de configuration de suPHP :
+
+<code>
+./configure --help | more
+</code>
+
+Les différents modes de suPHP sont les suivants :
+
+^ mode ^ description ^
+| force | Execute les scripts avec l'UID/GID spécifié dans la configuration d'Apache (ex: www-data:www-data) |
+| owner | Execute les scripts avec l'UID/GID de leur propriétaire |
+| paranoid |Execute les scripts avec l'UID/GID de leur propriétaire mais vérifie également qu'ils correspondent à la valeur spécifiée dans la configuration d'Apache, modifiable pour chaque vhost par la directive  suPHP_UserGroup #UID #GID |
+
+Une fois que votre configuration est faite, il n'y a plus qu'à compiler et à installer :
+
+<code>
+make
+make install
+</code>
+
+<note tip>
+Sur une installation fraiche et minimaliste de Hardy, il manquait les outils de compilation. Il suffit d'installer le paquet build-essential pour les obtenir.
+</note>
+
+== Configuration ==
+
+Ensuite, copiez le fichier de configuration d'exemple dans votre dossier suphp créé ci-dessus :
+
+<code>
+cp /tmp/suphp-0.6.3/doc/suphp.conf-example /etc/suphp/suphp.conf
+</code>
+
+et [[:tutoriel:comment_editer_un_fichier|éditez le]] pour qu'il ressemble à ça :
+
+<file>
+[global]
+;Path to logfile
+logfile=/var/log/suphp/suphp.log
+
+;Loglevel
+loglevel=info
+
+;User Apache is running as
+webserver_user=www-data
+
+;Path all scripts have to be in
+docroot=/
+
+;Path to chroot() to before executing script
+;chroot=/mychroot
+
+; Security options
+allow_file_group_writeable=false
+allow_file_others_writeable=false
+allow_directory_group_writeable=false
+allow_directory_others_writeable=false
+
+;Check wheter script is within DOCUMENT_ROOT
+check_vhost_docroot=false
+
+;Send minor error messages to browser
+errors_to_browser=true
+
+;PATH environment variable
+env_path="/bin:/usr/bin:/usr/sbin:/sbin"
+
+;Umask to set, specify in octal notation
+umask=022
+
+; Minimum UID
+min_uid=33
+
+; Minimum GID
+min_gid=33
+
+[handlers]
+;Handler for php-scripts
+x-httpd-php="php:/usr/bin/php5-cgi"
+
+;Handler for CGI-scripts
+x-suphp-cgi=execute:!self
+</file>
+
+Enfin vous devez indiquer à Apache de lancer le module suPHP. Pour cela vous pouvez [[:tutoriel:comment_editer_un_fichier|éditer le fichier]] /etc/apache2/httpd.conf et y rajouter :
+
+<file>
+LoadModule suphp_module       /usr/lib/apache2/modules/mod_suphp.so
+</file>
+
+Ou alors vous pouvez également mettre cette directive dans un fichier suphp.load dans le dossier /etc/apache2/mods-available et en faire un lien symbolique dans /etc/apache2/mods-enabled. Cette deuxième méthode est préférable car elle rend l'entretien d'Apache plus facile, en permettant notamment l'utilisation des utilitaires a2enmod et a2dismod pour activer et désactiver suPHP.
+
+<code>
+ln -s /etc/apache2/mods-available/suphp.load /etc/apache2/mods-enabled/suphp.load
+</code>
+
+De même, vous pouvez créer un fichier /etc/apache2/mods-available/suphp.conf et en faire un lien symoblique dans mods-enabled, contenant la configuration suivante :
+
+<file>
+<IfModule mod_suphp.c>
+  AddType application/x-httpd-php .php .phtml .php3 .php4 .php5
+  AddType application/x-httpd-php-source .phps
+  AddHandler x-httpd-php .php .php3 .php4 .php5
+  <Location />
+     SuPHP_AddHandler x-httpd-php
+  </Location>
+  suPHP_ConfigPath /etc/php5/cgi
+  suPHP_Engine on
+</IfModule>
+</file>
+
+C'est tout !
+
+N'oubliez quand même pas de redémarrer Apache pour prendre en compte la nouvelle configuration :
+
+<code>
+/etc/init.d/apache2 restart
+</code>
+
+
+===== Remarque sur l'utilisation =====
+
+Il vous suffit dès à présent de définir les droits des fichiers de vos sites pour que chacun devienne indépendant. Exemple pour un utilisateur fictif numéro 2135 ayant accès uniquement à tous les sous-dossiers à partir de /sous-dossier :
+
+<code>
+chown -R 2135:33 /var/www/domaine_1/sous_dossier/
+</code>
+
+Par ailleurs, il faut savoir deux choses sur l'utilisation de suphp :
+
+  - Le dossier contenant les fichiers d'un utilisateur doit également appartenir à cet utilisateur. C'est à dire que /sous_dossier doit appartenir à 2135 pour que celui-ci puisse executer les fichiers dans le dossier.
+  - Les autres dossiers parents doivent obligatoirement appartenir à l'utilisateur root:root, c'est à dire dans notre cas d'exemple /var/www/domaine_1 doit appartenir à root:root sous peine d'obtenir une erreur 500 dans votre navigateur, et la peu-explicite erreur :
+
+<code>
+[Tue May 20 02:14:18 2008] [error] [client x.x.x.x] terminate called after throwing an instance of 'suPHP::LookupException'
+[Tue May 20 02:14:18 2008] [error] [client x.x.x.x] Premature end of script headers: info.php
+</code>
+
+En cas de problème, s'adresser à [[http://lists.marsching.com/mailman/listinfo/suphp|la liste de diffusion (anglophone)]] ou [[http://lists.marsching.com/pipermail/suphp/|consulter les archives]] ; ils sont très gentils et très efficaces !
+
+===== suPhp et directives apache php_value =====
+Afin de spécialiser l'interpréteur php pour chaque application hébergée, il est possible d'utiliser des directives de la forme : php_value, php_admin_value, php_flag, php_admin_flag. Ces directives permet de fixer par répertoire (et donc application), les principales valeurs de configuration de php.
+
+Cependant, selon ce qui est écrit dans la [[http://www.suphp.org/FAQ.html|FAQ]] de suPhp, il est impossible de forcer les valeurs de php par ce moyen. Une alternative consiste a utiliser la directive **suPHP_ConfigPath** pointant vers le chemin d'acces à un fichier php.ini alternatif.
+
+
+----
+
+//Contributeurs : [[utilisateurs:stadrum]], [[utilisateurs:rixo]]//

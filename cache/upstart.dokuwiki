@@ -1,0 +1,112 @@
+
+{{tag>système administration services}}
+----
+
+====== Upstart ======
+<note important>upstart a été remplacé(([[https://lists.ubuntu.com/archives/ubuntu-devel-announce/2015-March/001130.html|annonce du 5 mars 2015 sur ubuntu.com]])) par [[systemd]] à partir de [[vivid|Vivid]] (15.04)</note>
+{{ http://upload.wikimedia.org/wikipedia/commons/7/74/Logo_for_Upstart_daemon.png?350|Logo upstart}}
+
+Upstart est un successeur des [[:script_sysV|scripts system V]] et se base sur les événements.\\
+Il fonctionne de manière asynchrone : de la même manière qu'il gère le lancement et l'arrêt des [[:services]] au démarrage et à l'arrêt de la machine, il les supervise pendant que le système tourne.
+
+Upstart est apparu avec [[:edgy|Ubuntu 6.10 "Edgy Eft"]] afin de remplacer sysinit. Dans les versions suivantes, il a vu son rôle étendu et devrait remplacer dans le futur [[:cron]], [[:init_d#atd]], [[:anacron]] et peut-être inetd.((Démon Unix qui permet de gérer les connexions à des services réseau -- [[wpfr>Inetd|inetd]]))\\
+
+<note important>Vu le risque que peut engendrer la mauvaise gestion des [[services]], la plupart des commandes indiquées nécessite les droits [[:sudo|administrateur]].</note>
+
+=====Utilisation=====
+
+Il existe des [[#logiciels]] qui prennent en charge les scripts Upstart, néanmoins l'outil qui permet de les contrôler ponctuellement se nomme **initctl**.\\
+Il est généralement utilisé ainsi dans un [[:terminal]]:
+<code>sudo initctl ACTION NomService</code>
+Où  
+  * ACTION sera la commande que l'on souhaite appliquer au dit service:
+      * // start // : démarrer le service
+      * // stop // : arrêter le service
+      * // restart // : relancer le service
+      * // reload // : recharger le service
+      * // status // : connaitre l'état du service
+  * NomService est le nom du service visé.
+ 
+Quelle que soit l'action menée sur un service, au prochain démarrage de la machine celui-ci devrait retrouver le status qui lui a été [[#Modifier l'exécution d'un service|défini par défaut]].
+
+Pour une explication plus détaillée et les autres actions possibles n'hésitez pas à consulter le [[:man|manuel]] d'**initctl**.
+
+===Exemples===
+
+<code>initctl status udev</code>donnera l'état du service [[:udev]] ainsi que son PID si celui-ci est actif, 
+<code>sudo initctl stop tty3</code> arrêtera la connexion au [[:console|tty]]3 ,
+<code>sudo initctl restart lightdm</code> relancera le serveur graphique.\\
+L'action // restart // renverra l' erreur //"initctl: Unknown instance"// si le service n'est pas en cours de fonctionnement ou est géré pas un [[script_sysV|script system V]].
+
+<note>Des liens vers les commandes principales d'initctl sont installés par défaut. Il s'agit de //start//,// stop//,// restart //et //status//.\\
+Par exemple **sudo restart lightdm** est équivalent à **sudo initctl restart lightdm**.</note>
+
+=====Lister les services démarrés=====
+
+Saisissez dans un [[:terminal]] :
+<code>
+initctl list
+</code>
+Vous obtenez la liste des services Upstart accompagnés de leur état ainsi que leur pid.
+
+<note tip>
+Pour obtenir une liste ordonnée, tapez :
+  initctl list | sort
+</note>
+
+=====Modifier l'exécution d'un service=====
+
+Contrairement aux [[script_sysv|scripts system V]] qui utilisent l'outil **update-rc.d**, Upstart utilise des fichiers de configuration correspondant aux différents services à manipuler.\\
+Ces fichiers de configuration, qui se trouve dans **/etc/init/**, permettent d'indiquer les conditions d'activation ou désactivation d'un service ou d'y insérer ses propres scripts.
+<note important>Ce dossier étant essentiel au bon fonctionnement de votre système, il est conseillé d'en faire une sauvegarde avant toute modification de fichier.\\
+Dans un [[:terminal]] saisissez:
+<code>sudo cp -r /etc/init/ /etc/init.save$(date +%Y%m%d)</code></note>
+Pour désactiver définitivement un service de **tous** les runlevel, il suffit de renommer le fichier de configuration.\\
+Néanmoins si vous souhaitez modifier l'état d'un service selon certaines conditions, vous devrez [[:tutoriel:comment_modifier_un_fichier|modifier le fichier]] **/etc/init/NomService.conf**.\\
+
+===Exemples===
+FIXME tout ce qui concerne lightdm n'est pas à jour. 
+  * Si vous souhaitez désactiver [[:lightdm]], dans un [[:terminal]] saisissez:
+<code>sudo mv /etc/init/tty6.conf /etc/init/tty6.conf.noexec</code>
+Pour réactiver le service, il faudra faire la manipulation inverse:
+<code>sudo mv /etc/init/tty6.conf.noexec /etc/init/tty6.conf</code>
+
+  * Si vous souhaitez ne jamais lancer [[:lightdm]], plutôt que de renommer le fichier comme indiqué plus avant, il faudra [[:tutoriel:comment_modifier_un_fichier|modifier le fichier]] **/etc/init/lightdm.conf** pour ajouter //never// à la ligne //start on (// comme ceci:
+<file>start on (never
+          and filesystem
+          and started hal
+          and tty-device-added KERNEL=tty7
+          and (graphics-device-added or stopped udevtrigger))
+stop on runlevel [016]
+...</file>Vous pouvez constater que [[:lightdm]] dépend également d'autres événements ([[:systeme_de_fichiers|fichiers système]] montés, [[:hal]] démarré...).
+
+  * Si vous souhaitez pouvoir lancer [[:lightdm]] uniquement après vous être connecté dans une [[:console]], [[:tutoriel:comment_modifier_un_fichier|modifiez le fichier]] **/etc/init/lightdm.conf** comme ceci:
+<file>start on (runlevel [3]
+          and filesystem
+          and started hal
+          and tty-device-added KERNEL=tty7
+          and (graphics-device-added or stopped udevtrigger))
+stop on runlevel [0126]
+...</file>
+
+==== Personnaliser un fichier de configuration UpStart ====
+
+Quand on a besoin de personnaliser un fichier de configuration upstart (.conf), il est préférable de le faire dans un fichier .override que modifier le .conf , celui-ci pouvant être écrasé lors d'une mise à jour évolutive (ex. nouvelle version du service). 
+
+Par exemple, pour rajouter une [[http://upstart.ubuntu.com/cookbook/#stanzas-by-category|stanza]] comme un pre-stop à /etc/init/mysql.conf, il convient de créer /etc/init/mysql.override et d'y placer la stanza pre-stop.
+
+Cf. [[http://upstart.ubuntu.com/cookbook/#override-files|ici]] (en anglais) pour de plus amples informations.
+=====Logiciels=====
+
+Vous trouverez sur la page <<** [[Services]] **>> une liste non exhaustive de logiciels permettant la gestion des scripts Upstart.
+
+===== Ressources ======
+  * [[http://upstart.ubuntu.com/|Site web d'Upstart]] 
+  * [[https://launchpad.net/upstart|Upstart sur Launchpad]]
+  * [[https://wiki.ubuntu.com/ReplacementInit|Upstart sur le Wiki anglophone]]
+  * [[http://ubuntuforums.org/showthread.php?t=1305659|Thread anglais]]
+  * [[http://ubuntuforums.org/archive/index.php/t-1519273.html|Archive d'un thread anglais]]
+  * [[http://wiki.frugalware.org/index.php/Upstart_Job_HOWTO|cette page du wiki frugalware]] (en) pour [[:tutoriel:comment_transformer_un_programme_en_service|démoniser]] mais avec upstart.
+
+----
+//Contributeurs: [[:utilisateurs:fabux]],//

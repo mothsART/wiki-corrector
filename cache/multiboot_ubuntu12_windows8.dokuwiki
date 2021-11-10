@@ -1,0 +1,96 @@
+
+{{tag>installation amorçage}}
+======triple amorçage EFI  Ubuntu /Windows 8/Mageia ou autre OS ======
+
+Ce tutoriel décrit la démarche à suivre pour créer un triple boot sur un netbook 64bits récent (carte mère UEFI et GPT) avec Windows 8 préinstallé sans disque d'installation.
+
+**Le chargeur de boot final sera Grub2 et non le chargeur de Windows 8.**
+
+
+<note tip>Pour aller plus loin dans la configuration globale de votre poste de travail, vous pouvez consulter la documentation complète \\ [[installer_ubuntu_selon_besoins|Ubuntu à votre image : Configurer votre ordinateur selon vos besoins]]</note>
+
+===== Pré-requis =====
+
+  * Netbook 64 bits avec Windows 8 préinstallé en mode EFI /GPT, sans CD d'installation Windows.
+  * Graver un disque d'installation '[[https://sourceforge.net/projects/linux-secure/files/|Linux Secure Remix 64bits']].
+  * Graver un disque d'installation 'Mageia 64bits'
+  * Avoir un DVD Live Ubuntu ou Mageia ou autre pour le partitionnement  (ou un CD de Gparted: partitionneur Linux)
+  * graver un CD de réparation de démarrage [[http://www.commentcamarche.net/faq/15961-super-grub-disk-live-cd|Super GRUB2 Disk]] .
+  
+[...]
+===== Première étape : partitionnement=====
+  * **sauver ses données** sur support externe
+  * [[tutoriel:modifier_ordre_amorcage_du_bios|peut-être modifier le BIOS pour booter sur un CD]]
+  * **partitionner son disque dur sans toucher à W8** (6 partitions W8 en FAT ou NTFS ) grâce à [[Gparted]] (sur un CD spécial ou un CD Ubuntu ou Mageia Live) :
+
+        Les 6 partitions W8 : 4 au début et 2 à la fin du DD (dans mon cas) :
+              sda1 (gpt1) : 0,5Go 'Windows RE tools' ; NTFS
+              sda2 (gpt2) ; 0,3Go 'boot-EFI'                 FAT32
+              sda3 (gpt3) ; 0,1Go  'réservé W8'
+              sda4 (gpt4) ; 80Go   'Windows 8'            NTFS
+              sda7 (gpt7) ; 25Go   ' recup2'                 NTFS
+              sda8 (gpt8) ; 1,1Go   'recup1'                 FAT32
+       2 partitions Ubuntu : sda9  15Go      /             ext4
+                             sda10 10Go   /home      ext4
+       2 partitions Mageia : sda11  15GO    /            ext4     
+                             sda12  10Go  /home      ext4
+       1 partition swap     sda5  (8Go = taille mem.vive + 30%)
+       1 grande partition   sda6 'DONNEES' commune en NTFS (taille=le reste du DD)
+
+ Notes: 
+        #La partion swap sera commune à tous les OS Linux
+        #La partition W8 gpt2 servira aussi pour le boot Linux en EFI .
+        #La grosse partition DONNEES sera accessible par tous les OS
+         
+
+===== Installer Ubuntu  =====
+  -Ubuntu >=12.10 64bits est compatible UEFI donc on installe l'OS en [[:uefi|réglant le BIOS sur le mode EFI]] ou mieux (si votre BIOS le permet ) sur le mode Legacy + EFI . Il faudra désactiver l'option 'secure boot' non supportée par Ubuntu 12.10 .
+  -On boote sur le CD d'installation.
+  -On choisit le mode de partitionnement 'manuel' (ou 'autre chose') et on monte donc:
+                    * gpt9  en racine /
+                    * gpt10 en /home
+                    * gpt2  en /boot/efi  **mais sans le formater !!!** 
+  -Finir l'installation Ubuntu en installant GRUB2 dans gpt9 (pas dans le MBR, cad le choix sda)
+  -Redémarrer :on tombera donc sur l'écran de choix GRUB2 avec Ubuntu et Windows.
+  -Si on tombe directement sur Windows, rebooter sur le CD Ubuntu Secure Remix, choisir 'boot repair', cliquer sur le bouton "Réparation recommandée" ; puis rebooter et l'on tombera bien sur GRUB2
+
+===== Installer Mageia ,  ou autre OS sans EFI et avec GRUB Legacy =====
+
+Mageia<5 est livré avec Grub-Legacy (grub1 sans EFI) et donc il ne faudra pas détruire sda2 ou le MBR (sda): il faut enregistrer l'amorce dans la racine sda11 de l'OS, puis avec [[:grub-customizer|Grub Customiser]] (sous Ubuntu)  ajouter une entrée à Grub2 dans /boot/efi .
+             L'installation de Mageia ne sera pas traitée ici
+Installer Mageia va donner la main à Grub Legacy : le prochain redémarrage se fera donc sur Mageia  sans les choix W8 ou Ubuntu .
+Il faudra repasser la main à Grub2 :
+Rebooter sur le CD Super GRUB2 Disk, choisir Ubuntu et booter dessus.
+
+**  Rajouter l'entrée Mageia  à Grub2:**
+       -   monter la partition / de Mageia
+  -        copier le fichier /boot/grub/menu.lst
+  -        dans Grub Customizer, rajouter une entrée mageia en s'inspirant de 'menu.lst ' :
+
+  *              ### BEGIN /etc/grub.d/12_os-prober_proxy ###  
+  * menuentry "Mageia 2 " --class gnu-linux --class gnu --class os $menuentry_id_option 'osprober-gnulinux-simple-7063f0bf-2cf8-4f47-8b88-8d862f729a35' {
+  * 	insmod part_gpt
+  * 	insmod ext2
+  * 	set root='hd0,gpt11'
+  * 	if [ x$feature_platform_search_hint = xy ]; then
+  * 	  search --no-floppy --fs-uuid --set=root --hint-bios=hd0,gpt11 --hint-efi=hd0,gpt11 --hint-baremetal=ahci0,gpt11  7063f0bf-2cf8-4f47-8b88-8d862f729a35
+  * 	else
+  * 	  search --no-floppy --fs-uuid --set=root 7063f0bf-2cf8-4f47-8b88-8d862f729a35
+  * 	fi
+  * 	linux /boot/vmlinuz BOOT_IMAGE=linux root=LABEL=mageia_root nokmsboot splash quiet resume=UUID=fb37cf6c-2f3d-4587-8e80-07fa9d34e583 vga=788
+  * 	initrd /boot/initrd.img  
+  *  }
+  *### END /etc/grub.d/12_os-prober_proxy ###
+  *
+ 
+ 
+ 4.     Changer l'ordre des OS si nécessaire 
+
+ 5.     Enregistrer : le prochain démarrage se fera sur Grub2
+       
+===== NOTES :=====
+
+  -Si en cours d'installation on perd un OS, on pourra le retrouver et booter dessus avec le [[http://www.commentcamarche.net/faq/15961-super-grub-disk-live-cd|Super GRUB2 Disk]] 
+  -Pour amorcer le BIOS au démarrage, faire Esc ou F2 ou toute autre touche suivant le type du Netbook (le faire pour booter provisoirement sur un CD)
+  -Ceci est valable pour un Window8 préinstallé, pour un W8 avec disque d'installation suivre la procédure plus simple:         [[ http://www.linuxbsdos.com/2012/11/05/dual-boot-windows-8-and-ubuntu-12-10-on-uefi-hardware/]]
+          

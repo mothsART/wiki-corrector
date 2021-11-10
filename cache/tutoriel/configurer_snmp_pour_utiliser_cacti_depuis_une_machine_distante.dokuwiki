@@ -1,0 +1,87 @@
+
+{{tag>tutoriel snmp supervision}}
+
+----
+
+
+=====Introduction=====
+
+L'objectif de ce tutoriel est de configurer snmpd sur une machine A dont on souhaite récupérer les informations de fonctionnement pour les exploiter sur une autre machine B, avec Cacti par exemple.
+===== Pré-requis =====
+
+L'on suppose que vous avez déjà installé et configuré Cacti sur la machine B en « local ». 
+
+[[apt://snmp,snmpd|{{ :apt.png|Cliquez pour installer.}}]]
+
+Sur la machine A il vous faut [[:tutoriel:comment_installer_un_paquet|installer les paquets]] **[[apt://snmp|snmp]]** et **[[apt://snmpd|snmpd]]**.
+
+D'autres paquets seront installés automatiquement par la même occasion si nécessaire ([[apt://libsensors3|libsensors3]] [[apt://libsnmp15|libsnmp15]] [[apt://libperl5.8|libperl5.8]] [[apt://libsnmp-base|libsnmp-base]] avec Hardy Heron 8.04).
+
+
+===== Configuration =====
+<note>
+les modifications sont à faire sur la machine A
+</note>
+Pour rendre l'accès à snmp possible depuis la machine B il faut [[:tutoriel:comment_editer_un_fichier|éditer le fichier]] **/etc/snmp/snmpd.conf**  :
+
+<file>
+#com2sec paranoid  default         public
+ com2sec readonly  default         public
+#com2sec readwrite default         private
+</file>
+
+On a commenté la ligne « paranoid » et décommenté la ligne « readonly ».
+
+Ensuite [[:tutoriel:comment_editer_un_fichier|éditez le fichier]] **/etc/default/snmpd** :
+
+<file>
+SNMPDOPTS='-Lsd -Lf /dev/null -u snmp -I -smux -p /var/run/snmpd.pid 127.0.0.1'
+</file>
+
+et remplacez 127.0.0.1 par l'adresse IP de l'interface réseau utilisée pour communiquer avec la machine B.
+
+== Activation des Partitions Disque ==
+
+Pour pouvoir surveiller l'occupation de l'espace disque de votre machine, il faut également modifier la partie **disk checks**. Il faut y rajouter une ligne pour chacune de vos partitions. Par exemple, si la commande **df** vous donne le résultat suivant :
+
+<code>
+    # df
+    Filesystem            Size  Used Avail Use% Mounted on
+    /dev/hda1             289M   56M  218M  21% /
+    /dev/hda2             1.7G  1.2G  429M  74% /etc
+    /dev/hda3              19G  6.7G   11G  37% /home
+</code>
+
+Vous devez [[:tutoriel:comment_editer_un_fichier|rajouter les lignes suivantes]] dans **/etc/snmp/snmpd.conf** :
+
+<file>
+    disk	/	100000
+    disk	/etc	100000
+    disk	/home	100000
+</file>
+
+Il ne vous reste plus qu'à redémarrer snmpd :
+
+<code>
+/etc/init.d/snmpd restart
+</code>
+
+
+
+===== Test =====
+
+Vous pouvez taper la commande :
+
+<code>
+snmpwalk -v 1 -c public x.x.x.x .1.3.6.1.2.1.1.1.0
+</code>
+
+où x.x.x.x est l'adresse IP que vous avez utilisée plus haut pour tester si le service fonctionne depuis la machine A et la machine B. Si vous obtenez autre chose que la réponse ci-dessous, c'est que c'est bon.
+
+<code>
+Timeout: No Response from x.x.x.x
+</code>
+
+----
+
+//Contributeurs : [[utilisateurs:stadrum]]//

@@ -1,0 +1,200 @@
+
+{{tag> BROUILLON}}
+
+----
+
+====== Scripts édité par l'utilisateur alt.g ======
+
+<note important>**Page en cours de rédaction**\\
+\\
+FIXME</note>
+<note warning>**Note sur un risque lié à une manipulation**\\
+L'utilisation des script présents sur cette page est à vos risques et périls.\\
+L'auteur de cet article ne sauraient être tenus responsables des éventuels dommages causés par leur usage.\\
+Veuillez n'utilisez ces scripts que si vous savez ce que vous faite.</note>
+
+===== musicNFO =====
+
+Ce script créer un fichier NFO pour les dossiers contenant des fichier MP3 ou FLAC. Il a été adapté depuis un script bugué dégoté sur le forum, il fonctionne mais il se pourrait qu'il y ait encore des bug, il n'a pas été complètement débogué\\
+
+**Utilisation:**
+<code>
+./Scripts/musicNFO.sh [-m | -f] [title column witdh] [directory path]
+</code>
+Options (facultatif):
+-m pour les fichier MP3 (par défaut)\\
+-f pour les fichiers FLAC\\
+Arguments:\\
+[title column witdh] : facultatif, largeur de colonne (par défaut 40 caractères)\\
+[directory path] : OBLIGATOIRE, chemin du dossier à analyser\\
+
+**script musicNFO.sh**
+<code bash>
+######################################################################
+#
+# musicNFO  v0.1b   2016-12-31     altg       
+#
+######################################################################
+usage() {
+echo "usage: $0 [-m | -f] [title column witdh] [directory path] "
+exit 1
+}
+
+# Files format
+
+ext=mp3
+# if "-m" look for MP3 files (default)
+[ "a$1" = a-m ] && shift && ext=mp3
+# if "-f" look for FLAC files
+[ "a$1" = a-f ] && shift && ext=flac
+
+# Title column witdh
+
+col=40
+# if col=0, display titles entirely
+[ "$1" -ge 0 ] 2>/dev/null && col=$1 && shift
+
+# Directory Path
+[ -d "$1" ] && path="$1" && totalsize=`du -sh "$1" | awk '{print $1}'` && set "$1"/*.$ext
+
+
+# Extract Mediainfo from files
+
+[ -f "$1" ] || usage
+
+file=/tmp/musicnfo$$
+mediainfo "$1" | sort -u > $file
+artist=`awk -F: '$1~/^Performer/ { print $2 }' $file` && artist=${artist:1}
+album=`awk -F: '$1~/^Album/ { print $2 }' $file` && album=${album:1}
+genre=`awk -F: '$1~/^Genre/ { print $2 }' $file`
+year=`awk -F: '$1~/^Recorded/ { print $2 }' $file`
+ripper=`awk -F: '$1~/^Writing/ { print $2 }' $file`
+format=`awk -F: '$1~/^Format  / { print $2 }' $file`
+fprof=`awk -F: '$1~/^Format p/ { print $2 }' $file`
+fvers=`awk -F: '$1~/^Format v/ { print $2 }' $file`
+rate=`awk -F: '$1~/^Sampling/ { print $2 }' $file`
+channels=`awk -F: '$1~/^Channel/ { print $2 }' $file`
+
+title="$artist - $album" && titlelen=${#title}
+ofile="$title.nfo"
+output="$path/$ofile"
+
+let seplen="$col+52"
+for ((i=0; i<$seplen; i++)); do sep="$sep-";done
+let titlepos="$seplen/2+$titlelen/2-1"
+
+
+## PRINT
+
+if [ "$col" -ne 0 ] ; then
+	printf "%s\n %*s\n%s\n\n" "$sep" "$titlepos" "$title" "$sep" > "$output"
+	printf "%-20s: %s\n" "Artist" " $artist" >> "$output"
+	printf "%-20s: %s\n" "Album" " $album" >> "$output"
+	printf "%-20s: %s\n" "Genre" "$genre" >> "$output"
+	printf "%-20s: %s\n" "Year" "$year" >> "$output"
+	printf "%-20s: " Ripper >> "$output" ; echo "$ripper" >> "$output"
+	printf "%-20s: %s %s %s\n" Format "$format" "$fprof" "$fvers" >> "$output"
+	printf "\n%s\n" "$sep" >> "$output"
+
+	case $col in 
+		1) fmt='%2s|%-40s|%10s |%10s |%10s |%10s |\n%s\n' ;; 
+		*) fmt='%2s|%-'$col's|%10s |%10s |%10s |%10s |\n%s\n';;
+	esac
+
+	printf "$fmt" " #" " Title" " Duration" " Size" " Bitrate" " Mode" $sep >> "$output"
+fi
+
+typeset -i n
+n=1
+
+while [ a"$1" != a ]
+do
+	[ -f "$1" ] || usage
+
+	file=/tmp/musicnfo$$
+	mediainfo "$1" | sort -u > $file
+	duration="`awk -F: '$1~/^Duration/ { print $2 }' $file | head -1`"
+	size="`awk -F: '$1~/^File/ { print $2 }' $file`"
+	bitrate="`awk -F: '$1~/^Overall bit rate[ ]*$/ { print $2 }' $file`"
+	mode="`awk -F: '$1~/^Overall bit rate mode/ { print $2 }' $file`"
+
+	case $col in
+		1)track="`awk -F: '$1~/^Track name / { print $2 }' $file`";;
+		0)track="`awk -F: '$1~/^Track name / { print $2 }' $file`";;
+		*)track="`awk -F: '$1~/^Track name / { print $2 }' $file | cut -c1-$col`";;
+	esac
+
+	[ -z "$track" ] && track="$1"
+
+	index="`awk -F: '$1~/Position / { print $2 }' $file`"
+	[ a"$index"=a ] && index=$n
+	n=$n+1
+
+	case $col in
+		1)fmt='%2s|%-40s|%10s |%10s |%10s |%10s |\n';;
+		0)fmt='%2s|%s\n';;
+		*)fmt='%2s|%-'$col's|%10s |%10s |%10s |%10s |\n';;
+	esac
+
+	if [ "$col" -ne 0 ] ; then
+	printf "$fmt" "$index" "$track" "$duration" "$size" "$bitrate" "$mode" >> "$output"
+	else
+	printf "$fmt" "$index" "$track" >> "$output"
+	fi
+	shift
+done
+
+if [ $col -gt 0 ]
+	then
+	printf "%s\n\n" $sep >> "$output"
+	echo "Total Size...........:" $totalsize"B." >> "$output"
+	echo "NFO generated on.....:" `date +"%D %T"` >> "$output"
+	rm $file
+fi
+
+echo "$ofile written successfully"
+echo "in folder $path ..."
+echo "ENJOY !"
+
+exit 0
+
+##############################################################
+</code>
+
+**Résultat:** fichier "Birdy Nam Nam - Jaded Future EP.nfo"
+<code>
+--------------------------------------------------------------------------------------------
+                              Birdy Nam Nam - Jaded Future EP
+--------------------------------------------------------------------------------------------
+
+Artist              :  Birdy Nam Nam
+Album               :  Jaded Future EP
+Genre               :  Bass
+Year                :  2012
+Ripper              :  LAME3.98
+Format              :  MPEG Audio  Layer 3  Version 1
+
+--------------------------------------------------------------------------------------------
+ #| Title                                  |  Duration |      Size |   Bitrate |      Mode |
+--------------------------------------------------------------------------------------------
+ 1| Jaded Future                           |   3mn 31s |  11.8 MiB |  320 Kbps |  Constant |
+ 2| Jaded Future (Foreign Beggars remix)   |   4mn 37s |  14.4 MiB |  320 Kbps |  Constant |
+ 3| Jaded Future (Pelican Fly Remix)       |    5mn 7s |  15.5 MiB |  320 Kbps |  Constant |
+ 4| Goin' In                               |   3mn 44s |  12.4 MiB |  320 Kbps |  Constant |
+ 5| Goin' In (Skrillex Goin' Hard mix)     |    4mn 0s |  12.9 MiB |  320 Kbps |  Constant |
+ 6| Goin' In (Skrillex Goin' Down mix)     |   3mn 37s |  12.1 MiB |  320 Kbps |  Constant |
+ 7| Goin' In (French Fries Remix)          |   5mn 33s |  16.5 MiB |  320 Kbps |  Constant |
+ 8| Cadillac Dreams                        |   4mn 20s |  13.7 MiB |  320 Kbps |  Constant |
+ 9| Cadillac Dreams (Culprate Remix)       |   4mn 37s |  14.4 MiB |  320 Kbps |  Constant |
+10| Cadillac Dreams (Soufien 3000          |   2mn 46s |  10.1 MiB |  320 Kbps |  Constant |
+--------------------------------------------------------------------------------------------
+
+Total Size...........: 135MB.
+NFO generated on.....: 01/01/17 03:21:47
+</code>
+
+=== source ===
+  * **(fr)** [[https://forum.ubuntu-fr.org/viewtopic.php?id=1852341|Topic du forum ubuntu-fr.org]]
+
+----
+//Contributeurs principaux : [[utilisateurs:alt.G|alt.G]].//

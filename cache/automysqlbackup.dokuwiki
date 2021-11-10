@@ -1,0 +1,74 @@
+
+{{tag>Xenial Bionic serveur sauvegarde sgbd mysql}}
+
+----
+ 
+====== AutoMySQLBackup ======
+ 
+**AutoMySQLBackup** est un script shell ([[bash]]) effectuant une sauvegarde (//dump//) d'une base de données [[:MySQL]]. Par défaut, il crée une sauvegarde différente tous les jours, toutes les semaines et tous les mois. On a donc au bout d'un mois un certain historique de la base.
+
+Il peut aussi être intéressant dans le cadre d'un système de sauvegarde de données global car les fichiers MySQL bruts ne sont pas facilement exploitables et il est de fait préférable d'utiliser les fichiers SQL produits par ce script.
+ 
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Avoir activé l'accès au [[:depots#universe|dépôt Universe]].
+ 
+===== Installation =====
+ 
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>automysqlbackup]]**
+ 
+ 
+===== Configuration =====
+ 
+La configuration par défaut est relativement complète et fonctionne sans aucune modification ((Par défaut le script récupère automatiquement les identifiants du super utilisateur de la base de données, et les utilise pour sauvegarder toutes les bases installées dans le répertoire var/lib/mysq, ce qui suffit à une bonne part des utilisateurs.)).
+Cependant si vous voulez l'affiner, vous pourrez le faire [[sudo|avec les droits d'administration]] via le fichier **/etc/default/automysqlbackup**.
+Ce fichier est bien commenté (en anglais) et la page de [[:man|manuel]] peut vous aider.\\
+
+Vous trouverez notamment :\\
+<code bash>BACKUPDIR="/var/lib/automysqlbackup"</code>\\
+**qui définit le répertoire de sauvegarde**. Vous pouvez définir ici un autre chemin, dans votre dossier personnel par exemple. Mais, sachez que vous n'aurez pas les permissions sur ces sauvegardes qui ont été créés par le superutilisateur ce qui peut être un problème au moment de les copier sur un autre support.\\
+
+Pour résoudre ceci, vous pouvez par exemple, utiliser la ligne suivante du fichier pour devenir propriétaire de ces fichiers :\\
+POSTBACKUP="chown -R utilisateur:groupe /chemin vers mon répertoire perso de sauvegarde"\\
+où vous remplacez 'utilisateur' et 'groupe' par votre nom d'utilisateur de la session.
+
+Si pour votre paramétrage, vous avez des noms de répertoires avec des espaces, vous aurez des messages d'erreur "touch".
+Dans /usr/sbin/automysqlbackup.sh, modifiez le code :\\
+__lignes 408 à 415__\\
+$LOGFILE devient "$LOGFILE"\\
+$LOGERR devient "$LOGERR"\\
+__lignes 421 à 436__\\
+$1 devient "$1"\\
+$2 devient "$2"
+
+Si vous définissez le //USERNAME// et le //PASSWORD//, la commande par défaut à la ligne //DBNAMES// va engendrer une erreur 1045((https://devops.stackexchange.com/questions/13422/automysqlbackup-fails-return-error-1045)), le mieux est de remplacer cette ligne (à adapter) par <code bash>DBNAMES="nom_base_1 nom_base_2"</code> pour préciser les bases à sauver. Si on met //"all"//, ça les sauvegarde toutes… mais peut engendrer une ERROR 1042 !
+===== Utilisation =====
+ 
+Normalement vous n'avez pas à exécuter directement le script si vous avez installé par ailleurs (le paquet n'en dépend pas) un système de déclenchement automatique tel [[:cron]] ou [[:anacron]].
+Cependant vous pouvez provoquer une sauvegarde, par exemple la première, en lançant le script directement :
+  /usr/sbin/automysqlbackup
+===== Restauration =====
+Le script va créer des fichiers compressés qui seront sauvegardés dans 3 répertoires différents "Daily", "Weekly" et "Monthly".
+Pour restaurer une base de données mysql, il faut chercher dans ces répertoires le fichier de sauvegarde correspondant au nom de la base et à la date correspondant au moment où vos données étaient satisfaisantes.\\
+La décompression de se fichier n'est pas nécessaire pour l'importer avec [[:phpmyadmin]], néanmoins, si vous souhaitez récupérer le fichier .sql, vous pouvez le décompresser avec :
+<code bash>gunzip -d fichier-de-sauvegarde.sql.gz</code>\\
+Pour restaurer la base de données à partir de ce fichier, avec Bionic et les versions ultérieures (à partir de Xenial pour MariaDB), la commande à taper est :
+<code>sudo mysql NomMaBase < /chemin vers fichier sauvegarde.sql</code>
+où //NomMaBase// est le nom de votre base de données (ceci peut être omis) et ///chemin vers fichier sauvegarde.sql// est le chemin vers le fichier que vous avez décompressé (il suffit de le tirer sur le terminal pour que le chemin s'écrive seul).
+
+Pour les versions antérieures :
+<code>mysql -u root -p NomMaBase < /chemin vers fichier sauvegarde.sql</code>
+<note tip>Le script automysqlbackup inclut une option qui restaure automatiquement la base sous son nom initial. Remplacer NomMaBase par NomMachin n'aura aucun effet ; c'est NomMaBase qui sera restitué. D'ailleurs vous pouvez omettre ce nom dans la commande.</note>
+===== Désinstallation =====
+ 
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée.
+ 
+===== Voir aussi =====
+ 
+  * **(en)** [[http://sourceforge.net/projects/automysqlbackup/|Site officiel du projet]]
+ 
+---
+//Contributeurs principaux : [[utilisateurs:Johndescs]].//
+ 

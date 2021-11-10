@@ -1,0 +1,108 @@
+
+{{tag>Bionic matériel portable}}
+----
+====== Dell Inspiron 7490 ======
+
+<note important>Ce pc portable est actuellement (2021), à ma connaissance, l'un des pc les plus durs pour installer Ubuntu dessus.
+Si vous prévoyez d'acheter ce pc pour mettre Ubuntu dessus, je vous conseille de passer votre chemin et d'acheter un autre pc: la solution présentée ici n'est qu'un contournement qui certes fonctionne, mais reste un contournement assez brutal.
+
+Une vraie solution serait que Dell sorte une mise à jour du BIOS afin de permettre à l'utilisateur de choisir entre le mode RAID et le mode AHCI, mais cela fait deux ans que des propriétaires de ce modèle le demandent, et pour l'instant Dell n'a rien fait (hormis d'annoncer que ce pc n'est pas compatible Ubuntu).
+</note>
+
+<note important>Si vous êtes sur cette page parce que votre pc est en mode RAID, ne suivez pas cette page: à ma connaissance, il est toujours possible (sauf pour ce pc) de désactiver le mode RAID pour passer en mode AHCI. Attention à bien préparer Windows avant le passage RAID vers AHCI</note>
+
+Si vous êtes sur cette page, vous avez acheté un Dell Inspiron 7490 (trop tard :-) ), et vous aimeriez réussir à installer Ubuntu dessus. Cette page contient une explication détaillée afin de réussir cette difficile tâche.
+
+===== Ce qui marche à la fin =====
+J'ai pu tester ce pc assez profondément, et à ma connaissance, tout fonctionne bien. La batterie tient bien après installation de tlp et configuration du pilote nvidia, le son fonctionne bien, les différents ports fonctionnent, le choix de la luminosité fonctionne, le rétroéclairage fonctionne... Le matériel dans ce pc étant assez classique, il ne devrait pas y avoir de problèmes particuliers.
+
+===== Pourquoi ne peut-on pas facilement installer Ubuntu? =====
+Sur les pc récents, deux modes sont proposés : le mode RAID et le mode AHCI. Ces deux modes sont une manière de voir le ou les disques durs internes.
+
+  * Le mode AHCI est assez classique : il ne pose d'ailleurs aucun problème avec Linux.
+  * Le mode RAID est utile dans le cas où on veut faire une grappe RAID au sein de son pc portable. Cette fonctionnalité est inutile pour un utilisateur lambda.
+
+Problème: le mode RAID n'est pas compatible avec Linux, et ce pc permet de choisir entre le mode RAID ou pas de disque dur: le choix est donc vite fait.
+
+<note>En réalité les noyaux venant de toutes les distributions Linux sont incompatibles avec le mode RAID, sauf une: endless OS. L'idée est donc d'utiliser les noyaux de cette distribution et de les injecter dans sa distribution Linux préférée.</note>
+
+<note>En réalité, ce pc a le mode AHCI mais il n'est pas accessible (et n'a probablement jamais été testé, donc à éviter)</note>
+
+Symptôme:
+On peut remarquer lorsqu'on démarre ce pc sur une clé d'installation classique d'Ubuntu le fait que le SSD n'est pas vu, ce qui empêche donc l'installation. Hormis ce "petit" détail, tout fonctionne bien en live-usb.
+
+On peut aussi voir dans le retour de
+<code>
+dmesg
+</code>
+l'apparition de l'erreur "change BIOS mode from RAID to AHCI".
+
+Un autre problème touche ce pc: sur d'anciennes versions du BIOS, on ne peut pas démarrer sur un live usb d'ubuntu, il faut auparavant mettre à jour le BIOS.
+
+<note important>Ce pc n'est compatible qu'avec le mode UEFI, il n'y a pas de mode legacy</note>
+
+===== Matériel nécessaire =====
+Pour installer Ubuntu sur ce pc, vous aurez besoin:
+  * d'un autre pc avec Ubuntu installé en mode EFI afin de créer le live usb personnalisé pour ce pc
+  * d'une clé usb (la mienne fait 4 Go, pas besoin qu'elle soit très grande)
+=====Pré-requis=====
+Suivez la procédure suivante avant l'installation d'Ubuntu :
+  * Commencez par aller sur Windows, puis [[:tutoriel:ntfs#probleme_connudemarrage_rapide_de_windows_active|désactivez le démarrage rapide]].
+  * Puis [[:repartitionner#pour_windows_7_windows_8_windows_10|réduire la partition Windows depuis Windows]] à l'aide de son outil dédié.
+  * Vous pouvez ensuite faire un tour dans le BIOS pour [[:desactiver_secure_boot|désactiver le secure boot]].
+
+===== Installation d'Ubuntu =====
+Il faut préparer la clé usb qui permettra l'installation d'Ubuntu. En premier lieu téléchargez l'iso d'Ubuntu de votre choix.
+
+Ensuite on peut installer cubic qui permettra de personnaliser l'iso :
+  * [[:PPA|Ajouter le PPA]] **ppa:cubic-wizard/release**((https://launchpad.net/~cubic-wizard/release)) dans vos sources de logiciels; 
+  * [[:tutoriel:comment_modifier_sources_maj#recharger_la_liste_des_paquets|Recharger la liste des paquets]];
+  * [[:tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt>cubic]]**. 
+
+Lancer cubic, indiquer l'iso téléchargée, continuer jusqu'au terminal, puis copier coller le contenu entier suivant puis appuyer sur entrée pour valider.
+<code>
+wget -q https://deb.endlessos.org/keys/eos-pub-archive-key.asc -O- | apt-key add -
+
+cat > /etc/apt/preferences.d/endlessOS.pref << EOF
+Package: *
+Pin: origin "deb.endlessos.org"
+Pin-Priority: 1
+
+Package: linux-headers-generic
+Pin: origin "deb.endlessos.org"
+Pin-Priority: 1000
+
+Package: linux-image-generic
+Pin: origin "deb.endlessos.org"
+Pin-Priority: 1000
+EOF
+
+echo "deb [arch=amd64] https://deb.endlessos.org/debian master endless" | tee -a /etc/apt/sources.list.d/endlessOS.list
+
+apt update
+apt install linux-headers-generic/master linux-image-generic/master
+</code>
+Cela permettra d'installer sur le live usb le noyau contenant le patch noyau rendant compatible Linux avec le mode RAID, et permet d'utiliser le dépôt d'endless OS uniquement pour mettre à jour le noyau, et uniquement le noyau.
+
+Une fois que le terminal a rendu la main, vous pouvez continuer, cubic vous demande quel noyau choisir, bien évidemment choisissez le noyau qui vient d'être installé (le plus récent).
+Vous pouvez continuer avec les paramètres par défaut pour obtenir l'iso modifiée tant recherchée.
+Puis démarrer sur le pc avec .
+
+Cette iso modifée est à [[:live_usb|graver sur une clé usb, avec un utilitaire]] (par exemple Etcher).
+
+Vous pouvez enfin démarrer le pc sur la clé d'installation modifiée, ce qui vous permettra d'installer Ubuntu. L'installation ne pose pas de problème particulier, la seule chose à faire est d'éviter de faire les mises à jour pendant l'installation, mais après.
+
+Vous pouvez maintenant installer le pilote nvidia, redémarrer et aller dans Nvidia Settings pour passer sur les graphiques intégrés au processeur afin de faire diminuer la température du pc.
+
+Vous pouvez aussi installer le paquet **[[apt>tlp]]** et redémarrer afin d'avoir une meilleure autonomie.
+
+TODO: HWE à virer?
+
+==== Autre solutions existantes ====
+A ma connaissance, il y a 3 solutions pour ce pc autre que celle expliquée ici:
+  * la première qui consiste à installer sur la clé usb d'installation (le ssd n'est donc pas utilisé). Cette solution n'est ni pratique, ni durable (car une clé usb s'use vite quand elle est beaucoup sollicitée)
+  * la seconde provient de Evroza du forum Dell: je me suis basé sur sa solution de contournement pour faire la solution expliquée au dessus, afin de régler le problème des mises à jour du noyau ainsi que d'éviter de devoir régulièrement recréer des isos personnalisées
+  * la troisième que je considère comme dangereuse, consiste pour une version particulière du BIOS à patcher GRUB pour qu'il aille trifouiller à votre place le BIOS et activer le mode AHCI. Le mode AHCI n'étant pas accessible dans le BIOS, il est très probable que ce mode n'ait pas été testé, et pourrait donc réserver de mauvaises surprises pouvant aller jusqu'à une corruption du BIOS et de vos données sur votre SSD si cette solution est appliquée sur une autre version du BIOS que celle prévue par la solution. Je vous déconseille donc vivement de suivre cette solution.
+  * une autre solution serait d'installer Ubuntu sur un disque dur externe en mode UEFI.
+
+Auteur: Nuliel

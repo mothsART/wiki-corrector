@@ -1,0 +1,192 @@
+
+====== Tablette graphique Trust Slimline TB6300 ======
+===== Installation du pilote Wizardpen =====
+==== Lucid Lynx et suivant ====
+On ajoute le dépot suivant:
+
+<code>sudo add-apt-repository ppa:doctormo/xorg-wizardpen</code>
+
+On met à jour les dépots:
+
+<code>sudo apt-get update</code>
+
+Et on installe le pilote
+
+<code>sudo apt-get install xserver-xorg-input-wizardpen</code>
+
+Voilà c'est terminé, au redémarrage, votre tablette fonctionne.
+
+(peut aussi fonctionner sous Karmic Koala)
+
+==== Karmic Koala et antérieur ====
+Installer les dépendances
+
+<code>
+sudo apt-get install xutils libx11-dev libxext-dev x-dev build-essential xautomation xinput xserver-xorg-dev
+</code>
+
+Récupérer la source
+<code>
+wget http://linuxgenius.googlecode.com/files/wizardpen-0.7.0-alpha2.tar.gz
+</code>
+
+Extraire, puis dans le dossier, ouvrir un terminal et faire:
+<code>
+sudo ./configure --with-xorg-module-dir=/usr/lib/xorg/modules && make && sudo make install
+</code>
+
+===== Configuration de la tablette =====
+
+Récupérer le nom du device
+<code>
+cat /sys/bus/usb/devices/*/product
+</code>
+
+Voici l'output, ici, celui qui nous intéresse est "Tablet WP8060U"
+<code>
+USB2.0                  
+Tablet WP8060U
+USB Optical Mouse
+EHCI Host Controller
+EHCI Host Controller
+UHCI Host Controller
+UHCI Host Controller
+UHCI Host Controller
+UHCI Host Controller
+UHCI Host Controller
+</code>
+
+Ajouter une règle à udev avec ces commandes
+<code>
+sudo bash
+echo 'BUS=="usb", KERNEL=="event*", SYSFS{product}=="Tablet WP8060U", NAME="input/%k", SYMLINK+="tablet-event", MODE="0666"' >> /etc/udev/rules.d/010_local.rules
+exit
+</code>
+
+Redémarrer udev
+<code>
+sudo restart udev
+</code>
+
+Vérifier que le syslink a été crée
+<code>
+ls -la /dev/tablet-event
+</code>
+
+L'output en vert
+<code>
+lrwxrwxrwx 1 root root 12 2009-11-05 16:16 /dev/tablet-event -> input/event6
+</code>
+
+===== Calibration de la tablette (xorg) =====
+
+
+Backup du Xorg
+<code>
+sudo cp /etc/X11/xorg.conf /etc/X11/xorg.conf.backup
+</code>
+
+Maintenant, on ouvre Xorg
+<code>
+sudo gedit /etc/X11/xorg.conf
+</code>
+
+On rajoute ce paragraphe en dessous de la souris générique
+<code>
+Section "InputDevice"
+        Identifier      "WizardPen Tablet"
+        Option          "SendCoreEvents"        "true"
+        Driver          "wizardpen"
+        Option          "Device"        "/dev/tablet-event"
+        Option          "TopX"          "0"
+        Option          "TopY"          "234"
+        Option          "BottomX"       "32747"
+        Option          "BottomY"       "32762"
+        Option          "MaxX"          "32747"
+        Option          "MaxY"          "32762"
+EndSection
+</code>
+
+Rajouter cette instruction dans la partie ServerLayout
+<code>
+Section "ServerLayout"
+InputDevice "WizardPen Tablet" "AlwaysCore"
+EndSection
+</code>
+
+===== Rajout d'un script au démarrage =====
+
+Comme le driver ne supporte pas encore le Plug&Play, il faut rajouter un petit script
+<code>
+sudo gedit /etc/rc.local
+</code>
+
+en dessous de exit 0, copier/coller ceci
+<code>
+XORG_CONF=/etc/X11/xorg.conf
+if [ -e /dev/tablet-event ]; then
+  sed -ie 's/^\(\s*\)\#\(\s*InputDevice\s\s*\"WizardPen\ Tablet\"\s\s*\"AlwaysCore\"\)\s*$/\1\2/' "$XORG_CONF"
+  echo "Udev created /dev/tablet-event = Tablet present! - Tablet-driver enabled"
+else
+  sed -ie 's/\(^\s*InputDevice\s\s*\"WizardPen\ Tablet\"\s\s*\"AlwaysCore\"\)\s*$/\#&/' "$XORG_CONF"
+  echo "Udev did NOT create /dev/tablet-event = tablet NOT present! - Tablet-driver disabled"
+fi
+</code>
+
+
+===== Rajout du support plug&play (avec xorg 7.3 et hal) =====
+
+Créez le fichier, et rajoutez ce qui suit, ensuite redémarrez le pc.
+<code>
+cd /etc/hal/fdi/policy/
+sudo > 99-x11-wizardpen.fdi
+sudo gedit /etc/hal/fdi/policy/99-x11-wizardpen.fdi
+</code>
+
+<code>
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+            <deviceinfo version="0.2">
+            <device>
+                <!-- This MUST match with the name of your tablet obtained -->
+                <!-- in Step 2 specified previously                        -->
+                <match key="info.product" contains="UC-LOGIC Tablet WP8060U">
+                <merge key="input.x11_driver" type="string">wizardpen</merge>
+                <merge key="input.x11_options.SendCoreEvents" type="string">true</merge>
+
+                <!-- Modify these configuration accordingly -->
+                <!-- See CONFIGURATION OPTIONS section for the full-set of -->
+                <!-- configurable options                                  -->
+                <merge key="input.x11_options.TopX" type="string">0</merge>
+                <merge key="input.x11_options.TopY" type="string">214</merge>
+                <merge key="input.x11_options.BottomX" type="string">32747</merge>
+                <merge key="input.x11_options.BottomY" type="string">32762</merge>
+                <merge key="input.x11_options.MaxX" type="string">32747</merge>
+                <merge key="input.x11_options.MaxY" type="string">32762</merge>
+                </match>
+            </device>
+            </deviceinfo>
+</code>
+
+
+
+===== Configuration des bouttons du stylet =====
+
+suivant ce tableau
+
+|Number | Function|
+|0 | rien, seulement mouvement |
+|1 | clique gauche |
+|2 | clique du milieu |
+|3 | clique droit |
+|4 | molette vers le haut |
+|5 | molette vers le bas |
+
+<code>
+xinput set-button-map "UC-LOGIC Tablet WP8060U" 1 2 3
+</code>
+
+Finalement, redémarrer le pc.
+
+===== En savoir plus =====
+
+[[http://ubuntuforums.org/showthread.php?t=1337260|Documentation en anglais (forum ubuntu)]]

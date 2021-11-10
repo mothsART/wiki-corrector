@@ -1,0 +1,114 @@
+
+{{tag>boot vétuste}}
+
+----
+
+====== Gestionnaire d'amorçage : Lilo ======
+
+//LiLo (Linux Loader) est un des premiers, si ce n'est le premier, [[amorçage|gestionnaire d'amorçage]].//
+
+
+
+
+===== Introduction =====
+
+Le gestionnaire d'amorçage se lance juste après l'écran du BIOS. C'est lui qui va ensuite transmettre le relais à un système d'exploitation, éventuellement en proposant le choix de ce dernier dans le cas d'un système dit multiboot.
+
+LiLo fait parti des gestionnaires d'amorçage au même titre que [[Grub]].
+Ce dernier est d'ailleurs recommandé et installé par défaut.
+
+
+<note warning>Ce qui est décrit ci-dessous n'a pas été suffisamment testé.
+
+De plus, cette documentation n'est utile **que pour ceux chez qui [[Grub]] refuserait de démarrer** (exemple : message "Grub loading..." qui ne disparaît pas)</note>
+
+
+===== Installation =====
+
+Lilo n'est pas installé par défaut mais est présent dans les dépôts de base. Vous pouvez [[tutoriel:comment_installer_un_paquet|l'installer]] grâce au paquet **[[apt://lilo|lilo]]**
+
+Pour pouvoir installer LiLo dans le MBR, vous avez besoin de rajouter le paquet **[[apt://mbr|mbr]]** présent dans les dépôts [[depots#universe_et_multiverse|universe]].
+
+
+===== Configuration =====
+
+  * Pour générer le fichier de configuration, commencez par exécuter dans un terminal: <code>sudo liloconfig</code>
+  * Modifiez ensuite le fichier ''/etc/lilo.conf'' :
+  * le fichier qui suit permet de booter sur les versions à partir de la **11.10** bien noter que à part le paramètre boot les **/dev/sdax**  doivent être remplacés par** "UUID=.........................."** sinon le boot se bloque, **de même dans /etc/fstab** , sinon pas de montage et le boot bloque
+  * bien entendu il faut modifier ce fichier pour être en phase avec votre configuration particulière
+
+  * lba32
+  * boot=/dev/sda              # disque de boot , ici lilo a été installe dans le MBR
+  * compact                       #absolument nécessaire (gain de temps 1 à 2 minutes)
+  * install=menu
+  * prompt
+  * timeout=20                  # 2 secondes avant de choisir le système par defaut
+  * large-memory
+  * map=/boot/map
+  * vga=normal
+  * 
+  * default="Windows"
+  * 
+  * image=/boot/vmlinuz-3.2.0-25-generic
+  * 	label="Ubuntu"
+  * 	initrd=/boot/initrd.img-3.2.0-25-generic
+  * 	root="UUID=1e6c0bc7-da47-42d4-86e2-313d2db2c174"      #UUID indispensable  (sudo blkid pour lister les UUID) sinon pas de boot !!!
+  * 	read-only
+  * 
+  * other=/dev/sda1
+  * 	label="Windows"
+  * 	change             # fondamental pour les autres systèmes sinon des partitions vont basculer cachées !!!!!!
+  * 
+  * image=/boot/memtest86+.bin
+  * 	label="Memory Test+"
+  * 	read-only
+
+Pour connaître les versions du noyau que vous pouvez utiliser, pensez à [[:tutoriel:console_commandes_de_base#ls|lister]] le contenu du répertoire ''/boot''.
+
+===== Utilisation =====
+
+LiLo n'est pas vraiment souple dans la mesure où il faut le reconfigurer à chaque fois pour un changement de noyau.\\
+Néanmois le script ''update-lilo'' peut être lancé lors de la mise à jour du noyau pour réaliser cette tâche.
+
+Si vous faites une mise-à-jour de votre distribution faites très attention à savoir si la version du noyau est mise à jour elle aussi.
+En effet il se pourrait que d'autres logiciels très liés soient mis à jour, tel que [[udev]] par exemple. Ceci pourrait avoir pour conséquence de rendre votre système inutilisable.
+
+**Si votre système ne démarre plus** (Kernel panic, ou problème de root sur un disque qui n'existe pas), il vous faut démarrer sur un liveCD avant de passer le relais à la version installée sur le disque dur (c'est la commande [[chroot]]). Pour ce faire vous pouvez utiliser [[tutoriel:comment_recuperer_ubuntu_apres_installation_windows#avec_un_livecd|cette partie]] d'une autre documentation.
+
+Plus d'informations sur [[http://www.archilinux.org/astuces/depanner.html|ce lien]].
+
+Le plus souvent le problème vient d'un changement de noyau ou d'un update du noyau existant
+pour y remédier suivre cet exemple (on suppose que / est /dev/sda7 et /home /dev/sda8)
+
+Booter sur un live CD et passer les commandes suivantes
+
+  * sudo su
+  * mount -t ext4 /dev/sda7 /mnt
+  * mount -t ext4 /dev/sda8 /mnt/home
+  * mount --bind /dev /mnt/dev
+  * mount --bind /sys /mnt/sys
+  * mount -t proc /proc /mnt/proc
+  * chroot /mnt
+  * ls /boot    #noter les noyaux
+  * blkid              # noter le UUID de /
+  * vi /etc/lilo.conf   # editer le noyau  et UUID si besoin
+  * lilo -v             #   verifier si OK
+  * exit
+  * umount /mnt/proc
+  * umount /mnt/sys
+  * umount /mnt/dev
+  * umount /mnt/home
+  * umount /mnt
+  * shutdown -r now
+
+Maintenant on doit pouvoir booter
+
+
+
+===== Notes =====
+
+Si vous obtenez une erreur <code>ERROR: install-mbr failed! Your system may not be bootable.</code> vérifiez la bonne installation du paquet **[[apt://mbr|mbr]]**
+
+----
+
+**__Contributeurs__**: [[utilisateurs:Id2ndR|Id2ndR]] (première rédaction) ,[[utilisateurs:Malizor|Malizor]]

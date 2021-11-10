@@ -1,0 +1,151 @@
+
+{{tag>Bionic GRUB Sécurité tutoriel BROUILLON}}
+====== Sécuriser Grub2 de manière avancée ======
+
+Ce tutoriel s'adresse à des utilisateurs confirmés en utilisation de la ligne de commande et en dépannage de démarrage. Sinon, vous allez droit vers la réinstallation pure et simple ! 
+
+Ce tutoriel explique comment sécuriser le menu [[:grub-pc|Grub]] de manière avancée. Si protéger l'édition des entrées est déjà un point important, il ne faut pas oublier que n'importe qui peut démarrer un noyau en mode [[:recovery_mode|recovery]], et obtenir une console root par la suite! Il serait donc avantageux de ne permettre l'accès à un noyau recovery qu'en possession du mot de passe. 
+
+Il faut savoir que votre ordinateur ne sera pas forcément protégé à 100% (puisqu'il reste la possibilité de démarrer sur une clé live), mais avec un mot de passe bios et le chiffrement des données sensibles, il y a de quoi retenir (ou dégoûter) un potentiel attaquant.
+
+<note important>Ce tutoriel fait suite à celui ci : **[[:securite#securiser_le_demarrage_d_ubuntu_grub|Sécuriser le démarrage d'ubuntu]]**. Vous devez impérativement avoir effectué ce dernier, et que la manipulation fonctionne, avant de passer à la suite. J'ai testé ces manipulations en 18.04 sur Ubuntu, KDE Neon dual boot Linux Mint 19.1 et Xubuntu en __legacy__. L'EFI pose parfois des problèmes. Aussi, prenez toutes vos précautions.</note>
+
+<note warning>Les manipulations qui suivent peuvent vous faire complétement perdre l'accès à votre système. Aussi, pensez à faire une sauvegarde du fichier grub.cfg grâce à cette ligne:
+
+<code bash>sudo cp -p /boot/grub/grub.cfg /boot/grub/grub.cfg.$(date --rfc-3339=date)</code>
+
+La sauvegarde du fichier grub.cfg sera suffixé par la date de la sauvegarde, ce qui permettra de le retrouver plus facilement en cas de multiples sauvegardes.
+
+Voir également [[:tutoriel:comment_sauver_et_restaurer_un_fichier]].
+
+Munissez vous d'un support d'installation de Ubuntu (ou de toute autre distribution permettant d'avoir une [[:live_usb|session live]]), et vérifiez bien que vous pouvez démarrer dessus. Une fois en session live, il suffira d'exécuter
+
+<code bash>sudo cp -p mnt/boot/grub/grub.cfg.DATE mnt/boot/grub/grub.cfg</code>
+
+si la racine de votre système est montée sur mnt. 
+
+Pour toutes ces raisons, ce tutoriel n'est pas adapté aux débutants en ligne de commande.
+Il est également possible de modifier directement le grub.cfg pour pouvoir rebooter (mais il faut savoir ce qu'on fait).
+</note>
+
+===== Prérequis =====
+
+  * Disposer des [[:sudo|droits d'administration]]
+  * Avoir [[:tutoriel:comment_sauver_et_restaurer_un_fichier|sauvegardé les fichiers]] importants: **/boot/grub/grub.cfg**, **/etc/grub.d/00_security_header**, **/etc/grub.d/10_linux** et **/etc/grub.d/30_os_prober** (si vous êtes en dual boot)
+  * Avoir en cas de besoin d'un [[:live_usb|live USB]] ou d'un [[:live_cd|live CD]] permettant [[:live_cd#session_livequ_est-ce_que_c_est|d'essayer Ubuntu]]
+
+Normalement à ce stade vous devriez posséder un fichier **00_security_header** ressemblant à celui ci:
+
+<code>#! /bin/sh
+
+cat <<EOF
+
+set superusers="toto"
+
+password_pbkdf2 toto grub.pbkdf2.sha512.10000.891DC34A2C0492FD76FA0E2D01B37F13FB3B3FD5A57D0838C4894D895CFAE206F9A2EA5ED3C1286AF7C44A1BBF4C9D4E2AD4AE4EBD376F4674FC8ACCEF65D92D.49656B11F58E309EC930E7B0CD76F63E67840E65E50F1F23FED0EA9D668291DFB0D10608BEEEC3C9F33AB68895C2EFDD7F7CDEE1CB58FD96CF12B9A507EACCCC
+set menuentry_id_option="--unrestricted \$menuentry_id_option"
+EOF
+</code>
+
+Le mot de passe n'est pas identique, mais c'est normal. Ce qui compte, c'est que le script fasse son travail. En particulier, que le superusers toto soit créé et fonctionne. 
+
+===== Modifier le script 00_security_header =====
+
+Nous allons maintenant effacer la ligne "EOF" rajouter au script les lignes suivantes:
+
+<code>
+set restricted="--users toto"
+export superusers
+export menuentry_id_option
+export restricted
+EOF
+</code>
+
+Nous utilisons une variable pour déterminer les utilisateurs autorisés à faire quelque chose (nous définirons le quelque chose plus tard) Les commandes **export** permettent de changer la portée des variables afin qu'elles soient valables dans les autres fichiers de configuration de Grub. 
+
+Voilà maintenant à quoi ressemble **00_security_header**
+
+<code>#! /bin/sh
+
+cat <<EOF
+
+set superusers="toto"
+
+password_pbkdf2 toto grub.pbkdf2.sha512.10000.891DC34A2C0492FD76FA0E2D01B37F13FB3B3FD5A57D0838C4894D895CFAE206F9A2EA5ED3C1286AF7C44A1BBF4C9D4E2AD4AE4EBD376F4674FC8ACCEF65D92D.49656B11F58E309EC930E7B0CD76F63E67840E65E50F1F23FED0EA9D668291DFB0D10608BEEEC3C9F33AB68895C2EFDD7F7CDEE1CB58FD96CF12B9A507EACCCC
+set menuentry_id_option="--unrestricted \$menuentry_id_option"
+set restricted="--users toto"
+export superusers
+export menuentry_id_option
+export restricted
+EOF
+</code>
+
+===== Modifier le script 10_linux =====
+
+<note important>Attention, c'est une partie dangereuse</note>
+
+Pour restreindre les parties de Grub que nous voulons, il va falloir "verrouiller" les entrées au niveau du script **10_linux** qui les génèrent.
+
+  * Avec votre éditeur favori, allez à la ligne 132. Vous voyez normalement cette ligne:
+
+<code bash>
+echo "menuentry '$(echo "$title" | grub_quote)' ${CLASS} \$menuentry_id_option 'gnulinux-$version-$type-$boot_device_id' {" |sed "s/^/$submenu_indentation/"
+</code>
+
+C'est la ligne qui définit toutes les entrées des noyaux dans le sous menu "Options avancées". 
+
+   * Nous allons écrire **\$restricted** afin d'inclure le contenu de la variable restricted dans la ligne d'entrée ci dessus et enlever la variable **\$menuentry_id_option**, qui annulerait ce qu'on vient d'écrire. Cela donne:
+
+<code bash>
+echo "menuentry '$(echo "$title" | grub_quote)' ${CLASS} \$restricted 'gnulinux-$version-$type-$boot_device_id' {" |sed "s/^/$submenu_indentation/"
+</code>
+
+  * Faites maintenant:
+
+<code bash>sudo update-grub</code>
+
+  * Redémarrez votre ordinateur afin de vous assurer de la prise en compte correcte des options. Normalement, en allant dans le menu "Options Avancées", il est désormais impossible de démarrer un noyau sans entrer le mot de passe renseigné dans 00_security_header. Néanmoins, depuis le menu principal, il est possible de démarrer le dernier noyau.
+
+<note warning>Pour sortir du menu "Options Avancées" sans avoir entré le mot de passe auparavant, il faut saisir le mot de passe!</note>
+
+===== En cas de dual-boot avec un autre Système type Debian =====
+
+Si vous êtes en dual-boot avec un autre système fonctionnant de la même manière (avec un sous menu "Options Avancées"), les manipulations ci haut sont à faire sur le grub maître (celui qui se lance). 
+
+De plus, de manière personnelle, pour limiter les entrées répétitives, je désactive le script **30_os-prober** pour tout les grub non maître: 
+
+<code bash>sudo chmod -x /etc/grub.d/30_os-prober</code>
+
+Sinon, le problème est bien pire. Les entrées de l'OS maître se retrouvent dans le menu "Options avancées" des autres OS, et cela détruit tout nos efforts précédents.
+
+Il reste à sécuriser le menu "Options Avancées" de l'autre OS (pour ses propres noyaux). Il faut le faire depuis le grub maître.
+
+==== Modification de 30_os-prober ====
+
+Le fichier **30_os-prober** génère le menu grub pour les autres systèmes détectés par os-prober. Il suffit de trouver la ligne concernant le menu "Options Avancées" et de faire la même manipulation que dans la partie précédente. 
+
+  * Ligne 292, vous avez:
+
+<code bash>echo "submenu '$gettext_printf "Advanced options for %s" "${OS} $onstr" | grub_quote)' \$menuentry_id_option 'osprober-gnulinux-advanced-$boot_device_id' {"</code>
+
+  * Il faut remplacer **\$menuentry_id_option** par **\$restricted**, ce qui donne:
+
+<code bash>echo "submenu '$gettext_printf "Advanced options for %s" "${OS} $onstr" | grub_quote)' \$restricted 'osprober-gnulinux-advanced-$boot_device_id' {"</code>
+
+  * Puis, dans le terminal:
+
+<code bash>sudo update-grub</code>
+
+  * Redémarrer pour vérifier. Cette fois, dès l'appui sur le menu "Options Avancées" de l'autre OS, le mot de passe est demandé.
+
+===== Conclusion =====
+
+Vous avez désormais un menu grub somme toute assez robuste, ce qui n'empêche pas des précautions élémentaires (ne pas laisser son ordinateur portable sans surveillance par exemple).
+
+===== Autres pages en rapport =====
+
+  * [[:grub-pc]]
+  * [[:securite]]
+
+
+//Contributeurs principaux : [[:utilisateurs:watts]] 

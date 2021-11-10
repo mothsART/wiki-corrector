@@ -1,0 +1,241 @@
+
+{{tag>Hardy serveur mail postfix courriel}}
+----
+
+====== Créer un serveur de courriel ======
+
+===== Introduction =====
+
+Ce tutoriel va vous apprendre comment installer un serveur de courriel complet, pourquoi un tel tutoriel ? Sur le wiki, la plupart des documentations ne sont pas encore terminées, et aucune d'elles ne met en relation tous les utilitaires afin de réaliser un vrai serveur de courriel.
+
+Nous parlerons donc ici de l'acheminement du courriel, depuis le MTA, vers IMAP, vers votre courrielleur, Thunderbird/Evolution.
+
+
+
+===== Pré-requis =====
+
+  * Postfix : Afin de gérer l'envoi et la réception du courriel
+  * IMAP : Afin de rapatrier les courriels reçus sur votre courrielleur préféré
+  * Un nom de domaine : Afin de pouvoir vous identifier sur la toile
+  * Un nom de domaine avec les entrées MX configurées : Afin de pouvoir recevoir vos courriels sur login@domaine.org
+  * Mailutils : Ensemble de petits outils GNU pour la gestion des courriels par la console
+
+Je n'aborderai pas la configuration de votre nom de domaine, sachez juste que dans notre exemple, le domaine est FF-IRC.net, et que le nom du serveur de courriel est mail.FF-IRC.net
+
+
+
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>postfix,courier-imap|postfix courier-imap]]**.
+
+Ou, si postfix et courier-imap sont déjà installés :
+
+  sudo dpkg-reconfigure postfix
+
+Postfix va alors vous poser les questions suivantes :
+
+{{serveur:postfix3.png?800}}
+
+{{serveur:postfix4.png?800}}
+
+Répondez aux questions comme sur les captures, sélectionnez "Site internet", puis  inscrivez FF-IRC.net et laissez l'installation se terminer tranquillement.
+
+C'est tout !
+
+<note important>Si vous possédez déjà Sendmail, il sera désinstallé automatiquement et remplacé par Postfix.</note>
+
+===== Configuration =====
+
+Argh ! Voici la partie délicate, mais pas forcément compliquée ...
+
+==== Postfix ====
+
+Le fichier de configuration de Postfix s'appelle main.cf, il se situe dans /etc/postfix.
+[[:tutoriel:comment_modifier_un_fichier|Adaptez le fichier]]  __/etc/postfix/main.cf__ selon vos besoins.
+
+Voici un exemple :
+<file>
+  # See /usr/share/postfix/main.cf.dist for a commented, more complete version
+  #
+  #
+  # Debian specific:  Specifying a file name will cause the first
+  # line of that file to be used as the name.  The Debian default
+  # is /etc/mailname.
+  #myorigin = /etc/mailname
+  #
+  smtpd_banner = $myhostname ESMTP $mail_name (Ubuntu)
+  biff = no
+  #
+  # appending .domain is the MUA's job.
+  append_dot_mydomain = no
+  #
+  # Uncomment the next line to generate "delayed mail" warnings
+  #delay_warning_time = 4h
+  #
+  # TLS parameters
+  smtpd_tls_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem
+  smtpd_tls_key_file=/etc/ssl/private/ssl-cert-snakeoil.key
+  smtpd_use_tls=yes
+  smtpd_tls_session_cache_database = btree:${queue_directory}/smtpd_scache
+  smtp_tls_session_cache_database = btree:${queue_directory}/smtp_scache
+  #
+  # See /usr/share/doc/postfix/TLS_README.gz in the postfix-doc package for
+  # information on enabling SSL in the smtp client.
+  #
+  myhostname = mail.FF-IRC.net
+  alias_maps = hash:/etc/aliases
+  alias_database = hash:/etc/aliases
+  myorigin = /etc/mailname
+  mydestination = FF-IRC.net, Final-Fantasy.FF-IRC.net, localhost.FF-IRC.net, localhost
+  relayhost =
+  mynetworks = 127.0.0.0/8, 192.168.0.0/24
+  #mailbox_command = procmail -a "$EXTENSION"
+  mailbox_size_limit = 0
+  recipient_delimiter = +
+  inet_interfaces = all
+  home_mailbox = Maildir/
+</file>
+Commentons quelques points :
+
+  * myhostname : c'est le nom de votre serveur de courriel, configuré dans les entrées MX, par défaut mail.domaine.net
+  * mydestination : ceci est la concordance des domaines, remplacez Final-Fantasy par votre nom de machine, et FF-IRC.net par votre domaine
+  * mynetworks : permet de donner l'accès au serveur SMTP, en plus des 2 exemples, rajoutez votre IP extérieure si votre serveur n'est pas sur le même réseau que votre PC
+  * home_mailbox = Maildir/ : Ceci est important ! Nous choisissons le format Maildir en accord avec le serveur IMAP ! Vous ne pourrez pas recevoir vos courriels par IMAP si cette ligne n'est pas ajoutée au fichier de configuration de Postfix !
+
+[[:tutoriel:comment_modifier_un_fichier|Modifiez le fichier]] **/etc/.procmailrc**. (Attention le fichier n'existe pas forcement il faut peut être le créer)
+
+<file>
+MAILDIR=$HOME/Maildir
+DEFAULT=$MAILDIR/
+
+:0:
+$DEFAULT
+</file>
+<note warning>Selon des infos récoltés ici et là, le fichier *procmailrc* se retrouve à deux endroits possible. Soit dans  __/home/<user>/.procmailrc__ ou encore dans __/etc/procmailrc__ (sans le *.* pour **/etc**). À revérifier donc.</note>
+<note>Tutoriel à revoir car la configuration de Postfix présentée ici __n'utilise pas__ Procmail...</note>
+==== IMAP : courier-imap ====
+
+Le fichier de configuration de courier-imap se situe dans /etc/courier et se nomme imapd : 
+
+Seulement un point nous intéresse dans cette configuration : le MAILPATH (ou MAILDIRPATH), [[:tutoriel:comment_modifier_un_fichier|modifiez le fichier]]  __/etc/courier/imapd__ comme suit :
+<file>
+  MAILDIRPATH=Maildir
+</file>
+Retournez ensuite dans votre **~** et tapez ceci :
+
+  maildirmake Maildir
+
+Ceci créera la boite de courriel Maildir/ dans votre **~**, autrement dit, dans votre /home/login
+
+===== Mise en application du Serveur de courriel =====
+
+
+
+==== Mise en place de vos paramètres ====
+
+Tout d'abord, [[:tutoriel:comment_installer_un_paquet|installez le paquet]]  ** [[apt>mailutils|mailutils]]**.
+
+Ceci va vous permettre de tester votre serveur de courriel.
+
+Pour appliquer les changements que vous avez fait sur Postfix et IMAP, procédez comme ceci :
+
+  sudo /etc/init.d/postfix restart && sudo /etc/init.d/courier-imap restart && sudo /etc/init.d/courier-authdaemon restart
+
+Ensuite, nous allons tester la réception d'un courriel, depuis l'**INTÉRIEUR**, autrement dit, en localhost :
+
+  ~$ mail Zic@FF-IRC.net
+  Cc:
+  Subject: Wiki de Ubuntu-fr
+  Je trouve votre article très intéressant et souhaiterais y contribuer.
+
+Entre chaque question, appuyez sur **[Entrée]**. Quand vous aurez terminé de rédiger votre courriel, tapez **[Entrée]** puis **[CTRL]+[D]** et votre message sera envoyé.
+infos complémentaires : [[https://help.ubuntu.com/community/Dovecot#Setting%20up%20Maildir]]
+
+
+
+===== Configuration de votre client de messagerie =====
+
+Les captures suivantes, sont basées sur le client de messagerie Thunderbird. Pourquoi, me direz-vous ? Tout simplement parce que Thunderbird est **SEULEMENT** un courrielleur et est donc plus léger.
+
+Evolution, le client par défaut de Ubuntu, possède d'autre petites fonctionnalités comme le calendrier des événements etc... ce qui le rend plus "lourd".
+
+==== Installation ====
+
+Installez le client [[:thunderbird#installation|Mozilla Thunderbird]].
+
+==== Configuration ====
+
+Lors du 1er lancement de Thunderbird, vous est proposé de créer le premier compte, suivez l'installation :
+
+{{serveur:thunderbird10.png?800}}
+
+Cliquez sur **Suivant**
+
+{{serveur:thunderbird11.png?800}}
+
+Je vous fait confiance pour remplacer ce qu'il faut :)
+
+{{serveur:thunderbird12.png?800}}
+
+Cochez IMAP, puis rentrez son adresse (dans mon cas, mon serveur de courriel est situé dans mon réseau, donc l'adresse est 192.168.0.2, de l'extérieur, cela serait : mail.FF-IRC.net)
+
+{{serveur:thunderbird13.png?800}}
+
+Attention ! Il y a une erreur volontaire sur la capture car je ne pouvais pas créer 2 comptes du même nom :>. En clair, entrez ici votre login UNIX, le mien par exemple, est normalement en minuscule, donc **zic** et pas **Zic**
+
+{{serveur:thunderbird14.png?800}}
+
+Ici rien de spécial, suivez les indications
+
+{{serveur:thunderbird15.png?800}}
+
+Vérifiez une dernière fois les choses et aussi (contrairement à la capture) que vos login de courier entrant/sortant correspondent bien à votre login UNIX, et non à votre nom de compte ou vous pouvez mettre ce que vous voulez ! (Comme Dupond Avignon).
+
+Cliquez sur **Terminer**
+
+Thunderbird va alors vous demander votre mot de passe : 
+
+{{serveur:thunderbird16.png?800}}
+
+Concernant votre mot de passe : Il s'agit de votre mot de passe UNIX, tout simplement.
+
+Et là, vous retrouvez votre courriel que vous aviez envoyé en ligne de commande plus haut :
+
+{{serveur:thunderbird1.png?800}}
+===== Problèmes avec le port 25 =====
+
+Certains FAI bloquent le port 25 afin d'éviter le SPAM par des machines zombies...
+
+Chez certains d'entre eux, le déblocage est tout simplement impossible !
+
+Chez le F.A.I Orange il existe une solution simple et rapide : 
+   * Firefox => Mettez comme url : http://livebox/
+   * Pseudo : admin | Mot de passe : admin (Si vous n'avez rien changé)
+   * Une fois connecté cliquez sur "Préférences" => Réseaux & services => Livebox => Paramètres avancé => Nat/Pat => Bouton Ajouter 
+   * Application / Service : Mail server (SMTP) | Nom / Adresse IP : On choisit l'IP local de son serveur. | Laisser le reste vide
+   * Et voilà votre port est ouvert
+FAIT SUR UNE LIVEBOX 2 Mini (Sagem).
+
+Chez le FAI Free, il existe une simple case à décocher afin de débloquer ce port :
+   * Allez dans votre [[http://subscribe.free.fr/|console d'administration]] Free, puis cliquez sur "Mon Compte: Abonnés, identifiez-vous" tout en haut à  droite, puis identifiez-vous.
+   * Cliquez sur le "Internet".
+   * Cliquez sur le "Blocage du protocole SMTP sortant".
+   * Décochez la case "Blocage SMTP sortant".
+   * Redémarrez votre Freebox comme indiqué, tout devrait maintenant aller mieux.
+
+Chez le FAI de Numéricable, il faut tout simplement rediriger le Port 25 et 143
+  * Normalement ceci est écrit sous votre modem ADSL :
+  - Dans un Navigateur allez a l'adresse http://192.168.0.1
+  - Entrer le login "admin" et le mot de passe : "password" afin d'ouvrir une nouvelle session.
+  * Dans les paramètres avancés allez dans les outils de redirection.
+  * Adresse IP locale : 192.168.0."votre adresse sur le réseau".
+  * Port de départ 25 | Port de fin 25 
+  * Sélectionné "both" et activer le.
+  * Reproduisez la même chose pour le port 143.
+
+FIXME La procédure ci-dessus débloque le port sortant pour Free et aiguille les appels entrants pour Orange. Cela n'est pas cohérent ! Chez Orange, il ne semble pas y avoir de solution pour débloquer le port 25 sauf à demander une adresse IP fixe.
+
+NB:Il est possible de créer une DMZ sur la livebox orange, donc de débloquer tout les ports.Cela nécessite d'avoir un routeur/parefeu en plus (pour la config la plus simple et pour sécuriser un minimum),qu'il soit bien configuré, et un pare feu logiciel bien réglé sur le serveur de la DMZ.
+----
+
+//Contributeurs : [[:utilisateurs:zic]], [[:utilisateurs:zedtux]].//

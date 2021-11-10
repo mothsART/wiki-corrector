@@ -1,0 +1,229 @@
+
+{{tag>Xenial télécommande multimédia matériel media_center}}
+----
+{{  https://openclipart.org/image/2400px/svg_to_png/239995/IR_symbol_paths.png?100}}
+====== Gérer sa télécommande avec IR-Keytable ======
+
+De nombreuses télécommandes infrarouges sont compatibles sous Linux (mais pas toutes). Les fonctionnalités de  l'infrarouge (ir-core) sont désormais intégrées par défaut au [[:kernel|noyau]]. **IR-Keytable** est l'outil qui permet de faire fonctionner son récepteur IR et ses télécommandes.\\
+Cette méthode est à privilégiée lorsque votre matériel est reconnu nativement par le noyau. Sinon il est préférable d'utilliser [[:LIRC]] (Linux Infrared Remote Control) et ses modules.
+
+===== Prérequis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Avoir désinstallé [[LIRC]] si vous l'aviez installé.
+
+===== Installation =====
+Avec IR-keytable, les touches de votre télécommande se comporteront comme des touches de clavier.
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>ir-keytable]]**.
+
+===== Configuration =====
+Pour savoir si votre récepteur est reconnu tapez dans un [[:terminal]] :
+<code bash>sudo ir-keytable</code>
+Si votre récepteur est reconnu vous obtenez quelque chose de la sorte : 
+<code>
+Found /sys/class/rc/rc2/ (/dev/input/event14) with:
+    Driver (null), table rc-dib0700-rc5
+    Supported protocols: NEC RC-5 RC-6 
+    Enabled protocols: RC-5 
+    Name: IR-receiver inside an USB DVB re
+    bus: 3, vendor/product: 2040:7050, version: 0x0598
+    Repeat delay = 500 ms, repeat period = 125 ms
+</code>    
+Dans cet exemple le récepteur est le rc2 et il gère les protocoles NEC, RC-5 et RC-6.
+
+Si votre récepteur est reconnu, il faut maintenant vérifier que votre télécommande l'est aussi. Tapez :
+<code>ir-keytable -t --sysdev rc2</code>
+Remplacez rc2 par votre récepteur (rc0, rc1, ...).
+
+Appuyez sur les touches de votre télécommande. Si votre télécommande est reconnue, à chaque appui sur une touche, une ou des lignes  apparaîtront : <code>
+1446572211.444184: event type EV_MSC(0x04): scancode = 0x1f32
+1446572211.444184: event type EV_SYN(0x00).
+1446572211.558001: event type EV_MSC(0x04): scancode = 0x0d</code>
+
+Chaque touche génère un ''scancode'' mais il est très probable que toutes les touches ne génèrent pas un ''keycode'' (un code clavier). Il faut donc y remédier en indiquant à Linux l’association à faire entre le ''scancode'' (ex. 0x1f32) et le ''keycode'' (ex. KEY_UP). Pour cela il est possible d'utiliser des fichiers de paramétrage existants ou bien de créer son propre fichier. Dans tous les cas, à ce stade, il est fortement recommandé de se faire un petit fichier permettant de connaître le scancode généré par chacune des touches de sa télécommande.
+
+====Fichiers de paramétrage prédéfinis====
+Les fichiers de paramétrage associant ''keycode'' et ''scancode'' sont situés dans le dossier **/lib/udev/rc_keymaps** et contiennent déjà des paramètres prédéfinis pour quelques télécommandes (ce qui vous évitera de créer vous même votre fichier). Il faudra alors rechercher le fichier de configuration le plus proche de votre materiel.\\
+Pour cela, en remplaçant ''0x0d'' par un ''scancode'' généré par une touche de votre telecommande, tapez la ligne ci-dessous qui affichera les fichiers contenant ce scancode :
+<code>grep -iH 0x0d /lib/udev/rc_keymaps/*</code>
+Vous obtenez quelque chose de la sorte : <code>
+/lib/udev/rc_keymaps/apac_viewcomp:0x0d KEY_STOP
+/lib/udev/rc_keymaps/ati_tv_wonder_hd_600:0x0d KEY_UP
+/lib/udev/rc_keymaps/ati_x10:0x0d KEY_1
+/lib/udev/rc_keymaps/avermedia_cardbus:0x0d KEY_7
+/lib/udev/rc_keymaps/behold_columbus:0x0D KEY_SETUP
+/lib/udev/rc_keymaps/budget_ci_old:0x0d KEY_MUTE
+/lib/udev/rc_keymaps/cinergy:0x0d KEY_CHANNELUP
+...</code>
+Dans cet exemple on obtenait le ''scancode 0x0d'' lorsqu'on appuyait sur le bouton "Couper le son" de la télécommande. Grâce à la commande précédente on peut se rendre compte que le fichier ''budget_ci_old'' contient le bon ''scancode''.
+
+Pour être sûr d'avoir le bon fichier, répéter l'opération avec différents scancodes. 
+
+====Créer son fichier de paramétrage====
+
+Vous pouvez créer votre fichier de paramètres personnalisés.
+
+La première ligne doit être la suivante : <file># table nomdevotretable, type: letypedelatélécommande</file>
+Le type de la télécommande correspond à RC5, RC6, NEC, UNKNOWN, ...
+
+Et ensuite les affectations de touches sous la forme : <file>scancode keycode</file>
+
+Exemple : <file># table telecommandetv, type: RC5
+0x00 KEY_SPACE
+0x01 KEY_N
+0x02 KEY_BRIGHTNESSUP
+0x0d KEY_MUTE
+...</file>
+
+Pour vous aider à la rédaction de ce fichier, vous trouverez une liste des "keycodes" multimedia avec leur signification [[https://linuxtv.org/wiki/index.php/Remote_Controllers|ici]].
+
+<note tip>Si vous avez plusieurs télécommandes reconnues par votre récepteur IR, vous pouvez créer plusieurs fichiers de paramétrage ou rassembler toutes ces tables de conversion dans un seul fichier.</note>
+
+====Utiliser son fichier de paramétrage====
+
+Finalement il faut associer le fichier à un récepteur. Tapez la commande ci-dessous : <code>sudo ir-keytable -c -w /lib/udev/rc_keymaps/budget_ci_old --sysdev rc2</code>
+Dans cet exemple, on utilise le fichier ''budget_ci_old'' pour le récepteur rc2. (Dans la ligne le -c permet de nettoyer la table de rc2 et -w permet d'écrire la nouvelle table à partir du fichier sélectionné).
+Une fois que vous aurez testé vos modifications, il suffira d'ajouter cette ligne de commande au fichier **/etc/rc.local** pour qu'elles soient prises en compte au prochain redémarrage :
+
+<code>
+#!/bin/sh -e
+#
+# rc.local
+#
+# This script is executed at the end of each multiuser runlevel.
+# Make sure that the script will "exit 0" on success or any other
+# value on error.
+#
+# In order to enable or disable this script just change the execution
+# bits.
+#
+# By default this script does nothing.
+ir-keytable -c -w /lib/udev/rc_keymaps/budget_ci_old --sysdev rc2
+exit 0
+</code>
+
+Maintenant chaque touche de votre télécommande agit comme une touche du clavier.
+
+Pour **VLC**, par exemple, vous pouvez associer dans //Outils --> Configuration --> Raccourcis// chaque touche de votre télécommande à une action (changer de chaîne, mettre en plein écran, pause, ...).
+
+C'est peut-être suffisant, mais si vous avez besoin de différencier votre télécommande de votre clavier, vous pouvez aller plus loin en installant le daemon ''InputLirc''. C'est par exemple très utile pour utiliser agreablement [[:kodi|Kodi / XBMC]]
+
+
+
+Pour le lecteur **Audacious**, ouvrir le Menu "Sortie" puis -->Paramètres audio -->Greffons-->Raccourcis universels --> paramètres.
+
+On y choisit une action, on clique dans le champ de droite "association de touches"  (par exemple LIRE = XF86AudioPlay) et on presse le bouton "Play" de sa télécommande.
+
+On répète l'opération pour toutes les actions qu'on veut définir puis on clique sur le pavé "Définir" en bas à droite pour les enregistrer définitivement.
+
+
+==== InputLirc ====
+''InputLirc'' est un daemon léger qui permet de ré-envoyer les KeyCodes générés par ''/dev/input/eventX'' aux clients Lirc.\\ 
+Il faut donc installer **[[apt>inputlirc]]**.
+
+<note warning>ImputLirc est incompatible avec Lirc. Pour que cette méthode fonctionne, il faut impérativement désinstaller Lirc ou s'assurer que le daemon Lircd n'est pas lancé. Pour cela, lors de l'installation de Lirc ou de sa re-configuration : <code>sudo dpkg-reconfigure lirc</code> il faut bien avoir répondu none aux questions posée. Assurez vous également que le paramètre START_LIRCD est bien configuré sur ''false'' dans **etc/lirc/hardware.conf**.</note>
+
+Pour le configurer, il faut connaître le numéro du EventX correspondant à votre récepteur IR :
+
+<code>cat /proc/bus/input/devices </code>
+
+Par exemple, sur une Zbox nano, vous pourrez obtenir :
+<code>I: Bus=0019 Vendor=1050 Product=00c5 Version=0062
+N: Name="Nuvoton w836x7hg Infrared Remote Transceiver"
+P: Phys=nuvoton/cir0
+S: Sysfs=/devices/pnp0/00:02/rc/rc0/input7
+U: Uniq=
+H: Handlers=kbd event7 
+B: PROP=0
+B: EV=100013
+B: KEY=fff 0 108fc010 4004900000000 0 40000a000 1080c4000801 9e168000000000 2
+B: MSC=10</code>
+ 
+Donc, ici les signaux de la télécommande sont transmis à travers ''/dev/input/event7'', ce qu'il faut indiquer à ''inputLirc'' en ajoutant au fichier ''/etc/default/inputlirc'' :
+<file>EVENTS="/dev/input/event7"
+OPTIONS="-g -m 0 -c"</file>
+
+<note>[cas particulier ?]  Lorsque vous débranchez et rebrancher votre récepteur IR, le numero eventX  peut changer. Voir plus bas comment s'affranchir de cet inconvénient</note>
+
+Il ne reste plus qu'à redémarrer inputLirc :
+<code>/etc/init.d/inputlirc stop
+/etc/init.d/inputlirc start</code>
+
+Et tester que maintenant, votre télécommande est bien reconnue et que l'appui de touche renvoie le bon code lirc :
+<code>irw</code>
+
+<note tip>Maintenant que InputLirc fonctionne, les scancodes générés par votre télécommande ne sont plus transformés en événements clavier KeyCode mais en événements télécommande. La commande <code>ir-keytable -t --sysdev rc2</code> ne ferait plus rien apparaître lors de l'appui des touches. C'est pour cela qu'il faut désormais utiliser la commande <code>irw</code> pour tester votre télécommande.</note>
+<note warning>la commande irw fait partie du paquet Lirc qu'il faut donc installer pour l'utiliser. Rappelons que InputLirc et Lirc sont incompatibles. Assurez vous bien que le daemon Lircd n'est pas lancé !</note>
+==== Cas où le numero EventX change de temps en temps ====
+Il arrive que le numero EventX change parfois. Lors d'un redémarrage ou lorsque l'on débranche puis rebranche son récepteur IR USB. Il faut alors créer une règle permanente avec Udev.\\
+Commençons par rechercher un peu plus d'information sur votre récepteur IR en tapant (remplacer event8 par le numéro d'eventX correspondant dans cette cession à votre récepteur IR) :
+<code> udevadm info -a -p $(udevadm info -q path -n /dev/input/event8) </code>
+
+On obtient alors par exemple :
+<code>Udevadm info starts with the device specified by the devpath and then walks up the chain of parent devices. It prints for every devicefound, 
+all possible attributes in the udev rules key format. A rule to match, can be composed by the attributes of the device and the attributes from one single parent device.
+
+  looking at device '/devices/pnp0/00:01/rc/rc0/input8/event8':
+    KERNEL=="event8"
+    SUBSYSTEM=="input"
+    DRIVER==""
+
+  looking at parent device '/devices/pnp0/00:01/rc/rc0/input8':
+    KERNELS=="input8"
+    SUBSYSTEMS=="input"
+    DRIVERS==""
+    ATTRS{name}=="Nuvoton w836x7hg Infrared Remote Transceiver"
+    ATTRS{phys}=="nuvoton/cir0"
+    ATTRS{properties}=="0"
+    ATTRS{uniq}==""
+
+  looking at parent device '/devices/pnp0/00:01/rc/rc0':
+    KERNELS=="rc0"
+    SUBSYSTEMS=="rc"
+    DRIVERS==""
+    ATTRS{protocols}=="[other] [unknown] [rc-5] [nec] [rc-6] [jvc] [sony] [rc-5-sz] [sanyo] [sharp] [mce_kbd] [xmp] [lirc]"
+
+  looking at parent device '/devices/pnp0/00:01':
+    KERNELS=="00:01"
+    SUBSYSTEMS=="pnp"
+    DRIVERS=="nuvoton-cir"
+    ATTRS{id}=="NTN0530"
+
+  looking at parent device '/devices/pnp0':
+    KERNELS=="pnp0"
+    SUBSYSTEMS==""
+    DRIVERS==""
+</code>
+
+Il faut alors rechercher l'''ATTRS{id}'' correspondant à votre matériel (dans mon cas ''ATTRS{id}=="NTN0530"'') pour créer le lien symbolique ''MaTelecommande'' pointant toujours sur le bon ''EventX'':
+
+<code>sudo echo 'KERNEL=="event*",ATTRS{id}=="NTN0530",SYMLINK="input/MaTelecommande"' > /etc/udev/rules.d/10-persistent-ir.rules </code>
+
+(vous pouver aussi modifier directement le fichier ''/etc/udev/rules.d/10-persistent-ir.rules''  en ajoutant la ligne : <file>''KERNEL=="event*",ATTRS{id}=="NTN0530",SYMLINK="input/MaTelecommande"''</file>
+\\
+Redemarrez Udev pour que les changements prennent effet :
+<code>sudo /etc/init.d/udev reload
+sudo udevadm trigger</code>
+
+Vous devriez voir désormais apparaître le fichier spécial  ''/dev/input/MaTelecommande''\\
+N'oubliez pas pour terminer de reconfigurer InputLirc :
+
+<file>EVENTS="/dev/input/MaTelecommande"
+OPTIONS="-g -m 0 -c"</file>
+
+Et redémarrer inputLirc :
+<code>sudo /etc/init.d/inputlirc stop
+sudo /etc/init.d/inputlirc start</code>
+
+===== Désinstallation =====
+ 
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée. Les journaux du système, et les fichiers de préférence des utilisateurs dans leurs dossiers personnels sont toujours conservés.
+ 
+===== Voir aussi =====
+ 
+  * [[http://kodi.wiki/view/HOW-TO:Set_up_an_MCE_remote_control_in_Linux|Tuto en anglais sur lirc et IR-Keytable]].
+  * [[https://forum.ubuntu-fr.org/viewtopic.php?id=2005215|Une installation, pas à pas, sur notre forum]].
+------
+//Contributeurs : [[utilisateurs:zarmu]]// , [[utilisateurs:Tout_seul]]

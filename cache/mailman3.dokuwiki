@@ -1,0 +1,74 @@
+
+====== Les liste de diffusions Mailman3 ======
+Mailman3 est une application libre pour gérer des listes de diffusion électroniques, les listes de discussion et les « newsletters ».
+
+Mailman3 est une ré-écriture complète de Mailman 2. Elle est basé sur le language Python et le framework Django.
+
+L'installation et l’administration cette version 3 sont très différentes de la version 1 ou 2, ce qui rend les recherches ardues et conduit bien souvent à d'incommensurables déceptions. D'où la création de cette page.
+
+===== Installation depuis le dépôt Ubuntu =====
+
+Il existe moultes manières d'installer Mailman3 (pip, git, apt, Docker…), selon votre humeur, vos goûts et vos envies.
+
+Reportez-vous à la [[https://docs.mailman3.org/en/latest/|documentation officielle Mailman3]] si nécessaire. (Attention, celle-ci ne couvre pas les paquets Ubuntu/Debian.)
+
+Nous ne verrons ici que celle qui me semble être la plus rapide et la plus confortable, pour Ubuntu : l'utilisation des dépôts via cette merveilleuse commande ''apt-get''. Notez qu'elle devrait fonctionner de la même manière sous Debian.
+
+Cette procédure a été écrite pour Ubuntu 20.04 LTS « Focal Fossa » mais devrait pouvoir être adaptée facilement pour des version ultérieures.
+
+  * Commencez par mettre à jour vos dépôts :
+
+  sudo apt-get update && sudo apt-get upgrade
+
+  * Installez mailman3, ainsi que Postorius (interface web) et HyperKitty (outil d'archivage), et ce en une seule et même opération :
+
+  sudo apt-get install mailman3-full
+
+Suivez les instructions lors de l'installation (les options par défaut fonctionnent plutôt pas mal).
+
+  * Configurer postfix en ajoutant les lignes suivantes au fichier ''/etc/postfix/main.cf'' :
+
+  transport_maps = hash:/var/lib/mailman3/data/postfix_lmtp
+  local_recipient_maps = hash:/var/lib/mailman3/data/postfix_lmtp
+  relay_domains = hash:/var/lib/mailman3/data/postfix_domains
+
+  * Je recommande Nginx plutôt que Apache2 :
+
+  sudo apt-get remove --purge apache2
+  sudo apt-get install nginx python3-certbot-nginx 
+
+  * Copiez le modèle de fichier de configuration Nginx fourni par Mailman3 vers le répertoire de Nginx :
+
+  sudo cp /etc/mailman3/nginx.conf /etc/nginx/sites-available/mailman.conf
+
+  * Muni de votre éditeur texte favori, éditez le fichier ''/etc/nginx/sites-available/mailman.conf'' ainsi copié et remplacez le nom de domaine ''mailman.example.com'' par le vôtre :
+
+  server_name mailman.example.com;
+
+  * Activez le fichier de configuration :
+
+  sudo ln -s /etc/nginx/sites-available/mailman.conf /etc/nginx/sites-enabled/mailman.conf
+
+  * Redémarrez Nginx :
+
+  sudo service nginx restart
+  
+En cas d'erreur, vérifiez que le répertoire défini dans ''/etc/nginx/sites-available/mailman.con'' pour ''access_log'' et ''error_log'' existe bien.
+
+  * Créez le certificat SSL :
+
+  sudo certbot
+
+Suivez les instructions à l'écran.
+
+  * Créez un compte superuser pour Mailman3 :
+
+  sudo django-admin createsuperuser --pythonpath /usr/share/mailman3-web/ --settings settings
+
+Suivez les instructions à l'écran.
+
+  * Muni du compte administrateur précédemment créé, il vous reste à configurer votre système.
+    * Avec le navigateur web qui vous plait, rendez-vous sur votre site à l'adresse https://mailman.example.com/.
+    * Le première chose à faire est sûrement de renommer le site (Web Host) : https://mailman.example.com/admin/sites/site/1/change/
+    * Puis créez un domaine de messagerie : https://mailman.example.com/postorius/domains/new/
+    * Enfin, créez votre première liste : https://mailman.example.com/postorius/lists/new/

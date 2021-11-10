@@ -1,0 +1,137 @@
+
+{{tag>xenial bionic serveur internet cms}}
+
+{{  https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Joomla!-Logo.svg/2560px-Joomla!-Logo.svg.png?240}}
+
+====== Joomla! ======
+
+[[wpfr>Joomla!]] est un [[:CMS]] utilisant [[:PHP]] et [[:MySQL]]. C'est le second CMS le plus utilisé au monde après [[:WordPress]] et avant [[:Drupal]].
+
+===== Installation =====
+
+==== Prérequis ====
+
+Pour installer Joomla! vous aurez besoin d'un [[:web#serveurs|serveur HTTP]], de [[:PHP]], et d'un serveur de base de données MySQL ([[:MySQL]] ou [[:MariaDB]]).
+
+<note>Sur un hébergement web géré par l'hébergeur, ces prérequis devraient déjà être en place, donc toutes ces étapes devraient être inutiles.
+
+N'hésitez pas à contacter le support de l'hébergeur si ce n'est pas le cas.</note>
+
+[[:apache2|Apache]] est le serveur HTTP le plus couramment utilisé, et cette configuration (en conjonction avec MySQL et PHP) s'appelle une pile [[:LAMP|LAMP]].
+
+Donc pour installer [[:apache2|Apache]], [[:PHP]] et [[:MySQL]] ou [[:MariaDB]], suivez [[:LAMP#installation|cette documentation]].
+
+Une fois la pile [[:LAMP]] installée (avec les modules PHP les plus courants), nous allons créer un [[:apache2#hotes_virtuels|hôte virtuel]] pour Joomla!, dont la racine sera ''/var/www/joomla'' :
+<code>sudo nano /etc/apache2/sites-available/joomla.conf</code>
+Ce qui ouvre avec [[:nano|l'éditeur nano]] un fichier dans lequel nous allons coller :
+<file - joomla.conf><VirtualHost *:80>
+        ServerName joomla.localhost
+        DocumentRoot /var/www/joomla
+        <Directory /var/www/joomla>
+                AllowOverride all
+                Require all granted
+        </Directory>
+        ErrorLog /var/log/apache2/error.joomla.log
+        CustomLog /var/log/apache2/access.joomla.log combined
+</VirtualHost></file>
+Si un nom de domaine pointe sur le serveur, on l'indique à la place de ''joomla.localhost'' pour la directive ''ServerName''.\\
+(''Ctrl+X'' puis ''O'' pour quitter en sauvegardant)
+
+Finalement, on active l'hôte virtuel et on recharge la configuration d'Apache :
+<code>sudo a2ensite joomla
+sudo systemctl reload apache2</code>
+
+<note important>Si votre serveur est sur le [[:Web]], pensez à [[:apache2#securite|sécuriser]] l'accès au site en particulier en forçant [[:apache2#HTTPS]].</note>
+
+==== Installation de Joomla! ====
+
+=== Copie des fichiers ===
+
+Tout d'​abord téléchargeons la dernière version française de Joomla! :
+<note important>Adaptez la commande suivante au numéro de la dernière version que vous trouverez [[https://github.com/AFUJ/joomla-cms-fr/releases/latest|ici]].</note>
+<code>wget -O Joomla.zip https://github.com/AFUJ/joomla-cms-fr/releases/download/3.9.15.1/Joomla_3.9.15-Stable-Full_Package_French_v1.zip</code>
+
+Ensuite nous allons extraire le contenu du zip à la racine de notre hôte virtuel (''/var/www/joomla'' dans cet exemple) :
+<code>sudo unzip Joomla.zip -d /var/www/joomla</code>
+
+Nous allons aussi créer un fichier de configuration vide :
+<code>sudo touch /var/www/joomla/configuration.php</code>
+
+On va renforcer la sécurité en attribuant des [[[[:apache2#permissions|droits]] restrictifs aux fichiers :
+<code>sudo chown -R $USER:www-data /var/www/joomla
+chmod -R a-rwx,u+rwX,g+rX /var/www/joomla
+chmod -R g+w /var/www/joomla/cache /var/www/joomla/tmp /var/www/joomla/administrator/cache /var/www/joomla/administrator/logs /var/www/joomla/configuration.php</code>
+
+=== Création de la base de données ===
+
+Pour créer la base de données qu'utilisera Joomla!, le plus simple est de se connecter avec le client [[:MySQL]] :
+<code>sudo mysql</code>
+
+On arrive alors sur la console SQL sur laquelle nous allons entrer ces commandes (en remplaçant ''mot_de_passe'') :
+<code mysql>CREATE DATABASE joomla;
+CREATE USER 'juser'@'localhost' IDENTIFIED BY 'mot_de_passe';
+GRANT ALL ON joomla.* TO 'juser'@'localhost';
+FLUSH PRIVILEGES;
+QUIT;</code>
+Il faut remplacer ''mot_de_passe'' par un vrai mot de passe complexe qu'on note pour la prochaine étape.
+
+On vient de créer la base de données ''joomla'' à laquelle l'utilisateur ''juser'' aura accès.
+
+=== Installation via l'interface web ===
+
+Joomla! devrait alors être accessible à l'​adresse [[http://joomla.localhost/]], et cette adresse nous redirige sur une interface qui nous permet de finaliser l'installation en 4 étapes.
+
+Il faudra remplir plusieurs champs pour chacune de ces étapes. La description de ces champs est bien indiquée et vous ne devriez pas rencontrer de problème particulier.
+
+À l'**étape 2** renseignez les champs de cette manière :
+  * **Nom d'utilisateur** : ''juser''
+  * **Mot de passe** : le mot de passe qu'on a noté lors de la création de la base de donnée et de l'utilisateur ''juser''
+  * **Nom de la base de données** : ''joomla''
+Pour le reste, conservez les valeurs par défaut.
+
+À l'**étape 3**, laissez la couche FTP désactivée et cliquez directement sur //Suivant//.
+
+À l'**étape 4** choisissez en //Type de site// les données que vous souhaitez voir insérées sur votre nouveau site (elles peuvent vous servir d'exemple). Vérifiez dans l'encart //Pré-installation// que tous les voyants sont verts puis cliquez sur //Installer//.
+
+=== Finalisation ===
+
+Finalement, supprimez le répertoire de l'installeur :
+<code>rm -rf /var/www/joomla/installation</code>
+
+Votre site est désormais installé et accessible à l'adresse [[http://joomla.localhost]]. Son administration est accessible à l'adresse [[http://joomla.localhost/administrator/]].
+
+===== Configuration =====
+
+==== Comment activer la réécriture des URLs ====
+
+Rendez vous dans l'administration de votre Joomla!, puis cliquez sur //Configuration//. Dans les //Paramètres SEO//, mettre //oui// pour //Réécriture d'URL en clair (SEF)// et //Réécriture au 'vol' des URL//. Puis cliquez sur //Enregistrer//.
+
+Activez le module [[:apache2#mod_rewrite]] :
+<code>sudo a2enmod rewrite</code>
+Puis renommez le fichier ''htaccess.txt'' :
+<code>mv /var/www/joomla/htaccess.txt /var/www/joomla/.htaccess</code>
+
+Actualisez la page d'accueil du site (après un certain temps si vous avez activé la mise en cache, par défaut 15min), pour que les liens de la page d'accueil soient changés. Appréciez les nouvelles URLs de la forme ''/catégorie/id-article''.
+
+===== Utilisation =====
+
+Voir [[https://docs.joomla.org/Main_Page/fr|cette documentation]].
+
+===== Mises à jour =====
+
+Pour mettre à jour l'intégralité de Joomla!, le serveur a besoin d'un accès en lecture et en écriture à l'ensemble des fichiers. Il faut donc l'y autoriser temporairement :
+<code>chmod -R g+w /var/www/joomla</code>
+On effectue ensuite la mise à jour via l'interface d'administration de Joomla! : [[http://joomla.localhost/administrator/]].
+
+Puis on rétablit les permissions sécurisées :
+<code>chmod -R a-rwx,u+rwX,g+rX /var/www/joomla
+chmod -R g+w /var/www/joomla/cache /var/www/joomla/tmp /var/www/joomla/administrator/cache /var/www/joomla/administrator/logs /var/www/joomla/configuration.php</code>
+
+
+===== Voir aussi =====
+
+  * (fr) [[https://joomla.fr/|Site officiel]]
+  * (fr) [[https://kinsta.com/fr/blog/joomla-vs-wordpress/|comparaison avec WordPress]]
+
+----
+//Contributeurs : [[:utilisateurs:clement.analogue]], Coakette, [[:utilisateurs:krodelabestiole]], hyppocampedecourse//

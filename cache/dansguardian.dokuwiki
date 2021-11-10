@@ -1,0 +1,174 @@
+
+{{tag>éducation sécurité internet À_RECYCLER}}
+
+----
+
+
+
+====== Contrôle parental avec DansGuardian ======
+
+<note important>Il existe des méthodes plus simples: [[tutoriel:comment_mettre_en_place_un_controle_parental|Comment mettre en place un contrôle parental ?]]</note>
+
+Ce document n'est pas réellement une documentation mais plutôt une description de ce que j'ai dû installer/configurer pour le faire fonctionner chez moi. Je n'ai pas cherché à être exhaustif sur tout ce que l'on peut faire avec ces applications.
+Je vais donc vous livrer ma config et tout ce que j'ai compris dessus.
+
+Squid va être configuré en proxy transparent. Cela signifie que les postes qui seront sur le réseau local n'auront pas besoin de configuration particulière pour accéder à Internet : tous les accès Web qu'ils feront sur le port 80 seront automatiquement filtrés (en clair, ils n'auront pas besoin de configurer de proxy dans leur navigateur ...).
+
+===== Contexte =====
+
+  * Mon réseau
+    * un ordinateur avec 2 cartes réseau : la première carte (eth0) est connectée à une Freebox et la seconde (eth1) à un hub ethernet. Cet ordinateur est "la passerelle". C'est par son intermédiaire que le "client" sera connecté à Internet.
+    * un ordinateur avec 1 carte réseau reliée au hub : c'est le "client" que l'on veut relier à Internet.
+    * J'ai pris comme plage d'adresses pour mon réseau interne 10.0.0.0/8 c'est-à-dire que toutes les adresses du réseau interne commencent par 10.
+
+  * Pré-requis
+    * Que vous ayez un réseau semblable à installer (avec, éventuellement, plus de clients).
+    * Que l'accès internet fonctionne déjà sur la passerelle.
+
+  * Logiciels utilisés :
+    * dhcp3-server : Serveur dhcp qui permet de ne pas avoir à se soucier de la configuration réseau sur les postes clients.
+    * shorewall : un firewall. Les règles sont faciles à mettre. Bien sûr il utilise iptables pour le filtrage.
+    * dansguardian : c'est lui qui fait le filtrage de tout ce qui s'affichera dans un navigateur sur les postes clients.
+    * squid : dansguardian fait le filtrage mais il a besoin de squid pour aller chercher les pages autorisées.
+
+
+
+===== Installation =====
+
+=== Le plus simple : dhcp3-server ===
+
+<del>[[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>dhcp3-server]]**</del> le paquet n'est plus dans les dépôts ou bien il a un autre nom
+
+Lors de l'installation il vous est demandé quelle est l'interface avec laquelle il doit travailler. Il faut bien entrer eth1, c'est à dire l'interface réseau connecté au réseau local et non eth0 qui est elle connecté à internet. Il ne faut pas non plus laisser ce champ vide car sinon votre serveur dhcp sera accessible depuis internet.
+
+Après l'avoir installé, il n'y a que peu de configuration à faire dans ///etc/dhcp3/dhcpd.conf// :
+
+  * En début de fichier, il y a deux lignes à adapter : <code>option domain-name "chezmoi.com";
+option domain-name-servers 212.27.54.252, 212.27.39.135;
+</code>\\ Bien sûr, vous pouvez mettre ce que vous voulez pour domain-name à la place de "chezmoi.com". Cette information ne sera pas vraiment utilisée.\\ Sur la deuxième ligne, vous devez mettre les adresses IP fournies par votre fournisseur d'accès. On peut les trouver dans ///etc/resolv.conf// une fois que vous êtes connecté à Internet. Exemple, chez moi il y a<code>
+root@bozo:/ # cat /etc/resolv.conf
+nameserver 212.27.54.252
+nameserver 212.27.39.135
+</code>
+  * Il faut ensuite indiquer au serveur dhcp quelles sont les adresses qu'il a le droit de distribuer aux clients : <code>
+subnet 10.0.0.0 netmask 255.0.0.0 {
+  range 10.0.10.1 10.0.10.254;
+  option routers 10.0.0.1;
+}</code>\\ La première ligne renseigne le serveur dhcp sur l'ensemble du réseau : Là, les adresses iront de 10.0.0.0  à 10.255.255.255.\\ La seconde ligne indique la plage d'adresses qu'il peut utiliser. Arbitrairement, j'ai mis de 10.0.10.1 à 10.0.10.254.\\ La troisième ligne, enfin, est l'adresse de la passerelle. C'est cette adresse IP là que vous devez donner à votre interface eth1.\\ Pour info, j'ai ajouté en plus :<code>host superkid {
+  hardware ethernet 00:d0:09:e9:ba:8b;
+  fixed-address 10.0.10.1;
+}
+</code>\\ après avoir récupéré l'adresse MAC de mon fils. Ainsi, je peux forcer son adresse ce qui me permet de mettre dans mon /etc/hosts<code>
+10.0.10.1 superkid
+</code>\\ Sinon j'aurais été incapable de savoir l'adresse qu'il utilise à tout moment ...
+
+Voilà. C'est fait pour le serveur dhcp. plus qu'à le démarrer : 
+<code>sudo /etc/init.d/dhcp3-server start</code>
+
+(Pour ceux qui veulent aller plus loin, on pourrait améliorer un peu en configuration un cache DNS ...)
+
+===  dansguardian + squid ===
+
+une fois les deux installés, 
+<code>
+sudo apt-get install squid dansguardian
+</code>
+voici ce qu'il faut configurer :
+
+==  squid ==
+La configuration est entièrement dans le fichier ///etc/squid/squid.conf//.
+j'ai ajouté à la fin :
+<code>
+httpd_accel_host virtual
+httpd_accel_port 80
+httpd_accel_with_proxy on
+httpd_accel_uses_host_header on
+http_access allow all
+</code>
+C'est la ligne //httpd_accel_port 80// qui est particulièrement importante. Sans elle, squid ne peut pas fonctionner en tant que proxy transparent.
+
+**Sous Karmic**
+Seul le paramètre ''http_access allow all'' est nécessaire.
+
+j'ai également commenté :
+<code>
+#http_access deny all
+</code>
+
+== DansGuardian ==
+Il n'y a que trois lignes de /etc/dansguardian/dansguardian.conf à modifier :
+<code>
+filterport = 8080
+proxyport = 3128
+language = 'french'
+</code>
+
+La première indique le port sur lequel DansGuardian écoute.
+La seconde indique le port sur lequel Squid écoute (3128 est le port par défaut de Squid).
+Enfin, la troisième est utilisée pour indiquer dans quelle langue seront envoyés les messages d'erreur.
+
+Bien s'assurer que Squid est démarré avant de démarrer DansGuardian car il fait un test de connexion.
+
+Pour tester que ça fonctionne, il suffit de mettre http://localhost:8080 en proxy dans Firefox (Edition / Préférences / Général / Connexion / Configuration manuelle du proxy ...) puis de naviguer. 
+Essayez d'aller sur un site "peu recommandable" : L’accès devrait être interdit.
+
+J'ai ensuite modifié /etc/dansguardian/languages/french/template.html afin de personnaliser le message que recevra mon fils.
+
+Vous pourrez plus tard jouer avec les fichiers qui se trouvent dans /etc/shorewall. Ils vous permettent de personnaliser ce qui est interdit ou ce qui est autorisé.
+
+Personnellement, je n'ai jamais eu besoin d'ajouter quoi que ce soit car les mots clés bannis semblent plutôt exhaustifs.
+Les seules opérations que j'ai dû faire sont d'ajouter certains sites.
+
+
+=== Le firewall ===
+
+Je ne vais pas refaire la doc de ce firewall : il y en a pas mal sur shorewall.net.
+En particulier, la configuration utilisée est "Linux avec deux interfaces".
+
+Lorsqu'on installe, il me semble qu'il n'y a pas de fichier de configuration (je ne sais plus, ça fait longtemps...) et qu'il faut les télécharger du site de shorewall.\\
+J'ai pris celle-là : http://www1.shorewall.net/pub/shorewall/Samples/samples-2.2.4/two-interfaces.tgz\\
+De plus, liée à cette config, il y a une documentation en français à l'adresse : http://www.shorewall.net/two-interface_fr.html.\\
+
+Fonctionnement succinct de Shorewall :
+
+Tout est organisé sous forme de zones. Ainsi, chez moi, j'ai\\ Internet <--> passerelle <--> clients\\ trois zones appelées net, fw et loc (local).
+
+Tout le paramétrage du firewall consiste à mettre des règles sur les flux entre ces zones.\\
+Pour cela, il faut :
+  * donner des règles "par défaut" entre les zones. Par exemple, tout ce qui vient d'Internet est, par défaut, rejeté.
+  * donner des exceptions à ces règles par défaut.
+
+Tous les fichiers de configuration sont dans /etc/shorewall.\\
+En particulier, on a :
+  * interface, zones : permettent de définir les zones. Je n'ai absolument pas modifié celles fournies dans les fichiers trouvés à l'adresse indiquée plus haut. Au pire, il vous faudra peut-être modifier "interfaces" si vous avez inversé eth0 et eth1 ...
+  * policy : celui-là, je l'ai un peu modifié. Par défaut, il permet au réseau local de tout faire sur internet et ne permet pas à la passerelle d'accéder à Internet.
+Or dans mon cas c'est l'inverse : je veux filtrer tout ce que va faire mon fils et je veux, moi (la passerelle est mon poste ...) ne pas avoir de filtre.
+Ainsi, j'ai changé :<code>
+#SOURCE         DEST            POLICY          LOG LEVEL
+loc             net             ACCEPT
+net             all             DROP            info
+all             all             REJECT          info
+</code>\\ en <code>
+fw              all             ACCEPT
+net             all             DROP
+all             all             REJECT
+</code>\\ Vous remarquerez que j'ai supprimé les logs des rejets (les deux dernières lignes). C'est pas bien, mais ça me polluait les logs système.\\ Vous pouvez aussi remarquer qu'il y a une fois DROP et une fois REJECT. Je vous laisse voir ce à quoi cela correspond sur le site de Shorewall ... .
+  * rules : c'est là qu'on dit, au cas par cas, ce qui est autorisé (puisque tout le reste est interdit ...). \\ Par rapport à ce qu'il y a par défaut, j'ai juste :<code>
+# fait en sorte que les clients qui accèdent au port 80 (pour aller vers Internet) soient redirigés vers DansGuardian :
+REDIRECT        loc             8080            tcp     80
+# fait en sorte que les clients puissent faire des résolutions de nom (Ce serait un peu différent si on avait un cache DNS ...):
+ACCEPT          loc             net             udp     53
+</code>
+
+C'est fini. Plus qu'à démarrer Shorewall (/etc/init.d/shorewall start) et tester.
+
+==== annexe ====
+
+===== Liens externes =====
+
+[[:dansguardian_sans_serveur|Contrôle parental simple avec DansGuardian]]
+Permet d'utiliser Dansguardian directement sur un PC client
+
+[[http://ubuntuforums.org/showpost.php?p=4686738&postcount=3|Si utilisation de FireStarter]]
+
+----

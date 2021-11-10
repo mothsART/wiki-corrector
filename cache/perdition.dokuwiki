@@ -1,0 +1,146 @@
+
+{{tag>serveur internet courrier réseau  sécurité proxy VÉTUSTE}}
+
+----
+
+====== Perdition : création d'une passerelle pour l'IMAP et le POP3 (sécurisée ou pas) ======
+
+===== Introduction =====
+
+**Perdition** est un serveur proxy pour les protocoles POP3, POP3S, IMAP4 et IMAP4S. Il est capable de gérer des connexions SSL ou non-SSL et rediriger les utilisateurs vers un serveur réel suivant l'utilisateur (qui se trouve dans une base de données ou pas).
+
+**Perdition** est essentiellement utilisé pour créer des systèmes e-mail de grande envergure où les boîtes e-mails des utilisateurs se trouvent sur un ou plusieurs hôtes différents. Il peut être également utilisé comme solution transitoire pour passer d'une authentification "texte brut" à SSL.
+
+===== Pré-requis =====
+
+  * Posséder un serveur POP3 ou IMAP fonctionnel.
+  * Activer les [[:depots#universe_et_multiverse|dépôts Universe]].
+
+===== Installation =====
+
+L'installation de **perdition** est très simple, il vous suffit d'installer le paquet ''perdition''.
+
+<code>
+sudo apt-get install perdition
+</code>
+
+
+===== Configuration =====
+
+La configuration principale de **perdition** se fait dans le fichier ''/etc/perdition/perdition.conf''. Cependant, il est préférable d'utiliser d'autres sous-fichiers afin de faciliter la gestion de la configuration.
+
+Dans tous les fichiers de configuration qui suivent, vous trouverez les mots clés ''$SERVER$'' et ''$PORT$''. Il s'agit de l'adresse IP et du port sur lequel seront //transférés// les communications.
+
+Les configurations présentés ici sont uniquement du proxy sans intelligence. Vous pouvez dévier le traffic vers l'un ou l'autre serveurs e-mail suivant le nom de l'utilisateur ou le domaine. N'ayant pas expérimenté la chose, je vous renvoie à la documentation du projet pour savoir comment faire.
+
+==== Proxy pour l'IMAP4 (port 143) ====
+
+Ce proxy est un pur proxy; c'est-à-dire qu'il fait transiter des connexions IMAP4 vers un autre serveur IMAP4. C'est intéressant pour avoir un serveur **perdition** dans une zone démilitarisée (DMZ) qui transfère les communications vers un serveur du LAN.
+
+Exemple de fichier ''/etc/perdition/perdition.imap4.conf'' :
+
+<code>
+outgoing_server $SERVER$
+log_facility local5
+no_lookup
+timeout 40
+imap_capability "IMAP4rev1 UIDPLUS CHILDREN NAMESPACE THREAD=ORDEREDSUBJECT THREAD=REFERENCES SORT QUOTA ACL ACL2=UNION STARTTLS"
+</code>
+
+
+==== Proxy pour l'IMAP4S (port 993) ====
+
+Ici, nous avons un proxy un peu plus intéressant. L'idée est de transférer des communications sécurisées (via SSL) vers des communications non-sécurisées. De cette manière, la partie chiffrage est dévouée à **perdition** pour éviter de charger le serveur d'e-mails réel. C'est un cas typique où le serveur **perdition** se trouve face à //Internet// pour les utilisateurs itinérants qui souhaitent avoir accès à leurs e-mails qui se trouve sur un serveur du LAN qui lui, n'a pas besoin de tout faire passer en SSL.
+
+Exemple de fichier ''/etc/perdition/perdition.imap4s.conf'' :
+
+<code>
+outgoing_server $SERVER$
+outgoing_port $PORT$
+log_facility local5
+no_lookup
+timeout 40
+imap_capability "IMAP4rev1 UIDPLUS CHILDREN NAMESPACE THREAD=ORDEREDSUBJECT THREAD=REFERENCES SORT QUOTA ACL ACL2=UNION STARTTLS"
+ssl_mode ssl_listen
+ssl_cert_file /etc/perdition/server.cert
+ssl_key_file /etc/perdition/server.key
+</code>
+
+//Remarque : // Dans le cas décrit, la valeur de ''$PORT$'' est le port du serveur IMAP non-sécurisé qui se trouve dans le LAN. Par défaut, les liaisons IMAP normale se passent sur le port 143. 
+
+==== Proxy pour le POP3 (port 110) ====
+
+Ce proxy est, de nouveau, un pur proxy; c'est-à-dire qu'il fait transiter des connexions POP3 vers un autre serveur POP3. C'est intéressant pour avoir un serveur **perdition** dans une zone démilitarisée (DMZ) qui transfère les communications vers un serveur du LAN ou pour passer par un de vos serveurs avant de se connecter sur celui d'un fournisseur d'accès.
+
+Exemple de fichier ''/etc/perdition/perdition.pop3.conf'' :
+
+<code>
+outgoing_server $SERVER$
+log_facility local5
+no_lookup
+timeout 40
+</code>
+
+==== Proxy pour le POP3S (port 995) ====
+
+L'idée est, à nouveau, de transférer des communications sécurisées (via SSL) vers des communications non-sécurisées. 
+
+Exemple de fichier ''/etc/perdition/perdition.pop3s.conf'' :
+
+<code>
+outgoing_server $SERVER$
+outgoing_port $PORT$
+log_facility local5
+no_lookup
+timeout 40
+ssl_mode ssl_listen
+ssl_cert_file /etc/perdition/server.cert
+ssl_key_file /etc/perdition/server.key
+</code>
+
+//Remarque : // Dans le cas décrit, la valeur de ''$PORT$'' est le port du serveur POP3 non-sécurisé qui se trouve dans le LAN. Par défaut, les liaisons POP3 normale se passent sur le port 110. 
+
+===== Remarques =====
+
+==== Proxy par défaut dans perdition ====
+
+Si vous n'utilisez pas les proxy POP3, pensez à les désactiver. Pour se faire, indiquez un des protocoles qui passent par **perdition** à l'option ''PROTOCOL'' du fichier ''/etc/perdition/perdition.conf''.
+
+Dans le cas contraire, le port POP3 sera ouvert alors qu'il n'est pas utilisé.
+
+==== Générer un certificat SSL personnel ====
+
+Pour générer un certificat SSL personnel (c'est-à-dire non authentifié par une autorité), vous pouvez utiliser ''openssl''. Une fois ''openssl'' installé :
+<code>
+sudo apt-get install openssl
+</code>
+
+Allez dans ''/etc/perdition'' :
+
+<code> 
+cd /etc/perdition
+</code>
+
+Lancez la génération des clés SSL :
+
+<code>
+sudo openssl genrsa -out server.key 1024
+sudo openssl req -new -key server.key -out server.csr
+</code>
+
+Répondez aux différentes questions et terminez la configuration :
+
+<code>
+sudo openssl x509 -req -days 365 -in server.csr -signkey server.key -out server.crt
+sudo /etc/init.d/perdition restart
+</code>
+
+===== Liens =====
+
+  * [[http://www.vergenet.net/linux/perdition/|Site officiel (EN)]]
+  * [[http://www.vergenet.net/linux/perdition/docs.shtml|Documentation officielle (EN)]]
+  * [[http://www.vergenet.net/linux/mail_farm/|Document sur la mise en place d'une "ferme de serveur e-mails" avec Perdition (EN)]]
+
+----
+
+// Contributeur : [[utilisateurs:ostaquet]] //

@@ -1,0 +1,87 @@
+
+{{tag>Xenial tutoriel partitions windows}}
+----
+
+====== Accéder à une partition Windows en hibernation ======
+
+Ce tutoriel a pour but de vous aider à accéder à une partition qui rencontre une erreur due à la mise en veille du disque par Windows 8 et suivants. L'erreur ressemble à ceci :
+
+{{ :windows:hibernation1.png?350 }}
+
+Si vous avez toujours Windows installé sur votre PC il suffit de [[http://www.zebulon.fr/astuces/273-desactiver-le-demarrage-rapide-de-windows-8.html|désactiver l'option de mise en veille prolongée]], ou bien de choisir de redémarrer l'ordinateur. Dans les deux cas cela vous redonnera accès à votre disque.
+
+Cependant vous pouvez être dans le cas où Windows est défectueux et ne peut donc pas redémarrer correctement, ce qui vous contraint normalement à réinstaller Windows en veillant à ne pas détruire les partitions actuelles pour pouvoir récupérer vos données. Les méthodes qui suivent vous affranchissent de cette contrainte (réinstaller Windows). Cependant un fichier qui peut être essentiel à l'accès aux partititons va être supprimé durant la procédure. Elle n'est donc pertinente que si vous avez décidé de formater le disque après avoir accédé aux données.
+
+**La  [[#méthode graphique]] n'est valable qu'à partir d'[[:trusty|Ubuntu 14.04]] et avec [[:Unity]]**, la seconde par contre fonctionne sur toutes les versions ainsi que sur toutes les [[:variantes]]. Ces deux méthodes vous permettront d'accéder directement à la partition ntfs concernée, sans utiliser Windows.
+
+<note tip>Vous pouvez également appliquer la méthode graphique sous d'autres variantes mais il vous faudra alors installer l'outil adéquat, à savoir [[:gnome-disk-utility|l'utilitaire de disque]] de gnome.</note>
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+ 
+=====Méthode graphique====
+Ouvrez [[:gnome-disk-utility|l'utilitaire de disque]] via [[:unity#dash|le tableau de bord unity]]. Puis choisissez le disque dur qui vous pose problème dans la liste.
+
+{{ :windows:hibernation2.png?400 }}
+
+Puis :
+  * Cliquez sur les roues dentées pour choisir l'option **Modifier les options de montage**, comme sur la capture plus haut,
+  * Dans la fenêtre qui s'ouvre désactivez **Option de montage automatique**, sinon vous ne pourrez pas modifier les paramètres,
+  * Ajouter l'option //,remove_hiberfile// dans le champs des options en bas de la fenêtre comme sur la capture d'écran suivante :
+
+{{ :windows:hibernation3.png?400 }}
+
+Cliquez sur **Valider** et fermez l'application.
+
+===== Méthode en ligne de commande =====
+
+  * Ouvrez un [[:terminal]] et entrez y la commande suivante : <code>sudo mkdir /media/windows</code> Ceci va créer un point de montage pour votre partition ntfs (Windows).
+  * Maintenant il s'agit d'identifier votre partition avec précision, pour cela utiliser la commande : <code>sudo blkid</code> Qui devrait vous renvoyer quelque chose du genre : <code bash>
+/dev/sda1: LABEL="System Reserved" UUID="96FCF8CAFCF8A5A1" TYPE="ntfs" PARTUUID="8bc00cf4-01"
+/dev/sda2: LABEL="MA PARTITION NTFS" UUID="7E36FC2D36FBE455" TYPE="ntfs" PARTUUID="8bc00cf4-02"
+/dev/sda3: UUID="B0C0D1CAC0D196C6" TYPE="ntfs" PARTUUID="8bc00cf4-03"
+/dev/sdb1: LABEL="Ubuntu" UUID="1CC6-7AAB" TYPE="vfat" PARTUUID="61747dfa-01"
+/dev/loop0: UUID="2016-07-19-21-27-51-00" LABEL="Ubuntu 16.04.1 LTS amd64" TYPE="iso9660" PTUUID="40a863e7" PTTYPE="dos"
+/dev/loop1: TYPE="squashfs"</code> Ici notre disque est **/dev/sda2**, retenez le chemin, vous en aurez besoin dans la prochaine étape.
+  * [[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/etc/fstab** avec les [[:sudo|droits d'administration]] et ajoutez-y la ligne : <file>/dev/sda2 /media/windows ntfs-3g remove_hiberfile</file>
+Ou **/dev/sda2** sera conforme à votre chemin.\\
+  * Ou bien en privilégiant l'UUID que vous trouverez également dans le retour de la commande blkid : <file>UUID=7E36FC2D36FBE455 /media/windows ntfs-3g remove_hiberfile</file>
+  <note tip>Ne soyez pas surpris si,  après cet ajout, ubuntu 18.04.1 se plante au prochain démarrage en vous demandant d'arrêter correctement windows.
+<code>févr. 05 18:05:31 a mount[937]: The disk contains an unclean file system (0, 0).
+févr. 05 18:05:31 a mount[937]: Metadata kept in Windows cache, refused to mount.
+févr. 05 18:05:31 a mount[937]: Failed to mount '/dev/sda28': Opération non permise
+févr. 05 18:05:31 a mount[937]: The NTFS partition is in an unsafe state. Please resume and shutdown
+févr. 05 18:05:31 a mount[937]: Windows fully (no hibernation or fast restarting), or mount the volume
+févr. 05 18:05:31 a mount[937]: read-only with the 'ro' mount option.
+févr. 05 18:05:31 a systemd[1]: DATA.mount: Mount process exited, code=exited status=14
+févr. 05 18:05:31 a systemd[1]: DATA.mount: Failed with result 'exit-code'.
+févr. 05 18:05:31 a systemd[1]: Failed to mount /DATA.
+-- Subject: L'unité (unit) DATA.mount a échoué
+-- Defined-By: systemd
+-- Support: http://www.ubuntu.com/support
+-- 
+-- L'unité (unit) DATA.mount a échoué, avec le résultat RESULT.</code>
+Faites donc ce qu'il vous indique en  demandant un montage en mode 'lecture seule' avec l'option  **ro** au lieu de la suppression de l'hibernation 
+ 
+  </note>
+
+
+
+===== Méthode en ligne de commande pour une session live uniquement=====
+Vous pouvez vouloir accéder à votre partition le temps d'une session live, uniquement pour récupérer vos données. Dans ce cas en prenant comme références les indications du paragraphe précédent voici la commande à utiliser :
+<code>sudo mount -t ntfs-3g -o remount, rw, remove_hiberfile /dev/sda2 /media/windows</code>
+Les chemins sont bien évidement à adapter à votre système.
+
+===== Méthode en ligne de commande pour les versions récentes de ubuntu =====
+Vous pouvez avoir besoin d'accéder à votre partition pour récupérer uniquement le contenu avant d'en refaire un formatage.
+
+Le montage en mode lecture seule  peut se faire avec cette commande en prenant le soin de remplacer XN par ce qui convient
+   sudo mount     /dev/sdXN    -v     -r     -t   ntfs    /mnt
+===== Conclusion =====
+
+Voila, vous pouvez maintenant accéder à une partition qui fut en hibernation sans devoir réinstaller Windows !
+
+----
+//Contributeurs principaux : [[:utilisateurs:l_africain|L'Africain]].//

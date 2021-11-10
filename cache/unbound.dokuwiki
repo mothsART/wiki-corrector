@@ -1,0 +1,144 @@
+
+{{tag>réseau dns}}
+
+====== Unbound ======
+
+Le service [[:dns|DNS]] (Domain Name Service) est un service UDP/IP (et parfois TCP/IP) permettant la correspondance entre un nom de domaine qualifié (FQDN : Fully Qualified Domain Name) et une adresse IP, par exemple www.ubuntu-fr.org = 88.191.119.240. Ainsi, grâce à DNS, il n'est pas nécessaire de se souvenir des adresses IP.
+
+Un serveur qui héberge le service DNS est appelé "serveur de noms".\\
+Ubuntu propose de base **[[apt>unbound|Unbound]]**,  une alternative à [[:bind9]].\\
+Unbound se veut plus simple a configurer que bind9 pour un LAN de petite taille.
+
+Ce guide est destiné aux personnes désireuses d'apprendre à configurer et maintenir un serveur DNS Unbound.
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]] sur le serveur.
+  * Disposer d'un réseau local.
+  * Connaître les bases de TCP/IP.
+  * Éventuellement disposer d'une connexion à Internet configurée et activée, pour faire les tests.
+
+
+===== Installation =====
+Unbound est disponible dans le [[:dépôts|dépôt]] principal. Aucun dépôt supplémentaire n'est nécessaire;
+
+Pour installer le serveur Unbound , il suffit d'[[:tutoriel:comment_installer_un_paquet#installer_un_paquet_present_dans_les_depots_recommande|installer le paquet]] **[[apt>unbound|unbound]]**.
+
+===== Configuration en serveur cache - Caching DNS =====
+
+Dans cette configuration, Unbound va effectuer les requêtes DNS et mettre les réponses en mémoire cache pour les requêtes à venir.\\ 
+Cette méthode permet de faire moins de requêtes DNS, et surtout gagner en temps de latence DNS.
+
+Pour la configuration, il faut [[:tutoriel:comment_editer_un_fichier|éditer en tant qu'administrateur un seul fichier]] **/etc/unbound/unbound.conf**
+
+Exemple de configuration basique :
+
+
+  server:
+   verbosity: 1                   #de 0 à 5 en fonction de vos envies de messages ;), 0 seulement les erreurs
+   interface: 192.168.0.1           #Adresse du serveur DNS Unbound, si vous désirez unbound sur plusieurs interfaces remplacer par 0.0.0.0
+   access-control: 192.168.0.0/24 allow       #autorisez votre réseau
+   # Par défaut tout est refusé ! à part localhost.
+   # Possible choix :  deny (drop message), refuse (polite error reply), allow (recursive ok), allow_snoop (recursive and nonrecursive ok)
+  
+  #Ajouter la zone qui transfère les requêtes DNS non effectuées par votre serveur vers le domaine racine (.)
+  forward-zone:
+   name: "."
+   forward-addr: 208.67.222.222   #serveur DNS OpenDNS
+   forward-addr: 208.67.220.220  #serveur DNS OpenDNS
+   forward-addr: 8.8.8.8                #serveur DNS de google
+   forward-addr: 8.8.4.4               #serveur DNS de google
+
+
+=== Enregistrer votre fichier et redémarrer Unbound :  ===
+  sudo service unbound restart
+  
+=== Enregistrer votre fichier et redémarrer Unbound :  (Avec Systemd) ===
+  sudo systemctl restart unbound.service
+  
+=== Pour vérifier que la mise en cache fonctionne correctement, utiliser la commande drill (installer le paquet  **[[apt>ldnsutils|ldnsutils]]**)sur un site pas encore visité : ===
+  drill maplestage.com @192.168.0.1
+
+{{::query1.png?200|}}
+
+Relancer la commande
+
+{{::query2.png?200|}}
+
+8-)La mise en cache fonctionne bien et nous pouvons observer le temps gagné !!!
+
+=== Pour contrôler les erreurs éventuelles du fichier conf : ===
+  unbound-checkconf /etc/unbound/unbound.conf
+  
+----
+
+==== Options du serveur ====
+
+=== Activer IPv4 et Support des Protocols : ===
+  do-ip4: yes
+  do-ip6 no  #désactivez si vous obtenez une erreur au lancement du service 
+  do-udp: yes
+  do-tcp: yes
+
+=== Activer les logs  : ===
+  logfile: /var/log/unbound
+
+=== Cacher l'identité et la version du serveur (Requêtes : id.server et hostname.bind)  : ===
+  hide-identity: yes
+  hide-version: yes
+
+=== Paramètre limitant l'usurpation de DNS ===
+  harden-glue: yes
+
+=== Résout gOogLe.cOm et google.com de la même manière ===
+  use-caps-for-id: yes
+  
+=== localhost peut être interrogé ! Seulement no pour test et debuging / Par défaut yes ===
+  do-not-query-localhost: yes
+  
+=== Exemple du fichier unbound.conf ===
+  server:
+   verbosity: 1
+   interface: 192.168.0.1
+   access-control: 192.168.0.0/24 allow
+  
+   do-ip4: yes
+   do-ip6: no  #désactivez si vous obtenez une erreur au lancement du service 
+   do-udp: yes
+   do-tcp: yes
+   logfile: /var/log/unbound
+   hide-identity: yes
+   hide-version: yes
+   harden-glue: yes
+   use-caps-for-id: yes
+   do-not-query-localhost: yes
+  
+  forward-zone:
+   name: "."
+   forward-addr: 208.67.222.222   #serveur DNS OpenDNS
+   forward-addr: 208.67.220.220  #serveur DNS OpenDNS
+   forward-addr: 8.8.8.8                #serveur DNS de google
+   forward-addr: 8.8.4.4               #serveur DNS de google
+   
+   
+   
+==== Gestion et Dépannage de Unbound ====
+
+===== Configuration DNS faisant autorité sur notre réseau local  =====
+
+
+===== Désinstallation =====
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée.
+Ne pas oublier de repositionner les DNS de son choix dans /etc/resolv.conf
+
+===== Voir aussi =====
+
+  * **(en)** [[http://en.wikipedia.org/wiki/Unbound_%28DNS_Server%29]]
+  * **(en)** [[http://unbound.net/]]
+  * **(fr)** [[http://www.bortzmeyer.org/unbound.html]]
+  * **(fr)** [[wpfr>Domain Name System Security Extensions|DNSSEC]]
+  * **(fr)**[[https://homeserver-diy.net/wiki/index.php?title=Installer_et_configurer_son_serveur_DNS_connect%C3%A9_aux_serveurs_root_avec_Unbound]]
+
+----
+
+<note>FIXME Article  à développer/compléter</note>

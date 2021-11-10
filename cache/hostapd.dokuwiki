@@ -1,0 +1,603 @@
+
+{{tag>wifi réseau}}
+----
+====== HostAP daemon ======
+
+Hostapd s'appuie sur les protocoles IEEE 802.11 AP et IEEE 802.1X/WPA/WPA2/EAP/RADIUS authentificateur.
+
+Hostapd permet la création d'un point d'accès Wi-Fi, technologie sans fil utilisée pour se connecter à un réseau informatique.
+Dans les réseaux informatiques, un point d'accès sans fil (spot ou AP) est un dispositif qui relie les appareils de communication sans fil pour former un réseau sans fil. Le spot Wi-Fi se connecte généralement à un réseau câblé, et peut transmettre des données entre les appareils sans fil et les périphériques câblés. Plusieurs spots peuvent être liés ensemble pour former un réseau plus large qui permet le "roaming" (l'itinérance). Pour rappel, en revanche, un réseau où les machines clientes gèrent elles-mêmes - sans avoir besoin de point d'accès - devient un réseau ad-hoc.
+
+===== Support du mode AP ou Master ====
+
+Votre adaptateur Wi-Fi doit supporter le mode AP ou Master, avant tout vérifiez que votre adaptateur supporte ce mode avec la commande "iw".
+
+Le **mode AP** doit apparaître :
+
+# iw list
+<code>
+[...]
+Supported interface modes:
+                 * IBSS
+                 * managed
+                 * AP
+                 * AP/VLAN
+                 * monitor
+                 * mesh point
+[...]
+</code>
+
+
+===== Installation, configuration et lancement de Hostapd =====
+
+
+Installation depuis dépots officiel
+
+<code>sudo apt-get -y install hostapd</code>
+
+Le fichier de configuration **/etc/hostapd/hostapd.conf** contient tous les paramètres de configuration du point d'accès Wi-Fi.
+ 
+La configuration minimale (Wi-Fi ouvert/OPEN) :
+<code>
+# interface wlan du Wi-Fi
+interface=wlan0
+
+# nl80211 avec tous les drivers Linux mac80211 
+driver=nl80211
+
+# Nom du spot Wi-Fi
+ssid=Nexus
+
+# mode Wi-Fi (a = IEEE 802.11a, b = IEEE 802.11b, g = IEEE 802.11g)
+hw_mode=g
+
+# canal de fréquence Wi-Fi (1-14)
+channel=6
+
+# Wi-Fi ouvert, pas d'authentification !
+auth_algs=0
+
+# Beacon interval in kus (1.024 ms)
+beacon_int=100
+
+# DTIM (delivery trafic information message) 
+dtim_period=2
+
+# Maximum number of stations allowed in station table
+max_num_sta=255
+
+# RTS/CTS threshold; 2347 = disabled (default)
+rts_threshold=2347
+
+# Fragmentation threshold; 2346 = disabled (default)
+fragm_threshold=2346
+</code>
+ 
+Le driver nl80211 est utilisé avec tous les drivers Linux mac80211.
+Hostapd supporte les adaptateurs Wi-Fi utilisant les drivers madwifi, prism.
+
+=== Authentification WPA/WPA2 ===
+
+Activez l'authentification en modifiant la clé auth_algs=1
+
+Avec  Wi-Fi WPA (WPA-PSK-TKIP) :
+<code>
+wpa=1
+#wpa_psk=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+wpa_passphrase=passphrase
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=TKIP
+</code>
+
+Avec Wi-Fi WPA2 (WPA2-PSK-CCMP) :
+<code>
+wpa=2
+#wpa_psk=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+wpa_passphrase=passphrase
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=CCMP
+rsn_pairwise=CCMP
+</code>
+
+=== Filtrage MAC ===
+
+Activez le Filtrage des adresses MAC des clients sans fil :
+
+<code>
+# Station MAC address -based authentication (driver=hostap or driver=nl80211)
+# 0 = accept unless in deny list
+# 1 = deny unless in accept list
+# 2 = use external RADIUS server (accept/deny lists are searched first)
+macaddr_acl=1
+
+# Accept/deny lists are read from separate files
+accept_mac_file=/etc/hostapd/hostapd.accept
+#deny_mac_file=/etc/hostapd/hostapd.deny
+</code>
+
+Exemple de fichier hostapd.accept :
+<code>
+b4:24:63:73:f8:14
+00:07:a5:f9:a7:80
+...
+</code>
+
+=== Lancement de hostapd ===
+
+Lancement de hostapd :
+<code>
+hostapd /etc/hostapd/hostapd.conf
+</code>
+==== Configuration d'un point d'accès en WI-FI 802.11n (support MIMO) ==== 
+
+L'agrégation de la bande passante (HT) se base sur l'addition de deux canaux en 20 MHz chacun, pour obtenir une large bande passante de communication de 40MHz. L'intervalle de garde (GI) en 800 ns ou en 400 ns détermine le délai utilisé pour s'assurer qu'une transmission n'interfère par avec d'autres (le délai est automatiquement sélectionné en fonction de la qualité du lien entre AP et son client Wi-Fi N) . Le nombre de flux avec antennes utilisées, active le mode MIMO (Multiple Input, Multiple Output) qui signifie de multiple entrées et sorties dans ce mode de communication, anciennement "mode diversity". Tous ces paramètres détermineront votre débit final, affecté par un dernier paramètre, les capacités matérielles (la puce/chipset) de cryptage (AES, TKIP, WEP) de votre adaptateur WI-FI 802.11n. Les débits montent de 6.5 Mbps minimum à 300 Mbps et plus en WI-FI 802.11n, par exemple un AP MIMO 2x2, donc 2 flux en réception (RX) et 2 en transmission (TX) est capable de soutenir un client MIMO, aussi en 2x2, à 300 Mbps sur une courte distance.
+
+Tableau montrant l'impact des modes HT20 / HT40 GI (guard interval) et du nombre de flux sur le débit du réseau, avec chaque fois la meilleur modulation possible 64-QAM : \\
+^Bande passante ^  ^HT 20MHz	^HT 40MHz^ ^
+|**Nombre de Flux** |800 ns Gi	|400 ns Gi	|800 ns  Gi	|400 ns Gi|
+|1 flux	|65 Mbps	|75 Mbps	|135 Mbps	|150 Mbps|
+|2 flux	|130 Mbps	|150 Mbps	|270 Mbps	|300 Mbps|
+|3 flux	|195 Mbps	|225 Mbps	|405 Mbps	|450 Mbps|
+|4 flux	|260 Mbps	|290 Mbps	|540 Mbps	|600 Mbps|
+
+Tableau des canaux dans le mode HT40 inférieur/supérieur : \\
+^fréquences	^ HT40-		^ HT40+ ^
+|2.4 GHz	        |5-13		|1-7 (1-9 en Europe/Japon)|
+|5 GHz		|40,48,56,64	|36,44,52,60|
+
+Les règles sont les suivantes : vous ne devez pas paramètrer les canaux 1,2,3 ou 4 dans le mode HT40 inférieur, et vous ne devez pas paramétrer les canaux 10,11,12 ou 13 dans le mode HT 40 supérieur. Les canaux 5,6 ou 7 marcheront donc dans les deux modes HT40 -/+.
+
+
+Petit rappel du mode standard IEEE 802.11g, entre 2,4GHz et 2,5GHz il y a 100Mhz et il y a 14 canaux de 20MHz espacés de 5MHz seulement, et se chevauchant obligatoirement dans cette espace de la bande. En mode 802.11n la bande passant additionné de 2 canaux couvre 40MHz, chevauchant par conséquent beaucoup plus de canaux entre 2,4GHz et 2,5GHz.  
+
+Paramètrage Wi-Fi N en mode IEEE 802.11g (2,4GHz) et channel :
+<code>
+# mode Wi-Fi 
+hw_mode=g
+channel=6
+</code>
+
+Paramètrage Wi-Fi N en mode IEEE 802.11a (5GHz) et channel :
+<code>
+# mode Wi-Fi 
+hw_mode=a
+channel=36
+</code>
+
+Hostapd implémente des règles très strictes en 802.11n en particulier IEEE_802.11n Draft 7.0 section 11.14.3.2. Au démarrage hostap scannera donc les APs HT20/40 actifs dans son environnement présent, et déterminera si votre fréquence primaire est en adéquation avec la fréquences secondaire conséquente du choix canal inférieur/supérieur pour chaque AP présent. Si un seul de ces APs environnants est détecté chevauchant sur vos fréquences primaire et secondaire, hostapd ne se lancera alors qu'en mode HT20, et uniquement dans ce mode 20MHz. Vous remarquerez sûrement dans un environnement non contrôlé (urbain et dense), que certaines BOX AP/router polluent et perturbent allègrement le 2,4GHz (la bande des 5GHz est bien plus calme), ne respectant pas certaines règles du 802.11n en 40MHz... Ce ne doit pas être la règle du premier arrivé qui doit être servi en premier en 40MHz et ceci sans limite de temps!
+
+Ce patch est fonctionnel pour activer le mode 40MHz dans un environnement non contrôlé et perturbé, fichier IEEE_802.11n_D7.0_11.14.3.2.patch :
+<code c>
+hostapd-0.7.3/hostapd# diff -ur ../src.orign/ap/hw_features.c ../src/ap/hw_features.c > IEEE_802.11n_D7.0_11.14.3.2.patch
+--- ../src.orign/ap/hw_features.c       2011-11-01 21:05:04.041307566 +0100
++++ ../src/ap/hw_features.c     2011-11-01 23:01:08.873747763 +0100
+@@ -378,8 +378,17 @@
+                                sec = pri + 20;
+                }
+ 
+-               if ((pri < affected_start || pri > affected_end) &&
+-                   (sec < affected_start || sec > affected_end))
++               wpa_printf(MSG_DEBUG, "Tested BSS " MACSTR
++                         " <%d,%d> (pri=%d%c sec=%d) vs. <%d,%d>",
++                               MAC2STR(bss->bssid),
++                               pri, sec, pri_chan,
++                               sec > pri ? '+' : '-',
++                               sec_chan, pri_freq, sec_freq);
++
++               if ( ((pri < affected_start || pri > affected_end) &&
++                   (sec < affected_start || sec > affected_end)) ||
++                  ((pri > affected_start && sec > affected_end) ||  //correction for <2447,2467> (chan=8+) vs. <2437,2417>
++                   (pri < affected_start && sec < affected_end)) ) // and reverse
+                        continue; /* not within affected channel range */
+ 
+                wpa_printf(MSG_DEBUG, "Neighboring BSS: " MACSTR
+@@ -451,7 +460,14 @@
+                iface->conf->secondary_channel = 0;
+                iface->conf->ht_capab &= ~HT_CAP_INFO_SUPP_CHANNEL_WIDTH_SET;
+        }
+-
++       else wpa_printf(MSG_INFO, "20/40 MHz permitted on "
++                          "channel pri=%d%c sec=%d/%d ",
++                          iface->conf->channel,
++                          iface->conf->channel > iface->conf->secondary_channel ? '+' : '-',
++                          iface->conf->channel +
++                          iface->conf->secondary_channel,
++                          iface->conf->channel +
++                          iface->conf->secondary_channel * 4);
+        hostapd_setup_interface_complete(iface, 0);
+ }
+</code>
+
+Exemple de configuration WI-FI 802.11n :
+<code>
+ieee80211n=1
+ht_capab=[HT40+][SHORT-GI-40][RX-STBC1][DSSS_CCK-40][MAX-AMSDU-3839]
+</code>
+
+Ici nous utilisons les modes HT20/HT40 supérieur, avec un intervalle de garde court en 40 MHz, avec 1 seul flux spatial, avec prise en charge du DSSS/CCK Mode en 40 MHz, avec un AMSDU de longueur maximum à 3839 bytes (par défaut). Canal 6 avec cryptage WPA2-PSK-CCMP configuré plus haut dans la config de hostapd.
+
+Utilisez la commande "iw list" pour déterminer les capacités de votre adaptateur en Wi-Fi 802.11n :
+<code>
+# iw list
+Wiphy phy1
+        Band 1:
+	      Capabilities: 0x114e
+                        HT20/HT40
+                        SM Power Save disabled
+                        RX HT40 SGI
+                        RX STBC 1-stream
+                        Max AMSDU length: 3839 bytes
+                        DSSS/CCK HT40
+                Maximum RX AMPDU length 65535 bytes (exponent: 0x003)
+                Minimum RX AMPDU time spacing: 8 usec (0x06)
+                HT TX/RX MCS rate indexes supported: 0-15
+[...]
+</code>
+
+Attention aux messages d'erreur lors du lancement de hostapd : 
+  * Driver does not support configured HT capability [SHORT-GI-20]
+  * Driver does not support configured HT capability [DSSS_CCK-40]
+  * Driver does not support configured HT capability [RX-STBC*]
+  * HT (IEEE 802.11n) with WPA/WPA2 requires CCMP to be enabled
+
+
+N'oubliez pas, vous êtes limités aux capacités matérielles de votre Point d'Accès en 802.11n (AP) et de vos clients (stations) en Wi-Fi N, ainsi qu'aux limites du driver Wi-Fi N que vous utilisez...
+
+Lancement de hostapd en Wi-Fi N avec son fichier de configuration :
+<code>
+hostapd /etc/hostapd/hostapd.conf
+</code>
+
+===== Création d'un point d'accès Wi-Fi & Partage de connexion Internet =====
+
+Cet exemple vous permettra de créer un point d'accès Wi-Fi sur une interface wlan0 (Wireless LAN) avec un partage de la connexion Internet d'une autre interface wlan6 (mais aussi bien eth0...)
+
+{{:reseau:wifi_ap_1_.jpg}}
+
+'' 
+Client Wi-Fi [PhoneWeb/Blu-Ray Disc/TV] <----100 mètres----> AP Wi-Fi <----[ PC Linux ]----> Client Wi-Fi <----300 mètres----> [Spot/AP Router] Internet
+                                                                                                                         
+''
+
+Ce type de configuration WI-Fi permet à des adaptateurs WI-Fi installés sur des périphériques, comme votre WebPhone, votre Blu-Ray Disc ou bien votre Téléviseur par exemple, d'accéder à votre réseau local maison et à Internet. De distribuer en Wi-Fi tout type de contenu, comme de la vidéo, images, musiques par l'intermédiaire de [[minidlna]] par exemple...
+
+==== Configuration de l'interface WLAN  ====
+
+Il nous faut activer l'interface wlan0 sur une adresse IP, prenons l'IP 192.168.0.1 et un masque 255.255.255.0 :
+
+<code>
+sudo ifconfig wlan0 down
+sudo ifconfig wlan0 192.168.0.1 netmask 255.255.255.0 up
+</code>
+
+==== Configuration du daemon hostapd  ====
+
+Lancement du daemon hostapd avec son fichier de configuration pointant sur l'interface wlan0 :
+<code>
+sudo hostapd /etc/hostapd/hostapd.conf &
+</code>
+
+==== Configuration Dhcpd Serveur ====
+
+La création d'un point d'accès Wi-Fi nécessite un sous-réseau configuré derrière ce spot Wi-Fi. Un serveur DHCP distribuera automatiquement des adresses aux clients sans fil. Configurons le serveur dhcpd-server avec un sous-réseau ayant pour adresse et masque 192.168.0.0/24.
+
+Le fichier de configuration /etc/dhcp/dhcpd.conf
+
+<code>
+option domain-name-servers 192.168.0.1;
+
+default-lease-time 600;
+max-lease-time 7200;
+
+authoritative;
+
+log-facility local7;
+
+subnet 192.168.0.0 netmask 255.255.255.0 {
+     #option domain-name "wifi.localhost";
+     option routers 192.168.0.1;
+     option subnet-mask 255.255.255.0;
+     option broadcast-address 192.168.0.0;
+     option domain-name-servers 192.168.0.1; 
+     range dynamic-bootp 192.168.0.15 192.168.0.100;
+}
+</code>
+
+Lancement de dhcpd-server : 
+<code>
+sudo dhcpd -d -f -pf /var/run/dhcp-server/dhcpd.pid -cf /etc/dhcp/dhcpd.conf wlan0 &
+</code>
+
+==== Configuration Dnsmasq Serveur ====
+
+Notre sous-réseau étant créé, il ne reste plus qu'à configurer un serveur de cache DNS sur notre interface, qui transformera toute demande d'un domaine en adresse Ip. 
+
+Attention notre DNS ne fait que lire le fichier '/etc/resolv.conf' déjà alimenté de serveur DNS par une autre interface ayant Internet.
+
+
+Le fichier de configuration /etc/dnsmasq.conf
+
+<code>
+bogus-priv
+filterwin2k
+# no-resolv
+interface=wlan0
+no-dhcp-interface=wlan0
+</code>
+
+Bien que dnsmasq puisse distribuer des adresses IP d'un sous-réseau, nous n'utiliserons pas cette fonctionnalité puisque nous utilisons déjà dhcpd-server.
+
+Lancement de dnsmasq : 
+
+<code>
+sudo dnsmasq -x /var/run/dnsmasq.pid -C /etc/dnsmasq.conf
+</code>
+
+==== Configuration de IP forwarding ====
+
+Notre interface wlan nouvellement créée a besoin de communiquer avec notre seconde interface ayant Internet, nous devons configurer l'IP forwarding. 
+
+Activez la prise en charge de l'IP forwarding, pour faire suivre les paquets d'une interface à l'autre :
+
+<code>
+echo 1 > /proc/sys/net/ipv4/ip_forward
+</code>
+
+Ou bien si vous voulez rendre cela permanent :
+
+Éditez le fichier /etc/sysctl.conf et dé-commentez la ligne :
+<code>
+# Uncomment the next line to enable packet forwarding for IPv4
+net.ipv4.ip_forward=1
+</code>
+
+==== Configuration de la Mascarade & du Firewall ====
+
+Notre sous-réseau 192.168.0.0/24 étant opérationnel, il ne reste plus qu'à activer la Mascarade et de lui permet de traverser notre firewall.
+
+Pour traduire des adresses entre deux interfaces nous devons activer le masquerading (NAT/Network Address Translation) dans le noyau Linux :
+
+Chargez le module :
+<code>sudo modprobe ipt_MASQUERADE</code>
+
+===  Configuration du Firewall avec iptables ===
+
+Activer la mascarade sur l'interface partageant Internet :
+<code>sudo iptables -A POSTROUTING -t nat -o wlan6 -j MASQUERADE</code>
+
+Accepter toutes les connexions établies et reliées entre elles :
+<code>sudo iptables -A FORWARD --match state --state RELATED,ESTABLISHED --jump ACCEPT</code>
+
+Accepter les nouvelles connexions venant de l'interface wlan0 et ayant pour destination notre sous-réseau :
+<code>sudo iptables -A FORWARD -i wlan0 --destination 192.168.0.0/24 --match state --state NEW --jump ACCEPT</code>
+
+Enfin accepter les connexions entrantes venant de notre sous-réseau :
+<code>sudo iptables -A INPUT -s 192.168.0.0/24 --jump ACCEPT</code>
+
+=== Configuration du Firewall avec Ufw === 
+
+En premier lieux, il faut changer la règle par défaut du transfert de paquets d'une interface à l'autre dans ufw.\\
+Editer le fichier /etc/default/ufw et modifier la clé DEFAULT_FORWARD_POLICY de DROP en ACCEPT :
+<code>DEFAULT_FORWARD_POLICY="ACCEPT"</code>
+
+Editer le fichier /etc/ufw/sysctl.conf qui doit contenir ceci pour activer l'IP forwarding :
+<code>
+net.ipv4.ip_forward=1
+</code>
+
+Éditer le fichier /etc/ufw/before.rules qui contient les règles de Ufw :
+        
+Juste après l'entête du fichier ajouter une nouvelle section NAT : 
+<code>
+# nat Table rules
+*nat
+:POSTROUTING ACCEPT [0:0]
+
+# Forward traffic from eth1 through eth0.
+-A POSTROUTING -s 192.168.0.0/24 -o wlan6 -j MASQUERADE
+
+# don't delete the 'COMMIT' line or these nat table rules won't be processed
+COMMIT
+</code>
+
+Dans la section *filter ajoutez : 
+<code>
+-A ufw-before-forward -m state --state RELATED,ESTABLISHED -j ACCEPT
+-A ufw-before-forward -i wlan0 -s 192.168.0.0/24 -o wlan6 -m state --state NEW -j ACCEPT
+</code>
+
+Finalement autorisez le sous-réseau :
+<code>
+sudo ufw allow from 192.168.0.0/24
+</code>
+
+ou bien avec Gufw :
+
+{{:administration:gufw_firewall1.png|}}
+
+
+==== Exemple de script ====
+
+
+Fichier bash wifi_ap.sh
+<code bash>
+#!/bin/bash
+
+#Description: Création d'un point d'accès wifi sur une interface wlan et partage la connexion Internet d'une autre interface avec celle-ci.
+#Requirements: Necessite les paquets hostapd isc-dhcp-server isc-dhcp-common isc-dhcp-client dnsmasq dnsmasq-base macchanger
+#Optionnel: paquet macchanger optionnel
+#Auteur: Nexus6[at]altern.org 01.12.2010
+
+### WARNING : kill hostapd dnsmasq & dhcpd à la fin...
+
+# Configuration des interfaces 
+INT_WIFI="wlan0" # interface du point d'accès wifi
+INT_NET="wlan6" # interface wlan ou eth0 ayant Internet
+
+# IP & mask du sous-réseau créé sur l'interface wlan
+SUBNET="192.168.0.0/24" 
+IP="192.168.0.1"
+MASK="255.255.255.0"
+#GW="192.168.0.1"
+
+# Change l'adresse mac ?
+MACCHANGER="0" #0=change la MAC, 1 garde la MAC d'origine
+
+# Definition de quelques couleurs 
+red='\e[0;31m'
+redhl='\e[0;31;7m'
+RED='\e[1;31m'
+blue='\e[0;34m'
+BLUE='\e[1;34m'
+cyan='\e[0;36m'
+CYAN='\e[1;36m'
+NC='\e[0m' # No Color
+
+#Mode Debug Dhcp ?
+DBG="-d"
+DBG=""     #Ligne à décommenter pour désactiver le debug du serveur dhcpd
+
+
+#Regarde si l'execution est bien en root (i.e. sudo)
+if [ $USER != "root" ]
+then
+    echo -e $RED"Vous devez être root pour lancer ce progamme!"$NC
+    exit 1
+fi
+
+#Verifie si tous les modules sont bien installes
+ifconfig=$(which ifconfig) 
+if [ $? != 0 ]
+then
+    echo -e $RED"Erreur Fatale: Un problème est survenue: Impossible de trouver la commande ifconfig!"$NC
+    exit 1
+fi
+
+hostapd=$(which hostapd)
+if [ $? != 0 ]
+then
+    echo -e $RED"Erreur Fatale: Vous devez installer hostapd!"$NC
+    exit 1
+fi
+
+dnsmasq=$(which dnsmasq)
+if [ $? != 0 ]
+then
+    echo -e $RED"Erreur Fatale: Vous devez installer dnsmasq!"$NC
+    exit 1
+fi
+
+dhcpd3=$(which dhcpd)
+if [ $? != 0 ]
+then
+    echo -e $RED"Erreur Fatale: Vous devez installer dhcpd!"$NC
+    exit 1
+fi
+
+macchanger=$(which macchanger)
+if [ $? != 0 ]
+then
+    echo -e $RED"Avertissement: macchanger non trouvé. L'adresse mac ne sera pas modifiée!"$NC
+    MACCHANGER="1"
+fi
+
+#Change les @ MAC si macchanger trouve
+if [ $MACCHANGER == "0" ]
+then
+    echo -e $blue"Macchanger random..."$NC
+    sudo $ifconfig $INT_WIFI down
+    sudo $macchanger --random $INT_WIFI $NC
+fi
+
+echo -e $blue"Démarrage et configuration de l'interface wifi $INT_WIF..."$NC
+sudo ifconfig $INT_WIFI down
+sleep 0.5
+sudo ifconfig $INT_WIFI $IP netmask $MASK up
+
+echo -e $blue"Démarrage daemon hostapd..."$NC
+# start hostapd server (see /etc/hostapd/hostapd.conf)
+sudo hostapd /etc/hostapd/hostapd.conf &
+sleep 1
+
+echo -e $blue"Démarrage daemon dnsmasq... "$NC
+# start dnsmasq server (see /etc/dnsmasq.conf) -7 /etc/dnsmasq.d
+sudo dnsmasq -x /var/run/dnsmasq.pid -C /etc/dnsmasq.conf
+sleep 1
+
+echo -e $blue"Démarrage daemon dhcpd... "$NC
+# start or resart dhcpd server (see /etc/dhcpd/dhcpd.conf)
+sudo touch /var/lib/dhcp/dhcpd.leases
+#sudo mkdir -p /var/run/dhcp-server
+#sudo chown dhcpd:dhcpd /var/run/dhcp-server
+sudo dhcpd $DBG -f -pf /var/run/dhcp-server/dhcpd.pid -cf /etc/dhcp/dhcpd.conf $INT_WIFI &
+#/etc/init.d/dhcp-server restart
+sleep 2
+
+# Turn on IP forwarding (faire suivre les paquets d'une interface à l'autre)
+echo 1 > /proc/sys/net/ipv4/ip_forward
+
+echo -e $blue"Activation iptables NAT MASQUERADE interface $NC$red$INT_NET$NC"
+# load masquerade module
+sudo modprobe ipt_MASQUERADE
+sudo iptables -A POSTROUTING -t nat -o $INT_NET -j MASQUERADE
+
+echo -e $blue"Activation iptables FORWARD & INPUT entre interface $NC$red$INT_WIFI$NC$blue & sous-réseau $NC$red$SUBNET$NC"
+sudo iptables -A FORWARD --match state --state RELATED,ESTABLISHED --jump ACCEPT
+sudo iptables -A FORWARD -i $INT_WIFI --destination $SUBNET --match state --state NEW --jump ACCEPT
+sudo iptables -A INPUT -s $SUBNET --jump ACCEPT
+
+# Wait user interaction !!!
+echo -e $redhl"[Terminé!!! Ne pas fermer la console! ]"$NC
+echo -e $redhl"[ENTER = STOP hostapd dhcpd dnsmasq   ]"$NC
+echo -e $redhl"[        STOP interface wifi $INT_WIFI    ]"$NC
+echo -e $redhl"[        EFFACE les règles iptables   ]"$NC
+read none
+
+
+echo -e $cyan"Stop hostapd, dhcpd, dnsmasq & interface wifi $INT_WIFI..."$NC
+# kill hostapd, dnsmasq & dhcpd
+sudo killall hostapd dnsmasq dhcpd
+echo -e $cyan"Désactivation iptables NAT MASQUERADE...$NC$red$INT_NET$NC"$NC
+sudo iptables -D POSTROUTING -t nat -o $INT_NET -j MASQUERADE 2>/dev/null || echo -e $cyan"POSTROUTING $INT_NET MASQUERADE clean OK!"$NC
+sudo iptables -D FORWARD -i $INT_WIFI --destination $SUBNET --match state --state NEW --jump ACCEPT 2>/dev/null || echo -e $cyan"FORWARD $INT_NET/$SUBNET clean OK!"$NC
+sudo iptables -D FORWARD --match state --state RELATED,ESTABLISHED --jump ACCEPT 2>/dev/null || echo -e $cyan"FORWARD ESTABLISHED clean OK!"$NC
+sudo iptables -D INPUT -s $SUBNET --jump ACCEPT 2>/dev/null || echo -e $cyan"INPUT $SUBNET clean OK!"$NC
+
+echo -e $cyan"Désactivation iptables FORWARD & INPUT...$NC $red$INT_WIFI$NC$blue & $NC$red$SUBNET$NC"
+# interface weak up!
+sudo ifconfig $INT_WIFI down
+sudo ifconfig $INT_WIFI up
+
+# Turn off IP forwarding
+echo 0 > /proc/sys/net/ipv4/ip_forward
+echo -e $blue"Done!"$NC
+</code>
+
+Lancement :
+
+<code>
+./wifi_ap.sh
+</code>
+
+Si pendant l’exécution du script précédent vous obtenez l'erreur "SIOCSIFFLAGS: Opération impossible du fait de RF-kill
+", exécuter ou rajouter la commande suivante en début de script :
+<code>rfkill unblock wifi</code>
+
+== Monitoring AP ==
+
+L'outil 'iw' couplé à 'iwconfig' permet d'avoir une vue d'ensemble sur notre installation, les clients connectés à l'AP wlan0, l'AP Wi-Fi lui-même wlan0, mais aussi la passerelle Wi-Fi wlan6 vers Internet : 
+<code>
+watch -d -n 3 "iw dev wlan0 station dump; iwconfig wlan0; iwconfig mon.wlan0; iw dev wlan6 station dump; iwconfig wlan6;cat /proc/net/wireless"
+</code>
+
+{{:administration:iw_ap_clients.png|}}
+
+===== Liens =====
+
+  * http://wireless.kernel.org/en/users/Documentation/hostapd site officiel de hostapd (anglais)
+  * http://wireless.kernel.org/en/users/Drivers Drivers et Documentations Linux (anglais)
+  * http://doc.ubuntu-fr.org/partage_de_connexion_internet Partage de connexion Internet 
+  * http://standards.ieee.org/getieee802/download/802.11n-2009.pdf
+  
+----
+//Contributeurs principaux : Nexus6//

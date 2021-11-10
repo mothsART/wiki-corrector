@@ -1,0 +1,259 @@
+
+{{tag>sauvegarde lamp serveur}}
+
+----
+
+
+
+
+
+
+====== Sauvegarder un ou des sites internet via FTP et leurs bases de données MySQL ======
+
+
+
+
+
+
+===== Principe =====
+
+Ce script va vous permettre de sauvegarder un ou plusieurs sites internet sur votre disque dur local, ainsi que la(les) base(s) de données MySQL associées.
+
+Il utilise lftp pour récupérer les fichiers. Pour récupérer les bases de données, il utilise soit mysqldump, soit http://sql.free.fr/backup.php pour les sites perso de free, soit wget qui va récupérer sur le site un fichier contenant la BDD (cf paragraphe "Script PHP de création d'un fichier .sql.gz")
+
+Les sauvegardes ftp vont écraser les fichiers modifiés, ajouter les nouveaux fichiers et supprimer les fichiers qui ne sont pas sur le serveur.
+Tous les x jours/mois, l'ancienne sauvegarde sera archivée, et une nouvelle se fera.
+
+Les sauvegardes MySQL créent un fichier date_heure.tar.bz2 ou date_heure.sql.gz pour les sites perso de free
+
+===== Prérequis =====
+
+
+Vérifiez que [[apt://lftp|lftp]], [[apt://links|links]] et [[apt://mysql-server|mysql-server]] sont bien installés.
+
+
+
+
+
+
+
+
+===== Installation =====
+
+
+Créez un fichier nom_que_l_on_veut.sh et mettez-y ce code :
+
+<file>
+#!/bin/bash
+# Version 0.31 : ajout de la possibilité de sauver une liste de répertoires en ftp pour chaque site internet + installation automatique des logiciels manquant
+
+# FONCTIONNALITÉS : 
+#  - Sauvegarde des fichiers distants via FTP
+#  - Sauvegarde des bases de données MySQL distantes via mysqldump ou http://sql.free.fr/backup.php pour les sites perso de free
+#  - Sauvegarde de plusieurs sites
+
+#Variables à renseigner
+sav_complete_tous_les="1 month" # refaire une sauvegarde complete et archiver les anciennes tous les ... (ex1 : 2 month) (ex2 : 30 day) (ex3: 12 hour)
+rep_log=$HOME/Sauvegardes/internet # répertoire où les fichiers .log seront stockés
+
+#copiez collez le bloc en modifiant le numéro entre crochets, dans l'ordre [0] puis [1], ... en fonction du nombre de sites à sauver
+
+ # Début du bloc à paramétrer
+nom_du_site[0]=login0.free.fr     # Nom du site internet (juste pour info)
+script_http[0]= # adresse http d'un fichier (php par exemple) à appeler
+rep_sav_ftp[0]=$HOME/Sauvegardes/ftp/login0     # Répertoire où seront sauvés les fichiers récupérés du site par ftp. Laissez vide si vous ne voulez pas de sauvegarde ftp. Ne pas terminer l'adresse par /
+rep_sav_sql[0]=$HOME/Sauvegardes/sql/login0     # Répertoire où seront sauvés les bases de données du site. Laissez vide si vous ne voulez pas de sauvegarde sql
+serveur_ftp[0]=ftpperso.free.fr     # adresse du serveur ftp
+utilisateur_ftp[0]=login0     # utilisateur ftp
+mdp_ftp[0]=mdp0     # mot de passe ftp
+liste_rep_ftp[0]="/rep /rep2/sous_rep" # liste de répertoires sur le serveur ftp à sauvegarder, séparés par des espaces. Mettre simplement / pour sauver le site en entier. Dans tous les cas l'adresse doit commencer par /. Garder les guillemets
+serveur_sql[0]=sql.free.fr     # adresse du serveur mysql
+utilisateur_sql[0]=login0     # utilisateur mysql
+mdp_sql[0]=mdp0 # mot de passe mysql
+liste_bases_de_donnees[0]=""  # liste des bases de données à sauver, séparées par des espaces (inutile pour les sites perso chez free). Ex : mon_forum mon_blog. Garder les guillemets
+ # Fin du bloc à paramétrer
+
+ # Début du bloc à paramétrer
+nom_du_site[1]=mon_site.org
+script_http[1]=
+rep_sav_ftp[1]=$HOME/Sauvegardes/ftp/mon_site_org
+rep_sav_sql[1]=
+serveur_ftp[1]=ftp.mon_site.org
+utilisateur_ftp[1]=login1
+mdp_ftp[1]=mdp1
+liste_rep_ftp[1]="/"
+serveur_sql[1]=
+utilisateur_sql[1]= 
+mdp_sql[1]=
+liste_bases_de_donnees[1]=""
+ # Fin du bloc à paramétrer
+
+
+
+sauver(){
+ #Exécute un script via http (ex : un fichier php sur le site internet distant qui va fabriquer un fichier .sql contenant la sauvegarde des BDD)
+ if [ "${script_http[$i]}" != "" ]; then {
+  echo Exécution du script de ${nom_du_site[$i]}
+  links -dump ${script_http[$i]}
+ } fi
+
+ #Sauvegarde des fichiers via FTP
+ if [ "${rep_sav_ftp[$i]}" != "" ]; then { # Pas de sauvegarde si le répertoire de sauvegarde n'est pas indiqué
+  echo
+  echo Sauvegarde FTP de ${nom_du_site[$i]}
+  echo
+  if [ ! -e "${rep_sav_ftp[$i]}" ]; then { # Si c'est une première sauvegarde
+   mkdir -p "${rep_sav_ftp[$i]}"
+  }
+  else {
+   if [ "$nom_archive_sav" != "" ]; then { # Si on doit archiver pour faire une nouvelle sauvegarde
+    mv "${rep_sav_ftp[$i]}" "${rep_sav_ftp[$i]}_-_$nom_archive_sav"
+    mkdir -p "${rep_sav_ftp[$i]}"
+   } fi
+  } fi
+  for rep_ftp in ${liste_rep_ftp[$i]}; do
+   lftp ftp://${utilisateur_ftp[$i]}:${mdp_ftp[$i]}@${serveur_ftp[$i]} -e "mirror -e ${rep_ftp} ${rep_sav_ftp[$i]}${rep_ftp} ; quit"
+  done
+ } fi
+
+ #Sauvegarde de la base MySQL via mysqldump
+ if [ "${rep_sav_sql[$i]}" != "" ]; then { # Pas de sauvegarde si le répertoire de sauvegarde n'est pas indiqué
+  echo
+  echo Sauvegarde SQL de ${nom_du_site[$i]}
+  echo
+  if [ ! -e "${rep_sav_sql[$i]}" ]; then { # Si c'est une première sauvegarde
+   mkdir -p "${rep_sav_sql[$i]}"
+  }
+  else {
+   if [ "$nom_archive_sav" != "" ]; then { # Si on doit archiver pour faire une nouvelle sauvegarde
+    mv "${rep_sav_sql[$i]}" "${rep_sav_sql[$i]}_-_$nom_archive_sav"
+    mkdir -p "${rep_sav_sql[$i]}"
+   } fi
+  } fi
+  cd ${rep_sav_sql[$i]} # on se place dans le repertoire ou l'on veut sauvegarder les bases
+  if [ "${serveur_sql[$i]}" = "sql.free.fr" ]; then {
+   wget http://sql.free.fr/backup.php --post-data="login=${utilisateur_sql[$i]}&password=${mdp_sql[$i]}&check=1&all=1" -O $(date +%F_%H-%M-%S).sql.gz
+  }
+  else {
+   j=0
+   for j in ${liste_bases_de_donnees[$i]}; do
+    mysqldump -h${serveur_sql[$i]} -u${utilisateur_sql[$i]} -p${mdp_sql[$i]} $j > ${j}_`date +%D | sed 's;/;-;g'`.sql # Sauvegarde des bases de donnees en fichiers .sql
+    tar jcf ${j}_`date +%D | sed 's;/;-;g'`.sql.tar.bz2 ${j}_`date +%D | sed 's;/;-;g'`.sql # Compression des exports en tar.bz2 (le meilleur taux de  compression)
+    rm ${j}_`date +%D | sed 's;/;-;g'`.sql # Suppression des exports non compresses
+   done
+  } fi
+ } fi
+
+}
+
+date_debut_script="le $(date +%F) à $(date +%H:%M:%S)"
+
+# On vérifie que lftp, links et mysql-client sont bien installés
+if [ ! -e "/usr/bin/lftp" ]; then {
+ echo "lftp n'est pas installé. Ce script va l'installer automatiquement."
+ sudo apt-get install lftp
+} fi
+if [ ! -e "/usr/bin/links" ]; then {
+ echo "links n'est pas installé. Ce script va l'installer automatiquement."
+ sudo apt-get install links
+} fi
+if [ ! -e "/usr/bin/mysqldump" ]; then {
+ echo "mysqldump n'est pas installé. Ce script va l'installer automatiquement."
+ sudo apt-get install mysql-client*
+} fi
+
+
+# On attend d'être connecté à internet
+while ! ping google.com -A -c1 |grep "1 received" >/dev/null; do
+ echo en attente de connexion internet...
+ sleep 60
+done
+
+
+# On met à jour les fichiers log
+if [ ! -e "$rep_log/date_derniere_version_sauvegarde.log" ]; then { # Si c'est une première sauvegarde
+ mkdir -p $rep_log
+ echo $(date +%F_%H-%M-%S) >$rep_log/date_derniere_version_sauvegarde.log
+} fi
+if [ "$(cat $rep_log/date_derniere_version_sauvegarde.log)" \< "$(date --date="$sav_complete_tous_les ago" +%F_%H-%M-%S)" ]; then {
+ nom_archive_sav=archive_du_$(cat $rep_log/date_derniere_version_sauvegarde.log)_au_$(date +%F_%H-%M-%S)
+ echo $(date +%F_%H-%M-%S) >$rep_log/date_derniere_version_sauvegarde.log
+} fi
+
+
+# On fait toutes les sauvegardes
+len=${#nom_du_site[*]}
+i=0
+while [ "$i" -lt "$len" ]
+do
+  sauver
+  let "i = $i + 1"
+done
+
+echo La sauvegarde des sites internet a commencée $date_debut_script et s\'est terminée le $(date +%F) à $(date +%H:%M:%S) >>$rep_log/liste_sauvegardes.log
+echo La sauvegarde des sites internet a commencée $date_debut_script et s\'est terminée le $(date +%F) à $(date +%H:%M:%S)
+
+exit 0
+</file>
+
+Puis rendez ce fichier exécutable
+
+  chmod +x nom_que_l_on_veut.sh
+
+Il ne vous reste plus qu'à l'exécuter !
+
+
+==== Script PHP de création d'un fichier .sql.gz ====
+
+Si le serveur mysql de votre site internet n'est pas accessible de l'extérieur (par ex avec OVH) :
+
+Vous pouvez créer un script php (ex : sauvegarder_mysql.php) qui aura pour fonction de sauver la BDD MySQL dans un fichier date_heure.sql.gz sur le serveur du site.
+
+Ce script php sera exécuté lors de la sauvegarde en spécifiant son adresse dans la variable script_http[numéro] du script de sauvegarde (ci-dessus).
+
+Puis, le fichier date_heure.sql.gz sera rappatrié en local dans votre répertoire de sauvegarde avec la sauvegarde des fichiers via lftp.
+
+Par ex, sauvegarder_mysql.php pourrait ressembler à ça :
+
+<file>
+<?php
+$mysql_server = "";
+$mysql_login = "";
+$mysql_passwd = "";
+$mysql_bdd =  "";
+
+$date_actu = date('Y-m-d_H-i-s');
+
+echo "Sauvegarde MySQL en cours...<BR>";
+system("mysqldump --host=".$mysql_server." --user=".$mysql_login." --password=".$mysql_passwd." ".$mysql_bdd." > ./mysql/".$date_actu.".sql");
+system("gzip ./mysql/".$date_actu.".sql");
+system("rm ./mysql/".$date_actu.".sql");
+echo "Sauvegarde MySQL terminee";
+?>
+</file>
+
+===== Automatisation =====
+
+Faites appeler ce script automatiquement à intervalle régulière par [[cron]] ou [[fcron]]
+
+Vérifiez de temps en temps que le log de sauvegarde. Si celle ci ne s'est pas faite, tentez la manuellement, car il se peut que vous ayez rentré un login ou un mot de passe incorrect et que ça bloque.
+
+
+=== Avec Cron ===
+
+En tant que root (administrateur), copiez le fichier sauver_sites_internet.sh créé vers un de ces répertoire, en fonction de la fréquence de sauvegarde désirée :
+  * /etc/cron.hourly
+  * /etc/cron.daily
+  * /etc/cron.weekly/
+  * /etc/cron.monthly
+
+=== Avec Fcron ===
+
+Si votre ordinateur n'est pas allumé en permanence, il vaut mieux utiliser [[fcron]], car cron ne s'exécute qu'à une heure précise de la journée alors que fcron prend en compte le temps pendant lequel reste allumé la machine :
+
+Installer fcront : [[apt://fcron]].
+Puis configurez la sauvegarde :
+   fcrontab -e
+Ex : pour faire une sauvegarde 2 fois par semaine : 
+   %midweekly * 0-23 ~/Sauvegardes/sauver_sites_internet.sh
+Faire CTRL + O pour enregistrer puis CTRL + X pour quitter

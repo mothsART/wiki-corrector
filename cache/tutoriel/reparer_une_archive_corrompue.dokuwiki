@@ -1,0 +1,101 @@
+
+{{tag>archivage tutoriel}}
+
+----
+
+======Comment réparer une archive corrompue======
+=====Dans quel cas utiliser ce tutoriel ?=====
+
+Vous voulez [[:archivage|extraire une archive]] et vous obtenez une erreur du type
+<code>
+bzip2: Data integrity error when decompressing.
+Input file = (stdin), output file = (stdout)
+
+It is possible that the compressed file(s) have become corrupted.
+You can use the -tvv option to test integrity of such files.
+
+You can use the `bzip2recover' program to *attempt* to recover
+data from undamaged sections of corrupted files.
+
+tar: 56 garbage bytes ignored at end of archive
+tar: Unexpected EOF in archive
+tar: Unexpected EOF in archive
+tar: Error is not recoverable: exiting now
+</code>
+
+Et bien vous n'avez vraiment pas de chance ! Votre archive est certainement corrompue.
+=====Solution pour une archive compressée tar.bz2=====
+
+Avec le gestionnaire d'archive, vous récupérez la première partie de l'archive, à savoir toutes les données avant l'erreur dans  le fichier.
+
+Pour récupérer la suite, tapez : 
+<code>
+bzip2recover nomdelarchive.tar.bz2
+</code>
+Vous obtiendrez une multitude de fichier (de l'ordre de 6000 fichiers pour une archive de 3 Go)
+Ces fichiers se nomment rec00001nomdelarchive.tar et ainsi de suite.
+
+Ensuite il faut tester chacun des fichiers, pour cela tapez :
+<code>bunzip rec*bz2</code>
+Si vous avez un retour "d'argument trop long" dans le terminal, essayez par tranche de 1000 (ex: rec01*bz2 puis rec02*bz2 ...)
+si cela est encore trop long, envisagez la commande xargs.
+
+Vous allez obtenir le nom du fichier corrompu (ex rec003776nomdelarchive.tar).
+Déplacez ce fichier ainsi que ceux situés avant pour n'avoir que les fichiers suivant le fichier corrompu.
+
+Ensuite, reconstruisez la suite des fichiers en tapant :
+<code>
+cat rec0* > findelarchvie.tar
+</code>
+
+Récupérez le script ici :
+http://oss.bestsolution.at/documents/find_tar_headers.pl.bz2
+qui permet de retrouver les marques d'en-tête, et exécutez-le en tapant:
+<code>
+perl find_tar_headers.pl findelarchive.tar
+</code>
+Une fois lancé, vous pouvez l'arrêter en tapant control + C et repérer les chiffres mentionnés.
+<code>
+findelarchive.tar:17185:top/secret/warp_reactor.so:157106
+findelarchive.tar:75041:top/secret/kernel_injectors.so:153125
+findelarchive.tar:130849:top/secret/dampening_fields.so:145746
+findelarchive.tar:183585:top/secret/plasma_controls.so:157035
+</code>
+Le nombre à repérer est celui de la première ligne, dans ce cas il s'agit de 17185.
+
+Reconstruisez correctement l'archive en tapant :
+<code>
+tail -c +17185 findelarchive.tar > bonnearchive.tar
+</code>
+Évidemment, mettez le bon chiffre à la place de 17185
+
+Voilà vous n'avez plus qu'à [[:archivage|décompresser]] la dernière archive ainsi obtenue.
+
+=====Solution pour une archive compressée TGZ (avec Gzip Recovery Tool)=====
+
+Gzip Recovery Tool est un outil en ligne de commande qui permet de restaurer une archive corrompue TGZ (tar.gz).
+
+==== Installation ====
+
+  * Via les dépôts: installer le paquet **[[apt>gzrt]]**.
+  * Manuellement (en passant par le site de l'auteur): [[http://www.urbanophile.com/arenn/coding/gzrt/gzrt.html]]
+
+==== Utilisation ====
+
+Lancer la commande suivante pour débuter la restauration:
+<code>
+gzrecover /chemin/vers/mon/archive/mon-archive-tar-corrompue.tar.gz
+</code>
+
+Une archive avec l'extension .recovered sera créée dans le répertoire courant après quelques minutes (varie selon la taille de votre archive à réparer).
+
+Une fois l'exécution de gzrecover terminé, lancer la commande suivante pour extraire vos fichiers:
+<code>
+cpio -F mon-archive-tar-corrompue.tar.recovered -i -v
+</code>
+=====Voir aussi=====
+  *[[:archivage]]
+
+----
+
+(inspiré de cet article http://oss.bestsolution.at/bash/repair_tar_archives.html.en)

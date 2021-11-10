@@ -1,0 +1,402 @@
+
+{{tag>Trusty réseau internet vpn tutoriel}}
+-----
+
+====== Connexion VPN ======
+Ce tutoriel décrit comment utiliser le //[[:network-manager|Network Manager]]// de Gnome pour paramétrer correctement une connexion VPN, de type [[:OpenVPN]], en utilisant un service généralement payant (environ 5€/mois), comme [[https://connectionvpn.com|connectionvpn.com]]. 
+
+<note>Si cette méthode vous paraît trop complexe ou fastidieuse, pas de panique. Certains fournisseurs tels que [[https://airvpn.org/|AirVPN]] fournissent une interface graphique pour linux nécessitant simplement un login et un mot de passe ou vous propose de télécharger tous les fichiers ad-hoc au cas où vous voudriez utiliser Network Manager sans que vous n'ayez à les créer manuellement.</note>
+
+===== Pré-requis =====
+==== Paquets nécessaires ====
+Vous devez [[:tutoriel:comment_installer_un_paquet|installer les paquets]] **[[apt>openvpn]]** et **[[apt>network-manager-openvpn]]** disponibles dans les dépôts officiels.
+
+==== Inscription à un service ====
+Vous devez vous inscrire chez un prestataire de service proposant un VPN de type **OpenVPN**. Vous trouverez une liste de prestataires, gratuits ou payants, sur [[https://korben.info/quel-vpn-choisir.html]]
+
+Attention, certains prestataires refusent le P2P, ou le rendent impossible par des déconnexions toutes les 20 minutes ! D'autres refusent de fournir une assistance pour les OS de type Linux (j'ai eu une mauvaise expérience avec <del>[[http://www.hidemynet.com/|HideMyNet.com]]</del>). Renseignez-vous avant de faire votre choix.
+
+==== Ouverture du Pare-feu ====
+
+Vous devrez pour les tests :
+  * soit désactiver complètement votre pare-feu (par défaut !),
+  * soit autoriser tout ce qui passe par la connexion VPN ; vous pourrez affiner cela plus tard.
+
+Si vous utilisez FireStarter pour gérer votre [[:ufw|pare-feu]], il vous faut alors inscrire les lignes suivantes dans le fichier **/etc/firestarter/user-pre**:
+<file>
+# Autoriser tout traffic sur l'interface OpenVPN
+$IPT -A INPUT -i tun+ -j ACCEPT
+$IPT -A OUTPUT -o tun+ -j ACCEPT
+</file>
+
+==== Redirection (NATage) de port sur votre routeur (ou votre Box) ====
+
+Pour le service connectionVPN.com, vous devrez rediriger le port 443 (UDP) vers votre ordinateur. 
+
+Pour les autres services, consultez leur F.A.Q.
+
+Consultez la documentation de votre routeur ou de votre Box.
+
+===== Le fichier client.ovpn de départ =====
+
+Une fois inscrit auprès d'un prestataire de service VPN, vous recevrez par e-mail, ou vous téléchargerez, un fichier ''client.ovpn'' personnalisé, **que vous enregistrerez dans un dossier qui ne contiendra que lui**, du moins au départ.
+
+<note important>Ne communiquez jamais ce fichier à personne ! Ne le modifiez jamais ! Enregistrez-le dans un endroit sûr, et donnez-lui les [[:droits#les_permissions|permissions]] d'accès suivantes : lecture seule pour vous, aucun accès ni pour votre groupe ni pour les autres.</note>
+
+==== Exemple de fichier client.ovpn ====
+
+Votre fichier //client.ovpn// ressemble à cela : 
+<file>
+# Automatically generated OpenVPN client config file
+# Generated on <la_date> by <un_serveur_du_prestataire_vpn>
+# Note: this config file contains inline private keys
+#       and therefore should be kept confidential!
+# Note: this configuration is user-locked to the username below
+# OVPN_ACCESS_SERVER_USERNAME=<votre_identifiant_vpn>
+# Define the profile name of this particular configuration file
+# OVPN_ACCESS_SERVER_PROFILE=<votre_identifiant_vpn>@<serveur_vpn>
+# OVPN_ACCESS_SERVER_WSHOST=<serveur_vpn>:<port>
+# OVPN_ACCESS_SERVER_WEB_CA_BUNDLE_START
+# -----BEGIN CERTIFICATE-----
+# <ici un certificat>
+# -----END CERTIFICATE-----
+# OVPN_ACCESS_SERVER_WEB_CA_BUNDLE_STOP
+# OVPN_ACCESS_SERVER_IS_OPENVPN_WEB_CA=1
+client
+proto udp
+nobind
+remote <serveur_vpn>
+port <port>
+dev tun
+dev-type tun
+ns-cert-type server
+reneg-sec 86400
+auth-user-pass
+auth-retry interact
+comp-lzo no
+verb 3
+
+<ca>
+-----BEGIN CERTIFICATE-----
+ <ici le certificat ca>
+-----END CERTIFICATE-----
+</ca>
+
+<cert>
+-----BEGIN CERTIFICATE-----
+ <ici le certificat cert>
+-----END CERTIFICATE-----
+</cert>
+
+<key>
+-----BEGIN RSA PRIVATE KEY-----
+ <ici la clé privée key>
+-----END RSA PRIVATE KEY-----
+</key>
+
+key-direction 1
+<tls-auth>
+#
+# 2048 bit OpenVPN static key (Server Agent)
+#
+-----BEGIN OpenVPN Static key V1-----
+ <ici la clé ta>
+-----END OpenVPN Static key V1-----
+</tls-auth>
+
+# -----BEGIN RSA SIGNATURE-----
+ <ici la signature de ce fichier>
+# -----END RSA SIGNATURE-----
+</file>
+
+==== Utilisation directe ====
+
+Vous pouvez utiliser directement ce fichier pour établir votre connexion, afin de la tester. Pour ce faire, entrez dans un [[:terminal]] : <code>sudo openvpn --config /chemin/vers/client.ovpn</code>
+
+Il vous sera demandé votre mot de passe local, puis votre identifiant auprès du serveur, et enfin votre mot de passe auprès du serveur (ceux avec lesquels vous vous êtes inscrit auprès du prestataire de service VPN).
+
+==== Test de la connexion VPN ====
+
+Ouvrez votre navigateur favori sur [[http://www.hostip.fr/|www.hostip.fr]]. Ne hurlez pas de joie, vous allez réveiller les voisins !
+
+==== Clôture de la connexion VPN ====
+
+Tapez Ctrl-C dans le [[:terminal]], ou fermez ce dernier. Rechargez la page [[http://www.hostip.fr/|www.hostip.fr]], vous voici à nouveau dans le giron de votre fournisseur d'accès.
+
+
+
+===== Les fichiers à créer =====
+
+Nous devons transformer le fichier ''client.ovpn'' en une série de fichiers lisibles par //Network-Manager//.
+
+==== Le fichier client.conf ====
+
+Copiez le fichier **/usr/share/doc/openvpn/examples/sample-config-files/client.conf** dans le dossier contenant le fichier **client.ovpn**. Ouvrez ces deux fichiers, **client.conf** et **client.ovpn**, dans //gedit//.
+
+Il vous faut adapter le contenu de **client.conf** en tenant compte des données de **client.ovpn**, **mais sans jamais y copier un certificat ou une clé**.
+
+Vous devez obtenir un fichier ''client.conf'' analogue à ceci (vous avez certainement modifié les données marquées par < et >) :
+
+<file>
+###################################################################
+# Exemple de fichier de configuration d'un client OpenVPN 2.0     #
+# pour se connecter à un serveur multi-client.                    #
+#                                                                 #
+# Cette configuration peut être utilisée par plusieurs clients,   #
+# chaque client devant posséder ses propres fichiers de clé (key) #
+# et de certificat (cert).                                        #
+#                                                                 #
+# Sous Windows, vous pourriez avoir à renommer ce fichier pour    #
+# qu'il ait une extension .ovpn                                   #
+###################################################################
+
+# Préciser que nous sommes un client et que nous allons accepter
+# certaines directives de configuration de la part du serveur.
+client
+
+# Nous connectons-nous à un serveur utilisant le protocole 
+# TCP ou UDP ?
+;proto tcp
+proto udp
+
+# La plupart des clients n'ont pas besoin de lier (bind) leur 
+# connection à un numéro de port spécifique.
+nobind
+
+# Le nom complet (ou l'IP) et le port du serveur.
+# Vous pouvez indiquer plusieurs serveurs (s'ils existent) pour
+# une répartition de charge.
+remote <serveur_vpn> <port>
+;remote my-server-2 1194
+
+# Choisir un serveur au hasard dans la liste ci-dessus.
+# Sinon, essayer les serveurs dans l'ordre de la liste.
+;remote-random
+
+# Type d'interface utilisée (tap/tun, idem que sur le serveur).
+# Remarque : sur la plupart des systèmes, le VPN ne fonctionnera
+# pas si vous ne désactivez pas partiellement ou complètement
+# le pare-feu pour cette interface tun/tap.
+;dev tap
+dev tun
+dev-type tun
+
+# keepalive 10 60 et ping-timer-rem, servent à tester régulierement
+# la connexion pour la relancer si elle semble coupée. 
+;keepalive 10 60
+;ping-timer-rem
+    
+# Vérifier que le certificat du serveur a bien son champ nsCertType
+# mis à "server". C'est une protection nécessaire contre des
+# attaques potentielles, dont il est question sur :
+#  http://openvpn.net/howto.html#mitm
+#
+# Pour que cette protection soit effective, le serveur doit avoir
+# généré son certificat avec un champ nsCertType mis à "server".
+# (Le script build-key-server du dossier easy-rsa permet de le faire.)
+ns-cert-type server
+
+# Temps entre chaque régénération de clé (en sec. ; 86400 sec = 24 h)
+reneg-sec 86400
+
+# L'utilisateur doit s'authentifier par identifiant/mot de passe.
+# Si on ajoute un nom de fichier (auth.conf) contenant 2 lignes,
+# la première l'identifiant, la seconde le mot de passe, l'utilisateur
+# n'aura plus à les indiquer à chaque démarrage.
+# Attention le fichier auth.conf doit avoir les droits 400 (lecture
+# pour le propriétaire, aucun droit pour tous les autres).
+;auth-user-pass auth.conf
+auth-user-pass
+
+# En cas d'échec de l'authentification :
+# - nouvel essai interactif (interact) : l'utilisateur doit entrer 
+# lui-même son identifiant et son mot de passe ;
+# - nouvel essai non-interactif (nointeract) : avec les données du
+# fichier auth.conf ;
+# - pas de nouvel essai (none).
+;auth-retry none
+;auth-retry nointeract
+auth-retry interact
+
+# Active la compression des données sur le lien VPN.
+# Ne pas activer sauf si ça l'est dans la configuration du serveur.
+;comp-lzo
+comp-lzo no
+
+# Essayer indéfiniment de résoudre le nom d'hôte du serveur OpenVPN.
+# Très utile sur les ordinateurs qui ne sont pas connectés en permanence
+# à internet, comme les portables.
+resolv-retry infinite
+
+# Abaisser le niveau de privilège du démon après l'initialisation de
+# la connexion (pas pour Windows).
+;user nobody
+;group nogroup
+
+# En cas de redémarrage de la connexion, on tente de préserver les états
+# de la clé (ne pas la relire) et de l'interface tun (ne pas la désactiver
+# pour la réactiver ensuite).
+persist-key
+persist-tun
+
+# Si votre connexion passe par un proxy HTTP, pour joindre le serveur OpenVPN,
+# indiquer ici son nom (ou son IP) et son numéro de port.
+# Cf. la man-page si votre proxy requiert une authentification.
+;http-proxy-retry # ré-essayer en cas d'erreur de connexion.
+;http-proxy [proxy server] [proxy port #]
+
+# Paramètres SSL/TLS.
+# Cf. la configuration du serveur OpenVPN.
+# Il est préférable d'utiliser une paire de fichiers .crt/.key particulière à
+# chaque client. Un seul et même fichier ca peut être distribué à tous les les
+# clients.
+ca ca.crt
+cert client.crt
+key client.key
+
+# Si une clé tls-auth est requise par le serveur, chaque client doit posséder
+# cette clé. Le numéro qui suit le nom du fichier (ta.key) est en général 0
+# sur le serveur et 1 sur le client.
+tls-auth ta.key 1
+
+# Fichier de log
+log /var/log/openvpn.log
+
+# Verbosité du fichier de log.
+# Niveau 3 pour le debugging.
+# Niveau 1 suffisant lorsque tout fonctionne.
+verb 3
+
+# Au plus 20 messages identiques à la suite dans le fichier de log.
+;mute 20
+
+# Les connexions WiFi (si vous en utilisez une) produisent souvent de nombreux
+# doublons de paquets. Activer cette option pour ne pas signaler ces doublons.
+;mute-replay-warnings
+
+# C'est pour Windows, on s'en TAPe ! ;-)
+# Windows needs the TAP-Win32 adapter name
+# from the Network Connections panel
+# if you have more than one.  On XP SP2,
+# you may need to disable the firewall
+# for the TAP adapter.
+;dev-node MyTap</file>
+
+==== Le fichier ca.crt ====
+
+Copiez les lignes du fichier ''client.ovpn'' comprises entre les lignes ''<ca>'' et ''</ca>'' dans un fichier que vous nommerez ''ca.crt''.
+
+Exemple de fichier ''ca.crt'' : 
+<file>
+-----BEGIN CERTIFICATE-----
+ici le certificat, sur plusieurs lignes
+-----END CERTIFICATE-----
+</file>
+
+==== Le fichier client.crt ====
+
+Copiez les lignes du fichier ''client.ovpn'' comprises entre les lignes ''<cert>'' et ''</cert>'' dans un fichier que vous nommerez ''client.crt''.
+
+Exemple de fichier ''client.crt'' : 
+<file>
+-----BEGIN CERTIFICATE-----
+ici le certificat, sur plusieurs lignes
+-----END CERTIFICATE-----
+</file>
+
+==== Le fichier client.key ====
+
+Copiez les lignes du fichier ''client.ovpn'' comprises entre les lignes ''<key>'' et ''</key>'' dans un fichier que vous nommerez ''client.key''.
+
+Exemple de fichier ''client.key'' : 
+<file>
+-----BEGIN RSA PRIVATE KEY-----
+ici la clé privée RSA, sur plusieurs lignes
+-----END RSA PRIVATE KEY-----
+</file>
+
+==== Le fichier ta.key ====
+
+Copiez les lignes du fichier ''client.ovpn'' comprises entre les lignes ''<tls-auth>'' et ''</tls-auth>'' dans un fichier que vous nommerez ''ta.key''.
+
+Exemple de fichier ''ta.key'' : 
+<file>
+#
+# 2048 bit OpenVPN static key (Server Agent)
+#
+-----BEGIN OpenVPN Static key V1-----
+ici la clé TLS-AUTH, sur plusieurs lignes
+-----END OpenVPN Static key V1-----
+</file>
+
+==== Le fichier auth.conf (optionnel) ====
+
+Vous pouvez créer, si vous êtes certain de la sécurité de votre poste, un fichier ''auth.conf'' ne contenant que 2 lignes. La première ligne contient votre identifiant auprès du serveur VPN, la seconde ligne contient le mot de passe (en clair).
+
+Pensez alors à transformer, dans votre fichier **''client.conf''** (pas ''client.ovpn''!), l'option 
+  auth-user-pass
+en :
+  auth-user-pass auth.conf
+
+==== Test de votre configuration ====
+
+Faites le même test que précédemment, mais avec votre fichier ''client.conf'' :
+<code>sudo openvpn --config /chemin/vers/client.conf</code>
+
+Si cela ne fonctionne pas, consultez le fichier ''/var/log/syslog'' ou ''/var/log/openvpn.log''.
+
+===== Protection des fichiers =====
+
+Les fichiers que vous avez créés, et le fichier ''client.ovpn'', contiennent tous des données sensibles ! Vous devez les protéger en interdisant aux autres de les lire ou de les modifier. Pour ce faire, soit vous utilisez le navigateur de fichiers Nautilus (sélection des fichiers, clic-droit, Propriétés, onglet Permissions), soit vous utilisez la commande :
+  chmod 600 client.* *.key *.crt
+Voire, une fois les fichiers définitivement mis au point, vous pouvez les mettre en lecture seule :
+  chmod 400 client.* *.key *.crt
+
+===== Utilisation avec le Network Manager =====
+
+==== Importation de client.conf ====
+
+Ouvrez l'application **Connexions Réseau** (menu //Système / Préférences//), et placez-vous dans l'onglet **VPN**. Importez alors votre fichier ''client.conf''.
+
+{{:network-manager:importation_vpn_trusty.png?300}}
+
+Une fenêtre s'ouvre comme celle ci-dessous. Renseignez correctement les champs textuels, et sélectionnez les fichiers Certificat de l'utilisateur (client.crt), Certificat du CA (ca.crt), Clé privée (client.key). **Décochez** //Connecter automatiquement// et //Disponible pour tous les utilisateurs//.
+
+{{http://img88.imageshack.us/img88/9710/capturemodificationdeco.png}}
+
+==== Paramètres avancés ====
+
+Cliquez sur Avancé... : 
+
+=== Onglet Général ===
+
+{{:network-manager:openvpn_general_trusty.png?300}}
+
+=== Onglet Sécurité ===
+
+Scrutez ce que vous a raconté openvpn, lors de vos tests, pour renseigner les champs //Chiffrement// et //Authentification HMAC//.
+
+{{:network-manager:openvpn_securite_trusty.png?300}}
+
+=== Onglet Authentification TLS ===
+
+Sélectionnez votre fichier ''ta.key''. Direction de la clé : 1, en général.
+
+{{http://img210.imageshack.us/img210/5323/captureoptionsavanceeso.png}}
+
+==== Connexion par le Network Manager ====
+
+Assurez-vous de ne pas être connecté à votre VPN (fermez votre terminal de test).
+
+En cliquant sur l'icône Network-Manager de votre tableau de bord, vous voyez apparaître le menu //Connexions VPN//. Sélectionnez votre connexion. L'icône de connexion s'anime ; lorsqu'un cadenas fixe (non-animé) y est apposé, cela signifie que votre connexion VPN est active.
+
+Vous pouvez également vous déconnecter par Network-Manager : //Connexions VPN / Déconnecter le VPN//.
+
+===== Voir aussi =====
+
+  * Tout ce qui concerne [[:openvpn|OpenVPN sur doc.ubuntu-fr.org]].
+  * L'équipe de [[https://connectionvpn.com|ConnexionVPN.com]]
+
+----
+
+//Contributeur principal : [[:utilisateurs:claudiux|Claudiux]]

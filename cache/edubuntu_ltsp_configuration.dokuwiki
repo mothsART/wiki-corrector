@@ -1,0 +1,481 @@
+
+{{tag>Edubuntu éducation A_Recycler}}
+----
+
+====== Configurer un réseau LTSP ======
+<note importante>Cette page a besoin d'être fusionnée avec la page principale sur les [[ltsp_version_5.x|serveurs ltsp]].</note>
+<note important>
+L'objectif de cette page est de donner les informations de configuration utilisées pour paramétrer un réseau [[ltsp|LTSP]] basé sur [[edubuntu]] au sein d'une école primaire de Seine et Marne.
+
+**Il a pour but d'aider le personnel de l'école à réinstaller, maintenir ou améliorer la configuration existante.
+**
+
+[[:utilisateurs:doogui|J']]ai tout de même souhaité rendre ce document public car il pouvait contenir des informations utiles à d'autres utilisateurs.
+
+Ce n'est pas un tutoriel à proprement parler et tout n'est donc pas expliqué. Dans la mesure du possible, des renvois vers des pages plus pertinentes seront donnés.
+
+:!: **Merci donc de prendre tout cela en considération si vous souhaitez modifier cette page** 
+
+Bonne lecture ;-)
+</note>
+===== Pré-requis =====
+
+  * **Disposer d'un serveur LTSP Edubuntu et d'au moins un client léger LTSP fonctionnel** (installation classique via DVD Edubuntu 11.04). Pour plus d'information sur l'installation, voir le [[http://www.edubuntu.org/documentation/11.04/installation-guide|Guide d'installation de Edubuntu 11.04]], en anglais
+  * **Disposer des [[:sudo|droits d'administration]].**
+  * **Disposer d'une connexion à Internet configurée et activée sur le serveur LTSP**
+  * **Savoir utiliser de façon basique un [[terminal| terminal GNU/Linux]] pour les lignes de commande** 
+
+===== Détail du réseau LTSP utilisé à l'école =====
+
+  * Infrastructure générale :
+{{:reseau_ltsp_fr.png?500|}}
+
+
+  * Dans le détail
+
+^Type de machine^Nombre^Processeur^Mémoire^Disque Dur^Réseau^Distribution^
+|**Serveur LTSP**|1| AMD Sempron 3000+|1.5 Go|80 Go|1x 100Mbits + 1x 1Gbits|Edubuntu 11.04 64-bits|
+|**Client Léger**|5|AMD Sempron 3000+|512Mo|Sans|1x 100Mbits|Image LTSP Edubuntu 11.04 32-bits|
+
+===== Maintenir les systèmes à jour (Serveur et Clients Légers)  =====
+Il est important de maintenir à jour le serveur et les clients avec les dernières mise à jour (correction de bogues, mise à jour de sécurité, ...).
+**Il est recommandé d'effectuer toutes ces opérations depuis le serveur et non pas depuis un client léger.**
+
+==== Pour le serveur  ====
+  * En mode graphique
+C'est relativement simple sous gnome, aller dans Système --> Administration --> Gestionnaire de mises à jour
+
+  * En console, ouvrir un terminal puis exécuter:
+<code>
+sudo apt-get update && sudo apt-get upgrade && sudo apt-get dist-upgrade
+</code>
+
+==== Pour les clients légers  ====
+
+  * Il faut tout d'abord mettre à jour la liste des sources des clients légers (car par défaut, la liste des sources des clients n'est pas identique à celle du serveur).
+
+Ouvrir un Terminal puis entrer le code :
+<code>
+sudo cp /etc/apt/sources.list /opt/ltsp/i386/etc/apt/sources.list
+</code>
+
+  * Empêcher le serveur de redémarrer ses services pendant la mise à jour :
+<code>
+export LTSP_HANDLE_DAEMONS=false
+</code>
+
+  * Mettre à jour la base du système des clients légers :
+
+On "simule" le fait que l'on travaille dans l'environnement des clients légers (chroot)
+
+On met à jour le système 
+
+On reconstruit l'image des clients légers (celle qui est utilisée au moment du démarrage des clients)
+
+chroot et mise à jour du système :
+
+<code>
+sudo chroot /opt/ltsp/i386
+mount -t proc proc /proc
+apt-get update && apt-get dist-upgrade
+</code>
+
+<note warning>Pendant la mise à jour des paquets, vérifiez qu'il n'y a pas d'erreurs majeures. Des erreurs type "Can not write log, openpty() failed (/dev/pts not mounted?)" ou bien "GPG error" n'ont aucun impact. En revanche, d'autres erreurs pourraient empêcher les clients légers de démarrer correctement...</note>
+
+<note help>
+Si la mise à jour ne fonctionne pas lors de apt-get update car la connection internet semble ne pas fonctionner, il suffit de modifier le fichier /opt/ltsp/i386/etc/resolv.conf pour qu'il soit identique à /etc/resolv.conf. taper la commande sur le serveur LTSP :
+
+sudo cp /etc/resolv.conf /opt/ltsp/i386/etc/resolv.conf
+</note>
+
+On quitte le chroot
+
+On démonter /proc 
+
+On exécute ltsp-update-kernels (met à jour le noyau si il y a eu une mise à jour)
+
+On reconstruit les images des clients avec ltsp-update-image (l'argument "-a i386" est nécessaire car le serveur est en version 64 bits tandis que l'image des clients légers est en version 32 bits)
+
+<code>
+exit
+sudo ltsp-update-kernels
+sudo umount /opt/ltsp/i386/proc
+sudo ltsp-update-image -a i386
+</code>
+
+<note tip>
+La mise à jour des clients étant assez fastidieuse et comme il faudra la faire assez régulièrement, on peut s'aider d'un script qui fera cela presque tout seul ! ;-)
+</note>
+
+[[:tutoriel:comment_modifier_un_fichier|modifiez le fichier]] /usr/local/bin/maj_clients.sh (si il n'existe pas, il faut le créer avec les droits d'administration bien sûr!). En console, par exemple :
+<code>
+sudo nano /usr/local/bin/maj_clients.sh
+</code>
+
+Puis copier/coller le code suivant :
+<code>
+ #!/bin/sh
+
+CHROOT_DIR=/opt/ltsp/i386
+
+sudo chroot $CHROOT_DIR mount -t proc /proc /proc 
+sudo chroot $CHROOT_DIR apt-get update
+sudo chroot $CHROOT_DIR env LTSP_HANDLE_DAEMONS=false apt-get dist-upgrade
+sudo umount /opt/ltsp/i386/proc
+sudo ltsp-update-kernels -b /opt/ltsp -d ltsp
+sudo ltsp-update-image -p 2000 -b /opt/ltsp -a i386
+</code>
+
+Sauvegarder le fichier et le fermer
+
+Rendre le fichier exécutable par
+<code>
+sudo chmod +x /usr/local/bin/maj_clients.sh
+</code>
+
+Maintenant on peut effectuer la mise à jour automatisée des clients légers en tapant dans un terminal :
+<code>
+sudo maj_clients.sh
+</code>
+
+Et voila! 8-)
+
+Pour plus d'informations --> [[https://help.ubuntu.com/community/UbuntuLTSP/UpdatingChroot|Mettre à jour chroot, (version anglaise)]]
+
+===== Paramétrage de base =====
+
+==== Générer des IP fixes/statiques par DHCP  ====
+Lorsqu'un client boote sur le réseau, il obtient une IP dynamique gérée par le serveur DHCP.
+Par confort, nous allons attribuer a chaque client LTSP qui se connecte une IP fixe dépendant de sa carte réseau
+
+Partons de l'hypothèse que le serveur DHCP est dejà installé avec la distribution Edubuntu et est fonctionnel
+
+  * Il faut obtenir l'adresse physique du client léger. On peut par exemple l'obtenir en demandant au client léger de booter sur le réseau. On devrait obtenir un message similaire à cela :
+<code>
+CLIENT MAC ADDR: 00 16 E6 12 7D 1E
+</code>
+Ce qui correspond à l'adresse MAC 00:16:e6:12:7d:1e
+Notez cette adresse
+
+  * Modifier la plage d'IP dynamique
+Nous allons dire au serveur qu'une nouvelle machine inconnue du système qui se connecte obtiendra une IP comprise entre 192.168.0.50 et 192.168.0.250. Les machines connues auront une IP comprise entre 192.168.0.10 et 192.168.0.49.
+
+  * Editer le fichier [[:tutoriel:comment_modifier_un_fichier|/etc/ltsp/dhcpd.conf]]
+ajouter à la fin du fichier :
+<code>
+host NOM_MACHINE {
+        hardware ethernet ADRESSE_MAC;
+        fixed-address IP_FIXE;
+}
+</code>
+
+Exemple:
+<code>
+host berlin {
+        hardware ethernet 00:16:e6:12:7d:1e;
+        fixed-address 192.168.0.10;
+}
+</code>
+Opération à effectuer pour chaque nouvelle machine sur le réseau (sur la plage 192.168.0.10 à 192.168.0.49)
+
+  * Redémarrer le serveur DHCP :
+<code>
+sudo /etc/init.d/isc-dhcp-server restart
+</code>
+ 
+Pour plus d'informations --> [[https://help.ubuntu.com/community/UbuntuLTSP/StaticIPsWithDHCP|IP statiques avec DHCP (version anglaise)]]
+
+===== Installer des applications locales sur les clients légers =====
+==== Activer le swap sur le serveur  ====
+Il est préférable d'activer le swap sur le serveur pour les machines exécutant des applications locales.
+
+Exécuter des applications locales (firefox ou vlc) permettent de décharger le serveur et la bande passante.
+
+La machine exécutant ces applications locales doit être suffisamment puissante, c'est en général le cas.
+
+  * Ouvrir le fichier [[:tutoriel:comment_modifier_un_fichier|/var/lib/tftpboot/ltsp/i386/lts.conf]]
+
+Dans la rubrique [default], ajouter les 2 lignes suivantes
+<code>
+NBD_SWAP=True
+SWAP_SERVER=IP_DU_SERVEUR_LTSP
+</code>
+
+Exemple dans notre cas :
+
+<code>
+  # active swap nbd
+  NBD_SWAP=True
+  SWAP_SERVER=192.168.0.254
+</code>
+
+  * Créer le fichier [[:tutoriel:comment_modifier_un_fichier|/etc/ltsp/nbdswapd.conf]] et y ajouter la ligne suivante :
+<code>
+SIZE=256
+</code>
+
+  * Rajouter la ligne suivante dans le fichier [[:tutoriel:comment_modifier_un_fichier|/etc/hosts.allow]]
+<code>
+nbdswapd: ALL: keepalive
+</code>
+
+  * Redémarrer tous les clients légers et vérifier que le swap est bien activé en tapant dans un terminal sur un des clients légers :
+<code>
+ls -lh /tmp/tmp.*|grep 256M|wc -l
+</code>
+Si la commande renvoie "1" c'est que ça marche 8-)
+
+
+==== Régler la configuration réseau (NAT) ====
+Avant tout, il va falloir faire quelques modifications de la configuration réseau car ce n'est plus le serveur LTSP qui va réellement gérer le traitement du flux internet sur le client léger.
+
+Le serveur LTSP va également jouer le rôle de passerelle
+
+=== Préambule ===
+
+  * Dans notre cas, le serveur est équipé de 2 cartes réseau. la commande "ifconfig"' permet de savoir comment elles sont configurées (seules les informations utiles sont données):
+<code>
+ ifconfig
+</code>
+qui renvoie
+<code>
+eth0   Link encap:Ethernet  
+          inet adr:192.168.0.254
+
+eth1   Link encap:Ethernet  HWaddr 00:1f:1d:72:f3:24  
+          inet adr:192.168.41.11
+</code>
+
+La première carte (eth0) est la carte reliée au réseau LTSP. Elle possède une IP fixe (192.168.0.254 qui est l'IP par défaut d'un serveur LTSP)
+
+La seconde carte (eth1) est la carte reliée au réseau internet (autre réseau ou box internet par exemple).
+
+L'objectif est donc que le serveur LTSP qui reçoit des requêtes internet de la part des clients LTSP (par eth0) puisse transférer les requête vers le réseau internet (par eth1).
+
+  * Maintenant, il nous faut aussi connaître l'adresse du serveur [[dns|DNS]]
+Il suffit de regarder dans le fichier /etc/resolv.conf du serveur LTSP. par exemple en console avec la commande "cat"
+<code>
+cat /etc/resolv.conf
+</code>
+qui renvoie
+<code>
+# Generated by NetworkManager
+nameserver 212.27.40.241
+nameserver 212.27.40.240
+</code>
+
+Il y a deux serveurs DNS possibles dans ce cas qui peuvent être utilisés. On prendra le premier : 212.27.40.241
+<note>
+Pour mémo, dans notre cas, la configuration est la suivante :
+
+2 cartes réseaux :
+
+eth0, IP=192.168.0.254, reliée au réseau LTSP
+
+eth1, IP=192.168.41.11, reliée à un autre sous réseau et à la box Internet
+
+1 serveur DNS : IP=212.27.40.241
+</note>
+
+=== Activation du NAT ===
+
+  * Ouvrir le fichier [[:tutoriel:comment_modifier_un_fichier|/etc/ltsp/dhcpd.conf]] sur le serveur LTSP
+Vérifier que l'option router est correcte ou bien la corriger :
+<code>
+option routers 192.168.0.254;
+</code>
+
+  * Ouvrir le fichier [[:tutoriel:comment_modifier_un_fichier|/etc/sysctl.conf]] sur le serveur LTSP
+Ajouter la ligne suivante ou la dé-commenter (supprimer le # au début de la ligne) :
+<code>
+net.ipv4.ip_forward=1
+</code>
+
+  * Activer le NAT en tapant la commande suivante sur le serveur LTSP (on considère que la configuration du réseau est celle par défaut en adresse masque 192.168.0.0/24, à modifier si ce n'est pas le cas)
+<code>
+sudo iptables --table nat --append POSTROUTING --jump MASQUERADE  --source 192.168.0.0/24
+</code>
+
+Pour rendre l'activation NAT permanente, taper la commande suivante sur le serveur :
+<code>
+sudo sh -c 'iptables-save > /etc/ltsp/nat'
+</code>
+
+  * Ajouter la ligne "iptables-restore < /etc/ltsp/nat" à la fin du fichier "/etc/network/interfaces" dans la section eth0 (celle de la carte du réseau LTSP). Ouvrir le fichier [[:tutoriel:comment_modifier_un_fichier|/etc/network/interfaces]], la section eth0 doit maintenant ressembler à cela :
+
+<code>
+auto eth0
+iface eth0 inet static
+  address 192.168.0.254
+  netmask 255.255.255.0
+  broadcast 192.168.0.255
+  network 192.168.0.0
+  up iptables-restore < /etc/ltsp/nat
+</code>
+
+  * Encore une fois, modifier le fichier [[:tutoriel:comment_modifier_un_fichier|/etc/ltsp/dhcpd.conf]] pour indiquer le serveur DNS à utiliser (celle listée dans le fichier /etc/resolv.conf du serveur LTSP après le terme "nameserver"). Voir le paragraphe "préambule".
+modifier la ligne si elle existe déjà ou bien la créer :
+<code>
+   option domain-name-servers IP_DU_SERVEUR_DNS;
+</code>
+
+Dans notre cas, nous modifions la ligne :
+<code>
+   option domain-name-servers 212.27.40.241;
+</code>
+
+Le fichier complet est celui-ci :
+<code>
+#
+# Default LTSP dhcpd.conf config file.
+#
+
+authoritative;
+
+subnet 192.168.0.0 netmask 255.255.255.0 {
+    range 192.168.0.50 192.168.0.250;
+    option domain-name "example.com";
+    option domain-name-servers 212.27.40.241;
+    option broadcast-address 192.168.0.255;
+    option routers 192.168.0.254;
+#    next-server 192.168.0.254;
+#    get-lease-hostnames true;
+    option subnet-mask 255.255.255.0;
+    option root-path "/opt/ltsp/i386";
+    if substring( option vendor-class-identifier, 0, 9 ) = "PXEClient" {
+        filename "/ltsp/i386/pxelinux.0";
+    } else {
+        filename "/ltsp/i386/nbi.img";
+    }
+}
+</code>
+
+  * Redémarrer le serveur DHCP en exécutant sur le serveur LTSP : 
+<code>
+sudo /etc/init.d/isc-dhcp-server restart
+</code>
+
+<note>
+Suivant la configuration et le type de serveur DHCP utilisé, la commande pourra être :
+
+sudo /etc/init.d/dhcp3-server restart
+</note>
+
+  * **Redémarrer le client léger** et tester la configuration
+Dans un terminal sur le client léger, taper la commande suivante :
+
+<code>
+ping -c 2 www.edubuntu.com
+</code>
+
+Si cela fonctionne, on doit quelque-chose qui ressemble à cela :
+
+<code>
+PING edubuntu.com (91.189.94.239) 56(84) bytes of data.
+64 bytes from humboldt.canonical.com (91.189.94.239): icmp_req=1 ttl=53 time=17.3 ms
+64 bytes from humboldt.canonical.com (91.189.94.239): icmp_req=2 ttl=53 time=16.3 ms
+
+--- edubuntu.com ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1001ms
+rtt min/avg/max/mdev = 16.386/16.857/17.328/0.471 ms
+</code>
+
+Si ce n'est pas le cas, reprendre la démarche et vérifier la configuration...
+
+Pour plus d'information, voir la [[https://help.ubuntu.com/community/UbuntuLTSP/ThinClientHowtoNAT/|documentation NAT et clients légers (version anglaise)]]
+
+==== Installer firefox comme application locale sur les clients légers ====
+<note warning>
+Avant de commencer, activer le NAT sur le serveur, sinon firefox en application locale ne fonctionnnera pas ! Voir la rubrique associée dans ce document.
+
+Une autre solution est d'installer un proxy sur le serveur (http://doc.ubuntu-fr.org/squid) et de configurer firefox pour utiliser ce proxy.
+</note>
+
+  * Mettre à jour la liste des paquets dans le chroot LTSP. Taper la commande suivante sur le serveur LTSP :
+
+<code>
+sudo chroot /opt/ltsp/i386 apt-get update
+</code>
+<note help>
+Si la mise à jour ne fonctionne pas lors de apt-get update car la connection internet semble ne pas fonctionner, il suffit de modifier le fichier /opt/ltsp/i386/etc/resolv.conf pour qu'il soit identique à /etc/resolv.conf. taper la commande sur le serveur LTSP :
+
+sudo cp /etc/resolv.conf /opt/ltsp/i386/etc/resolv.conf
+</note>
+
+  * Installer les paquets nécessaires (firefox et plugin flash par exemple).
+<code>
+sudo chroot /opt/ltsp/i386 apt-get install firefox flashplugin-installer
+</code>
+
+  * Modifier le fichier [[:tutoriel:comment_modifier_un_fichier|/var/lib/tftpboot/ltsp/i386/lts.conf]] sur le serveur LTSP.
+Ajouter dans la section [default] les lignes suivantes :
+
+<code>
+  LOCAL_APPS=True
+  LOCAL_APPS_MENU=True
+  LOCAL_APPS_MENU_ITEMS=firefox
+</code>
+
+<note tip>
+Pour ajouter d'autres applications locales , par exemple vlc ou mplayer, il faudra alors reprendre la démarche pour installer les paquets nécessaire et modifier la ligne comme cela LOCAL_APPS_MENU_ITEMS=firefox,vlc,mplayer
+</note>
+
+  * Reconstruire l'image du client léger. Sur le serveur LTSP exécuter:
+<code>
+sudo ltsp-update-image -a i386
+</code>
+
+  * Redémarrer le serveur DHCP en exécutant sur le serveur LTSP : 
+<code>
+sudo /etc/init.d/isc-dhcp-server restart
+</code>
+
+<note>
+Suivant la configuration et le type de serveur DHCP utilisé, la commande pourra être :
+
+sudo /etc/init.d/dhcp3-server restart
+</note>
+
+  * Tester l'application sur le client léger.
+Redémarrer le client léger
+
+Lancer Firefox sur le client léger
+
+Sur le titre de la fenêtre, on doit lire quelque chose qui ressemble à : "Mozilla Firefox (sur ltspxx)" avec xx le N° du client léger LTSP (en général les derniers chiffres de son adresse IP).
+
+<note help>
+Si internet ne fonctionne pas à ce niveau, c'est probablement que le NAT n'est pas correctement configuré. Se reporter à la section qui traite de la mise en place du NAT dans ce document
+</note>
+
+Pour plus d'informations --> [[https://help.ubuntu.com/community/UbuntuLTSP/ThinClientHowtoNAT/|NAT avec les clients légers LTSP (version anglaise)]]
+
+===== Carte réseau LTSP et Internet =====
+Pour modifier la carte réseau qui est relié au réseau des clients LTSP et celle reliée à internet, modifiez le fichier /etc/network/interfaces .  Cette opération est également nécessaire si vous changer la carte réseau de votre ordinateur.
+
+===== RESTE A FAIRE =====
+  * Modification du thème LDM
+
+  * Franciser les applications (firefox par exemple)
+Pour mémo, les applications suivantes ont ete installees dans le chroot ds clients:
+language-support-fr firefox-locale-fr language-pack-fr
+
+Le fichier lts.conf a été modifié pour y ajouter :
+LDM_LANGUAGE="fr_FR.UTF-8"
+Mais aucun changement sur la fenêtre de connexion de LDM qui est toujours en anglais...
+
+Modifier dans les paramètres systèmes :
+Système --> Administration --> Prise en charge des langues
+On met français en priorité 1
+
+
+
+  * Mettre en place du RAID 10 sur le serveur
+
+  * Divers
+
+===== Voir aussi =====
+
+  * **Une bible d'information sur la configuration de réseaux LTSP, en anglais : [[https://help.ubuntu.com/community/UbuntuLTSP|Ubuntu LTSP]]**
+  * **La [[http://www.edubuntu.org/documentation|documentation officielle d'Edubuntu]], en anglais**
+----
+//Contributeurs principaux : [[:utilisateurs:doogui]].//

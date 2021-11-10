@@ -1,0 +1,106 @@
+
+====== Bissection d'un noyau ======
+
+===== Présentation du principe =====
+
+Il peut arriver que quelque chose qui fonctionnait bien dans une version d'un noyau ne fonctionne plus dans la version suivante.
+
+Cela provient de code qui a été modifié... et comme des milliers de ligne de code sont modifiées entre deux versions successives de noyau, la détermination des lignes incriminées n'est pas toujours évidente.
+
+Heureusement les développeurs proposent un outil "Git bisect" qui selon le principe d'une dichotomie permet de trouver les lignes de code responsables du problème.
+
+===== Exemple de mise en oeuvre =====
+
+==== Procédé de bissection ====
+
+Installer des dépendances requises pour la compilation :
+  $ sudo apt build-dep linux
+
+Télécharger les sources du noyau dans la branche de développement
+
+  $ git clone git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+ 
+Entrer dans le répertoire et lancer le processus
+
+  $ cd linux
+  $ git bisect start
+
+Installer et tester la **dernière version RC fonctionnelle** du noyau mainline et la **première version RC non fonctionnelle** du noyau.\\
+Dans l'exemple qui suit il s'agit de v5.8-rc7 et v5.9-rc1.
+
+Déclarer ces versions comme "good" et "bad".
+
+  $ git bisect good v5.8-rc7
+  $ git bisect bad v5.9-rc1
+
+En réponse, on obtient le nombre approximatif d'étapes (et donc de compilations) de noyaux à tester.
+
+Lancer la première compilation.
+  $ make localmodconfig
+  $ make -j$(nproc) bindeb-pkg
+  
+Installer le nouveau noyau (4 fichiers) avec ''dpkg -i''.
+
+Redémarrer sur ce noyau.
+
+S'il fonctionne correctement, exécuter :
+  $ git bisect good
+S'il ne fonctionne pas correctement, exécuter :
+  $ git bisect bad
+  
+Lancer la nouvelle compilation.
+  $ make localmodconfig
+  $ make -j$(nproc) bindeb-pkg
+  
+Continuer avec ''git bissect god'' ou ''git bissect bad'', recompiler, etc...
+
+A la fin on obtient une sortie du type
+<code>
+meloli@Asus-A17:~/Bureau/meloli/GITBISECT/linux$ git bisect bad
+b2cc23398e8166b38f8715026273503b081c2a7a is the first bad commit
+commit b2cc23398e8166b38f8715026273503b081c2a7a
+Author: Sathish Narasimman <nsathish41@gmail.com>
+Date:   Thu Jul 23 18:09:02 2020 +0530
+
+    Bluetooth: Enable RPA Timeout
+    
+    Enable RPA timeout during bluetooth initialization.
+    The RPA timeout value is used from hdev, which initialized from
+    debug_fs
+    
+    Signed-off-by: Sathish Narasimman <sathish.narasimman@intel.com>
+    Signed-off-by: Marcel Holtmann <marcel@holtmann.org>
+
+ include/net/bluetooth/hci.h | 2 ++
+ net/bluetooth/hci_core.c    | 8 ++++++++
+ 2 files changed, 10 insertions(+)
+</code>
+
+==== Vérification ultime ====
+
+En console (adapter le numéro)
+  $ git checkout b2cc23398e8166b38f8715026273503b081c2a7a
+  $ make localmodconfig
+  $ make -j$(nproc) bindeb-pkg
+
+Installer le noyau et vérifier qu'il est incorrect.
+
+  $ git checkout b2cc23398e8166b38f8715026273503b081c2a7a^
+  $ make localmodconfig
+  $ make -j$(nproc) bindeb-pkg
+  
+Installer le noyau et vérifier qu'il est correct.
+
+==== Faire un rapport de bug ====
+
+Déposer un rapport de bug sur :
+  * https://bugs.launchpad.net/ubuntu/+source/linux/+filebug
+  * https://bugzilla.kernel.org/enter_bug.cgi
+
+Préciser que la bissection a déjà été faite et coller le code donné en sortie plus haut.
+
+
+
+Contributeur principal : [[:utilisateurs:Olivier V]]
+
+{{tag>kernel noyau complilation bug bissection}}

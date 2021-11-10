@@ -1,0 +1,117 @@
+
+{{tag>Xenial sécurité}}
+
+----
+
+====== Shred : détruire efficacement un fichier ======
+
+Si vous supprimez un fichier, il n'est pas totalement supprimé :
+
+  * Si vous êtes sous Nautilus ou Konqueror, il est juste envoyé à la corbeille (~/.Trash le plus souvent)
+  * Si vous le supprimez sans passer par la corbeille (avec la commande ''rm'' par exemple), il n'est pas totalement supprimé : l'espace disque correspondant est juste marqué comme étant "libre", mais il existe des logiciels permettant de retrouver ces données.
+
+<note important>Shred ne permet de supprimer que des fichiers. Si vous voulez pouvoir supprimer de façon sécurisée un répertoire avec ses sous-dossiers, optez pour [[:Wipe]] ([[http://wipe.sourceforge.net/|doc en anglais]]) qui sera intégrable sous Nautilus de la même façon.</note>
+
+===== Installation =====
+
+Shred fait partie du paquet [[apt>coreutils]]. Ce dernier contient les utilitaires de base essentiels à votre système et devrait donc y être déjà intégré sans autre manipulation.
+
+===== Utilisation =====
+
+Pour supprimer efficacement un fichier, vous pouvez utiliser la commande ''shred'' (déchiquetage) : <code>shred -n 35 -z -u nomDuFichier</code>
+
+Ceci a pour effet de :
+  * remplacer 35 fois les données du fichier par des déchets (''-n 35'')
+  * puis remplacer ces données par des zéros (''-z'') pour masquer le déchiquettage
+  * puis tronquer et supprimer le fichier (''-u'')
+
+Cette méthode est déjà plus efficace. 
+
+**Attention** : Il reste encore des informations sur le fichier permettant de le retrouver, notamment si vous utilisez un système de fichier journalisé comme ''ext3'', ''ReiserFS'', ''XFS'', ''JFS'', un système d'écriture, de compression ou de sauvegarde, sur disque (ex : RAID) ou via un réseau.
+Pour plus d'informations, entrez la commande ci-dessous :
+
+  man shred
+
+===== Configuration =====
+
+==== Intégrer Shred à Nautilus ====
+<note warning>Ne fonctionne plus sur les versions récentes d'Ubuntu.</note>
+  * Libellé : Supprimer avec shred
+  * Information : Suppression sécurisée
+  * Chemin : shred
+  * Paramètres : ''-n 35 -z -u %M''
+
+Valider et fermer. Shred est maintenant intégré à Nautilus. Pour que les modifications soient effectives, il va vous falloir redémarrer Nautilus. Pour cela, vous pouvez choisir de redémarrer votre session ou bien de redémarrer Nautilus (moins propre mais plus rapide pour les tests) :
+
+  nautilus -q
+  nautilus
+
+Vous pouvez maintenant effacer de façon plus sécurisée un fichier en passant par un simple clic droit.
+
+==== Intégrer Shred aux services menu de KDE ====
+
+Il suffit de [[:tutoriel:comment_modifier_un_fichier|créer le fichier]] **/usr/share/kservices5/ServiceMenus/shred.desktop** avec les [[:sudo|droits d'administration]] et d'y copier le code suivant :
+
+<file>
+[Desktop Entry]
+Type=Service
+X-KDE-ServiceTypes=KonqPopupMenu/Plugin
+MimeType=all/all;
+Actions=shred
+
+[Desktop Action shred]
+Name=Suppr with shred
+Name[fr]=Suppression sécurisée des fichiers
+Icon=draw-eraser
+Exec=shred -n 35 -z -u %U
+</file>
+==== Intégrer Shred à Nautilus Script ====
+
+Voici un script pour shred à placer dans le dossier "nautilus scripts" :
+<file bash>
+#!/bin/bash
+
+if [[ -a /dev/urandom ]]; then
+  randomizer=/dev/urandom;
+fi
+
+SHRED="shred --remove=wipesync --zero --iterations=99 ${randomizer}"
+
+echo ${NAUTILUS_SCRIPT_SELECTED_URIS} > ~/.gnome2/temp_shred_list
+
+zenity --question --title "Destruction de fichier" --text "Voulez-vous vraiment supprimer ce fichier ?"
+
+if (( $? == 0 )); then
+
+  for file in $(cat ~/.gnome2/temp_shred_list); do
+
+    shortfile=$(echo $file | sed -e 's/\%20/\ /g' -e 's/.*\///g')
+
+    file_name=$(echo $file | sed -e 's/file:\/\///g' -e 's/\%20/\ /g')
+
+    ${SHRED} "${file_name}"
+
+    if (( $? == 0 )); then
+      zenity --info --text="${shortfile} Suppression définitive terminée" --title "Opération réussite"
+    else
+      zenity --info --text="${shortfile} Suppression impossible" --title "Opération annulée"
+    fi
+
+  done
+
+fi
+
+${SHRED} ~/.gnome2/temp_shred_list
+</file>
+===== Voir aussi =====
+
+  * [[wipe]] dans les [[depots#depots_officiels|dépôts universe]] pour les répertoires
+  * [[Secure-delete]]. Rapide explication [[http://forum.ubuntu-fr.org/viewtopic.php?pid=2976731#p2976731|ici]] mais lire le man de chaque utilitaire (srm, sfill, sswap et smem)
+  * Encore plus radical pour une partition complète, utiliser [[dd#ecrire_par_dessus_toute_la_place_libre_d_une_partition|dd]]
+  * [[http://www.dban.org/|DBAN]] un live-cd qui offre plusieurs méthodes d'effacement.
+  * [[https://www.it-connect.fr/shred/|Tutoriel en Français sur l'utilisation de Shred]]
+  * [[https://www.it-connect.fr/wipe-supprimer-definitivement-un-dossier-sous-ubuntu%ef%bb%bf/|Tutoriel en Français sur l'utilisation de Wipe]]
+
+----
+
+// Contributeur : [[utilisateurs:eks]] --- //[[:utilisateurs:Edouard973|Edouard973]]  Complèté par : [[utilisateurs:alexpayne]] et [[utilisateurs:hizoka|hizoka]]//

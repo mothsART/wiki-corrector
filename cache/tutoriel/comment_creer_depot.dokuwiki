@@ -1,0 +1,97 @@
+
+{{tag>installation apt dépôts paquet gestionnaire_de_paquets serveur partage tutoriel}}
+
+====== Comment créer un dépôt de paquets ======
+
+Ce petit tutoriel va vous apprendre une façon simple de créer votre propre serveur de paquets. Vous pouvez aussi utiliser un serveur avec [[:apache]] et **debarchiver**, reportez-vous à cette [[:creer_un_depot_ubuntu|page]].
+
+===== Prérequis =====
+Ce tutoriel utilise le logiciel **reprepro**, disponible dans le dépôt universe. Donc avant tout :
+[[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>reprepro]]**.
+
+===== Création d'un dépôt =====
+La création d'un dépôt est relativement simple. Commencez par créer un dossier qui contiendra votre futur dépôt : <code>user@ubuntu:~$ mkdir apt</code>
+Ensuite, on crée l'architecture de base du serveur apt:<code>
+user@ubuntu:~$ mkdir -p ./apt/conf
+user@ubuntu:~$ mkdir -p ./apt/incoming
+</code>
+
+Le répertoire **conf** contiendra les fichiers de configuration, le répertoire **incoming** pourra permettre l'upload de paquets.
+
+Nous allons maintenant créer le fichier de configuration, ce fichier contiendra plusieurs informations, comme la version de la distribution correspondant aux paquets. [[:tutoriel:comment_editer_un_fichier|Créez le fichier]] ./apt/conf/distributions. Pour Trusty remplissez-le comme ceci:<file>
+Origin: Votre Nom
+Label: Label de votre société (ou autre)
+Suite: stable
+Codename: trusty
+Version: 14.04
+Architectures: i386 amd64 source #(en fonction de vos besoin)
+Components: main restricted universe multiverse #(en fonction de vos besoin)
+Description: Votre Description
+</file>
+
+
+=== Ajouter mon premier paquet ===
+Vous voila prêt à ajouter des paquets à votre dépôt. Pour cela vous devez:
+  * Mettre vos **.deb** dans le dossier //incoming//.
+  * Vous déplacez dans le bon dossier, en entrant la commande suivante dans un [[:terminal]]:<code>cd apt</code>
+  * Puis en lançant reprepro comme ceci: <code>reprepro -Vb . includedeb (distribution) incoming/(nom_du_paquet)
+</code>
+
+Vous pouvez enlever l'option V pour qu'il y ait moins d'informations affichées. 
+Le "." correspond à la racine de votre serveur (nous sommes dans le répertoire **apt**).
+La distribution doit correspondre à celle du paramètre //Codename// du fichier de configuration précédemment créé. 
+
+<note important>Attention: ceci fonctionne pour ajouter des paquets .deb uniquement pour ajouter les sources la reportez vous au manuel de reprepro.</note>
+
+=== Ajouter plusieurs paquets en une fois ===
+Voici un petit script permettant d'ajouter tous les paquets présents dans un dossier en une seule commande :)
+<file>
+#!/bin/bash
+for paquet in $1/*.deb; do
+reprepro -b . includedeb trusty $paquet;
+done
+</file>
+Copiez ce code dans le fichier AjoutPaquets.sh dans le dossier //apt//, puis: <code>chmod u+x ./AjoutPaquets.sh
+./AjoutPaquets.sh /var/cache/apt/archives</code>
+
+La dernière commande aura pour effet d'ajouter à votre dépôt tous les paquets présents dans /var/cache/apt/archives, c'est à dire tous les paquets téléchargés récemment.
+Pour inclure un autre répertoire, il suffit de le passer en argument au script.
+
+Ou tout simplement: <code>reprepro -Vb . includedeb (distribution) incoming/*.deb</code> Ici ce sont les **.deb** du dossier **incoming** qui seront intégrés au dépôt.
+
+===== Utilisation de votre dépôt =====
+Vous avez un dépôt fraîchement créé, mais vous voudriez bien l'utiliser : suivez le guide ...
+
+Soit vous l'utilisez en local, dans ce cas il vous suffit d'ajouter à votre ///etc/apt/sources.list// la ligne :
+<file>
+deb file:/home/user/apt stable main contrib non-free
+</file>
+
+Bien sûr il faudra changer le //stable// en //unstable// pour la version instable.
+
+Si vous voulez l'utiliser en réseau, il vous faudra un serveur web sur votre pc, vous trouverez cette procédure [[:tutoriel:creer_un_miroir_de_depot|ici]]. Ajoutez un alias dans votre httpd.conf pointant vers le répertoire **apt** fraîchement créé.
+Une fois ceci fait et votre serveur lancé, le répertoire apt devrait être accessible avec une adresse du type //http://votre_ip/apt // .
+Il vous suffira alors d'ajouter à tous les pc devant se servir de ce serveur la ligne :
+<file>
+deb http://ip_du_serveur/apt stable main contrib non-free
+</file>
+dans le fichier sources.list .
+
+Ensuite un petit: <code>sudo apt-get update</code>
+et les paquets ajoutés à votre serveur personnel devraient être disponibles.
+
+Vous pouvez aussi ajouter vos fichiers sur un site web (le site disponible pour vous chez votre fournisseur d'accès ou autre...). Il vous suffira de donner la bonne URL dans une ligne semblable à ci-dessus. Tout le monde pourrait alors avoir accès à vos chers debs.
+
+===== Signer votre dépôt =====
+Pour ce faire, rien de plus simple, vous devez bien évidemment, [[:gnupg#utilisation_et_configuration|disposer avant tout d'une clé GPG]].
+Ensuite, [[:tutoriel:comment_editer_un_fichier|éditez le fichier]] **./conf/distributions**, et rajoutez y ceci : <file>SignWith: XXXXXXXX</file>
+**XXXXXXXX** devant être remplacé par la valeur de votre clé GPG
+
+ensuite, lancez le [[:terminal]], et utilisez cette commande:<code>reprepro --ask-passphrase export</code>
+
+Votre passphrase vous sera demandée, puis votre dépôt sera signé.
+Il ne vous restera plus qu'à uploader tous les dossiers composants votre dépôt. =)
+
+----
+
+//Contributeurs : [[utilisateurs:Sp4rKy]] (base), [[utilisateurs:Johndescs]], [[utilisateurs:Billou]], MAJ de la page [[:utilisateurs:l_africain|L'Africain]] //

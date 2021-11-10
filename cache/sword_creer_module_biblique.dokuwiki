@@ -1,0 +1,310 @@
+
+{{tag>Bionic Bible}}
+
+-----
+======Créer un module sword pour les logiciels de lecture biblique======
+
+Le projet SWORD est un projet de logiciel libre de l'organisation **CrossWire Bible Society Bible**. Son but est de créer des outils libres (couverts par la licence GPL) multiplate-formes, permettant ainsi aux programmeurs et aux sociétés bibliques d'écrire plus facilement et plus rapidement de nouveaux logiciels d'étude de la Bible.\\
+Le cœur du projet SWORD est une bibliothèque multiplate-forme écrite en C++, offrant un accès, des fonctions de recherche et d'autres services à une collection grandissante de plus de 200 textes dans plus de 50 langues. Tout logiciel basé sur leur API peut utiliser cette collection.\\
+
+Le projet est un des premiers à avoir contribué au développement du format **OSIS** (pour Open Scripture Information Standard), un langage XML pour coder les écritures (traductions de la Bible, commentaires etc). 
+[[:Xiphos]] et [[:Bibletime]] sont des interfaces à Sword, qui permettent son utilisation graphique.\\
+Cette page a pour but de vous décrire la procédure pour créer un module biblique avec les outils Sword.
+
+=====Pré-requis=====
+
+  * Disposer des [[:sudo|droits d'administration]] ;
+  * Disposer d'une connexion à Internet configurée et activée;
+  * [[:tutoriel:comment_installer_un_paquet|Installer le paquet]] des outils sword **[[apt>libsword-utils]]** et éventuellement **[[apt>libsword-dev]]**.
+
+=====Création d'un module pour une bible ou un commentaire=====
+Un module SWORD peut désigner un texte biblique (i.e. une traduction de la Bible), un commentaire, un dictionnaire, un glossaire ou un calendrier.
+Il existe plusieurs formats pour créer un module, **vpl**, **imp**, et **osis** entre autre. Ici nous favoriserons le format **osis**. Vous trouverez [[http://www.crosswire.org/wiki/File_Formats|ici]] toutes les informations sur les divers formats possibles.
+
+====Créer le fichier usfm====
+La première chose à faire est de télécharger ce [[http://paratext.org/system/files/usfmReference2_4.pdf|PDF]] qui vous donnera toutes les références nécessaires à la création d'un fichier **usfm**, ainsi que les codes propres à chaque livre biblique.
+Dans un premier temps lorsque vous aurez récupéré ou converti en fichiers texte les livres bibliques (vous pouvez utiliser **unoconv** pour cela), il faudra renommer chaque livre par son numéro d'identification, comme indiqué dans le pdf plus haut.
+Par exemple pour la Genèse vous nommerez votre fichier **01_GEN_nom_de_bible.usfm**.
+Cela fait, modifier votre fichier texte, pour qu'il ressemble à ceci:
+<file bash>
+\id GEN
+\mt1 LA GENÈSE
+\c 1
+\s I — LES ORIGINES DE L’HUMANITÉ
+\s2  La Parole de Dieu ordonne le monde
+\p 
+\v 1 Au commencement Dieu créa le ciel et la terre.
+\v 2 La terre était informe et vide, les ténèbres couvraient l’abîme, et l’Esprit de Dieu planait au-dessus des eaux.
+\v 3 Dieu dit : “Que la lumière soit !” Et la lumière fut.
+\v 4 Dieu vit que la lumière était bonne, et Dieu sépara la lumière d’avec les ténèbres.</file>
+Chaque numéro de chapitre est précédé par **\c**, puis suivi par **\p**.
+Chaque verset est précédé par **\v**. Vous trouverez la signification des autres codes dans le **PDF**.
+Pour faire cela rapidement il peut être utile d'utiliser [[:sed]], puis **grep** pour les éventuelles erreurs.
+Ce petit script peut vous être utile, à vous de l'adapter à votre fichier de base:
+<code bash>
+#!/bin/bash
+#Pour supprimer les bom des fichiers utf8
+find . -type f -exec sed 's/\xEF\xBB\xBF//g' -i.bak {} \; -exec rm {}.bak \;
+# pour chaque fichier dans ls *.sfm
+for FILE in `ls *.sfm` ; do
+#Commence par mettre à la ligne chaque verset
+  sed -i 's/ [0-9][0-9] /\n&/g' $FILE
+  sed -i 's/ [0-9] /\n&/g' $FILE
+#Supprime les espaces éventuel en début de ligne
+  sed -i 's/^[ ]*//g' $FILE
+#Supprime les lignes vide et ajoute "\id \mt1" à la première ligne
+  sed -i '/./!d; 1i\\\id \n\\mt1 ' $FILE
+#Colle la ligne 2 et 3
+  sed -i '/\\mt1$/N; s/\n/ /' $FILE
+#Ajout "\v " devant chaque ligne commençant par un puis deux chiffres suivit d'un espace et de texte
+  sed -i 's/^[0-9] [a-z]*/\\v &/g' $FILE
+  sed -i 's/^[0-9][0-9] [a-z]*/\\v &/g' $FILE
+  sed -i 's/^[0-9][0-9][0-9] [a-z]*/\\v &/g' $FILE
+
+#ajoute \c devant chaque ligne commencant par deux chiffre
+  sed -i 's/^[0-9]+\n/\\c &\n\\p/g' $FILE
+  sed -i 's/^[0-9][0-9]+\n/\\c &\n\\p/g' $FILE
+  sed -i 's/^[0-9][0-9][0-9]+\n/\\c &\n\\p/g' $FILE
+
+  #rename 's/txt/sfm/g' $FILE Commande à utiliser si vous voulez travailler avec des fichier .txt
+  # Mettre \s devant les éventuels titres
+  #sed -i 's/^[A-Z]/\\s1 &/g' $FILE
+  #sed -i 's/^[1-2] [A-Z]/\\s1 &/g' $FILE
+done
+</code>
+
+Attention au possible problème d'espace (comme les espaces cadratin) qui peuvent se glisser dans votre texte. Dans ce cas utilisez l'expression régulière **\s** pour les supprimer ou les remplacer, plutôt que la vrai espace dans le script sed...
+Il vous faudra encore compléter manuellement le code du livre biblique à la première ligne du fichier sfm après **\id**.
+
+<note tip>À partir de cette étape il est possible d'utiliser [[:Bibledit-Desktop]] pour la conversion en osis et même en module.</note>
+
+====Convertir au format osis====
+Une fois vos fichiers bien codés en **.usfm** il faudra les convertir en **osis**. Pour cela, téléchargez le script **u2o.py**
+[[https://github.com/adyeths/u2o/|ici]]. Rendez-le exécutable et copiez-le dans le dossier contenant les fichier **.usfm**.
+Lancez-le comme suit:
+<code bash>./u2o4.py -e utf-8 -o Nom_de_votre_module.osis.xml -l code_langue -v -d ID_sword *.usfm</code>
+Vérifiez qu'il ne vous retourne pas d'erreurs, si c'est le cas, corrigez-les. Si vous ne savez pas dans quel fichier se trouve l'erreur, utilisez la commande **grep** pour les trouver.
+Les erreurs fréquentes sont un code collé à un chiffre, par exemple //\v1// au lieu de //\v 1//, ou un chiffre collé à un verset, par exemple //\v 1Alors...// au lieu de //\v 1 Alors...//.
+
+====Créer le module final====
+===L'archive===
+Maintenant que votre fichier osis est prêt il ne vous reste plus qu'à exécuter les outils sword, dans notre cas il s'agit du script //osis2mod//. Pour créer l'archive, toujours dans le dossier où se trouve les fichiers sfm, créez un dossier avec le nom de votre bible, puis lancez la commande suivante:
+<code>osis2mod Le_nom_du_dossier_de_votre_bible/ votre_fichier_osis.xml -z -v Catholic</code>
+
+Ici à titre d'exemple l'option -v est suivit de Catholic, cela correspond au type de versification de votre bible. Avec la commande :
+<code>osis2mod -h</code>
+Vous pourrez voir tous les types de versification possible. Vous trouverez [[http://www.crosswire.org/wiki/Alternate_Versification|ici]] la description complète des diverses versifications. Si le module est une bible, placez le dossier contenant l'archive dans //.sword/modules/texts/ztext/// ou si vous souhaitez le rendre accessible pour tous les utilisateurs, ///usr/share/sword/modules/texts/ztext///. Si c'est un commentaire, placez la dans //.sword/modules/comments/zcom///.
+
+===Le fichier .conf===
+Une fois l'archive créée, il vous faudra encore créer le fichier **.conf** de votre bible, fichier à mettre dans le dossier //.sword/mods.d// ou pour tous les utilisateurs dans ///usr/share/sword/mods.d///. Le contenu est le suivant, en adaptant à votre bible:
+  * Pour une bible
+<file>
+[Nom de la bible]
+DataPath=./modules/texts/ztext/Dossier de l'archive/
+ModDrv=zText
+GlobalOptionFilter=OSISHeadings #Pour afficher les introductions
+GlobalOptionFilter=OSISFootnotes #Pour afficher les notes
+GlobalOptionFilter=OSISScripref
+Encoding=UTF-8
+BlockType=BOOK
+CompressType=ZIP
+SourceType=OSIS
+Lang=la langue de votre bible, fr pour le français
+;GlobalOptionFilter=
+SwordVersionDate=2017-03-08
+Version=0.1
+History_0.1=Version de base
+;TextSource=
+;LCSH=
+DistributionLicense=copyright
+Description=
+About=
+Versification=Catholic, ou une autre versification si vous avez fait un autre choix
+InstallSize=la taille de votre module
+</file>
+  * Pour un commentaire:
+<file>
+[Nom du commentaire]
+DataPath=./modules/comments/zcom/Dossier de l'archive/
+ModDrv=zCom
+Encoding=UTF-8
+BlockType=BOOK
+CompressType=ZIP
+SourceType=OSIS
+Lang=la langue de votre bible, fr pour le français
+Category=Commentaries
+;GlobalOptionFilter=
+SwordVersionDate=2017-03-08
+Version=0.1
+History_0.1=Version de base
+;TextSource=
+;LCSH=
+DistributionLicense=copyright
+Description=
+About=
+Versification=Catholic, ou une autre versification si vous avez fait un autre choix
+InstallSize=la taille de votre module
+</file>
+Vous trouverez [[http://www.crosswire.org/wiki/DevTools:conf_Files|ici]] toutes les indications sur le fichier**.conf**.
+=====Création d'un module pour un livre (genbook) =====
+
+Ce qui suit donne les instructions pour créer un autre module, comme par exemple un livre, un module de cartes, du contenu liturgique. La procédure diffère de celle utilisée pour la Bible et les commentaires. On ne passe pas par un fichier **.sfm**, mais vous devez travailler directement sur les fichiers **xml**. Vous pouvez les créer directement, ou bien vous pouvez utiliser un filtre écrit pour LibreOffice qui vous permettra de convertir votre fichier **.odt** en **xml**.
+====Création directe du fichier xml====
+Voici un modèle qui peut vous servir de base pour la création de votre fichier OSIS xml:
+<file xml>
+<?xml version="1.0" encoding="UTF-8"?>
+
+<osis xsi:schemaLocation="http://www.bibletechnologies.net/2003/OSIS/namespace 
+      http://www.bibletechnologies.net/osisCore.2.1.1.xsd" 
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+      xmlns="http://www.bibletechnologies.net/2003/OSIS/namespace">
+
+<osisText osisRefWork="book" xml:lang="en" osisIDWork="WorkID">
+<header>
+<work osisWork="WorkID">
+<title>OSISGenbook</title>
+<creator role="aut">Nom de l'auteur</creator>
+</work>
+<work osisWork="Bible">
+<refSystem>Bible</refSystem>
+</work>
+</header>
+
+<div type="book" osisID="Book Title">
+<title>Titre du livre</title>
+<title type="x-author">Nom de l'auteur</title>
+<p>Copyright</p>
+
+<p>
+<figure src="images/crosswire.jpg"/>
+</p>
+
+<div type="chapter" osisID="Chapter  1">
+<p>Ceci est le Chapitre 1, introduction. 
+<reference osisRef="Gen.1.1">Genese 1,1</reference> est le premier verset de la Bible. 
+<reference osisRef="Rev.22.21">Apocalypse 22,21</reference> est le dernier verset de la Bible. 
+<reference osisRef="Ps.119">Psaume 119</reference> est le plus long chapitre de la Bible. 
+<reference osisRef="Prov.1-Prov.9">Proverbes 1-9</reference> introduit le livre des Proverbes. 
+<reference osisRef="John.1-John.1.18">Jean 1,1-18</reference> introduit le livre de Jean. 
+<reference osisRef="2Cor.6.14-2Cor.7.1">2 Corinthiens 6,14-7,1</reference> est un enseignement sur la sainteté.
+</p>
+
+<div type="section">
+<title>Section 1</title>
+<p>Ceci est la section 1 du chapitre 1.</p>
+<table>
+<row>
+<cell>
+<hi type="bold">Ici est le titre de la colonne 1</hi>
+</cell>
+<cell>
+<hi type="bold">Ici est le titre de la colonne 1</hi>
+</cell>
+</row>
+<row>
+<cell>Colonne 1, Ligne 1</cell>
+<cell>Colonne 2, Ligne 1</cell>
+</row>
+<row>
+<cell>Colonne 1, Ligne 2</cell>
+<cell>Colonne 2, Ligne 2</cell>
+</row>
+</table>
+</div>
+
+<div type="section">
+<title>Section 2</title>
+<p>Ceci est la section 2 du chapitre 1.<note type="x-footnote" n="1">Note de bas de page</note>
+</p>
+</div>
+</div>
+
+<div type="chapter" osisID="Chapter 2">
+<p>Ceci est l'introduction du chapitre 2.<note type="x-endnote" n="i">Note de fin</note>
+</p>
+
+<div type="section">
+<title>Section 1</title>
+<p>Ceci est la section 1 du chapitre 2.</p>
+</div>
+
+<div type="section">
+<title>Section 2</title>
+<p>Ceci est la section 2 du chapitre 2.</p>
+<p>Default <hi type="italic">Italique</hi>
+</p>
+<p>Default <hi type="bold">Gras</hi>
+</p>
+<p>Default<hi type="super">Exposant</hi>
+</p>
+<p>Default<hi type="sub">Indice</hi>
+</p>
+<p>Ceci est de l'hébreu: <foreign xml:lang="he">עִבְרִי</foreign>.</p>
+</div>
+</div>
+
+</div>
+</osisText>
+</osis>
+
+</file>
+====Création avec le filtre odt2osis====
+Il existe un filtre **odt2osis**, prévu pour Libreoffice qui vous permet d'écrire votre fichier dans Writer, puis de l'exporter au format OSIS.
+<note warning>Pour l'instant la convertion des images et des références bibliques ne fonctionne plus. Si quelqu'un veut aider à débugger il peut prendre contact avec le créateur du filtre.</note>
+  * Pour installer le filtre :
+    * Téléchargez-le [[https://sites.google.com/site/danielowensstuff/Home/odt2osis_v1.4.zip?attredirects=0&d=1|ici]] puis [[:archivage|décompressez]] l'archive;
+    * Ouvrez [[:LibreOffice|Writer]], dans //Outils > Paramétrage des filtres XML >Ouvrir un paquet//, naviguez jusqu'au fichier .jar précédemment décompressé.
+Le programme devrait vous indiquer que le filtre a été correctement installé. Un modèle a également été ajouté.
+  * Pour utiliser le filtre:
+    * Dans //Fichier > Nouveau > Modèles//, une fenêtre s'ouvre dans laquelle vous devriez voir votre modèle **OSIS Genbook**, double-cliquez dessus,
+    * Dans le fichier qui s'ouvre vous aurez tous les styles dont vous aurez besoin pour créer votre fichier **.xml**,
+    * Dans //fichier > Propriétés// complétez comme suit : Dans l'onglet //Description//, champ //Titre// entrez le titre du module, et dans le champ //Sujet// le nom du module; dans l'onglet //Propriétés personnalisées// changez la valeur **en** en **fr**.
+   * Après il ne vous reste plus qu'à appliquer les styles de paragraphe correspondants, comme //Majorsection, chapter, section, subsection//... Le gras et l'italique seront correctement appliquées à l'exportation si vous les choisissez.
+   * Une fois écrit, exportez votre fichier en **OSIS xml**, //Fichier > Exporter// Choisissez le bon format.
+====Créer le module final====
+ ===L'archive===
+Pour créer enfin votre module, employez le script suivant:
+<code>xml2gbs votre_fichier.osis.xml Le_nom_de_votre_module</code>
+Placez le dossier contenant l'archive dans //.sword/modules/modules/genbook/rawgenbook/nom_du_dossier_du_module/// ou si vous souhaitez le rendre accessible pour tous les utilisateurs, ///usr/share/sword/modules/genbook/rawgenbook/nom_du_dossier_du_module///.
+
+====Le fichier .conf===
+Pour ce qui est du fichier **.conf** remplissez-le comme suit:
+<file>
+[Nom du livre]
+DataPath=./modules/genbook/rawgenbook/Dossier de l'archive/Nom_de_l'archive
+ModDrv=RawGenBook
+Encoding=UTF-8
+BlockType=BOOK
+CompressType=ZIP
+SourceType=OSIS
+Feature=Images si ce sont des images là aussi ça varie
+Category= Ici tout dépend de votre module, ça peut être "Maps" si ce sont des cartes, ou "Daily Devotional" si c'est du contenu liturgique, ou tout simplement "book si c'est un livre... (cf le lien plus haut pour les fichiers .conf)
+Lang=la langue de votre bible, fr pour le français
+GlobalOptionFilter=
+SwordVersionDate=2012-03-08
+Version=0.1
+History_0.1=Version de base
+TextSource=LBOL
+LCSH=
+DistributionLicense=copyright, s'il y a un copyright, ou Domaine Public
+Description=
+About=
+InstallSize=la taille de votre module
+</file>
+
+Il ne vous reste plus qu'à accéder à votre module via le panneau latéral gauche dans votre [[:xiphos|logiciel de lecture biblique]].
+
+=====Création d'un module pour un dictionnaire ou un calendrier=====
+FIXME : cette partie est en cours de test, d'expérimentation, elle est donc incomplète.
+Ceci concerne tout les types de modules sous forme de liste, un dictionnaire, un calendrier, un glossaire...
+Pour créer à l'archive après avoir écrit votre fichier **tei/xml** utilisez ce script:
+<code>tei2mod <output/path> <teiDoc> [OPTIONS]</code>
+
+=====Voir aussi====
+  * [[http://www.crosswire.org/wiki/Converting_SFM_Bibles_to_OSIS|Procédure complète sur le site officiel]] (en),
+  * [[http://www.crosswire.org/sword/index.jsp|Le Projet Sword]],
+  * [[https://github.com/chrislit/usfm2osis|Le script usfm2osis]].
+
+
+--------------
+Contributeur : [[:utilisateurs:l_africain|L'Africain]]

@@ -1,0 +1,498 @@
+
+{{tag>Xenial Bionic Focal sgbd mysql serveur réseau}}
+
+====== MySQL ======
+
+**[[https://www.mysql.com/|MySQL]]** est un [[wpfr>SGBD|système de gestion de bases de données relationnelles]] (SGBDR) propriétaire, gratuit, performant, très populaire, multi-threadé, multi-utilisateurs…
+
+<note tip>MySQL appartient à [[wpfr>Oracle_(entreprise)|Oracle]]. Il existe un fork open-source, plus communautaire, 100% compatible MySQL et a priori plus performant créé et maintenu par Michael Wideniusm fondateur de MySQL. Il s'agit de [[:MariaDB]], qui est également disponible sur Ubuntu, et choisi par défaut sur [[wpfr>Debian]].</note>
+
+MySQL est principalement un //serveur// de bases de données. Pour s'y connecter localement ou à distance, on utilise un //client//. Il peut s'agir de la commande ''mysql'', ou couramment d'un script [[:PHP]]. Il faudra dans ce cas installer le [[:php#association_avec_un_serveur_de_base_de_donnees|module]] [[apt>php-mysql]] qui permet à PHP de communiquer avec un serveur MySQL. 
+
+===== Installation =====
+
+L'installation de ce paquet doit se faire de préférence en utilisant [[terminal]] via la commande : <code>sudo apt install mysql-server</code>
+[[apt>mysql-server]] est un [[:tutoriel:creer un meta paquet|méta-paquet]] qui installera MySQL 5.7 sur [[:xenial|Xenial 16.04]] et sur [[:bionic|Bionic 18.04]], MySQL 8.0 sur [[:Focal|Focal 20.04]].
+
+===== Utilisation =====
+
+==== Démarrage ====
+
+Pour démarrer le serveur MySQL, tapez la [[:commande_shell|commande]] suivante dans un [[:terminal]]:
+
+  sudo systemctl start mysql
+
+
+==== Redémarrage ====
+
+Pour redémarrer le serveur MySQL, tapez la [[:commande_shell|commande]] suivante dans un [[:terminal]]:
+
+  sudo systemctl restart mysql
+
+==== Arrêt ====
+
+Pour arrêter le serveur MySQL, tapez la [[:commande_shell|commande]] suivante dans un [[:terminal]]:
+  sudo systemctl stop mysql
+
+==== Rechargement de la configuration ====
+
+Pour que MySQL prenne en compte les modifications de sa configuration, [[:commande_shell|commande]] suivante dans un [[:terminal]]:
+  sudo systemctl reload mysql
+
+==== Forcer la prise en compte de la nouvelle configuration ====
+
+Pour forcer MySQL à recharger ses fichiers de configuration, [[:commande_shell|commande]] suivante dans un [[:terminal]]:
+  sudo systemctl force-reload mysql
+
+==== Connaître la version ====
+Il est parfois utile de connaître la version installée:\\
+<code>mysql --version</code>
+
+===== Configuration =====
+
+==== Authentification ====
+
+L'inscription des utilisateurs de MySQL se fait sur la table //users// de la base de données //mysql//. On peut donc les administrer manuellement depuis cette table, mais il existe des outils pour simplifier leur gestion (tels que ''mysqladmin'', ''mysql_secure_installation'', [[:mysql_outils#adminer|adminer]] ou [[:phpMyAdmin]]).
+
+Il existe plusieurs méthodes d'authentifications. Nativement MySQL permet de définir ses propres couples d'utilisateurs et de mots de passe. Mais il existe des plugins permettant d'implémenter d'autres comportements, dont //[[https://dev.mysql.com/doc/refman/5.7/en/socket-pluggable-authentication.html|auth_socket]]// qui permet de s'identifier au moyen de comptes UNIX (qui correspondent donc aux utilisateurs Ubuntu).\\ 
+Il faut tout de même créer le compte sur MySQL pour pouvoir l'utiliser, mais il n'est plus nécessaire de renseigner le mot de passe. Il faut par contre lancer le client (la commande''mysql'' ou le script [[:PHP]]) avec l'utilisateur correspondant.
+
+Pour choisir l'un ou l'autre des comportement, on renseigne le champs //plugin// de la table //user// :
+  * //mysql_native_password// ou vide pour utiliser l'authentification native de MySQL.
+  * //auth_socket// pour se connecter avec un utilisateur Ubuntu.
+
+Depuis [[:bionic|Bionic 18.04]], Ubuntu lie par défaut le compte //root// de Ubuntu avec //auth_socket// en installant MySQL. Auparavant il fallait spécifier un mot de passe lors de l'installation. Cela a différents impacts sur les méthodes de travail. ((Voir [[https://forum.ubuntu-fr.org/viewtopic.php?id=2027272|ce fil]] sur le forum pour plus d'information au sujet des répercutions de l'utilisation de //auth_socket//.))
+
+==== Lancer la console MySQL ====
+
+**Avant [[:bionic|Ubuntu 18.04 Bionic]]**\\
+L’authentification de l'utilisateur root de MySQL se fait par mot de passe (//mysql_native_password//).
+  * Si vous n'avez pas défini de mot de passe (déconseillé) : <code>mysql -u root</code>
+  * Si vous avez défini un mot de passe : <code>mysql -u root -p</code> et tapez votre mot de passe.
+
+**À partir de [[:bionic|Ubuntu 18.04 Bionic]]**\\
+À partir ce cette version l'utilisateur root de MySQL est authentifié par son compte système (plugin //auth_socket//) et non plus par un mot de passe (plugin //mysql_native_password//).
+<code>sudo mysql</code>
+
+**La console MySQL**\\
+Vous arriverez alors sur un prompt du type :
+
+  mysql>
+
+Vous pouvez alors taper vos requêtes MySQL. N'oubliez pas le point-virgule à la fin de la requête. Si vous l'oubliez le prompt passe à la ligne.
+
+<code>
+mysql> select * from
+    ->
+</code>
+
+Ce passage vous indique que la requête n'est pas terminée. Vous pouvez entrer vos requêtes de cette façon sur plusieurs lignes et enfin la clôturer avec le « **;** ».
+
+==== Sélectionner la base de données à utiliser ====
+
+Soit directement lorsque vous lancez le client MySQL en ligne de commande:
+<code>mysql -u root -D votre_base -p</code>
+<code>sudo mysql -D votre_base</code>
+  
+
+Soit une fois connecté à MySQL en tapant la [[:commande_shell|commande]] suivante dans un [[:terminal]]:
+
+  mysql> use votre_base
+
+==== Ajouter ou changer le mot de passe de root ====
+
+<note warning>
+À partir de [[:bionic|Bionic 18.04]] il est vivement déconseillé de modifier la méthode d'[[#authentification]] par défaut de l'utilisateur //root// (//auth_socket//). Le système utilise ce compte pour effectuer des tâches de maintenance (auparavant Ubuntu créait un compte spécial //debian-sys-maint// à cette fin).
+
+Si vous souhaitez créer un accès "super-administrateur" pour gérer l'intégralité de vos bases de données et de leurs utilisateurs avec une application tierce ([[:phpMyAdmin]], [[mysql_outils#adminer|Adminer]], ou autre), suivez [[phpmyadmin#acces_root|cette autre procédure]].
+</note>
+
+Pour changer ou attribuer un mot de passe à l'utilisateur //root// (qui n'est pas forcément le même que l'utilisateur //root// du système) **seulement sur [[:xenial|Xenial 16.04]] et précédents** :
+
+Dans la console MySQL :
+
+  ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'le_mot_de_pass_choisi';
+
+Ou avec ''mysqladmin'' pour changer le mot de passe :
+
+  sudo mysqladmin password Nouveau_mot_de_passe -p Ancien_mot_de_passe
+
+Vous pourrez avoir besoin de mettre votre mot de passe entre guillemet si celui ci comporte des caractères spéciaux.
+
+  
+==== Redéfinir de force le mot de passe de root ====
+
+<note important>Ceci ne s'applique que pour les versions n'utilisant pas //[[#authentification|auth_socket]]// par défaut pour le compte //root//, donc [[:xenial|Xenial 16.04]] et les versions précédentes ([[:trusty|Trusty 14.04]]).
+
+Sur [[:bionic|Bionic 18.04]] MySQL n'utilise pas de mot de passe pour le compte //root//. Il se sert du système d'authentification des utilisateurs Ubuntu, et donc de [[:sudo]].</note>
+
+Deux possibilités s'offrent à vous. Une méthode simple : <code>sudo dpkg-reconfigure mysql-server-5.7</code>
+
+Une méthode plus compliquée, si vous avez perdu votre mot de passe root pour MySQL, suivez ces quelques étapes :
+  * On se connecte à l'aide du compte spécial debian-syst-maint (défini dans le fichier /etc/mysql/debian.cnf) : <code>sudo mysql --defaults-file=/etc/mysql/debian.cnf</code>
+  * On met en place le nouveau mot de passe : <code mysql>
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'le_mot_de_pass_choisi';</code><code mysql>FLUSH PRIVILEGES;</code>
+
+  * On quitte le prompt de MySQL : <code mysql>QUIT;</code>
+
+
+==== Utilisateurs ====
+
+=== Lister les utilisateurs ===
+
+Vous pouvez lister les utilisateurs ainsi que leurs [[#authentification|méthodes d'authentification]] avec la requête suivante :
+<code mysql>
+SELECT user, host, plugin, authentication_string FROM mysql.user;
+</code>
+
+=== Créer un utilisateur ===
+
+Vous avez le choix entre créer un utilisateur identifié au moyen d'un mot de passe (méthode //mysql_native_password//, celle par défaut pour MySQL) ou créer un accès MySQL à un utilisateur Ubuntu existant (méthode //auth_socket//).
+La plupart du temps, on utilisera //mysql_native_password//.
+
+Pour créer un utilisateur MySQL identifié au moyen d'un mot de passe :
+<code mysql>
+CREATE USER 'nom_utilisateur_choisi'@'localhost' IDENTIFIED WITH mysql_native_password BY 'mot_de_passe_solide';
+</code>
+ou si cette commande échoue avec une erreur de syntaxe :
+<code mysql>
+CREATE USER 'nom_utilisateur_choisi'@'localhost' IDENTIFIED BY 'mot_de_passe_solide';
+</code>
+
+
+Ou pour créer un accès MySQL à un utilisateur Ubuntu (seulement dans le cadre d'une utilisation avancée, et si vous comprenez ce que vous faites) :
+<code mysql>
+CREATE USER 'nom_utilisateur'@'localhost' IDENTIFIED WITH auth_socket;
+</code>
+
+=== Modifier l'accès d'un utilisateur ===
+
+Pour modifier l'accès d'un utilisateur MySQL existant, et l'identifier par mot de passe (ou simplement changer son mot de passe) :
+<code mysql>
+ALTER USER 'nom_utilisateur'@'localhost' IDENTIFIED WITH mysql_native_password BY 'mot_de_passe_solide';
+</code>
+
+Pour lier un compte MySQL existant à un utilisateur Ubuntu (il faut que les noms d'utilisateur soient les mêmes) :
+<code mysql>
+ALTER USER 'nom_utilisateur'@'localhost' IDENTIFIED WITH auth_socket;
+</code>
+
+=== Supprimer un utilisateur ===
+
+Pour supprimer un utilisateur :
+<code mysql>
+DROP USER 'nom_utilisateur'@'localhost';
+</code>
+
+==== Privilèges ====
+
+=== Donner tous les droits sur une base de données à un utilisateur précis ===
+
+<code mysql>
+GRANT ALL ON nom_base.* TO 'nom_utilisateur'@'localhost';
+</code>
+Puis rechargez les privilèges.
+
+=== Donner tous les droits à un super-administrateur ===
+
+<code mysql>
+GRANT ALL ON *.* TO 'nom_utilisateur'@'localhost';
+</code>
+Puis rechargez les privilèges.
+
+=== Supprimer les droits sur une base de données à un utilisateur précis ===
+
+<code mysql>
+REVOKE ALL ON nom_base.* FROM 'nom_utilisateur'@'localhost';
+</code>
+Puis rechargez les privilèges.
+
+=== Recharger les privilèges ===
+
+Après chacune de ces opérations il est nécessaire de recharger les privilèges des utilisateurs MySQL :
+<code mysql>
+FLUSH PRIVILEGES;
+</code>
+
+==== Connexions entrantes ====
+
+Par défaut, MySQL n'écoute que les connexions venant de //localhost// (127.0.0.1), c'est-à-dire du système sur lequel il est installé.
+
+Pour pouvoir accéder à MySQL depuis un autre ordinateur, [[:tutoriel:comment_editer_un_fichier|ajoutez la ligne suivante au fichier]] **/etc/mysql/mysql.conf.d/mysqld.cnf** dans la section « ''[mysqld]'' », sous [[Mariadb]] il s'agit du fichier **/etc/mysql/mariadb.conf.d/50-server.cnf** :
+
+<file mysql>
+bind-address = x.x.x.x
+</file>
+
+où x.x.x.x est l'adresse ip de l'interface sur laquelle MySQL doit écouter. Cela permet de n'écouter que sur une ip privée si vous avez plusieurs interfaces réseaux.
+
+Pour forcer mysql à écouter sur toutes les interfaces réseau, il suffit de commenter la ligne "bind-address = 127.0.0.1" (ou écrire bind-address = 0.0.0.0) Cela peut être dangereux si votre serveur est connecté à Internet directement.
+
+Redémarrez le service après avoir modifié le fichier de configuration :
+<code>sudo systemctl restart mysql</code>
+
+
+Pour créer un utilisateur mysql qui est autorisé à se connecter à distance :
+
+se connecter sur mysql en root :
+
+<code>sudo mysql</code>
+(on ajoute //-p// si on utilise un mot de passe pour //root//)
+Puis une fois connecté :
+<code mysql>GRANT ALL ON [base de donnée].* TO '[nom utilisateur]'@'[adresse IP]' IDENTIFIED WITH mysql_native_password BY '[mot de passe]';</code>
+
+Dans cette requête remplacez ''[nom utilisateur]'' par le nom d'utilisateur que vous souhaitez créer, ''[base de donnée]'' par le nom de la base de données à laquelle il aura accès, ''[mot de passe]'' par le mot de passe que vous souhaitez lui attribuer, et ''[adresse IP]'' par l'adresse IP depuis laquelle vous souhaitez vous connecter à distance.
+
+Pour autoriser l'accès venant de toutes machines (limité par l'authentification), remplacer ''[adresse IP]'' par le symbole ''%''.
+
+Il est fortement conseillé que le ''[nom utilisateur]'' soit différent du nom d'utilisateur connecté en local ''[localhost]'' pour éviter les blocages de connexion.
+
+Pour rendre ces modifications effectives, terminez par :
+<code mysql>FLUSH PRIVILEGES;</code>
+
+Cette modification des droits de l'utilisateur (ou l'ajout d'un nouvel utilisateur avec des droits différents) peut aussi se faire dans [[phpmyadmin|phpMyAdmin]].
+
+==== Configuration en UTF-8 ====
+
+Il suffit d'ajouter avec les [[sudo|droits d'administration]] les lignes suivantes dans les sections adéquates (ne pas hésiter à les créer si elles n'existent pas) dans le fichier **/etc/mysql/mysql.conf.d/mysqld.cnf** :
+<file>
+[client]
+default-character-set=utf8
+
+[mysql]
+default-character-set=utf8
+
+[mysqld]
+collation-server = utf8_unicode_ci
+init-connect='SET NAMES utf8'
+character-set-server = utf8
+</file>
+
+puis de relancer le serveur mysql :
+<code>sudo systemctl restart mysql</code>
+
+Vous pouvez vérifier le résultat une fois loggé dans mysql grâce à la commande suivante :
+
+<code mysql>
+SHOW VARIABLES LIKE 'char%';
+</code>
+
+Résultat :
+
+<code mysql>
+mysqld> SHOW VARIABLES LIKE 'char%';
++--------------------------+----------------------------+
+| Variable_name            | Value                      |
++--------------------------+----------------------------+
+| character_set_client     | utf8                       | 
+| character_set_connection | utf8                       | 
+| character_set_database   | utf8                       | 
+| character_set_filesystem | binary                     | 
+| character_set_results    | utf8                       | 
+| character_set_server     | utf8                       | 
+| character_set_system     | utf8                       | 
+| character_sets_dir       | /usr/share/mysqld/charsets/ | 
++--------------------------+----------------------------+
+8 rows in set (0.00 sec)
+</code>
+
+===== Quelques requêtes SQL =====
+
+Toutes ces commandes sont à entrer dans le prompt de MySQL une fois connecté au serveur. (Voir comment [[#lancer_la_console_mysql|lancer la console MySQL]] ci dessus.)
+
+
+==== Base de donnée ====
+
+=== Utiliser une base de données existante ===
+
+<code mysql>
+USE nom_de_la_base;
+</code>
+ 
+=== Créer une base de données ===
+
+<code mysql>
+CREATE DATABASE nom_de_la_base;
+</code>
+
+=== Liste des bases de données ===
+
+<code mysql>
+SHOW DATABASES;
+</code>
+
+=== Supprimer une base de données ===
+
+<code mysql>
+DROP DATABASE nom_de_la_base;
+</code>
+
+=== Importer une base de données située dans le répertoire courant (base de donnée exportée en .sql) ===
+
+<code mysql>
+SOURCE fichier.sql;
+</code>
+
+=== Créer une base de données et un utilisateur qui lui est associé ===
+
+Cette procédure est la plus courante, c'est celle qu'on réalise lorsqu'on installe une application web en production. Pour des raisons de sécurité chaque application doit se connecter avec un utilisateur MySQL qui lui est dédié, et qui n'a accès qu'à la base correspondante.
+<code mysql>
+CREATE DATABASE application;
+CREATE USER 'utilisateur'@'localhost' IDENTIFIED BY 'mot_de_passe';
+GRANT ALL ON application.* TO 'utilisateur'@'localhost';
+FLUSH PRIVILEGES;
+QUIT;
+</code>
+
+Il faut remplacer dans ces requêtes ''application'' par le nom de l'application web ou du site internet (sans espace ni caractère spécial) , ''utilisateur'' par un nom d'utilisateur (qui peut aussi être celui de l'application, pour s'y retrouver facilement) et ''mot_de_passe'' par un vrai mot de passe complexe qu'on note : on devra renseigner ces identifiants lors de l'installation de l'application.
+
+On vient de créer la base de donnée //application// à laquelle l'utilisateur //utilisateur// aura accès.
+
+==== Tables ====
+
+=== Liste des tables de la base de données active ===
+
+<code mysql>
+SHOW TABLES;
+</code>
+
+=== Structure d'une table ===
+
+<code mysql>
+DESCRIBE nom_table;
+</code>
+
+=== Renommer une table ===
+
+<code mysql>
+ALTER TABLE nom_table RENAME AS nouveau_nom;
+</code>
+
+Pour la syntaxe des requêtes SQL, reportez-vous à la [[http://dev.mysql.com/doc/|documentation MySQL]].
+
+===== Autres opérations =====
+
+MySQL avec Qt5:
+
+Installer la bibliothèque Qt5 pour mysql afin de l'utiliser sous Qt :
+
+<code>sudo apt install libqt5sql5-mysql</code>
+
+
+
+==== Sauvegarde et importation ====
+
+<note>Ajoutez //-p// à ces commandes si vous utilisez un mot de passe pour le compte //root// :</note>
+
+Pour **exporter** la base de donnée « maBase », utilisez la commande :
+<code>sudo mysqldump maBase > maBase_backup.sql</code>
+
+Ceci fera l'export dans un fichier « maBase_backup.sql ».
+
+Pour exporter une table (par exemple //ma_table// )appartenant à une base des données (par exemple //maBase//) :
+<code>sudo mysqldump maBase ma_table > ma_table.sql</code>
+
+Ainsi nous aurons une exportation seulement de la table //ma_table// sans toucher à d'autres tables de la base des données
+
+Pour **importer** une base de données ou une sauvegarde sur « maBase », utilisez la commande :
+<code>sudo mysql maBase < maBase_backup.sql</code>
+
+<note tip>
+Si vous souhaitez mettre en place une solution de sauvegarde automatique de bases de données à intervalle régulier, rendez-vous sur la page de documentation de [[automysqlbackup|AutoMySQLBackup]]
+</note>
+
+D'autres commandes telles que la suppression des tables, de la base, l'ajout des données dans la base des données, etc. peuvent être trouvées sur le [[http://dev.mysql.com/doc/refman/5.0/fr/sql-syntax.html|site de documentation de MySQL]].
+
+
+
+==== Compacter l'espace utilisé par ibdata1 ====
+
+MySQL stocke ses fichiers dans le dossier /var/lib/mysql. Il arrive avec le temps et l'utilisation que le fichier ibdata1 occupe un espace disque très important qui ne sera pas récupéré même en supprimant toutes les bases.
+
+Pistes pour comprendre et corriger ce problème : 
+  * [[http://bytes.com/groups/mysql/495219-mysql-ibdata1-compact-space|Supprimer les tables InnoDB pour récupérer l'espace]]
+  * [[http://bugs.mysql.com/bug.php?id=1287|"Bogue" associé]]
+  * Exporter toutes les bases de données, arrêter mysql, supprimer le fichier, démarrer mysql et importer toutes les bases.
+
+
+
+
+  
+===== Administrer MySQL via une une interface graphique =====
+
+Il est possible d'administrer un serveur MySQL via une interface graphique avec par exemple [[:phpMyAdmin]] ou [[:mysql_outils#adminer|Adminer]] qui sont d'excellentes applications web. D'autres outils sont disponibles, vous en trouverez une liste non exhaustive sur la page [[:mysql_outils|Outils MySQL]].
+
+===== Réinstallation complète =====
+
+De nombreux paramètres du serveur MySQL (tels que ses utilisateurs) sont stockés directement en base de données.
+
+Ces bases de données ne seront jamais supprimées par [[:APT]] (et heureusement : on risquerait d'y perdre de précieuses données).
+
+En cas de problème de configuration lors d'un premier déploiement d'un serveur MySQL on doit donc effectuer un certain nombre d'opérations manuelles afin de réinitialiser complètement son installation. Attention cela rendra les bases de données existantes inaccessibles !
+
+Pour Ubuntu avant 20.04 :
+<code>sudo apt autoremove --purge mysql-server\* mariadb-server\*</code>
+À partir de Ubuntu 20.04 :
+<code>sudo apt autoremove --purge ~n^mysql-server ~n^mariadb-server</code>
+
+Puis quelle que soit la version :
+<code>
+sudo mv /var/lib/mysql /var/lib/mysql.bak
+sudo mv /etc/mysql /etc/mysql.bak
+sudo mkdir -p /etc/mysql/conf.d
+sudo apt clean</code>
+On peut ensuite choisir d'installer [[:MySQL]] ou [[:MariaDB]] :
+<code>sudo apt install mysql-server</code>
+**__ou__**
+<code>sudo apt install mariadb-server</code>
+
+===== Problèmes courants =====
+
+==== Le server MySQL ne démarre pas ("time out") ou s'arrête au bout de quelques secondes ====
+
+Consultez le journal de [[:systemd]] :
+<code>journalctl -xe -u mysql</code>
+et les logs dans /var/log/mysql/error.log
+
+=== AppArmor ===
+
+Si vous y trouvez des messages du type :
+<code>AVC apparmor="DENIED"</code>
+lié à votre serveur MySQL, c'est que [[:AppArmor]] bloque l'execution de //mysqld//.
+
+Vous pouvez corriger le problème à l'aide des commandes suivantes :
+<code>sudo apt install apparmor-utils
+sudo aa-complain /usr/sbin/mysqld</code>
+Il faut ensuite redémarrer l'ordinateur (redémarrer le service //apparmor// ne suffit pas).
+
+==== Installation de MySQL impossible ====
+
+=== Conflit entre MySQL et MariaDB ===
+
+Si vous rencontrez une erreur de ce type lors de l'installation de MySQL :
+<code>Aborting downgrade from (at least) 10.0 to 5.7.
+If are sure you want to downgrade to 5.7, remove the file
+/var/lib/mysql/debian-*.flag and try installing again.</code>
+ou encore :
+<code>mysql_upgrade: Got error: 1524: Plugin 'unix_socket' is not loaded while connecting to the MySQL server
+Upgrade process encountered error and will not continue.</code>
+
+Il s'agit probablement d'un conflit entre MySQL et [[:MariaDB]]. Le plus simple est de [[#reinstallation_complete|réinstaller complètement MySQL]].
+
+Il est également possible que des fichiers [[:systemd]] pour [[:MariaDB]] persistent après une mauvaise désinstallation, et empêchent une nouvelle installation propre. Pour résoudre ce problème, suivez [[https://askubuntu.com/a/1235833|cette procédure]].
+
+===== Voir aussi =====
+
+  * [[https://www.mysql.com/|Le site officiel de MySQL]] [en]
+  * [[http://www.mysql.fr/|Le site officiel francophone]] [fr]
+  * [[http://www.system-linux.eu/index.php?category/Mysql|Aller plus loin avec MySQL]] [fr]
+  * La page dédiée aux [[:mysql_outils|outils MySQL]]
+  * [[:greensql|GreenSQL : Pare-feu applicatif SQL]]
+  * [[http://mysql.developpez.com/|La section dédiée à MySQL sur Developpez.com]] [fr]
+  * La page des [[:SGBD|systèmes de gestion de base de données]]
+  * [[:MariaDB]] -> Le serveur alternatif 100% compatible MySQL
+  * [[.:?do=showtag&tag=mysql|La liste des pages taguées avec MySQL]]
+
+----
+
+//Contributeurs : [[utilisateurs:_Enchained]], Hugo, Oscar Nsarhaza, [[:utilisateurs:Ner0lph]], [[:utilisateurs:david96|david96]], Gounlaf, [[:utilisateurs:McPeter]], [[:utillisateurs:Rewiiz]], ernest-le-voyage, [[:utilisateurs:krodelabestiole]]//

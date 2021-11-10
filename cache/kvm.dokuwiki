@@ -1,0 +1,192 @@
+
+{{tag>Precise virtualisation BROUILLON}}
+
+
+====== Kernel Virtual Machine ======
+
+**KVM**, //Kernel Virtual Machine//, est intégré depuis le noyau 2.6.20 et permet une virtualisation matérielle et donc une accélération de la virtualisation de système d’exploitation.
+
+C'est un système optimisé pour la virtualisation de serveur. Pour virtualiser des systèmes de type desktop, on peut lui préférer [[:virtualbox]]. **KVM** semble en effet plus performant en consommation de processeur mais plus lent pour l'émulation du périphérique graphique. L'utilisation d'un bureau virtualisé dans **VirtualBox** pourra donc laisser une meilleure impression à l'utilisateur. Vous pouvez tout de même préférer KVM pour sa meilleure compatibilité avec des système d'exploitations anciens ou peu populaires.
+
+Néanmoins, **KVM** est complètement libre, performant et très facile à installer et à utiliser. L'interface graphique **[[virt-manager]]** pourra aider les néophytes à paramétrer KVM et pourra rendre la vie plus simple aux administrateurs réseaux.
+
+De plus, il est possible d'isoler une deuxième carte graphique dédiée à la virtualisation afin d'obtenir une accélération 3D. La méthode dite du "GPU passthrough".
+
+<note important>Vous ne pouvez pas utiliser **KVM** en même temps que **VirtualBox**. Il faudra en effet [[#suppression_de_kvm|fermer KVM]] pour utiliser VirtualBox et vice versa. Ou désactiver le support de la virtualisation processeur dans VirtualBox.</note>
+
+<note tip>apparemment on peut désormais(test effectué sur ubuntu 12.04 amd64) installer kvm et virtualbox sans problème et il n'y a plus besoin de recharger les modules pour passer de l'un à l'autre, Simplement si vous lancez virtualbox alors que kvm tourne, virtualbox plantera, si vous lancez kvm alors que virtualbox tourne, qemu  démarrera en mode tcg accelerator(avec des performance très faibles)
+voir ce post [[http://forum.ubuntu-fr.org/viewtopic.php?id=917021]]
+</note>
+
+===== Mise en place =====
+
+Tout d’abord, assurez-vous que votre processeur supporte la virtualisation matérielle et, si c’est bien le cas, assurez-vous également que ce support est bien activé par le BIOS. Pour cela tapez cette commande :
+<code>egrep '^flags.*(vmx|svm)' /proc/cpuinfo</code>
+Si un résultat s'affiche, c'est que le processeur supporte la virtualisation.
+
+On peut aussi taper la commande (fournie par le paquet **[[apt://cpu-checker|cpu-checker]]**):
+  sudo kvm-ok
+On obtient soit :
+  INFO: Your CPU supports KVM extensions
+
+  INFO: /dev/kvm exists
+  KVM acceleration can be used
+ou cela :
+  INFO: Your CPU does not support KVM extensions
+
+Il suffit ensuite d'[[apt|installer]] le paquet **[[apt://qemu-kvm|qemu-kvm]]**
+
+
+===== Droits utilisateur =====
+
+<note important>Le périphérique '/dev/kvm' n'est accessible en écriture qu'aux utilisateurs du groupe kvm. Votre utilisateur sera normalement ajouté automatiquement, mais vous pouvez ajouter d'autres utilisateurs.</note>
+
+Ajouter votre utilisateur à ce groupe, soit à l’aide de votre outil de gestion des groupes, soit avec cette commande :
+<code>sudo adduser $USER kvm</code>
+Redémarrez enfin l'ordinateur (ou simplement la session si aucune console tty n'est ouverte) afin que l'utilisateur soit affecté au groupe.
+
+===== Utilisation =====
+
+Vous voilà prêt à installer un système d’exploitation virtuel.
+
+Commencez par créer le fichier image qui va accueillir ce système :
+<code>qemu-img create -f qcow2 emplacement/du/fichier_image.img 6G</code>
+Où :
+  * ''emplacement/du/fichier_image.img'' est l’emplacement du fichier qui sera créé, 
+  * ''6G'' est la taille virtuelle de ce système de fichier virtuel.
+
+Puis installez votre système dessus en utilisant un CD-ROM d’installation :
+<code>kvm -m 256 -cdrom /dev/cdrom -boot d emplacement/du/fichier_image.img</code>
+Où ''256'' est la quantité de mémoire à utiliser.
+
+Vous pouvez également utiliser une image ISO sans la graver :
+<code>kvm -m 256 -cdrom emplacement/de/l_image.iso -boot d emplacement/du/fichier_image.img</code>
+
+Ou bien tester une clé LiveUSB de la maniere suivante (en supposant que la clé USB est relié au device **''/dev/sdb''**) :
+<code>kvm -m 512 -hdb /dev/sdb</code>
+
+Pour quitter la fenêtre de virtualisation, il vous faut utiliser les combinaisons de touches "''CTRL-ALT''"
+Une fois l'installation terminée, démarrez votre système virtuel :
+<code>kvm -m 256 emplacement/du/fichier_image.img</code>
+
+pour l'activation du son et de l'USB :
+
+<code>kvm -m 386 -std-vga -cdrom /dev/cdrom emplacement/du/fichier_image.img -soundhw all -usb</code>
+
+=== Pour restaurer une sauvegarde clonezilla sur périphérique USB dans une image virtuelle : ===
+Connaitre les groupes de mon compte utilisateur :
+<code>id $USER</code>
+Autoriser mon compte utilisateur à accéder aux disques :
+<code>sudo adduser $USER disk fuse</code>
+Se déconnecter et reconnecter pour prendre en compte les modifications de son compte utilisateur.
+Connaitre le périphérique USB de restauration :
+
+**Sans le disque :**
+<code>sudo fdisk -l</code>
+**Avec le disque USB :**
+<code>sudo fdisk -l</code>
+Notez le périphérique /dev/sdx supplémentaire affiché, c'est votre disque USB.
+Puis lancez la restauration dans votre machine virtuelle :
+<code>kvm -m 512 -cdrom /emplacement_du_fichier/clonezilla.iso -boot d /emplacement_du_fichier/fichier_image-virtuelle.img -hdb /dev/sdx</code>
+<note>La taille du disque du fichier d'image virtuelle doit-être égal ou plus grande que la taille du disque sauvegardé</note>
+
+Voir aussi les autres paramètres de [[qemu]] qui peuvent être passés à kvm.
+
+===== Suppression de Kvm =====
+
+Pour supprimer cette application, [[:tutoriel:comment_supprimer_un_paquet|supprimez son paquet]]. Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée. Les journaux du système, et les fichiers de préférence des utilisateurs dans leurs dossiers personnels sont toujours conservés.
+
+A partir de Ubuntu 9.10 et suivant, il faut également [[:tutoriel:comment_supprimer_un_paquet|supprimer le paquet]] **qemu-kvm** pour que la désinstallation soit complète.  
+
+<note tip>S'il reste encore les modules installés à la main ( dans la partie mise en place de cette page), ouvrez un terminal puis tapez : <code>lsmod | grep -e '^kvm'</code>
+
+Pour retirer les modules, tapez :
+<code>sudo rmmod (nom_du_module)</code>
+
+<note warning>Les modules seront à nouveau chargés au prochain redémarrage.</note>
+</note>
+
+===== Utilisation avancée =====
+
+==== Conversion d'image disque ====
+
+  * Compression d'une image disque au format qcow2 (attention la compression est "perdue" à la réécriture pour toutes les données qui seront modifiées) :
+<code>$ kvm-img convert -c -f qcow2 image.qcow2 -O qcow2 image-compressed.qcow2</code>
+
+  * Conversion d'une image disque
+<code>$ kvm-img convert -f vmdk image.vmdk -O qcow2 image.qcow2</code>
+
+
+==== Conversion d'image disque IMG vers un LV (LVM) ====
+Vous pouvez monter directement un LV sur votre machine virtuelle. Ceci explique comment convertir un fichier .img en un Logical Volume sur LVM (visible depuis votre serveur KVM)
+Vous devez avoir au préalable déjà préparé un VG qui contiendra les data pour vos VM (ici appelé "vg_data"). (cf:[[:lvm|Doc Ubuntu]])
+
+  * Vérifier que le VG dispose de la place nécessaire 
+  * Création du LV "lv_VmName" sur le VG "vg_data" : 
+<code>lvcreate -L80G -n lv_v-VmName vg_data</code>
+* Arrêt de votre VM
+* Copie du contenu de l'image IMG vers le LV :
+<code>dd if=/path/to/image/v-VmName.coe.int.img of=/dev/vg_data/lv_v-VmName</code>
+* Configurer votre VM pour utiliser ce LV
+==== Amélioration des performances ====
+
+=== VirtIO ===
+
+L'utilisation des bus virtio permet de prendre en compte la virtualisation par l'invité grâce à des pilotes spécifiques qui lui permettent de travailler en collaboration avec l'hyperviseur kvm de l'hôte.
+  * Pour les disques :
+    * à partir de Linux 2.6.25 (sur l'invité) on peut utiliser le bus virtio de manière transparente. Les disques apparaissent comme des périphériques /dev/vdX sur l'invité
+    * sous Windows, télécharger l'iso ici -> [[https://fedoraproject.org/wiki/Windows_Virtio_Drivers#Direct_download]] (comme indiqué [[http://www.linux-kvm.org/page/WindowsGuestDrivers/Download_Drivers|ici]]) puis installer les pilotes.\\ Windows ne permet pas d'installer les pilotes si un disque dur n'utilise pas le bus virtio, d'où l'[[http://www.linux-kvm.com/content/redhat-54-windows-virtio-drivers-part-2-block-drivers|astuce suivante]] pour installer le pilote :
+      - démarrer l'invité normalement (disque dur sur bus ide par exemple)
+      - ajouter un second disque dur (cette fois sur le bus virtio ; le disque dur n'a pas besoin de contenir de données)
+      - installer les pilotes sur l'invité
+      - éteindre l'invité
+      - supprimer le second disque dur (inutile) puis le premier disque (sur bus ide par exemple)
+      - ajouter le premier disque dur sur bus virtio
+      - redémarrer l'invité
+  * Pour le réseau : les idées précédentes sont applicables pour le réseau 
+
+=== Autres ===
+
+  * Améliorer les accès disques: passez le mode de cache de vos disques dur en mode "writeback"
+  * Pour les guests Linux sans Virtio : //gestion par l'hôte de l'ordonnancement d'accès au fichier//.  Sur la ligne de commande Linux du grub de la machine virtuelle, passer le paramètre **elevator=noop** (procédure détaillée en anglais <del>[[http://blog.bodhizazen.net/linux/improve-kvm-performance/|ici]](Lien mort)</del> Equivalent RedHAT : [[https://access.redhat.com/solutions/5427/|ici]])
+
+===== Astuces =====
+
+==== Arrêter proprement une VM Windows ====
+
+  * Si vous avez des connexions RDP sur votre VM, celle-ci empêche l'arrêt de la VM par la méthode ACPI si les sessions Windows ne sont pas fermées (mais juste verrouillées par exemple). Pour supprimer la fenêtre de confirmation "Des utilisateurs ont ouvert une session sur cet ordinateur. La fermeture de Windows peut provoquer la perte de données", il faut ajouter une clef registre : voir [[http://mindref.blogspot.fr/2011/04/kvm-shutdown-windows-guest-gracefullly.html|ici]] ou [[http://ethertubes.com/unattended-acpi-shutdown-of-windows-server/|là]]. Pour XP, voir [[https://forums.virtualbox.org/viewtopic.php?f=8&t=24719#p215403|là]].
+
+==== Réduire l'usage CPU ====
+
+De manière générale, il est important d'avoir une couche kvm récente pour bénéficier des corrections de bugs et en particulier ceux liés à la performance. Il faut également avoir l'accélération matérielle du CPU pour la virtualisation (VT chez Intel, et AMD-V pour AMD).
+
+Si votre VM ne fait rien, l'usage CPU de l'hôte ne devrait pas dépasser 3%. Voici quelques causes pouvant entraîner un usage CPU trop élevé (20% par exemple) :
+  * utilisation d'une carte virtio sur un système invité trop « ancien » : tester en passant à e1000
+  * FreeBSD
+    * utilisation d'un pointeur « Tablette graphique USB » (constaté avec FreeBSD 9)
+    * FreeBSD jusqu'à la 8 : diminuter le paramètre kern.hz en ajoutant la ligne suivante au fichier /boot/loader.conf: kern.hz=100
+===== Autres outils permettant d'administrer les machines virtuelles gérées par kvm =====
+==== Outils Graphiques ====
+  *[[virt-manager]]
+  *[[http://sourceforge.net/projects/aqemu/|aqemu]] est une  interface graphique en [[wpfr>Qt#Qt4|Qt4]] de gestion de [[:qemu]] et kvm. ( [[apt://aqemu|aqemu]] )
+  *qemu-launcher interface graphique en [[wpfr>GTK%2B|Gtk]] de gestion de [[:qemu]] et kvm. ( [[apt://qemu-launcher|qemu-launcher]] )
+
+==== Outils en ligne de commande ====
+  *  [[http://linux.die.net/man/1/virsh|Virsh]] est une interface en ligne de commande qui permet au travers de [[http://www.libvirt.org/virshcmdref.html#description|libvirt]] la création et la gestion de vos machines virtuelles.  \\
+(cf: [[https://help.ubuntu.com/community/KVM/Virsh|KVM virsh sur help ubuntu]])
+
+===== Ressources externes =====
+
+  * [[wpfr>Kernel-based_Virtual_Machine|Article wikipedia]]
+  * [[:qemu]]
+  * [[https://help.ubuntu.com/community/KVM|Article sur le wiki Ubuntu anglophone]]
+  * Amélioration des performances des disques virtuels [[http://blog.bodhizazen.net/linux/improve-kvm-performance/|ici (en)]].
+  * [[http://www.linux-kvm.com/content/be-more-productive-base-images-part-3|Manipulation des images disque dur avec image de "base"]] (utilisée par des images "cow" : copy on write). Voir aussi les "part 1" et "2". (Remarque : pour chaîner plus d'une fois l'image, voir [[https://bugs.launchpad.net/ubuntu-release-notes/+bug/656173|l'aspect sécurité présenté sur Launchpad]]).
+
+  * [[http://www.linux-france.org/prj/inetdoc/articles/vm/|A voir surtout pour la partie réseau,bridge,vlan]]
+
+  * [[http://xenman.sourceforge.net/index.html]] ConVirt un Gui pour la virtualisation (simple et efficace)
+  * [[https://blog.zerosector.io/2018/07/28/kvm-qemu-windows-10-gpu-passthrough/]] mise en place d'une carte graphique dédiée à la machine virtuelle(accélération 3D !)
+ <note> ce logiciel semble devenu commercial ? 8-O </note> 
+
+  *  * Une liste d'outils de gestion de VM KVM [[http://www.linux-kvm.org/page/Management_Tools]]

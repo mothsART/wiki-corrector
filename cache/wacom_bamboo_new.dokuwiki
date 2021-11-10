@@ -1,0 +1,156 @@
+
+====== Nouvelle Wacom Bamboo ======
+Les nouvelles tablettes Wacom Bamboo (en particulier la Pen & touch) ne s'installent pas aussi simplement que les anciennes. En effet, il ne suffit pas de les brancher. Une petite manipulation préliminaire s'impose.
+Ce tuto a été testé sous Karmic (32 et 64 bits), ainsi que Karmic remix. (Merci d'ajouter les fonctionnements ou dysfonctionnement avec d'autres versions). La manipulation a été effectuée sur un OS fraichement installé. D'éventuelles tentatives infructueuses visant à installer la tablette peuvent donc empêcher le bon fonctionnement de la suite.
+
+Notez que cette manipulation devra être refaite à chaque installation d'un nouveau noyau.
+<note warning>
+Cette page est obsolète. Elle ne convient pas pour les distribution à partir de Lucid (10.04)
+</note>
+
+<note warning>
+L'installation étant spécifique à chaque tablette, d'une part cette page est obsolète, d'autre part des pages ont été créées pour chacune.
+</note>
+
+===== Pré-requis =====
+Tout d'abord branchez votre tablette, et vérifiez qu'elle est détectée : tapez dans un [[:terminal]] : <code>lsusb</code> Si une ligne contenant "wacom" apparaît, continuez. Sinon, assurez-vous du branchement correct de la tablette. Si le problème persiste, <del>consultez votre médecin</del> demandez de l'aide sur le forum, et testez éventuellement le hardware sur un autre OS.
+
+===== Installation du pilote =====
+Tout d'abord, quelques mises à jour et installation de paquets : 
+<code> sudo apt-get update
+sudo apt-get install build-essential libx11-dev libxi-dev x11proto-input-dev xserver-xorg-dev tk8.4-dev tcl8.4-dev libncurses5-dev libhal-dev
+sudo apt-get upgrade</code>
+Si vous n'utiliser **pas** Karmic Koala, ajoutez ces deux lignes :
+<code>sudo apt-get install wacom-tools xserver-xorg-input-wacom
+sudo apt-get purge wacom-tools xserver-xorg-input-wacom</code>
+
+<note>Installation en un clic : 
+  * pour Karmic : **[[apt://build-essential,libx11-dev,libxi-dev,x11proto-input-dev,xserver-xorg-dev,tk8.4-dev,tcl8.4-dev,libncurses5-dev,libhal-dev|clic]]**
+  * pour Jaunty et précédents : **[[apt://build-essential,libx11-dev,libxi-dev,x11proto-input-dev,xserver-xorg-dev,tk8.4-dev,tcl8.4-dev,libncurses5-dev,libhal-dev,wacom-tools xserver-xorg-input-wacom|clic]]**
+
+N'oubliez pas de [[:tutoriel:apt-get?s[]=apt&s[]=get&s[]=upgrade#mise_a_jour_paquets|mettre les paquets à jour]]</note>
+
+Sous Karmic, un fichier nécessaire à la compilation du pilote semble manquer. Il faudra donc le télécherger :
+<code>wget http://kernel.ubuntu.com/git-repos/ubuntu/linux-2.6/drivers/hid/hid-ids.h
+sudo cp ./hid-ids.h /lib/modules/`uname -r`/build/drivers/hid/hid-ids.h
+sudo apt-get install patch</code>
+
+Téléchargez la dernière version du pilote disponible ici : http://linuxwacom.sourceforge.net/index.php/dl (actuellement linuxwacom-0.8.4-4.tar.bz2) ainsi que la patch : http://ubuntuforums.org/attachment.php?attachmentid=133692&d=1256905425 Décompressez le tout, et copiez le contenu de wcm2_patch :
+<code>tar -xjvf linuxwacom-0.8.4-4.tar.bz2
+tar -xjvf wcm2_patch.tar.bz2        
+cp wcm2_patch/*.patch linuxwacom-0.8.4-4/     
+cd linuxwacom-0.8.4-4/</code>
+
+Il ne reste plus qu'à appliquer les patchs...
+<code>patch -p1 < wacomcpl-exec.patch
+patch -p1 < wacom_sys.c.patch
+patch -p1 < wacom_wac.c.patch
+patch -p1 < wacom_wac.h.patch
+patch -p1 < wactablet.h.patch
+patch -p1 < wacusb.c.patch
+patch -p1 < wcmUSB.c.patch</code>
+
+... et à compiler :
+<code>sudo make clean
+sudo ./configure --enable-wacom --prefix=/usr
+sudo make
+sudo make install
+sudo cp src/2.6.31/wacom.ko /lib/modules/$(uname -r)/kernel/drivers/input/tablet/</code>
+
+<note important>Si votre cp échoue en disant que le fichier spécifié n'existe pas alors c'est qu'il n'est pas dans src/2.6.31 mais dans src///un.autre.version//. Pour ça, remonter à la fin du résultat de la commande ./configure et vous y verrez quelque chose comme :
+
+''Your wacom.ko is available under
+
+    /home/jeanclaudedusse/path/to/directory/linuxwacom-0.8.8-10/src/2.6.30''
+    
+Il vous suffit de récupérer le sous dossier (ici src/2.6.30) et de le mettre dans la commande cp qui ne fonctionnait pas. Ce qui donne dans mon cas :
+''sudo cp src/2.6.30/wacom.ko /lib/modules/$(uname -r)/kernel/drivers/input/tablet/''</note>
+
+
+Finissez par :
+<code>sudo insmod /lib/modules/$(uname -r)/kernel/drivers/input/tablet/wacom.ko
+sudo depmod -e</code>
+<note>Si vous obtenez "WARNING: -e needs -E or -F", n'en tenez pas compte, et laissez tourner. Si vous obtenez un autre message d'erreur, tapez "rmmod wacom", puis réessayez. Si les symptômes persistent, ... consultez le forum :p</note>
+
+Et voilà, le pilote est installé, il ne reste plus qu'à s'occuper du fichier .fdi.
+
+===== Le fichier .fdi =====
+Commencez par créer le fichier .fdi :
+  * sous Karmic : sudo touch /usr/share/hal/fdi/policy/20thirdparty/10-linuxwacom.fdi
+  * autre : sudo touch /usr/share/hal/fdi/policy/20thirdparty/10-wacom.fdi
+Puis éditez-le en mode root. Effacez l'éventuel contenu, et remplacez-le par ceci :
+<file><?xml version="1.0" encoding="UTF-8"?> <!-- -*- SGML -*- -->
+
+    <!-- Wacom Bamboo Pen & Touch (models CTT-460 CTL-460 CTH-460,461,660) -->
+<deviceinfo version="0.2">
+  <device>
+    <match key="input.originating_device" contains="if0">
+      <match key="info.product" contains="Wacom">
+        <merge key="input.x11_driver" type="string">wacom</merge>
+        <merge key="input.x11_options.Type" type="string">stylus</merge>
+        <merge key="info.product" type="string">stylus</merge>
+          <append key="info.callouts.add" type="strlist">hal-setup-wacom</append>
+          <append key="wacom.types" type="strlist">eraser</append>
+          <append key="wacom.types" type="strlist">pad</append>
+      </match>
+    </match>
+  </device>
+  <device>
+    <match key="input.x11_options.Type" contains="eraser">
+      <merge key="info.product" type="string">eraser</merge>
+    </match>
+  </device>
+  <device>
+    <match key="input.x11_options.Type" contains="pad">
+      <merge key="info.product" type="string">pad</merge>
+    </match>
+  </device>
+  <device>
+    <match key="input.originating_device" contains="if1">
+      <match key="info.product" contains="Wacom">
+        <merge key="input.x11_driver" type="string">wacom</merge>
+        <merge key="input.x11_options.Type" type="string">touch</merge>
+        <merge key="info.product" type="string">touch</merge>
+      </match>
+    </match>
+  </device>
+</deviceinfo></file>
+
+Le fichier .fdi est prêt, passons à la suite.
+
+===== Le fichier .rules =====
+Commencez par déterminer l'id de la tablette. Pour ceci, regardez les informations données par "lsusb" :
+<code>lsusb
+	...
+	Bus 005 Device 001: ID 1d6b:0001 Linux Foundation 1.1 root hub
+	Bus 002 Device 003: ID 056a:00d1 Wacom Co., Ltd 
+	Bus 002 Device 002: ID 045e:0737 Microsoft Corp. 
+	...</code>
+Ici, l'id est "00d1" Notez bien votre id à vous !
+
+Téléchargez le fichier.rules de base :
+<code>wget -O 50-xserver-xorg-input-wacom.rules "http://git.debian.org/?p=users/ron/wacom-tools.git;a=blob_plain;f=debian/xserver-xorg-input-wacom.udev;hb=e110b046292d6aff63b489c9b1aecec25d470cdb"</code>
+Puis éditez-le :
+<code>sudo nano 50-xserver-xorg-input-wacom.rules</code> et baladez-vous aux alentours de la ligne 88. À la fin de la longue liste que vous verrez, ajoutez cette ligne :
+<code>ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00d1", SYMLINK="input/tablet-wacom-bamboo-pen_touch-$env{WACOM_TYPE}"</code>
+<note>Remplacez "00d1" par l'id que vous avez du noter :p</note>
+Et enfin, mettez-le à sa place :
+<code>sudo cp 50-xserver-xorg-input-wacom.rules /lib/udev/rules.d/40-xserver-xorg-input-wacom.rules</code>
+
+Et maintenant, j'ai une surprise pour vous...
+
+===== Fin =====
+Quittez tout, redémarrez, et admirez :D
+<note warning>Admirez comme ça plante ! Dans mon cas, dès que je branche la tablette, le serveur X reboot en boucle... Donc faites attention et faites des backup avant toute manipulation.</note>
+
+===== Références et tout et tout =====
+== Bibliographie ==
+  * inspiré en très grande partie de http://ubuntuforums.org/showpost.php?p=8262965&postcount=541 (en) (Thanks kgingeri, Favux and Ayuthia)
+  * http://ubuntuforums.org/showpost.php?p=8165182&postcount=384
+  * http://linuxwacom.sourceforge.net/
+
+== Contributeurs ==
+  * Ayuthia
+  * Favux
+  * kgingeri (tuto anglais)
+  * Dunatotatos (traduction et réécriture)

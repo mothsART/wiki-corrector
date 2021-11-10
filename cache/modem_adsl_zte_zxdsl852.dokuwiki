@@ -1,0 +1,118 @@
+
+{{tag>matériel réseau modem À_RECYCLER}}
+
+----
+====== Modem ZTE ZXDSL 852 ======
+
+<note warning>Ne pas utiliser NetworkManager pour configurer votre connexion !</note>
+
+
+
+===== Méthode mode texte =====
+
+Mise à jour le 06/04/11
+
+
+Pour le modem USB ZTE ZXDSL 852.
+
+    -<del>Télécharger le paquet binaire Debian pour votre modem Usb.  zte-zxdsl852.deb voir : http://pagesperso-orange.fr/modem-usbadsl/debian/zte-zxdsl852.deb</del> lien mort
+ la commande suivante : 
+    sudo /usr/sbin/config-dslusb FR09 (j'ai Wanadoo/France)
+
+    - Installer le fichier du modem sur votre ordinateur.
+    - Configurer votre connexion grâce aux informations communiqués par votre FAI.
+    - Brancher, attendre l'initialisation du modem... Quand les voyants sont verts, c'est bon !
+
+Explications disponibles depuis le site : [[http://ubuntu-modem-usb.11vm-serv.net]]
+
+===== Méthode du script =====
+
+Le modem **ZTE ZXDSL** 852 est actuellement utilisé par Wanadoo/Orange et Algérie Telecom. Il s'agit d'un modem utilisant un chipset Conexant AccessRunner. Ce chipset possède déjà un pilote inclus dans le noyau, mais celui-ci ne reconnait pas le vendor_id et device_id de ce périphérique (**0572:cb07**). Nous allons donc télécharger les sources, les modifier et les recompiler.
+
+Les paquets suivants doivent être installés : **build-essential cvs**.
+
+<note>
+  - Pour installer le modem sans avoir internet sur Ubuntu, il est possible de télécharger tous les éléments nécessaires, depuis Windows ; le logiciel [[http://www.tortoisecvs.org/|Tortoise CVS]] permet de se connecter un à CVS depuis Windows. Attention, il faut impérativement cocher « Fin de ligne UNIX » dans le dernier onglet « Options ». Si vous devez préciser une date, allez dans le deuxième onglet (« Version »), « Fichiers d'une certaine date » → 17 janvier 2006. Pour télécharger le firmware, saisissez simplement l'adresse http://ftp.linux.it/pub/People/md/warez/cxacru-fw.bin.gz dans votre navigateur favori.
+  - [[http://wavemaker.free.fr/index.php/post/2007/05/12/30-ubuntu-feisty-installation-du-modem-zte-zxdsl-852|Un autre tutoriel est aussi disponible]].
+  - À partir de la version Ubuntu Edgy Eft, [[http://ubuntu-modem-usb.c-wh.org/installationzte-zxdsl852.html|un autre tuto est aussi disponible]].
+    * Aucun problème de mise à jour ou si vous compilez un nouveau noyau personnel.
+    * Le paquet Debian inclu les firmwares du modem, un script de connexion et de configuration simple //(utilisateur & mot de passe)//.
+</note>
+
+===== Téléchargement du firmware =====
+Ce pilote charge à chaque démarrage un firmware au sein du modem. Il est disponible sur le ftp de Marco d'Itri
+
+<code>mkdir firmware
+cd firmware
+wget http://ftp.linux.it/pub/People/md/warez/cxacru-fw.bin.gz
+gunzip cxacru-fw.bin
+sudo cp cxacru-fw.bin /lib/firmware/$(uname -r)</code>
+
+
+===== Création de la connexion pour Wanadoo/Orange =====
+Il nous faut créer un fichier contenant les caractéristiques de la connexion.
+<code>gksudo gedit /etc/ppp/peers/zxdsl</code>
+Collez-y :
+
+<code>user "nom_d_utilisateur_à_completer"
+plugin pppoatm.so 8.35
+noipdefault
+usepeerdns
+defaultroute
+persist
+noauth</code>
+
+Puis modifiez le fichier /etc/ppp/chap-secrets :
+<code>gksudo gedit /etc/ppp/chap-secrets</code>
+pour obtenir :
+<code>"nom_d_utilisateur_à_completer" * "mot_de_passe_fourni_par_wanadoo" *</code>
+
+La connexion doit pouvoir être activée comme ceci :
+<code>sudo pppd call zxdsl</code>
+Pour vérifier que la connexion est activée :
+<code>grep pppd /var/log/messages</code>
+Vous devriez obtenir quelque chose comme :
+<code>pppd[3204]: Plugin pppoatm.so loaded. pppd[3204]: PPPoATM plugin_init pppd[3204]: PPPoATM setdevname_pppoatm - SUCCESS:8.35 pppd[3207]: pppd 2.4.3 started by root, uid 0 pppd[3207]: Using interface ppp0 pppd[3207]: Connect: ppp0 <--> 8.35 pppd[3207]: CHAP authentication succeeded: CHAP authentication success, unit 6368 pppd[3207]: local IP address .... pppd[3207]: remote IP address .... pppd[3207]: primary DNS address .... pppd[3207]: secondary DNS address ...</code>
+
+
+
+=====Création de la connexion pour Algerie Telecom =====
+
+Algerie Telecom utilise également ce modem mais avec des caractéristiques de connexion différentes.
+
+Télécharger le pilote br2684 : installez le paquet **br2684ctl**. Si vous n'avez pas de connexion et que vous êtes sous Windows, allez à cette page http://packages.ubuntu.com, et recherchez le paquet « br2684ctl » correspondant à votre distribution. Transférez-le sous Ubuntu, et installez-le avec la commande :
+
+  sudo dpkg -i br2684ctl*.deb
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/ppp/peers/zxdsl** et collez-y :
+
+<code>
+user "nom_d_utilisateur_à_completer"
+plugin rp-pppoe.so
+nas0
+noipdefault
+usepeerdns
+defaultroute
+persist
+noauth
+</code>
+
+Puis [[:tutoriel:comment_editer_un_fichier|modifiez le fichier]] **/etc/ppp/chap-secrets** pour obtenir :
+<code>"nom_d_utilisateur_à_completer" * "mot_de_passe_fourni_par_algeria_telecom" *</code>
+
+La connexion doit pouvoir être activée comme ceci :
+
+<code>
+sudo modprobe br2684
+sudo br2684ctl -b -c 0 -e 0 -a 0.35
+sudo ifconfig nas0 up
+sudo pppd call zxdsl
+</code>
+
+===== Remarque pour le Modem Olitec USB ADSL V3 =====
+
+Ce modem fonctionne pareil, vous pouvez donc suivre le tuto ci-dessus !
+
+----
+
+//Contributeurs :zebob, [[utilisateurs:jschott]], [[utilisateurs:Danadanao]], [[utilisateurs:Ishmael]], [[utilisateurs:JimBo]].//

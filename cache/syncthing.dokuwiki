@@ -1,0 +1,135 @@
+
+{{tag>Xenial Bionic synchronisation}}
+
+----
+
+{{ :syncthing.png?220|}}
+====== Syncthing ======
+
+Syncthing est un logiciel open source. Il permet de synchroniser les répertoires de plusieurs machines à travers Internet au moyen d'une connexion P2P sécurisée. Il fonctionne sur diverses plateformes en plus de Linux, dont Windows, OS-X, Android... Ce qui permet de créer son propre cloud sans passer par des serveurs hébergés par des tiers !
+<note important>Ce logiciel étant en cours de développement, il est fortement conseillé de faire une copie de sauvegarde des répertoires que vous souhaitez synchroniser avant de paramétrer Syncthing et de lancer la synchronisation.</note>
+
+===== Installation =====
+Depuis Ubuntu 18.04, Syncthing est dans les dépôts officiels. Il suffit donc d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>syncthing]]**.
+
+Pour les versions plus anciennes ou pour bénéficier des mises à jours fréquentes de Syncthing, il faut utiliser le PPA:
+
+  * ajouter la clé PGP :
+<code>curl -s https://syncthing.net/release-key.txt | sudo apt-key add - </code>
+
+  * Ajoutez à vos sources la source "release"
+<code>echo "deb http://apt.syncthing.net/ syncthing release" | sudo tee /etc/apt/sources.list.d/syncthing.list</code>
+  * [[:tutoriel:comment_modifier_sources_maj#recharger_la_liste_des_paquets|Recharger la liste des paquets]];
+  * [[:tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt>syncthing]]**.
+
+===== Démarrage automatique =====
+Depuis Ubuntu 18.04, les fichiers de config pour lancer Syncthing en tant que service Systemd sont inclus dans les paquets. Pour que le service soit lancé automatiquement pour l'utilisateur Toto, il suffit de taper dans une console :
+<code>sudo systemctl enable syncthing@toto.service
+sudo systemctl start syncthing@toto.service</code>
+
+
+Auparavant, il fallait créer les fichiers de configuration manuellement.\\
+Pour cela, commençons par [[:tutoriel:comment_modifier_un_fichier|créer le fichier]] syncthing@.service dans **/etc/systemd/system/**
+
+Et copiez y les infos suivantes :
+<file txt syncthing@.service>
+[Unit]
+Description=Syncthing - Open Source Continuous File Synchronization for %I
+Documentation=man:syncthing(1)
+After=network.target
+Wants=syncthing-inotify@.service
+
+[Service]
+User=%i
+ExecStart=/usr/bin/syncthing -no-browser -no-restart -logflags=0
+Restart=on-failure
+SuccessExitStatus=3 4
+RestartForceExitStatus=3 4
+UMask=0002
+
+[Install]
+WantedBy=multi-user.target
+</file>
+Reste à activer le service pour le ou les utilisateurs qui souhaitent utiliser Syncthing et démarrer le service (remplacer Toto par le nom d'utilisateur) :
+<code>systemctl enable syncthing@Toto.service
+systemctl start syncthing@Toto.service</code>
+
+Si vous souhaitez contrôler que tout est dans l'ordre :
+<code>systemctl status syncthing@Toto.service</code>
+
+Ou consulter les logs :
+<code>journalctl -e -u syncthing@Toto.service</code>
+
+===== Utilisation =====
+
+==== Premiers pas ====
+ 
+Si vous avez correctement configuré le service Syncthing, vous devez y accéder dans votre navigateur web sur le port par défaut 8384 en entrant l'adresse localhost:8384.
+Sinon, lancez Syncthing en tapant la commande suivante dans un terminal :
+<code>syncthing</code>
+
+Vous obtenez alors une fenêtre proche de celle ci :
+{{ :syncthing_uxenial_01.png?direct&400 |}}
+
+Sur la partie gauche de la fenêtre intitulée **partage**, vous trouverez la liste des répertoires partagés et leur statut (actuellement aucun). Sur la partie de droite, vous trouverez les informations relative à votre cluster de machines synchronisées (actuellement, il n'y a que la machine locale intitulée Zbox)\\
+Syncthing ayant pour but de synchroniser des répertoires entre plusieurs machines, il vous faut au moins une autre machine sur laquelle est installée Syncthing.
+<note important>Syncthing n'est pas capable de synchroniser des répertoires sur la même machine</note>
+<note tip>Afin de faciliter la configuration de vos diverses machines, je recommande de créer des accès à distance pour travailler depuis une seule machine. Voir la section suivante pour plus d'infos à ce sujet</note>
+
+==== Ajout d'une machine ====
+Supposons que vous souhaitiez synchroniser des répertoires entre deux machines (ou appareils selon la terminologie de Syncthing) nommées A et B. A doit connaître l’existence de B et inversement. Pour cela, Syncthing identifie les machines à l'aide d'un identifiant unique crée lors de la première utilisation sur une nouvelle machine. Pour connaître l'identifiant de la machine A, il faut aller sur la page //Afficher mon ID// du menu //Actions//. On obtient alors la page suivante :
+{{ :syncthing_uxenial_02.png?direct&400 |}}
+
+Copiez l’identifiant  apparu et faites-le parvenir par un moyen ou un autre à la machine B (par e-mail par exemple)
+<note>Il n'est pas nécessaire de conserver secrètement cet identifiant : c'est une clé publique</note>
+
+Aller alors sur votre machine B et cliquez sur le bouton en bas à droite //**+** Ajouter un appareil distant//. Dans la fenêtre qui s'affiche, collez l'identifiant de la machine A, donnez lui un nom intelligible et enregistrez.
+{{ :syncthing_uxenial_03.png?direct&400 |}}
+
+Après un petit temps d'attente, le statut de la machine A apparaissant dans le GUI de la machine B devrait passer de //Déconnecté// à //non utilisé//
+<note tip>Sur les anciennes version (antérieure à la V0.14.15 que j'utilise actuellement), il était nécessaire de redémarrer Syncthing pour que l'ajout de machines soit pris en compte. Pour cela, il suffit de cliquer sur le bouton //Redémarrer// du menu //Actions// </note>
+Procédez de même de la machine B sur la machine A pour que les 2 machines se connaissent.
+<note tip>Normalement, cette étape devrait être facilitée : sur la machine A, vous devriez trouver un message indiquant qu'elle reçoit une demande de connexion de la machine B. Accepter la demande revient à ajouter la machine B à la liste des machines connectées à la machine A.</note>
+
+==== Synchronisation de répertoires ====
+ 
+Il faut désormais indiquer à Syncthing les répertoires qui doivent être synchronisés. Pour cela, il faut cliquer sur le bouton //**+** Ajouter un partage// dans la zone de gauche du GUI et renseigner les diverses informations de la page.
+  * **Étiquette du partage** Étiquette optionnelle pour le partage. Peut être différente sur chaque appareil.
+  * **ID du partage** Identifiant unique du partage. Doit être le même sur l'ensemble des appareils concernés. N’hésitez pas à remplacer celui proposé d'office par Syncthing par un nom intelligible.
+  * **Chemin racine du partage** Chemin vers le répertoire dans l'appareil local.
+  * **Synchroniser avec des appareils** Cliquez sur le nom des machines sur lesquelles ce répertoire sera synchronisé.
+  * **Configuration avancée** Cliquez pour accéder aux paramètres suivants :
+    * **Type de partage** Choisissez //Normal// pour de la synchronisation bidirectionnelle ou //Maître// pour de la synchronisation unidirectionnelle dans laquelle le répertoire de la machine locale est la source. Voir la page [[synchronisation]] pour plus d'information à ce sujet.
+    * **Ignorer les permissions** Cliquez ici si l'un de vos partage ce trouve sur une machine Windows ne gerant pas les permissions comme sur Linux
+
+Procédez de même sur vos autres machines ou attendez de recevoir et acceptez l'invitation au partage de la première machine configurée sur les autres.\\
+La synchronisation de vos répertoires entre vos diverses machines devrait commencer.
+
+===== Contrôle à distance =====
+ 
+Si vous souhaitez accéder à la console d'administration de Syncthing depuis une autre machine, vous pouvez utiliser 2 méthodes :
+
+==== Par SSH en port forwarding ====
+Si vous n'avez pas modifié le port standard de syncthing de votre serveur 192.168.0.20, vous vous y connectez en local sur le port 8384. Sur la machine client depuis laquelle vous souhaitez vous connecter à distance, nous allons rediriger le GUI sur le port 9090 :
+<code>ssh -L 9090:127.0.0.1:8384 Toto@192.168.0.20</code>
+
+Entrez maintenant l'adresse //localhost:9090// dans votre navigateur préféré et vous vous retrouverez sur la console d'administration de votre serveur 192.168.0.20
+
+==== En modifiant les paramétres dans le GUI ====
+Dans la page **Configuration** , il suffit de remplacer l'adresse du GUI //127.0.0.1:8384// par //0.0.0.0:8384//
+
+<note warning> Avec cette méthode, il est impératif de mettre en place un Mot de passe et d'activer l'HTTPS pour le GUI (sur la page Configuration du GUI) pour éviter un évident trou de sécurité.</note>
+
+===== Désinstallation =====
+ 
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée. Les journaux du système, et les fichiers de préférence des utilisateurs dans leurs dossiers personnels sont toujours conservés.
+ 
+===== Voir aussi =====
+ 
+  * **(en)** [[https://syncthing.net/|Site officiel du logiciel]]
+  * **(fr)** [[https://djan-gicquel.fr/IMG/pdf/syncthing_utilisation.pdf|Présentation de l'utilisation de Synthing en image]]
+ 
+----
+//Contributeurs principaux : [[utilisateurs:zarmu|zarmu]].//
+ 
+//Basé sur [[https://docs.syncthing.net|« Documentation officielle de Syncthing »]].//

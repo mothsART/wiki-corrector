@@ -1,0 +1,377 @@
+
+{{tag>tutoriel radio audio}}
+
+====== Installer une Webradio sous ubuntu ======
+
+===== Introduction =====
+
+Tout d'abord, j'ai choisi de faire une Webradio avec Ices et Icecast, car d'autres paquets ne prenaient pas en compte le format MP3 ce qui m'empêchais de lire mon flux via Itunes par exemple.
+
+Sachez qu'en france c'est la SACEM qui gère les webradios, si vous voulez créer votre propre webradio et la diffuser sur internet vérifiez bien que le titre n'est pas déposé à la SACEM sinon les ennuis pourront vite arriver... sinon si vous souhaitez diffuser des titres déposé à la SACEM il vous faudra payer des droits de diffusion (environ 75€ HT/mois).
+
+__Sites utiles:__
+  * [[http://icecast.org/|Site de Ices et Icecast2]]
+
+===== Installation =====
+
+On installe les librairies MP3 et Icecast2
+
+<code>apt-get install icecast2 libmp3lame0 libmp3lame-dev</code>
+
+On installe Ices qui est un peu plus galère
+
+<code>wget http://downloads.us.xiph.org/releases/ices/ices-0.4.tar.gz
+tar -zxvf ices-0.4.tar.gz
+cd ices-0.4
+./configure --with-lame       ===>pour ma part 
+
+configure: error: C++ preprocessor "/lib/cpp" fails sanity check
+See `config.log' for more details.
+
+make && make install</code>   ===>make:  Pas de cibles spécifiées et aucun makefile n'a été trouvé. Arrêt.
+
+
+<note tip>Vous noterez que l'on prends pas la dernière version de Ices, tout simplement parce que elle ne support pas le stream avec des MP3</note>
+
+===== Configuration =====
+
+==== Ices ====
+
+Facilitons la configuration du fichier de configuration
+
+<code>mkdir /etc/ices0
+cd /etc/ices0
+vim ices.conf.dist</code>
+
+Puis mettez cela dans le fichier de configuration
+
+<code><?xml version="1.0"?>
+<ices:Configuration xmlns:ices="http://www.icecast.org/projects/ices">
+  <Playlist>
+  
+    <!-- This is the filename used as a playlist when using the builtin 
+	 playlist handler. -->
+    <File>playlist.txt</File>
+    
+    <!-- Set this to 0 if you don't want to randomize your playlist, and to
+	 1 if you do. -->
+    <Randomize>1</Randomize>
+    
+    <!-- One of builtin, perl, or python. -->
+    <Type>builtin</Type>
+    
+    <!-- Module name to pass to the playlist handler if using  perl or python.
+	 If you use the builtin playlist handler then this is ignored -->
+    <Module>ices</Module>
+    
+    <!-- Set this to the number of seconds to crossfade between tracks.
+         Leave out or set to zero to disable crossfading (the default). -->
+    <Crossfade>3</Crossfade>
+    
+  </Playlist>
+
+  <Execution>
+    <!-- Set this to 1 if you want ices to launch in the background as a
+         daemon -->
+    <Background>1</Background>
+    
+    <!-- Set this to 1 if you want to see more verbose output from ices -->
+    <Verbose>0</Verbose>
+    
+    <!-- This directory specifies where ices should put the logfile, cue file
+	 and pid file (if daemonizing). Don't use /tmp if you have l33t h4x0rz
+         on your server. -->
+    <BaseDirectory>/tmp</BaseDirectory>
+    
+  </Execution>
+
+  <Stream>
+    <Server>
+      <!-- Hostname or ip of the icecast server you want to connect to -->
+      <Hostname>127.0.0.1</Hostname>
+      
+      <!-- Port of the same -->
+      <Port>8000</Port>
+      
+      <!-- Encoder password on the icecast server -->
+      <Password>votremotdepassesource</Password>
+      
+      <!-- Header protocol to use when communicating with the server.
+           Shoutcast servers need "icy", icecast 1.x needs "xaudiocast", and
+	   icecast 2.x needs "http". -->
+      <Protocol>http</Protocol>
+      
+    </Server>
+
+    <!-- The name of the mountpoint on the icecast server -->
+    <Mountpoint>/webradio</Mountpoint>
+    
+    <!-- The name of the dumpfile on the server for your stream. DO NOT set
+	 this unless you know what you're doing.
+    <Dumpfile>ices.dump</Dumpfile>
+    -->
+    
+    <!-- The name of you stream, not the name of the song! -->
+    <Name>Nom de la Webradio</Name>
+    
+    <!-- Genre of your stream, be it rock or pop or whatever -->
+    <Genre>Recent</Genre>
+    
+    <!-- Longer description of your stream -->
+    <Description>Description de la webradio</Description>
+    
+    <!-- URL to a page describing your stream -->
+    <URL>http://localhost/</URL>
+    
+    <!-- 0 if you don't want the icecast server to publish your stream on
+	 the yp server, 1 if you do -->
+    <Public>1</Public>
+
+    <!-- Stream bitrate, used to specify bitrate if reencoding, otherwise
+	 just used for display on YP and on the server. Try to keep it
+	 accurate -->
+    <Bitrate>128</Bitrate>
+    
+    <!-- If this is set to 1, and ices is compiled with liblame support,
+	 ices will reencode the stream on the fly to the stream bitrate. -->
+    <Reencode>0</Reencode>
+    
+    <!-- Number of channels to reencode to, 1 for mono or 2 for stereo -->
+    <!-- Sampe rate to reencode to in Hz. Leave out for LAME's best choice
+    <Samplerate>44100</Samplerate>
+    -->
+    
+    <Channels>2</Channels>
+  </Stream>
+</ices:Configuration>
+</code>
+
+
+<code><file></file> c'est l'endroit ou ce situe votre fichier playlist.txt
+<hotsname></hostname> c'est l'adresse de votre serveur Icecast2
+<password></password> c'est le mot de passe SOURCE il faudra mettre le même a un moment dans la configuration de Icecast2</code>
+==== Icescast2 ====
+
+Editez le fichier de configuration de Icecast qui ce trouve **/etc/icecast2/icecast.xml**
+
+<code><icecast>
+    <limits>
+        <clients>100</clients>
+        <sources>2</sources>
+        <threadpool>5</threadpool>
+        <queue-size>524288</queue-size>
+        <client-timeout>30</client-timeout>
+        <header-timeout>15</header-timeout>
+        <source-timeout>10</source-timeout>
+        <!-- If enabled, this will provide a burst of data when a client 
+             first connects, thereby significantly reducing the startup 
+             time for listeners that do substantial buffering. However,
+             it also significantly increases latency between the source
+             client and listening client.  For low-latency setups, you
+             might want to disable this. -->
+        <burst-on-connect>1</burst-on-connect>
+        <!-- same as burst-on-connect, but this allows for being more
+             specific on how much to burst. Most people won't need to
+             change from the default 64k. Applies to all mountpoints  -->
+        <burst-size>65535</burst-size>
+    </limits>
+
+    <authentication>
+        <!-- Sources log in with username 'source' -->
+        <source-password>votremotdepassesource</source-password>
+
+        <!-- Relays log in username 'relay' -->
+        <relay-password>votremotdepasserelay</relay-password>
+
+        <!-- Admin logs in with the username given below -->
+        <admin-user>admin</admin-user>
+        <admin-password>admin</admin-password>
+    </authentication>
+
+    <!-- set the mountpoint for a shoutcast source to use, the default if not
+         specified is /stream but you can change it here if an alternative is
+         wanted or an extension is required
+    <shoutcast-mount>/live.nsv</shoutcast-mount>
+    -->
+
+    <!-- Uncomment this if you want directory listings -->
+    <!--
+    <directory>
+        <yp-url-timeout>15</yp-url-timeout>
+        <yp-url>http://dir.xiph.org/cgi-bin/yp-cgi</yp-url>
+    </directory>
+     -->
+
+    <!-- This is the hostname other people will use to connect to your server.
+    It affects mainly the urls generated by Icecast for playlists and yp
+    listings. -->
+    <hostname>127.0.0.1</hostname>
+
+    <!-- You may have multiple <listener> elements -->
+    <listen-socket>
+        <port>8000</port>
+        <!-- <bind-address>127.0.0.1</bind-address> -->
+        <!-- <shoutcast-mount>/stream</shoutcast-mount> -->
+    </listen-socket>
+    <!--
+    <listen-socket>
+        <port>8001</port>
+    </listen-socket>
+    -->
+
+    <!--<master-server>127.0.0.1</master-server>-->
+    <!--<master-server-port>8001</master-server-port>-->
+    <!--<master-update-interval>120</master-update-interval>-->
+    <!--<master-password>hackme</master-password>-->
+
+    <!-- setting this makes all relays on-demand unless overridden, this is
+         useful for master relays which do not have <relay> definitions here.
+         The default is 0 -->
+    <!--<relays-on-demand>1</relays-on-demand>-->
+
+    <!--
+    <relay>
+        <server>127.0.0.1</server>
+        <port>8001</port>
+        <mount>/example.ogg</mount>
+        <local-mount>/different.ogg</local-mount>
+        <on-demand>0</on-demand>
+
+        <relay-shoutcast-metadata>0</relay-shoutcast-metadata>
+    </relay>
+    -->
+
+    <!-- Only define a <mount> section if you want to use advanced options,
+         like alternative usernames or passwords
+    <mount>
+        <mount-name>/example-complex.ogg</mount-name>
+
+        <username>othersource</username>
+        <password>hackmemore</password>
+
+        <max-listeners>1</max-listeners>
+        <dump-file>/tmp/dump-example1.ogg</dump-file>
+        <burst-size>65536</burst-size>
+        <fallback-mount>/example2.ogg</fallback-mount>
+        <fallback-override>1</fallback-override>
+        <fallback-when-full>1</fallback-when-full>
+        <intro>/example_intro.ogg</intro>
+        <hidden>1</hidden>
+        <no-yp>1</no-yp>
+        <authentication type="htpasswd">
+                <option name="filename" value="myauth"/>
+                <option name="allow_duplicate_users" value="0"/>
+        </authentication>
+        <on-connect>/home/icecast/bin/stream-start</on-connect>
+        <on-disconnect>/home/icecast/bin/stream-stop</on-disconnect>
+    </mount>
+
+    <mount>
+        <mount-name>/auth_example.ogg</mount-name>
+        <authentication type="url">
+            <option name="mount_add"       value="http://myauthserver.net/notify_mount.php"/>
+            <option name="mount_remove"    value="http://myauthserver.net/notify_mount.php"/>
+            <option name="listener_add"    value="http://myauthserver.net/notify_listener.php"/>
+            <option name="listener_remove" value="http://myauthserver.net/notify_listener.php"/>
+        </authentication>
+    </mount>
+
+    -->
+
+    <fileserve>1</fileserve>
+
+    <paths>
+		<!-- basedir is only used if chroot is enabled -->
+        <basedir>/usr/share/icecast2</basedir>
+
+        <!-- Note that if <chroot> is turned on below, these paths must both
+             be relative to the new root, not the original root -->
+        <logdir>/var/log/icecast2</logdir>
+        <webroot>/usr/share/icecast2/web</webroot>
+        <adminroot>/usr/share/icecast2/admin</adminroot>
+        <!-- <pidfile>/usr/share/icecast2/icecast.pid</pidfile> -->
+
+        <!-- Aliases: treat requests for 'source' path as being for 'dest' path
+             May be made specific to a port or bound address using the "port"
+             and "bind-address" attributes.
+          -->
+        <!--
+        <alias source="/foo" dest="/bar"/>
+          -->
+        <!-- Aliases: can also be used for simple redirections as well,
+             this example will redirect all requests for http://server:port/ to
+             the status page
+          -->
+        <alias source="/" dest="/status.xsl"/>
+    </paths>
+
+    <logging>
+        <accesslog>access.log</accesslog>
+        <errorlog>error.log</errorlog>
+        <!-- <playlistlog>playlist.log</playlistlog> -->
+      	<loglevel>3</loglevel> <!-- 4 Debug, 3 Info, 2 Warn, 1 Error -->
+      	<logsize>10000</logsize> <!-- Max size of a logfile -->
+        <!-- If logarchive is enabled (1), then when logsize is reached
+             the logfile will be moved to [error|access|playlist].log.DATESTAMP,
+             otherwise it will be moved to [error|access|playlist].log.old.
+             Default is non-archive mode (i.e. overwrite)
+        -->
+        <!-- <logarchive>1</logarchive> -->
+    </logging>
+
+    <security>
+        <chroot>0</chroot>
+        <!--
+        <changeowner>
+            <user>nobody</user>
+            <group>nogroup</group>
+        </changeowner>
+        -->
+    </security>
+</icecast>
+</code>
+<code>
+<source-password></source-password> C'est le mot de passe mis dans la config de Ices
+<admin-user></admin-user> & <admin-password></admin-password> C'est vos identifiants Administrateur
+</code>
+
+
+==== Playlist ====
+
+Bon maintenant le plus dur est fait vous devez vous demander a quoi ressemble une playlist ? exemple ci dessous
+
+<code>
+/home/<user>/webradio/Love Games.mp3
+/home/<user>/webradio/Circus.mp3
+/home/<user>/webradio/Alala.mp3
+/home/<user>/webradio/Ca m'énerve.mp3
+/home/<user>/webradio/Discobitch.mp3
+/home/<user>/webradio/Ding Dong.mp3
+/home/<user>/webradio/Day'N'Nite.mp3
+/home/<user>/webradio/Poker Face.mp3
+/home/<user>/webradio/Crazy Frog.mp3
+/home/<user>/webradio/Everytime We Touch.mp3
+/home/<user>/webradio/Ou tu veux.mp3
+/home/<user>/webradio/Right Round.mp3
+/home/<user>/webradio/Womanizer.mp3
+/home/<user>/webradio/Technologic.mp3
+/home/<user>/webradio/Oh La La La.mp3
+/home/<user>/webradio/Même pas fatigués.mp3
+/home/<user>/webradio/Infinity 2008.mp3
+/home/<user>/webradio/Dollaly.mp3</code>
+
+<note tip>Veuillez faire attention à mettre les noms corrects avec majuscules etc.</note>
+
+===== Lancement =====
+
+Redemarrage de IceCast2
+
+<code>/etc/init.d/icecast2 restart</code>
+
+Lancement de Ices
+
+<code>ices -c /etc/ices0/ices.conf.dist</code>
+
+Et voila les serveurs sont lancé normalement 
+
+Pour aller sur le site de icecast (en local) il vous faut taper cette adresse http://monip:8000/ (http://127.0.0.1:8000/ si on est sur la machine où est installé le serveur) et pour acceder à la partie admin il vous faudra entrer les identifiants mit dans la config de Icecast2

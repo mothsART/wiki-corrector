@@ -1,0 +1,105 @@
+
+{{tag>CAO BROUILLON Conception_électronique}}
+
+----
+====== Quartus Web Edition ======
+
+La suite de logiciels **Quartus Web Edition** est propriétaire mais gratuite. Dérivée de la suite plus complète mais payante Quartus II Subscription Edition Software, elle est suffisante pour la plupart des usages à visée pédagogique. Bien que prévue pour Linux, l'installation sous Debian/Ubuntu nécessite quelques maniuplations.
+
+<note important>
+Bien qu'il existe une version d'évaluation de **Quartus II Subscription Edition Software** utilisable pendant 30 jours, notez que vous ne pourrez pas compiler d’architecture matérielle avec. Aucune erreur ne sera signalée à la compilation, mais le fichier .sof ne sera pas créé.
+</note>
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Avoir [[:tutoriel:comment_installer_un_paquet|installé le paquet]] **[[apt>ia32-libs|ia32-libs]]**.
+
+===== Installation et configuration=====
+
+Après avoir installé le paquet [[apt>ia32-libs|ia32-libs]], téléchargez la Web Edition de Quartus [[http://dl.altera.com/?edition=web&platform=linux|ici]]. Veillez à ne pas lancer l'installateur dans le dossier Téléchargement : **le chemin de l'installateur ne doit contenir ni espaces ni accents**.
+
+Ouvrez un terminal (raccourci Ctrl + Alt + T), placez-vous dans le dossier de Téléchargement, puis créez une variable contenant le nom de la version installée :
+  cd ~/Téléchargements
+  INST_ALTERA=11.1sp2_259_quartus_free_linux
+Puisque le chemin de l'installateur ne doit pas contenir d'accents, déplaçons l’exécutable vers ~/altera. Donnons ensuite les droits d'éxecution à l'installateur et lançons-le :
+  mkdir ~/altera
+  mv $INST_ALTERA.sh ../altera/
+  cd ~/altera
+  chmod +x $INST_ALTERA.sh
+  ./$INST_ALTERA.sh
+L'installateur qui va s'auto-extraire jusqu'à afficher l'erreur :
+  ./setup: 1: ./setup: Syntax error: "&" unexpected
+Cela est dû au fait que Ubuntu utilise comme shell par défaut DASH au lieu de BASH. Il suffit de corriger l'en-tête du fichier setup puis de le relancer pour continuer :
+  cd $INST_ALTERA
+  sed -i 's/\/bin\/sh/\/bin\/bash/g' setup 
+  ./setup
+L'installation graphique devrait commencer. Donnons les droits d'utilisation du périphérique au logiciel :
+  sudo sh -c 'echo ATTR{idVendor}==\"09fb\", ATTR{idProduct}==\"6001\", MODE=\"666\" > /etc/udev/rules.d/altera-usb-blaster.rules'
+Créons des chemins d'accès raccourcis pour utiliser les logiciels et lions les librairies au système :
+  PATH_ALTERA=~/altera/11.1sp2
+  echo "export PATH=\$PATH:$PATH_ALTERA/nios2eds/bin:$PATH_ALTERA/nios2eds/bin/gnu/H-i686-pc-linux-gnu/bin/:$PATH_ALTERA/quartus/bin" >> ~/.profile
+  echo "$PATH_ALTERA/quartus/linux" | sudo tee /etc/ld.so.conf
+  sudo ldconfig -v
+Installons les locales en_US, qui sont nécessaires pour générer sous Qsys 11 ([[http://www.altera.com/support/kdb/solutions/rd05112011_512.html|voir bug]]) :
+  sudo locale-gen en_US
+Pensez à n'installer que les outils dont vous avez besoin, le logiciel a une taille significative. Pensez aussi à supprimer l’installateur après l'installation (il pèse environ 3Go). Il est nécessaire de redémarrer votre ordinateur pour que tous les changements prennent effet.
+
+Si vous souhaitez utiliser les briques de l'University Program, et puisque l'installateur n'existe que pour Windows, vous pouvez copier-coller le répertoire University_Program depuis une installation Windows vers le répertoire ip de votre installation.
+
+
+===== Utilisation=====
+
+Lancez l'application via le [[:unity#tableau_de_bord_dash|dash]] (Ubuntu 11.04 et ultérieures) ou via le [[:terminal]] (toutes versions d'Ubuntu) avec la [[:commande_shell|commande]] suivante :
+<code>quartus</code>
+
+===== Désinstallation =====
+suffit de supprimer le dossier d'installation, par exemple ~/altera. Pensez aussi à retirer du fichier ld.so.conf les librairies ajoutées :
+  gksudo gedit /etc/ld.so.conf
+  sudo ldconfig -v
+===== Erreurs et solutions =====
+La plupart des problèmes ci-dessous ne vous concerneront pas si vous suivez les différentes étapes indiquées ci-dessus.
+==== Démarrage graphique de l'installateur impossible ====
+
+  Welcome to Altera Software Installer
+  Copyright (c) Altera Corporation 2011
+  
+  Starting GUI. If nothing shows up, or you don't have an X display, run:
+  ./setup --help
+  for commandline usage.
+  NOTE: All output has been redirected to /tmp/altera_setup.log.tROjnwaHC0
+
+Les sources de ce problème peuvent être :
+  * Vous n'avez pas installé le paquet **[[apt>ia32-libs]]**
+  * Le chemin d'accès à l'installateur contient des espaces ou des accents
+==== Failed to generate module sous Qsys ====
+[[http://www.altera.com/support/kdb/solutions/rd05112011_512.html|Un bug de Quartus version 11]] oblige à installer les locales en_US pour générer sous Qsys. Tapez dans un terminal :
+  sudo locale-gen en_US
+====Can't place multiple pins====
+Si lors de la compilation sous Quartus vous obtenez une erreur semblable à :
+  Error (176310): Can't place multiple pins assigned to pin location Pin_AD25 (IOC_X95_Y2_N1)
+Allez dans Assignements -> Device -> Device and pin options -> Dual purpose pins et passez "nCEO" à l'état "Use as regular I/O" 
+====Erreurs de flashage====
+  There are no Nios II CPUs with debug modules available which match the values specified. 
+  Please check that your PLD is correctly configured, downloading a new SOF file if necessary.
+Avez-vous bien programmé la carte avec le bon fichier .sof ? Si oui, alors l'erreur peut être dûe à un problème d'autorisation d'accès au périphérique. Tapez dans un terminal :
+  sudo sh -c 'echo ATTR{idVendor}==\"09fb\", ATTR{idProduct}==\"6001\", MODE=\"666\" > /etc/udev/rules.d/altera-usb-blaster.rules'
+  
+ ====Librairie manquante====
+  error while loading shared libraries: libjtag_client.so: cannot open shared object file: No such file or directory
+Tapez dans un terminal :
+  PATH_ALTERA=~/altera/11.1sp2
+  echo "$PATH_ALTERA/quartus/linux" | sudo tee /etc/ld.so.conf
+  sudo ldconfig -v
+====Erreur de compilation====
+  Description Resource Path Location Type
+  make: *** [../Essai1_bsp/-recurs-make-lib] Error 2 Essai1 C/C++ Problem
+Cette erreur apparaît lorsque vous modifiez un programme alors que vous avez recompilé l'architecture matérielle. Il suffit de regénérer les fichiers BSP. Sous Eclipse, Cliquez droit sur le nom de projet_BSP -> Nios II -> Generate BSP
+
+===== Voir aussi =====
+
+  * **(en)** [[http://dl.altera.com/?edition=web&platform=linux|Site officiel de la suite Quartus Web Edition pour linux]]
+
+//Contributeurs principaux : [[utilisateurs:sdenel|Simon DENEL]]//
+
+//Autres contributeurs : [[:utilisateurs:FestinMWM|FestinMWM]]//

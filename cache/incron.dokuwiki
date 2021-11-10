@@ -1,0 +1,106 @@
+
+{{tag>système administration}}
+====== Présentation ======
+===== Origine =====
+
+**incron** (remplaçant de //dnotify//) est le diminutif de **in**otify  **cron**tab qui est le diminutif de **c**h**ron**o **tab**le qui signifie table de planification.
+
+[[https://fr.wikipedia.org/wiki/Inotify|inotify]] est un mécanisme du [[https://fr.wikipedia.org/wiki/Noyau_Linux|noyau Linux]] qui fournit des notifications concernant le système de fichiers.
+
+===== Description =====
+
+Ainsi, **incron** est un outil qui exécute des actions selon des événements du système de fichiers.
+
+Il est composé de :
+  * **incrond** : un démon (un service qui tourne en tâche de fond)
+  * **incrontab** : configurer les actions en ligne de commande
+  * **/etc/incron.conf** : le fichier de configuration principal 
+  * **/etc/incron.d/** : répertoire contenant la définition de fichiers/de répertoires à monitorer
+  * **/etc/incron.{allow,deny}** (optionnel) : fichier définissant les utilisateurs autorisés à utiliser l’outil
+
+
+Fonctionnement : le fonctionnement est proche de cron :
+  * le démon **incrond** scanne les fichiers **/etc/incron.d/** pour savoir quoi faire en fonction des évènements du système
+
+===== Installation =====
+[[:tutoriel:comment_installer_un_paquet|Installer un paquet]] [[apt://incron|incron]]
+
+===== Configuration =====
+L'utilisation est proche de cron.
+
+==== Gérer les autorisations de l'utilisation de incron ====
+
+Si le fichier **/etc/incron.allow** existe, alors seuls les utilisateurs qui sont dans ce fichier ont le droit d'utiliser incron. Ainsi, il vous faut soit :
+  * Effacer le fichier <code>sudo rm -f  /etc/incron.allow</code>
+  * Ajouter l'utilisateur courant (ou ceux voulus) <code>echo $USER | sudo tee -a /etc/incron.allow</code>
+
+==== Configurer les dossiers et les actions à effectuer ====
+Lancer **incrontab** pour assigner des actions en fonction des fichiers/dossiers paramétrés :
+  incrontab -e
+ou bien créer un fichier texte dans le dossier :
+  /etc/incron.d/
+  
+  
+Le format de saisie de incrontab est :
+
+**<chemin> <type d'événement> <commande à exécuter>**
+
+//Exemple// :
+/home/mon_user/download IN_CLOSE_WRITE /home/mon_user/mon_script_incron.sh
+
+===Règles importantes===
+  * Si votre dossier comporte des **espaces**, il faut mettre un antislash \ devant chacun d'entre eux. Les guillements ne marcheraient pas. Ex : **Mon\ dossier\ avec\ espace** au lieu de **"Mon dossier avec espace"**
+
+  * Il est préférable d'**utiliser un script** plutot que de lancer directement des commandes. Effectivement, certaines commandes semblent ne pas marcher quand elles sont directement appelé dans le fichier alors qu'elles marchent quand elles sont appelées dans le script.
+
+  * Le display n'est pas actif. Vous ne pouvez donc pas appeler de commande graphique tel que Zenity pour afficher des boites de dialogue (ou alors qqn pourrait expliquer comment ?).
+Une possibilité (à inclure dans le script exécuté par incron) : **à adapter selon la session et l'utilisateur**
+<code>sudo -u nom_utilisateur sh -c '\
+   export DISPLAY=:0
+   PID=$(pgrep gnome-session)
+   [ ! -z "$PID" ] && dbus=$(grep -z DBUS_SESSION_BUS_ADDRESS /proc/$PID/environ | cut -d= -f2-)
+   export DBUS_SESSION_BUS_ADDRESS=$dbus
+   zenity --info --title "TEST INCRON" --text "test graphique incron."
+ '</code> 
+ On peut ajouter <code>   -- "$@"</code> après la dernière simple quote '  pour récupérer les arguments passés au script et donc afficher qui a déclenché quoi
+
+  * Si vous voulez appliquer plusieurs événements, il faut les séparer par une virgule et non insérer plusieurs lignes
+
+===Liste des types d'événements===
+^ type d'événement  ^ Signification ^
+| IN_ACCESS | le fichier a été accédé (lecture) |
+| IN_ATTRIB | les métadonnées du fichier ont été modifiées (permissions, timestamp, attributs étendus, etc) |
+| IN_CLOSE_WRITE | fermeture d’un fichier avec écriture. On attend que le fichier soit clôturé, dans notre cas, que le téléchargement SOIT TERMINE avant de déclencher la commande ou le script |
+| IN_CLOSE_NOWRITE | fermeture d’un fichier sans écriture |
+| IN_CREATE | fichier ou répertoire créé dans un répertoire surveillé. **Attention** : la commande est déclenchée lorsque le fichier est créé MAIS pas "terminé". Dans le cas d'un téléchargement qui dure 2 mn dans notre répertoire "download", la commande se déclencherait dès la création du fichier SANS ATTENDRE LA FIN DU TÉLÉCHARGEMENT. L’opération de déplacement échouerait. |
+| IN_DELETE | fichier ou répertoire supprimé dans un répertoire surveillé |
+| IN_DELETE_SELF | le fichier ou répertoire surveillé est supprimé |
+| IN_MODIFY | le fichier ou répertoire a été modifié |
+| IN_MOVE_SELF | le fichier ou répertoire a été déplacé |
+| IN_MOVED_FROM | un fichier du répertoire surveillé à été déplacé |
+| IN_MOVED_TO | un fichier a été déplacé dans le répertoire surveillé |
+| IN_ALL_EVENTS | combinaison de tous ce qui précède |
+| IN_MOVE | équivalent à IN_MOVED_FROM ou IN_MOVED_TO |
+| IN_CLOSE | équivalent à IN_CLOSE_WRITE ou IN_CLOSE_NOWRITE  |
+
+Pour utiliser contextuellement les fichiers/dossiers, des "Wildcard" sont disponibles :
+
+^ Wildcard  ^ Signification ^
+| $# | nom du fichier ou nom du dossier sur lequel l’événement est intervenu |
+| $@ | chemin complet (dossier) du fichier/répertoire surveillé |
+| $% | nom (textuel) de l’événement intervenu |
+| $& | numéro de l’événement intervenu |
+| $$ | le caractère dollar (“$”) |
+
+
+==== Prise en compte de la configuration en redemarrant le demon ====
+  sudo service incron restart
+  
+===== Liens =====
+Merci infiniment pour ces 2 liens qui ont servi d'inspiration pour cette page :
+  * [[http://www.admin-linux.fr/?p=4840|Une description intéressante sur admin-linux.fr]]
+  * [[http://dmesg.fr/categorie-logiciels/75-incron-executer-des-actions-selon-des-evenements-du-systeme-de-fichiers|Une autre description intéressante sur dmesg.fr]]
+  * [[http://www.it-connect.fr/incron-executer-des-actions-selon-des-evenements/|Tutoriel sur l'utilisation d'Incron]] sur IT-Connect.fr
+  * [[:cron]] : planifier/programmer des tâches
+  * [[:Anacron]] : planificateur de commande « anachronique »
+  * [[fcron]] : programmer des tâches devant être exécutées

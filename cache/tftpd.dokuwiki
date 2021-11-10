@@ -1,0 +1,104 @@
+
+{{tag>ftp réseau VÉTUSTE}}
+
+----
+
+<note warning>Cette page contient des manipulations dangereuses du point de vue de la sécurité du système (chmod 777)</note>
+====== Serveur TFTP : TFTPd ======
+
+
+[[wpfr>TFTP]] (pour //Trivial File Transfert Protocol//) est un protocole simplifié de transfert de fichiers. Il fonctionne en UDP sur le port 69, au contraire du FTP qui utilise lui TCP et le port 21. L'utilisation d'UDP implique que le client et le serveur doivent gérer eux-mêmes une éventuelle perte de paquets.
+
+Les principales simplifications visibles du TFTP par rapport au FTP sont qu'il ne gère pas le listage de fichiers, et ne dispose pas de mécanismes d'authentification, ni de chiffrement. Il faut connaître à l'avance le nom du fichier que l'on veut récupérer. De même, aucune notion de droits de lecture/écriture n'est disponible en standard.
+
+On utilise le protocole TFTP notamment pour la mise à jour des //firmwares// sur les équipements réseaux, la sauvegarde de la configuration de ces équipements réseau, mais aussi pour amorcer des stations de travail sans disque dur.
+
+Ce tutoriel vaut pour les 2 premiers cas qui requièrent un serveur TFTP basique. Si vous souhaitez amorcer un PC par le réseau, il vous faut préférer [[:netboot|tftp-hpa]].
+
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] ** xinetd tftpd tftp  ** . apt://xinetd,tftpd,tftp 
+===== Configuration =====
+
+Créer le fichier **/etc/xinetd.d/tftp** puis [[:tutoriel:comment_editer_un_fichier|l'éditer]] et saisir :
+
+<file>
+service tftp
+{
+protocol        = udp
+port            = 69
+socket_type     = dgram
+wait            = yes
+user            = nobody
+server          = /usr/sbin/in.tftpd
+server_args     = /tftpboot
+disable         = no
+}
+</file>
+
+Créer le répertoire **/tftpboot** :
+
+  sudo mkdir /tftpboot
+  sudo chmod -R 777 /tftpboot
+  sudo chown -R nobody /tftpboot
+
+Re-charger les fichiers de configuration de xinetd :
+
+  sudo /etc/init.d/xinetd reload
+
+Démarrer ou re-démarrer xinetd :
+
+  sudo /etc/init.d/xinetd start
+
+ou
+
+  sudo /etc/init.d/xinetd restart
+  
+
+Pour tester votre service 
+
+netstat -n | grep 69 (exemple de sortie a ajouter)
+===== Utilisation =====
+
+Pour tester le bon fonctionnement du serveur, nous allons créer un fichier dans notre home (emetteur - client) et dans /tftpboot (serveur) (avec l'attribut 777) puis le transférer sur le serveur tftp :
+
+Sur le serveur (car il faut que le fichier existe) :
+<code>
+$ touch /tftpboot/essai.txt
+$ sudo chmod 777 /tftpboot/essai.txt
+</code>
+
+<code>
+$ touch /home/MON-REPERTOIRE-UTILISATEUR/essai.txt
+$ tftp 192.168.1.1
+tftp> put essai.txt
+Sent 722 bytes in 0.0 seconds
+tftp> quit
+</code>
+
+Pour avoir l'aide mémoire sur les commandes de tftp taper :
+<code>
+$ tftp
+tftp> ?
+</code>
+
+Ce qui est écrit ci-dessous n'est pas vérifié dans tous les cas !!!
+
+__Ne pas oublier de créer le fichier que l'on désire envoyer sur le serveur dans le dossier /tftpboot pour l'écraser par la suite, sans cette manipulation vous aurez une erreur du type__:
+<code>
+Error code 2: Access violation
+</code>
+Voilà, le serveur tftp est fonctionnel pour recevoir et mettre à disposition des fichiers.
+
+----
+
+===== logs =====
+
+Les messages tftpd sont loggé sur le serveur avec syslog. Voici un exemple d'affichage dynamique :
+<code>
+user:~$ tail -f  /var/log/syslog | grep tftp
+Apr  9 09:19:58 user tftpd[12613]: tftpd: trying to get file: test.txt
+Apr  9 09:19:58 user tftpd[12613]: tftpd: serving file from /home/user/common/tftp
+</code>
+
+//Contributeurs : [[:utilisateurs:sidney_v]],[[:utilisateurs:tiwiv]]//, 007m

@@ -1,0 +1,139 @@
+
+{{tag>ssh tutoriel proxy réseau VÉTUSTE}}
+
+----
+
+====== Comment avoir un accès complet à Internet derrière un proxy ? ======
+
+Ce tutoriel explique comment obtenir un accès complet à internet depuis un site sécurisé par un Proxy en utilisant son PC comme serveur Proxy.
+
+Cas concret :
+Vous souhaitez accéder à plusieurs serveurs en VNC (port 5901) or la plupart des sites où vous intervenez protègent l'accès à internet par un proxy.
+
+===== Principe =====
+
+Si l'entreprise laisse passer le HTTP/HTTPS (si on peut utiliser les sites marchands, c'est le cas), il est en général possible de se connecter chez soi en SSH (donc quasiment tout utiliser à travers des tunnels SSH: VNC en particulier) même si le proxy/firewall l'empêche.
+
+Au niveau du serveur SSH chez soi, dans le pire des cas, il faudra juste ajouter un port d'écoute supplémentaire pour le sshd: Le port 443 du HTTPS.
+
+Le principe est simple :
+
+  * Côté boulot : Utiliser une appli user type proxytunnel et [[:tutoriel:comment_editer_un_fichier|créer un fichier]] **/home/username/.ssh/config** permettant d'intégrer la création du tunnel HTTPS comme préalable à la connexion ssh pour les hostnames concernés. Ceci ne nécessite pas les droits d'administration. A noter que pour les hôtes Windows il est possible de configurer Putty afin de faire la même chose, voir plus bas…
+  * Côté maison : [[:tutoriel:comment_editer_un_fichier|éditer]] **/etc/ssh/sshd_config** pour ajouter un port d'écoute si le proxy vérifie le port de connexion HTTPS, ce qui n'est pas toujours le cas. Ceci nécessite les droits d'administration, mais en général on maitrise ce côté de la chaine. ;-)
+
+===== Configuration du poste client Linux, côté travail =====
+
+Installer proxytunnel directement de sa source :
+http://proxytunnel.sourceforge.net/download.php
+
+Télécharger le //linux-x86 binary// et le copier dans « /home/$USER/.ssh » (remplacer ''$USER'' par son nom d'utilisateur).
+
+Vérifier qu'il a bien l'attribut +x (execution), sinon faire :
+chmod u+x proxytunnel-i386-linux
+
+Créer (s'il n'existe pas) un fichier /home/username/.ssh/config
+et y placer la ligne d'appel de proxytunnel:
+<code>
+# Remplacer ce nom par son domaine dyndns maison ou IP (si fixe)
+host mon_domaine.net
+
+# Remplacer "nom_du_proxy:port_proxy" par ce qui est utilisé dans l'entreprise:
+# voir config de firefox/IE, ou directement le fichier de config auto du proxy...
+# Si pas d'authentification auprès du proxy, virer les -u -s et les username/passwd.
+# Sinon, mettre les bons (attention a ne pas laisser les droits +r aux autres utilisateurs, qui pourraient lire votre MDP d'accès au proxy internet!).
+ProxyCommand /home/username/.ssh/proxytunnel-i386-linux -p nom_du_proxy:port_proxy -u username -s user_internet_passwd -d mon_domaine.net:443 -v
+</code>
+
+
+===== Configuration du poste client Windows, côté travail =====
+
+On utilise Putty pour créer une connexion SSH.
+La version portable de Putty est très pratique, car on peut la mettre sur une clé USB : [[http://www.framakey.org/Portables/PortablePuTTY|Portable Putty]]
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **.putty\sessions\masession** FIXME __(sous Windows avec portablePuTTY ça se trouve dans **(répertoireframakey)\Apps\PortablePuTTY\.putty\sessions** )__ :
+<file>
+Protocol=ssh 
+PortNumber=443 
+
+// Activation du keep alive afin d’éviter d’être déconnecté 
+PingIntervalSecs=30 
+TCPNoDelay=1 
+
+// Configuration du proxy (proxy http) 
+ProxyMethod=3 
+ProxyHost=Proxy 
+ProxyPort=3128 
+ProxyUsername=login 
+ProxyPassword=XXXX 
+
+// redirection de ports 
+LocalPortAcceptAll=1 
+RemotePortAcceptAll=1 
+PortForwardings=D6588,
+</file>
+
+Pour Windows, dans le cas de l'utilisation de Putty, les informations sont à spécifier dans l'onglet de gauche. N'oubliez pas de sauvegarder la session.
+
+{{tutoriel:putty_windows_connexion_00.png|}}
+
+{{tutoriel:putty_windows_connexion_01.png|}}
+
+Configurer le navigateur (Firefox : //Outils → Options → Avancé → Réseau → Paramètres// ; IE : //Outils → Options Internet → Connexions → Paramètres réseau//) :
+
+{{tutoriel:proxy.jpg|}}
+
+
+===== Configuration du serveur SSH, côté maison =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>ssh]]**.
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/ssh/sshd_config** afin d'ajouter "Port 443" en dessous du classique port d'écoute 22 du daemon sshd.
+
+<note tip>
+Pour éviter les déconnexion, il faut utiliser le mode keepalive :
+[[:tutoriel:comment_editer_un_fichier|éditez le fichier]] **/etc/ssh/sshd_config** et vérifier que la ligne suivante est bien présente : **TCPKeepAlive yes**
+</note>
+
+===== Configuration du routeur =====
+
+La plupart des Box internet permettent de configurer la redirection des ports.
+Mais pas le routeur linksys
+
+===== Utilisation =====
+
+Possibilité de faire du VNC chez soi sous tunnel SSH crypté en redirigeant classiquement les ports 59XX avec l'option -L de la ligne de commande ssh. Voir les tutoriels/posts forum à ce sujet (ou le man ssh), résumé ci après (bureau à distance préalablement activé chez soi en prenant soin de bloquer les accès directs, sans tunnel SSH, niveau firewall: Ne pas ouvrir les ports 59xx!):
+Dans un 1er terminal:
+<code>
+ssh -L 5901:localhost:5900 -C <user>@<hostname>
+</code>
+
+Dans un 2e terminal :
+
+<code>
+vncviewer localhost:1
+</code>
+
+Possibilité de faire du web en utilisant son PC ubuntu maison: Utiliser l'option -D de ssh, qui transforme le serveur ssh en proxy SOCKS. Ainsi, on peut aller sur Monster sans que son DRH ne puisse être informé par l'admin réseau ;o)
+<code>
+ssh -D 9999 <user>@<hostname>
+</code>
+
+Et côté navigateur, sous //Édition → Préférences → Général → Paramètres de connexion// → configurer manuellement un proxy Socks v5 sur le localhost, port 9999 (celui de l'option ''-D''). Ne pas oublier de retirer le localhost de la ligne « No proxy for: »((« Pas de proxy pour : »)), qui bypasserait ce setup !
+
+Et tout ce que peut faire SSH de rigolo, avec les reverse tunnels par exemple :
+
+Si l'on veut se passer du VPN de l'entreprise... Lancer un reverse tunnel ssh chez soi par exemple ! On se connecte ensuite de chez soi //via// le localhost et en utilisant le numéro de port //reverse forwardé// avant de partir du travail. ;-)
+
+De quoi rendre un admin fou... et sans doute la raison pour laquelle le HTTPS commence à ne plus sortir dans certaines entreprises ?
+
+===== Voir aussi =====
+
+  * Sur le forum : [[http://forum.ubuntu-fr.org/viewtopic.php?id=213500|[Tuto] Passer à travers un proxy et creuser un tunnel ssh]]
+
+> FIXME faire un mix de cette page avec le tuto du forum pour n'avoir qu'une seule page
+
+  * Documentation en PDF testé et réussie : [[http://www.breizh-ardente.fr/public/Commentsurfertranquilleaubureau.pdf|Comment surfer tranquille au bureau]]
+
+
+----
+
+//Contributeurs : [[utilisateurs:manusvs650|manusvs650]], yvan78.//

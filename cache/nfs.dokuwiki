@@ -1,0 +1,330 @@
+
+{{tag>Partage réseau}}
+----
+
+====== NFS : Network File System - le partage réseau sous Linux =======
+
+**NFS** est l'abréviation de [[wpfr>Network_File_System|Network File System]], c'est-à-dire [[:système de fichiers]] [[:réseau]].
+
+Ce système de fichiers en réseau permet de [[:partage|partager des données]] principalement entre systèmes de type UNIX mais des versions existent également pour Microsoft Windows™ et Mac. \\
+**NFS** est compatible avec IPv6 sur la plupart des systèmes.
+
+===== Alternative avec interface graphique GUI =====
+
+Avant de vous lancer dans la lecture de cette documentation, il existe une application permettant de créer facilement un partage de fichiers avec NFS. Son usage évite d'utiliser le terminal et favorise la configuration du réseau partagé NFS.
+
+https://github.com/Philippe734/Simple.NFS.GUI
+
+{{::27803265-f3ab49dc-6028-11e7-8e10-857f86ac5a85.png?400|}}
+
+Avant d'installer cette application, il est nécessaire d'en installer d'autres.
+
+[[apt>gambas3-runtime,gambas3-gb-form,gambas3-gb-gtk3|gambas3-runtime gambas3-gb-form gambas3-gb-gtk3]]
+
+<code bash>sudo apt-get install -y gambas3-runtime
+sudo apt-get install -y gambas3-gb-form
+sudo apt-get install -y gambas3-gb-gtk3
+</code> 
+
+Lorsque cette application sera lancée, elle installera automatiquement l'application **fping**
+===== Avec le terminal, pré-requis =====
+==== Deux ordinateurs au moins ====
+
+  *Un **[[:serveur]]** sous GNU/Linux (ici Ubuntu) où se trouvent les fichiers à partager.
+  *Un **client** qui doit pouvoir accéder aux fichiers du Serveur. 
+
+==== Ne pas avoir peur de la ligne de commande ====
+
+[[:terminal|Voir ici les bases du terminal]].
+
+==== Avoir les droits d'administration sur les deux machines ====
+
+C'est-à-dire de pouvoir installer des paquets et utiliser la commande **//sudo//**
+
+[[:sudo|Voir ici de quoi il est question et en particulier la commande « sudo »]].
+
+==== Être sur un réseau de confiance  ====
+
+[[wpfr>NFS]] surtout avant la version 4 (incompatible avec les précédentes) ne doit être déployé que sur des réseaux [[:securite|sûrs]]. \\
+Quelle que soit la version, NFS est a déployer dans un [[wpfr>Réseau_local|réseau local]] et n'a pas de vocation à être ouvert sur [[wpfr>internet]]. \\
+On peut utiliser par exemple NFS sur son réseau local derrière une //Box// assurant le rôle de [[wpfr>routeur]] [[wpfr>Network_address_translation|NAT]].
+
+==== Connaître les adresses IP locales de Serveur et de Client ====
+
+Dans le [[:terminal]] lancer « ifconfig », l'adresse est à la ligne « ''inet adr:'' », paragraphe « ''eth'' » si vous êtes connecté en ethernet, « ''wlan'' » pour une connexion Wi-Fi.
+
+Vous pouvez aussi connaître l'IP de vos PC via l'applet [[network-manager]].
+
+Pour la suite de cet exemple, on considérera que Serveur et Client ont une adresse locale fixe :
+  * Serveur : **192.168.0.10**
+  * Client : **192.168.0.20**
+
+<note important>
+Il peut être important de fixer les adresses IP de vos ordinateurs pour être sûr qu'elles ne changeront pas :
+  * Soit à partir de l'interface du routeur / de la *box. Ouvrez Firefox, et tapez dans la barre d'adresse celle donnée dans le mode d'emploi du routeur / de la *box (le login et le mot de passe y sont aussi). [[:modem_adsl_routeur_et_box|Plus d'infos]]. 
+  * Soit directement à partir d'Ubuntu via [[:Network-Manager]] ou [[http://forum.ubuntu-fr.org/viewtopic.php?pid=1152502#p1152502|par la configuration fixe]]
+</note>
+
+==== Se faire un aide-mémoire ====
+
+^ Les machines        ^ IP locales              ^ Points de montage des fichiers                                ^
+| //Votre serveur//   | //IP de votre serveur// | Exemple : ///home/Votre_Nom_d'Utilisateur_sur_Votre_Serveur// |
+| **Serveur**         | **192.168.0.10**         | **/Fichiers_à_partager_sur_Serveur**                          |
+| //Votre client//    | //IP de votre client//  | Exemple : ///home/Nom_d'Utilisateur_sur_le_Client/Partage//   |
+| **Client**          |** 192.168.0.20**         | **/Point_de_montage_sur_Client**                              |
+
+
+<note>Vous n'êtes pas obligé de connaître les IP de tous vos clients si vous en avez beaucoup ou si leurs IP sont amenées à changer \\
+En effet avec cette méthode, les ordinateurs de tout votre réseau local pourront sans distinction utiliser NFS. \\
+D'autres méthodes décrites dans les [[#Exemples concrets]] vous demanderont de les connaître.</note>
+
+===== Création d'un Serveur NFS =====
+==== Installation ====
+Installez sur le ou les serveurs NFS le paquet **[[apt>nfs-kernel-server|nfs-kernel-server]]**
+
+==== Configuration ====
+=== déclaration de l'Export NFS===
+La configuration  d'un 'export' NFS se fait en [[:tutoriel:comment_modifier_un_fichier|éditant le fichier]] **/etc/exports** 
+
+<file bash /etc/exports>
+# Un exemple à adapter:
+/Dossier/à/partager/ 192.168.0.0/24(rw,all_squash,anonuid=1000,anongid=1000,sync,no_subtree_check)
+/Dossier/numero02/  master(rw) trusty(rw,no_root_squash)
+</file>
+
+Dans ce fichier, chaque ligne est définie comme ceci :
+   <dossier partagé> <hôte>(<options>) <hôte2>(<options>)...
+
+Les informations se trouvant sur une ligne sont les suivantes(([[man>exports]])) :
+  * **<dossier partagé>** : chemin menant au dossier partagé.
+  * **<hôte>** : indique quel est l'hôte qui peut accéder à ce partage, l'hôte peut être défini de plusieurs manières :
+     * une IP : on indique simplement l'adresse IP de la machine pouvant accéder à ce partage.
+     * un nom d'hôte : on indique le nom complet de l'hôte (pour peu qu'il soit connu du système au travers d'un DNS ou du fichier ''hosts'').
+     * un nom de groupe réseau NIS (NIS netgroup) qui s'indique sous la forme ''@<netgroup>''.
+     * un domaine avec un joker qui indique les machines d'un domaine ou sous-domaine; par exemple : ''*.ubuntu-fr.org''.
+     * un intervalle d'IP avec le masque de sous-réseau; par exemple : ''192.168.0.0/24'' ou ''192.168.0.*''
+  * **<options>** : indique les options de partage; nous n'allons pas parcourir toutes les options ensemble mais uniquement les plus importantes.
+     * **rw** : permet la lecture et l'écriture sur un partage pour l'hôte défini (par défaut, les partages sont en mode ''ro''; c'est-à-dire en lecture seule).
+     * **async** : permet au serveur NFS de violer le protocole NFS et de répondre aux requêtes avant que les changements effectués par la requête aient été appliqués sur l'unité de stockage. Cette option améliore les performances mais a un coût au niveau de l'intégrité des données (données corrompues ou perdues) en cas de redémarrage non-propre (par exemple en cas de crash système).
+     * **sync** : est le contraire de ''async''. Le serveur NFS respecte le protocole NFS.
+     * **root_squash** : force le //mapping// de l'utilisateur ''root'' vers l'utilisateur anonyme (option par défaut).
+     * **no_root_squash** : n'effectue pas de //mapping// pour l'utilisateur ''root''.
+     * **all_squash** : force le //mapping// de tous les utilisateurs vers l'utilisateur anonyme.
+     * **anonuid** : indique au serveur NFS l'UID de l'utilisateur anonyme (considéré comme tel dans les précédentes options de //mapping//).
+     * **anongid** : indique au serveur NFS le GID de l'utilisateur anonyme (considéré comme tel dans les précédentes options de //mapping//).
+     * **subtree_check** :  Si un sous-répertoire dans un système de fichiers est partagé, mais que le système de fichiers ne l'est pas, alors chaque fois qu'une requête NFS arrive, le serveur doit non seulement vérifier que le fichier accédé est dans le système de fichiers approprié (ce qui est facile), mais aussi qu'il est dans l'arborescence partagée (ce qui est plus compliqué). Cette vérification s'appelle subtree_check.
+     * **no_subtree_check** : Cette option neutralise la vérification de sous-répertoires, ce qui a des subtiles implications au niveau de la sécurité, mais peut améliorer la fiabilité dans certains cas.
+Ce qui pourrait donner par exemple:
+
+  /media/NFS 192.168.0.0/24(rw,all_squash,anonuid=1000,anongid=1000,sync,no_subtree_check)
+
+<note>Si vous obtenez l'erreur suivante au montage : **mount.nfs4: access denied by server while mounting**, vérifiez les droits d'accès au dossier partagé (le dossier est peut être en mode interdit pour "autres" ce qui le rend impossible à lire pour le serveur NFS)</note>
+
+<note tip>essayer aussi une codification plus simple<code bash>/media/NFS 192.168.0.24(rw,sync,no_subtree_check)</code></note>
+
+=== relancer le service ===
+Après avoir défini vos partages dans le fichier **/etc/exports** il suffit de relancer le service nfs:
+  sudo service nfs-kernel-server reload
+  
+Cette commande ne coupe pas les transferts en cours si la nouvelle configuration permet toujours leur accès au serveur. Vous pouvez donc la lancer plus ou moins à n'importe quel moment.
+
+Pour vérifier que l'export a bien eu lieu, taper sur le serveur NFS la commande :
+  showmount -e
+
+Si l'export n'est pas effectif , il faut faire restart du service NFS mais attention cela peut interrompre les transferts en cours :
+  sudo service nfs-kernel-server restart
+
+=== Un peu de sécurité avec TCPwrapper ===
+
+Pas indispensable si vous avez un bon firewall entre internet et votre réseau local, NFS peut être protégé par le serveur le cas échéant. (testez tout d'abord votre configuration sans protection pour voir si tout fonctionne si vous comptez utiliser ce genre de protection dans le futur)
+
+Si vous utilisez [[:denyhosts|denyhosts]] sur le serveur, il vous faudra ajouter les lignes suivantes dans le fichier /etc/hosts.allow :
+<file bash /etc/hosts.allow>
+portmap: <ip de la machine cliente>
+lockd: <ip de la machine cliente>
+nfsd: <ip de la machine cliente>
+mountd: <ip de la machine cliente>
+rquotad: <ip de la machine cliente>
+statd: <ip de la machine cliente>
+</file>
+
+et également afin de sécuriser un peu plus votre installation, ajouter dans le fichier **/etc/hosts.deny** :
+<file bash /etc/hosts.deny>
+# Tout interdire sur  portmap, nfsd et mountd
+portmap:ALL
+nfsd:ALL
+mountd:ALL
+</file>
+
+=== mise en veille ===
+
+Si vous mettez en veille votre serveur NFS ou si il se met en veille automatique après un certain délai pour économiser l'énergie, alors vos clients NFS qui utilisent les partitions exportées seront "bloqués".
+Par exemple si un client NFS se met en veille, lors du réveil, après saisie du mot de passe dans l'écran de session, vous serez "bloqué" et aurez bien du mal à reprendre la main. 
+Pour éviter cet effet de bord, je vous conseille de ne pas utiliser la mise en veille automatique sur votre serveur NFS (celui qui exporte les partitions) mais seulement l'économie d'énergie de l'écran (sans effet sur les partitions).
+
+
+
+==== Exemples concrets ====
+
+  * **[[:tutoriel:partage_nfs|Exemple de partage avec NFS]]** : Exemple de réseau entre 3 ordinateurs qui permet l'échange et le partage de fichiers avec le minimum de contraintes via //nfs-kernel-server//. 
+
+  * **[[:disque réseau|Partager une partition en réseau]]** : Exemple en éditant les fichiers de configuration du partage d'une partition de sauvegarde en réseau via //nfs-kernel-server//.
+
+  * **[[:tutoriel:un_simple_partage_nfs|Un simple partage NFS]]** : Tutoriel expliquant pas à pas comment accéder à distance aux documents enregistrés sur un ordinateur à partir d'un autre. Nécessite de saisir quelques lignes de commandes, mais permet de comprendre tout en faisant.
+  * D'autres méthodes, parfois obsolètes, sont également disponible sur l'[[:nfs?rev=1258038788|ancienne version de la page NFS]].
+
+===== Client NFS =====
+
+Pour accéder à un NFS, il faut le "monter". En gros il s'agit de dire au service qui s'occupe des disques durs que ce serveur NFS est comme un disque dur et qu'il serait bête de ne pas s'en servir !
+
+Il n'existe pas d'autoconfiguration pour NFS, il faudra donc le faire manuellement.
+
+==== Ubuntu GNU/Linux ====
+
+Le paquet nécessaire pour accéder à un NFS est **[[apt>nfs-common|nfs-common]]**
+
+Après avoir installé ce paquet, il existe deux solutions pour monter son NFS sur un ordinateur. \\
+La première est plus adaptée à un Serveur allumé en permanence (ou presque), la seconde via autoFS est peut être plus tolérante à l'arrêt inopiné du serveur.
+
+Pour parcourir les partages NFS d'un serveur (ici : serveur.local, que vous pouvez remplacer par l'IP) saisissez dans un [[:terminal]] la commande suivante:
+<code>
+showmount -e serveur.local
+Export list for serveur.local:
+/mnt/nas/media *.local,192.168.0.0/255.255.0.0
+</code>
+
+=== Modifier /etc/fstab ===
+
+Il faut tout d'abord créer un dossier dans lequel le NFS viendra se loger. Ouvrez donc un [[terminal]] sur vos clients puis tapez:
+
+  sudo mkdir /media/NFS
+  
+Vous pouvez bien entendu créer un répertoire du nom de votre choix; dans ce cas adaptez les instructions suivantes au besoin. 
+
+Pour ce faire, il suffit de [[:tutoriel:comment_modifier_un_fichier|modifier le fichier]] **/etc/fstab** pour y ajouter la ligne:
+
+<file>
+192.168.0.10:/<Dossier_à_partager>/ /media/NFS nfs defaults,user,auto,_netdev,bg 0 0
+</file>
+
+  * **192.168.0.10** étant l'IP de votre serveur
+  * **<Dossier_à_partager>** étant le dossier sur votre serveur que vous voulez recevoir (doit correspondre à celui que le serveur veut envoyer)
+  * **/media/NFS** On précise le point de montage (dossier que vous avez créé juste avant dans lequel vous souhaitez monter le partage NFS)
+  * **nfs** On précise le protocole utilisé.
+  * **defaults,user,auto,_netdev** sont décrite dans [[:mount_fstab#utilisation_avancee|fstab]], vous pouvez ajouter **ro** à la fin pour ne pas autoriser l'écriture.
+  * **atime/noatime, diratime/nodiratime, relatime/norelatime, strictatime/nostrictatime mount** n'as pas d'effet pour un montage nfs 
+  * **bg** permet de ne pas bloquer le démarrage du client si le serveur n'est pas opérationnel.
+  * **0 0** dit à Linux de ne pas vérifier si le disque contient des erreurs (le serveur s'en occupera)
+
+<note idée>**Optimisation possible:** \\
+  * Si vous utilisez un réseau Gigabit ethernet (les dernier switchs, routeurs, box), vous pouvez ajouter en option de montage: **,rsize=16384,wsize=16384** \\
+Ces options de montage permettront de booster légèrement à énormément (suivant la carte réseau) la vitesse de transfert sur les gros fichiers.
+  * Si votre serveur est très peu puissant (un Pentium 2 ou 3 par exemple plus de 12 ans d'âge, bon millésime) vous pouvez augmenter les performances en ajoutant en "options de montage" (voir plus haut) **,vers=3,udp** ceci aura pour effet d'utiliser la version 3 de NFS ainsi que le protocole UDP. \\
+Vous devriez maintenant utiliser moins de processeur mais ceci peut ne pas marcher très bien si votre liaison réseau est de mauvaise qualité **(ne surtout pas utiliser ces options sur les clients en Wifi !)**
+</note>
+
+=== Utiliser Autofs ===
+
+  * **[[:autofs#nfs|Autofs]]** : Logiciel pour monter facilement votre partage NFS.
+
+
+Se servir d'AutoFS a de grands avantages quand à la gestion d'un partage NFS pour un client qui peut être déplacé vers un autre réseau, comme un ordinateur portable. Des problèmes d'instabilité peuvent survenir quand le NFS est en montage automatique comme avec les indications ci-dessus. Et s'il n'est pas automatique alors cela nécessite de monter manuellement le partage quand on rejoint à nouveau le réseau local. Auto-FS permet très simplement de définir le montage automatique quand on accède aux dossiers correspondant au partage.
+
+La première étape est d'installer autofs comme indiqué dans la page dédiée sous le lien plus haut.
+
+Il y a plusieurs méthodes pour ajouter un partage NFS, mais celle qui offre le plus de souplesse est d'utiliser l'option hosts. Voici la ligne [[:tutoriel:comment_modifier_un_fichier|à ajouter en bas du fichier /etc/auto.master]]
+<file>
+/net    -hosts -fstype=nfs4,rw
+</file>
+Redémarrez le service Autofs
+<code>
+sudo service autofs restart
+</code>
+Et c'est tout !
+
+Ou presque, vous venez de définir que le dossier /net à la racine du système est un portail pour accéder à n'importe quel partage accessible. La configuration de ce partage n'est plus déterminée que par le chemin d'accès.
+Voici des exemples avec le serveur <serveur>.local et le partage /<Dossier à partager>, vous n'avez qu'à accéder à :
+<code>
+/net/<serveur>.local/<Dossier à partager>/
+</code>
+Pour vous simplifier la vie, ou si vous aviez déjà configuré préalablement le montage sur un dossier comme /media/NFS, il vous suffit de remplacer le dossier /media/NFS par un lien symbolique :
+<code>
+sudo umount /media/NFS # Démontage du partage existant si besoin
+sudo rmdir /media/NFS  # Suppression du point de montage si existant
+sudo ln -s /net/<serveur>.local/<Dossier à partager> /media/NFS # Création du lien symbolique
+</code>
+Ainsi vos anciens raccourcis ne seront pas perturbés.
+
+==== Windows ====
+
+  * **[[:tutoriel:nfs_client_windows|Comment configurer un PC client Windows pour accéder à un partage NFS]]** : Tutoriel pour accéder au partage NFS depuis un client Windows à l'aide de Windows Services for Unix (SFU).
+
+
+===== Firewall (Pare-feu) et NFS =====
+
+Sachez qu'un firewall ne vous servira à rien si vous êtes (comme ce tutoriel l'exige **très important**) derrière un routeur. \\
+Si vous faites un partage de connexion via [[:Network-Manager]] un routage sera en place automatiquement, les ordinateurs dans le partage n'ont donc rien à craindre. \\
+Si vous utilisez un pare-feu entre le modem et le PC qui partage la connexion internet, n'ouvrez surtout pas le port NFS vers le modem ! Il faut l'ouvrir dans le sens inverse, c'est-à-dire vers le partage de connexion ! Ne vous trompez pas !
+Le seul intérêt d'un pare-feu dans ce cas précis est seulement si vous avez un nombre très important de postes informatiques chez vous et que ces postes risquent d'être utilisés par des personnes malveillantes.
+
+Si vous utilisez tout de même un pare-feu sur vos serveurs et/ou clients NFS, il vous faudra le configurer pour ne pas filtrer NFS et donc pouvoir y accéder :
+
+  * **[[nfs-ufw|partage NFS et Firewall (UFW )]]** : Comment fixer les ports utilisés lors d'un partage NFS (firewalling, routage..) .
+
+===== Résoudre les problèmes =====
+
+==== Rétrograder en NFSv3 ====
+Si vous obtenez un message comme:"mount.nfs: access denied by server while mounting"ipserveur"", c'est certainement que vous avez entré les bonnes adresses ip autorisés dans export, cependant, NFSv4 n'utilise pas le système d'authentification par ip, il est donc utile de rétrograder en version 3 pour que le serveur se base sur l'ip
+=== Côté serveur ===
+Modifier le fichier **/etc/default/nfs-kernel-server** et éditer la ligne
+<code>RPCNFSDCOUNT='8' </code>
+
+par
+
+<code>RPCNFSDCOUNT='8 --no-nfs-version 4'</code>
+
+=== Côté client ===
+Ajoutez **,vers=3** aux options de montage dans le fichier fichier **/etc/fstab**
+comme ceci :
+<file>
+  192.168.0.10:/<Dossier_à_partager>/ /media/NFS nfs defaults,user,auto,noatime,bg,vers=3 0 0
+</file>
+
+Utilisez ''nfsstat'' pour vérifier que la modification à été prise en compte.
+
+==== Résoudre le problème de verrouillage de fichiers avec LibreOffice ====
+Commentez les lignes suivantes dans les fichiers **/usr/bin/libreoffice** et **/usr/bin/soffice**
+(ajouter un # devant les deux lignes)
+
+<code>SAL_ENABLE_FILE_LOCKING=1
+export SAL_ENABLE_FILE_LOCKING</code>
+
+==== Résoudre le problème de temps de montage sur les clients  ====
+
+Les clients Ubuntu 13 et 14 présentent un bug connu : un temps de latence très long pour le montage
+https://bugs.launchpad.net/ubuntu/+source/nfs-utils/+bug/1270445
+
+Pour le résoudre, sur le client Modifier le fichier **/etc/default/nfs-common** et éditer la ligne
+<code># Do you want to start the gssd daemon? It is required for Kerberos mounts.
+NEED_GSSD=
+</code>
+
+par
+
+<code># Do you want to start the gssd daemon? It is required for Kerberos mounts.
+NEED_GSSD=yes
+</code>
+
+puis blacklister le module 'rpcsec_gss_krb5' en éditant le fichier /etc/modprobe.d/blacklist.conf en y ajoutant à la fin la ligne :
+<code>#To improve NFS mounting time
+blacklist 'rpcsec_gss_krb5'
+</code>
+
+
+
+ ===== Autres liens =====
+
+  * http://nfs.sourceforge.net/
+  * [[http://kodi.wiki/view/NFS|Configurer NFS pour KODI]]
+
+{{backlinks>nfs}}

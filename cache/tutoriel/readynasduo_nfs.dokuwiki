@@ -1,0 +1,152 @@
+
+{{tag>Precise Tutoriel BROUILLON}}
+--------------
+
+====== Installer un Readynas duo en NFS dans son réseau personnel ======
+
+
+<note important>Ce tutoriel se base sur [[autofs|autofs]] et [[nfs|NFS]]
+</note>
+
+Ce tutoriel a pour but de partager mon expérience avec un Readynas duo sur un réseau personnel de quelques machines linux en utilisant NFS.
+
+{{:rnd2xxx_duo.png|ReadyNas Duo }}
+===== Pré-requis =====
+  * Disposer des [[:sudo|droits d'administration]]. Ne pas avoir peur de la [[tutoriel:console_ligne_de_commande|ligne de commande]]
+  * Avoir [[:tutoriel:comment_installer_un_paquet|installé les paquets]]  **[[apt>nfs-common,autofs|NFS et Autofs]]**. L'installation est détaillée plus bas.
+
+  
+===== Paramétrage du Readynas =====
+==== Activation du service NFS ====
+Activer le service NFS dans le menu du NAS
+
+{{ :ready_nas_services_nfs.png?640 |}}
+
+==== Activation du NFS pour un partage ====
+Dans le menu partages, vérifier l'activation du service NFS pour le partage voulu, activer-le si nécessaire
+
+{{ :ready_nas_edit.png?640 |}}
+
+Vérifier l'autorisation d'accès en lecture-écriture
+
+{{ :ready_nas_default_access.png?640 |}}
+
+Le paramétrage de votre NAS est prêt ! pour plus de détails, vous pouvez consulter ce [[http://lnxdev.com/view_article.php?id=85|tutoriel (en anglais)]]
+
+----
+
+===== Paramétrage du PC =====
+==== paramétrage du fichier hosts ====
+Il faut paramétrer le fichier /etc/hosts du PC pour ajouter votre NAS
+<code>gksudo gedit /etc/hosts</code>
+
+Ajoutez-y une ligne concernant votre nas:
+<code>adresse_ip_du_NAS  Nom_du_NAS</code>
+Par exemple:
+<code>192.168.0.56 brigitte</code>
+
+<note important>
+Pour que ce paramétrage fonctionne tout le temps, il vaut mieux fixer l'adresse IP de votre NAS.
+Si vous utilisez un DHCP, paramétrez une adresse IP fixe pour le NAS basé sur son adresse MAC
+</note>
+==== Installation de NFS et Autofs ====
+Vous pouvez vérifier sur les pages dédiées [[autofs|AutoFS]] et [[nfs|NFS]]
+
+Sinon, installez directement:
+<code>sudo apt-get install nfs-common autofs</code>
+
+Éditez le fichier /etc/auto.master
+Ajoutez la ligne suivantes à la fin du fichier:
+<code>/net -hosts --ghost,--timeout=30</code>
+On redémarre autofs pour prendre en compte les modifications:
+<code>sudo service autofs restart</code>
+
+Cela va monter automatiquement les partages NFS des machines définies dans /etc/hosts dans le répertoire /net
+
+Dans le cas d'un readynas s'appelant brigitte ayant un partage nfs s'appelant "mes_backup", vous retrouverez un répertoire /net/brigitte/c/mes_backup
+
+le "c" est le nom du volume sur le NAS (vous pouvez vérifier sur l'interface de votre NAS dans la section volumes
+
+
+
+==== Accès depuis plusieurs machines / problèmes de droits ====
+
+Lorsqu'on accède depuis son nas depuis plusieurs machines, il peut être souhaitable de vérifier qu'on a le même uid sur toutes les machines
+
+Ex: Si j'accèdes au NAS depuis les machines Castor et Pollux, avec mon compte utilisateur pouet
+Je peux vérifier mon uid en tapant:
+<code>id pouet</code>
+
+Si j'ai un uid different pour pouet sur Castor et pouet sur Pollux, alors il ne sera pas autorisé d'effacer les fichiers copié depuis une machine si ils ont été copié depuis l'autre.
+
+Essayer un ls -l et ls -n dans vos partages pour vous en rendre compte:
+<code>
+pouet@:/net/brigitte/c/media/musique$ cd /net/brigitte/c/media/musique/
+pouet@castor:/net/brigitte/c/media/musique$ ls -l
+total 32
+drwxr-xr-x 4 pouet pouet 16384 mars   5  2011 albums
+drwxr-xr-x 2 pouet pouet 16384 juin  12  2010 playlists
+pouet@castor:/net/brigitte/c/media/musique$ ls -n
+total 32
+drwxr-xr-x 4 1000 1000 16384 mars   5  2011 albums
+drwxr-xr-x 2 1000 1000 16384 juin  12  2010 playlists
+pouet@castor:/net/brigitte/c/media/musique$
+</code>
+Si vous essayez d'effacer ces fichiers / répertoires depuis la machine pollux où votre uid est 1001, cela ne fonctionnera pas
+Il est possible de modifier l'uid et le gid d'un user, je ne détaille pas ce point ici, il existe un [[tutoriel:changer_un_identifiant_de_compte|tutoriel]] ou des solutions sur le forum
+
+===== Ajouter les partages NFS d'un autre PC =====
+<note tip>
+Si en plus du NAS vous avez d'autres partages NFS ( serveur linux, partage sur un PC ... )
+Il suffit de l'ajouter dans /etc/hosts :
+</note>
+<code>gksudo gedit /etc/hosts</code>
+Ajoutez-y une ligne concernant chaque PC avec partage NFS:
+<code>adresse_ip_du_NAS  Nom_du_PC</code>
+Par exemple:
+<code>192.168.0.15 castor
+192.168.0.31 robert</code>
+<note important>
+Pour que ce paramétrage fonctionne tout le temps, il vaut mieux fixer l'adresse IP de vos PC "partageur".
+Si vous utilisez un DHCP, paramétrez une adresse IP fixe pour le(s) PC(s) basé sur son adresse MAC
+</note>
+Il suffit alors de redémarrer autofs pour voir apparaitre les partages de castor et robert dans /net/castor et /net/robert
+<code>sudo service autofs restart</code>
+<note important>
+Il faut avoir paramétré un partage NFS sur ces machines pour que cela fonctionne !
+Voir le [[nfs#creation_d_un_serveur_nfs|tutoriel NFS]] pour ce faire
+</note>
+
+===== Paramétrer un backup automatique sur le Readynas =====
+
+Maintenant que vous avez monté votre NAS sur votre machine dans /net, vous pouvez y copier des fichiers depuis votre PC ou bien utiliser un archivage via [[:rsync|rsync]].
+Vous pouvez utiliser également la fonction de backup de votre NAS: dans ce cas, c'est le NAS qui viendra chercher lui même les données à sauvegarder sur votre PC.
+Voici la démarche:
+==== Selection de la source ====
+Sur le NAS, allez dans //sauvegarde>Nouvelle tâche//
+Choisissez une source : //Distant: protocole NFS//
+Rentrez les informations de votre PC avec partage NFS: 
+  * Hôte: adresse IP de votre PC
+  * Chemin: /home/pouet/mon_repertoire_a_sauvegarder
+  * Identifiant : pouet / Mot de passe: mot_de_passe_de_pouet
+Vous pouvez tester les paramètres avec le bouton Test de connexion
+{{ :tutoriel:readynas_backup.jpg?640 |}}
+==== Selection de la destination ====
+  
+  
+  //en cours d'ecriture// 
+  
+  
+===== Autres liens =====
+
+[[http://lnxdev.com/view_article.php?id=85|Setting up NFS Linux client for Netgear ReadyNAS Duo]]
+{{backlinks>nfs}}
+ 
+
+
+
+
+
+
+
+

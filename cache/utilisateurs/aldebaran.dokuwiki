@@ -1,0 +1,247 @@
+
+===== Compatibilité =====
+
+Concerne INSTALLATION WIFI avec chipset ATHEROS ar5007eg sur FUJITSU-SIEMENS AMILO U 2727
+
+DISTRIBUTION UBUNTU "Gutsy Gibbon" - 7.10
+
+
+==== Pré-requis ====
+    *
+      Disposer des droits d'administration ;
+    *
+      Disposer d'une connexion à Internet configurée et activée sous ethernet ;
+
+    * 
+      Avoir activé l'accès aux dépôts APT universe et multiverse ;---
+
+    *
+      vérifier que vous avez le chipset ar5007eg avec la commande :
+
+lspci -d 168c:001c
+
+ 
+le résultat est     08:00.0 Ethernet controller: Atheros Communications, Inc. AR5006EG 802.11 b/g Wireless PCI Express Adapter (rev 01)
+
+
+--vérifier le version d'Ubuntu 32 bits (pas essayé la version 64 bits)
+
+getconf LONG_BIT
+
+32
+    
+
+
+===== ==== REMARQUES : ==== =====
+__la technique décrite dans la page http://doc.ubuntu-fr.org/acer_aspire_5315 n'a pu fonctionner :__
+
+ 
+a/ éléments absents dans le site
+
+http://blakecmartin.googlepages.com/ar5007eg-32-0.2.tar.gz (lien absent)
+
+b/ pas de gestion des touches de fonction pour démarrer le wifi (fnct/F1)
+
+c/  explication à préciser concernant l'utilisation d'une clé WAP
+
+__La technique décrite dans la page http://doc.ubuntu-fr.org/atheros_ar5007eg n'a pu fonctionner :__
+
+a/ matériel reconnu par madwifi avant installation de acer_apci, mais ne fonctionnant pas
+
+b/ après installation de acer_apci, le matériel n'est plus reconnu, bien que la led témoin orange soit allumée.
+  
+
+
+====== ===== ==== Installation ==== ===== ======
+
+
+
+TROIS PHASES :
+
+LE GESTIONNAIRE ACPI pour remplacer les touches FNCT / F1
+
+LE pilote AR5007EG avec ndiswrapper
+
+LES PARAMETRES DE RESEAU avec wicd
+
+---------------------------------------------------------------
+
+===== A ---------- ACER_ACPI =====
+
+---------------------------------------------------------------
+
+ INSTALLATION DU GESTIONNAIRE DE MISE EN ROUTE DU WIFI (POUR DEMARRER LE WIFI SANS FAIRE FNCT / F1)
+----
+télécharger le fichier acer_acpi :
+
+http://aceracpi.googlecode.com/files/acer_acpi-0.4.tar.gz
+
+placez-le dans votre répertoire, décompressez, et installez le gestionnaire :
+
+$ tar xvf acer_acpi-0.4.tar.gz
+
+$ cd acer_*
+
+$ make
+
+Si vous ne rencontrez pas d'erreur, tapez ensuite :
+
+$ sudo make install
+
+
+Pour démarrer avec mise en route auto du wifi : éditez le fichier /etc/modules :
+
+$ sudo gedit /etc/modules
+
+et ajoutez :
+acer_acpi
+
+Puis créez un fichier /etc/init.d/acer-acpi :
+
+$ sudo gedit /etc/init.d/acer-acpi
+
+et mettez-y :
+
+#!/bin/sh
+echo "enabled : 1" > /proc/acpi/acer/wireless
+
+Enregistrez !
+
+Puis créez un lien symbolique avec la commande suivante :
+
+$sudo ln -s /etc/init.d/acer-acpi /etc/rcS.d/S38acerwifi
+
+(ce qui aura pour effet d'activer l'interface "wireless" à chaque démarrage !)
+
+7- N'oubliez pas de faire :
+
+$sudo chmod 755 /etc/init.d/acer-acpi
+
+(afin de donner les bons droits sans quoi vous aurez une erreur au démarrage.)
+
+8- Rebootez l'ordinateur.
+
+Vous devriez, au redémarrage, voir la led orange du wifi s'allumer
+
+Référence : http://www.mumblyworld.info/index.php?post/2007/04/04/111-wifi-et-portable-acer-aspire-sous-ubuntu-feisty-fawn-704
+------------------------------------------------------------------------------
+
+===== B ----- pilote ATHEROS =====
+INSTALLATION DU pilote ATHEROS ORIGINE AVEC NDISWRAPPER
+------------------------------------------------------------------------------
+
+Utilisation des pilotes fournis dans les disques de restauration windows
+(pilotes et utilitaires)
+
+copier les deux fichiers "ar5211.inf" et "net5211.sys" dans un répertoire "ar5007eg"
+
+télécharger la dernière version de ndiswrapper ( attention, les anciennes version, antérieures à la 1.49) ne prennent pas en charge l'atheros ar5007eg)
+
+adresse au 03/02/2008 :
+
+http://sourceforge.net/project/showfiles.php?group_id=93482
+
+placez le fichier obtenu (......tar.gz) dans votre répertoire, et décompressez :
+
+$ tar xvf ndiswrapper*
+
+mettez à jour les outils de compilation :
+
+$ sudo aptitude update && sudo aptitude install linux-headers-$ (uname -r) build-essential
+
+mettez en black-list le ath_pci (j'ai suivi sans comprendre...probablement créé par la technique madwifi, incompatible avec ndiswrapper)
+
+echo "blacklist ath_pci" | sudo tee -a /etc/modprobe.d/blacklist
+
+(vous pouvez vérifier le résultat en éditant le fichier /etc/modprobe.d/blacklist)
+
+compiler le dernier ndiswrapper :
+
+cd ndiswrapper-*
+
+sudo make uninstall
+
+make
+
+sudo make install
+
+cd ..
+
+Installer le pilote windows avec ndiswrapper
+
+cd */ar5007eg/
+
+sudo ndiswrapper -i net5211.inf
+
+cd ..
+
+Lancement automatique du wifi au démarrage
+
+sudo modprobe ndiswrapper
+echo "ndiswrapper" | sudo tee -a /etc/modules
+
+Référence : http://doc.ubuntu-fr.org/acer_aspire_5315 (attention lien vers pilote ar5007eg absent)
+
+----------------------------------------------------------------------
+
+
+
+
+===== C--- PARAMETRES DU RESEAU WIFI =====
+
+REMPLACER "networkmanager" par "wicd"
+----------------------------------------------------------------------
+
+avec la livebox ou la freebox, il n'est pas possible d'utiliser un wifi sans clé WEP ou WAP.
+
+La saisie des clés semble plus simple (?) avec wicd
+
+Attention, wicd, networkmanager et wifi-radar ne semblent pas fonctionner ensemble... désinstallez les précédents avant d'utiliser celui que vous voulez installer :
+
+echo "deb http://wicd.longren.org feisty extras" | sudo tee /etc/apt/sources.list.d/wicd.list
+
+sudo apt-get update
+
+sudo apt-get install wicd
+
+sudo ln -s /opt/wicd/gui.py /usr/local/bin/wicd
+
+A ce stade vous aurez sûrement perdu votre connexion câblée car network-manager a été désinstallé.
+Si c'est le cas tapez ceci pour la rétablir:
+
+sudo dhclient eth0
+
+Reprenons:
+
+sudo wget -O /usr/local/bin/wicd-tray http://blakecmartin.googlepages.com/wicd-tray
+(ce lien ne fonctionne pas, j'ai quand même continué !)
+
+sudo chmod 755 /usr/local/bin/wicd-tray
+
+enlevez la prise ethernet, redémarrer....votre wifi devrait fonctionner
+
+(lancer wicd, il présente le réseau wifi pour connection, reste à saisir la clé et les paramètres de détection réseau )
+
+Référence : http://blakecmartin.googlepages.com/
+
+---------------------- pour la clé WEP ou la clé WAP ----------------------
+
+encadrez la clé avec des guillemets si c'est une clé ascii
+
+---------------------------------------------------------------------------
+
+==== Références : ====
+ 
+
+gestion des touches de fonction FNCT / F1 : <http://www.mumblyworld.info/index.php?post/2007/04/04/111-wifi-et-portable-acer-aspire-sous-ubuntu-feisty-fawn-704>
+ 
+
+installation pilote windows avec ndiswrapper : <http://doc.ubuntu-fr.org/acer_aspire_5315>
+
+wicd, wifi-radar  :  <http://blakecmartin.googlepages.com/>
+
+Contributeurs :  <alban Darnas>
+
+MERCI À <WILLY 78, forum ubuntu>, sa méthode avec madwifi n'a pas pu m'aider.
+Par contre, j'ai lu attentivement les tutoriels très précis qu'il indique, ils  m'ont permis de trouver le chemin.
+

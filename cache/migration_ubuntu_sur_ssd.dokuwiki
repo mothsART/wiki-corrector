@@ -1,0 +1,59 @@
+
+====== Comment assurer la Migration d'Ubuntu vers un SSD ? =====
+{{tag> migration système ssd }}
+
+<note tip>La migration de vers un SSD revient à copier le root du disque dur vers le SSD. La page [[deplacer_root|Déplacer sa racine(ou root (/))]] traite de ce point. Elle parait mieux finalisée, plus claire. </note>
+
+Situation : ubuntu installé sur un HDD, et vous n'avez pas envie de réinstaller toute la configuration !
+
+Le principe est le suivant :
+    * Partitionner le SSD : avec Gparted
+      * Créer une nouvelle partition au moins aussi grande que l'ancienne (sinon clonezilla ne sera pas content) type ext4
+      * Ne pas créer de partition de swap, pour utiliser celle existante du HDD. Swapper sur un SSD va diminuer sa durée de vie par un nombre d'écriture trop important. En même temps, les machines récentes n'ont souvent que des SSD. Question ouverte sur ce problème qui est peut etre plus théorique que pratique. Si vous souhaitez vous assurer de la durée de vie de votre SSD, conserver la partition swap sur le disque dur classique.
+    * Créer un bootCD/usb clonezilla (Utiliser multisystem ).
+    * Booter sur le CD/USB clonezilla et dupliquer la partition système du HDD vers la nouvelle partition du SSD. À ce stade la nouvelle partition reçoit UUID de la vieille : Nous allons corriger cela pour éviter tous problèmes.
+    * Redémarrer sur l'ancien système, puis avec gparted créer un nouvel UUID pour la nouvelle partition système sur le SSD.
+    * Monter la partition de ce nouveau système : Monter the SSD (nous supposons que le SSD est en sda)
+<code>$ sudo mkdir /mnt/ssd
+$ sudo mount /dev/sda1 /mnt/ssd/</code>
+
+    * Editer le fichier /etc/fstab afin de corriger le montage de / avec le nouvel UUID. 
+    * Reste à configurer le secteur d'amorçage (grub) :
+
+1. Monter l'ensemble des arborescences des répertoires "/proc","/sys" et "/dev" à la racine de la nouvelle partition Ubuntu:
+
+<code>$ sudo mount --bind /proc /mnt/ssd/proc
+$ sudo mount --bind /sys /mnt/ssd/sys
+$ sudo mount --bind /dev /mnt/ssd/dev</code>
+
+l'argument "--bind" fait en sorte de monter toute l'arborescence.
+
+2. Exécuter à présent un chroot sur la racine de la nouvelle partition:
+
+<code>$ sudo chroot  /mnt/ssd</code>
+
+Ceci étant fait, il faut savoir qu'à présent, c'est comme si nous avions booter sur cette partition. 
+
+3. Enfin, Réinstallation de GRUB
+
+<code>$ sudo grub-install /dev/sda</code>
+
+Une dernière petite chose à faire avant d'en avoir terminé, mettre à jour la configuration de GRUB par:
+
+<code>$ sudo update-grub</code>
+
+En effet, comme les UUID des partitions ont changé, nous avons informé fstab, mais pas les fichiers de config GRUB
+Vous pouvez à présent quitter le chroot par
+
+<code>$ exit</code>
+
+Voilà, c'est fini! 
+
+4. Redémarrer en Bootant sur le SSD (en désactivant l'ancien disque). 
+    * Une fois redémarré sur le SSD, relancer :
+<code>$ sudo grub-install /dev/sda
+$ sudo update-grub</code>
+5. Rebooter une dernière fois le PC.
+
+Voilà, c'est fini !
+

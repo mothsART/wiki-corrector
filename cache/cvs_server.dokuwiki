@@ -1,0 +1,247 @@
+
+{{tag>Xenial programmation serveur BROUILLON}}
+
+----
+
+====== Mise en place d'un serveur CVS ======
+
+Cette page se propose de vous montrer comment installer un serveur CVS, opération qui parait simple une fois faite, mais qui a priori n'est pas si évidente.
+
+CVS est un concept qui permet à un ensemble de développeurs de développer sur un même projet, sans se préocuper de l'archivage ni même des modifications concurrentes (deux personnes sur le même fichier). Le principe étant assez complexe, je ne vais pas vous en détailler le fonctionnement et je vous renvoie chez [[http://www.google.fr|google]] qui fait ça très bien.
+
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+Attention : Plus loin j'utilise /mon/chemin/cvs qui n'est pas un vrai répertoire et qui **doit** être accommodé à vos besoins...
+
+
+
+===== Installation =====
+
+Pour installer ce logiciel, il suffit d'[[:tutoriel:comment_installer_un_paquet|installer les paquets]] ** [[apt>cvs]]**.
+
+
+===== Configuration =====
+
+==== Utilisateurs et groupes ====
+
+Nous allons créer un groupe cvs ainsi que les utilisateurs qui y sont associés.
+
+  sudo groupadd cvs
+  sudo useradd -m -g cvs -s /sbin/nologin cvs
+  sudo useradd -m -g cvs -s /sbin/nologin anonymous
+
+Ces lignes vous permettent d'ajouter des utilisateurs associés directement au groupe cvs et sans login, c'est à dire que l'utilisateur ne peut se logger en faisant **su anonymous** par exemple... Ajoutez de cette manière tous les utilisateurs que vous voulez. Il faut ensuite [[:tutoriel:comment_modifier_un_fichier|ouvrir le fichier]] **/etc/group** et modifier la ligne contenant cvs: (tout en bas normalement) pour quelle soit comme ceci : <file>cvs:x:501:cvs,anonymous,monUser1,...</file>
+
+et ajoutez tous vos utilisateurs.
+
+
+==== Répertoires ====
+
+Il faut que le cvs puisse déposer tous ses fichiers quelque part. Nous allons donc lui indiquer où...
+
+Pour l'installation, nous allons utiliser le compte root, afin que vous puissiez placer où vous désirez votre dossier root de cvs.
+( Par exemple, /home/rootcvs ).
+
+  sudo su -
+  password
+  export CVSROOT=/mon/chemin/cvs
+  mkdir $CVSROOT 
+
+
+==== openbsd-inetd ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>openbsd-inetd]]**.
+
+Voici comment configurer le service :
+
+Dans un premier temps, nous allons définir le port à utiliser :
+  sudo gedit /etc/services
+
+<note warning>
+Dans la version d'ubuntu 9.04, il apparaît le message suivant à chaque fois qu'il faut utiliser gedit :
+
+  (gedit:20882): Gtk-WARNING **: cannot open display:
+
+La solution temporaire que j'ai trouvé est de lancer ces commandes dans un nouveau terminal
+</note>
+
+Et ajoutez ces deux lignes :
+  cvspserver	2401/tcp
+  cvspserver	2401/udp
+
+
+Maintenant, ajoutons le service dans openbsd-inetd :
+  sudo gedit /etc/inetd.conf
+
+Et ajoutez à la fin la ligne suivante en changeant le chemin vers cvs :
+  cvspserver		stream	tcp	nowait		root	/usr/bin/cvs -f --allow-root=/mon/chemin/cvs pserver
+
+Il ne reste plus qu'a redémarrer openbsd-inetd :
+  sudo /etc/init.d/openbsd-inetd restart
+
+
+
+==== Initialisation du serveur ====
+
+Une partie somme toute assez simple puisqu'il suffit de faire :
+
+Toujours en tant que root :
+
+  cvs init
+
+Normalement il ne se passe rien mais vous pouvez constater que dans /mon/chemin/cvs le répertoire CVSROOT a été créé ... 
+
+Cela dit, comme nous avons précédemment décidé que le serveur cvs était encapsulé dans un groupe s'appelant **cvs**, il faut modifier les droits et le propriétaire des fichiers :
+
+  chown -R cvs:cvs $CVSROOT
+  chmod -R 770 $CVSROOT
+  chmod u+s $CVSROOT
+
+Maintenant, nous n'avons plus besoin de l'environnement root :
+  exit
+
+
+
+Si vous obtenez cette erreur :
+  cvs init: No CVSROOT specified!  Please use the `-d' option
+  cvs [init aborted]: or set the CVSROOT environment variable.
+
+La variable CVSROOT n'est pas ou n'est plus renseigné.
+Normalement, vous devez toujours être en tant que root. Si ce n'est pas le cas, recommencé la partie [[cvs_server#repertoires]]
+
+
+==== Ajouter les utilisateurs CVS ====
+
+Dernière étape du procéssus, l'ajout des utilisateurs au serveur CVS. Pour l'instant nous avons ajouté des utilisateurs au sens unix, c'est à dire que le système d'exploitation est en mesure de les reconnaître, mais le serveur CVS non. Pour ce faire, il existe un fichier auquel on accède de cette manière
+
+  gksudo gedit $CVSROOT/CVSROOT/passwd &
+
+Le & à la fin va nous permettre de faire autre chose en même temps, sans ouvrir une autre console ...
+
+Le fichier est vide... Parfait nous allons le remplir. On a juste besoin de l'utilitaire htpasswd du paquet [[apt://apache2-utils]] pour crypter les mots de passe
+
+  sudo apt-get install apache2-utils
+
+Les mots de passe sont cryptés par cette commande :
+
+  htpasswd -n monUser1
+
+On vous demande un mot de passe et une confirmation. Ne vous inquiétez pas, si vous avez saisi un utilisateur unix existant, la commande ne modifiera pas son mot de passe. A la fin, elle affiche quelque chose comme ça :
+
+  New password:
+  Re-type new password:
+  monUser1:G2pCH9aRwVhjI
+
+Il suffit alors d'ajouter au fichier (celui que nous avons ouvert avec gedit précédemment) cette ligne agrémentée de **:cvs** ce qui nous donne :
+
+  monUser1:G2pCH9aRwVhjI:cvs
+  anonymous::cvs
+
+<note warning>
+Si il vous est impossible d'enregistrer.
+Fermez l'éditeur de texte sans enregistrer.
+lancez la commande
+  gksudo gedit /chemin/vers/cvs/CVSROOT/passwd &
+
+cela donne par exemple
+  gksudo gedit /home/rootcvs/CVSROOT/passwd &
+</note>
+
+L'utilisateur anonyme peut, quant à lui, ne pas avoir de mot de passe (laissez vide le champ réservé au mot de passe pour ne pas le définir). Il est alors important qu'il ne puisse pas modifier le cvs. Pour cela, sauvegardez et fermez le fichier de mots de passe. Faites 
+
+  gksudo gedit $CVSROOT/CVSROOT/readers
+
+et indiquez simplement:
+
+  anonymous
+
+<note warning>même remarque que pour le passwd.
+Si cela ne fonctionne pas,
+Fermez l'éditeur de texte sans enregistrer.
+lancez la commande
+  gksudo gedit /chemin/vers/cvs/CVSROOT/readers
+
+cela donne par exemple
+  gksudo gedit /home/rootcvs/CVSROOT/readers
+ </note>
+
+Dernière chose, si vous désirez renseigner la variable CVSROOT au démarrage, il vous suffit de modifier le fichier .bashrc de votre compte et d'y ajouter l'export dedans :
+  gedit ~/.bashrc
+
+Et ajouter :
+  # CVS ROOT DIR
+  export CVSROOT=/chemin/vers/cvs
+
+===== Conclusion =====
+
+Si vous avez suivi intégralement ce tutoriel, vous avez un serveur cvs opérationel. Il vous suffit de vous y connecter de cette manière :
+
+  # sur une autre machine
+  export CVSROOT=:pserver:monUser1@adresse-ip-machine-1:/mon/chemin/cvs
+  cvs login
+
+Pour une utilisation de CVS, je vous recommande d'utiliser [[http://www.google.fr|google]] qui propose des tutoriaux par centaines à ce sujet.
+
+
+
+
+
+
+
+===== Méthode alternative =====
+
+Après avoir testé sans succès la méthode décrite ci dessus, j'ai testé la méthode suivante qui a fonctionnée :
+
+Installation de CVS :
+   sudo apt-get install cvs  
+
+Installation/configuration du serveur :
+   sudo apt-get install cvsd
+
+Entrer "/cvsroot" lorsque l'assistant vous demande un chemin.
+
+
+Configurations :
+   cd /var/lib/cvsd 
+   # build the cvsroot:
+   sudo cvsd-buildroot /var/lib/cvsd  
+   sudo mkdir cvsroot
+   sudo cvs -d /var/lib/cvsd/cvsroot init
+   sudo chown -R cvsd:cvsd cvsroot
+
+Création d'un utilisateur :
+   sudo cvsd-passwd /var/lib/cvsd/cvsroot +justin
+
+Changement du type d'authentification :
+<note warning>L'opération suivante échoue car le fichier config est en lecture seule pour tous les utilisateurs.</note>
+
+  sudo vi /var/lib/cvsd/cvsroot/CVSROOT/config
+  uncomment the “SystemAuto=no” line.
+
+Pour tester la connexion au serveur cvs :
+  cvs -d :pserver:justin@localhost:/cvsroot login
+  
+En cas d'erreur : cvs [login aborted]: connect to localhost(127.0.0.1):2401 failed: Connection refused
+
+sudo vi /etc/cvsd/cvsd.conf
+
+changer la ligne : Listen * 2401 par: Listen 0.0.0.0 2401 ou par : Listen 127.0.0.1 2401 pour une utilisation locale
+
+ensuite faire un redemarrage du cvsd :  sudo /etc/init.d/cvsd restart
+
+
+
+
+
+
+Méthode tirée de :
+  * [[http://www.netscape.com/viewstory/2006/07/19/howto-cvs-server-on-ubuntu-606/]]
+  * [[http://sanatio.blogspot.com/2005/12/cvs-server-on-ubuntu.html]]
+
+
+
+----
+
+//Contributeur : [[utilisateurs:pitilezard|PiTiLeZarD]] - Fortement inspiré de [[http://www.uta.edu/oit/how-to/docs/cvs.php|ce HowTo]] mais pas une traduction exacte.//, [[utilisateurs:zedtux]]

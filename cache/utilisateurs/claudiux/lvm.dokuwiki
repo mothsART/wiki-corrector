@@ -1,0 +1,56 @@
+
+====== LVM : Logical Volume Management ======
+
+Puis-je faire en sorte que mes partitions soient extensibles ?
+
+Je ne veux pas être bloqué avec des partitions rigides. Comment faire en sorte de pouvoir les étendre à volonté, éventuellement en les faisant déborder sur un autre disque dur ?
+
+Réponse:
+
+Il faut utiliser le LVM (Logical Volume Management) et des partitions formatées en XFS (et non en ext4) pour pouvoir en augmenter la taille sans les démonter (génial !)
+
+**Guide rapide :**
+
+Pour installer LVM (version 2), si ce n'est déjà fait :
+  sudo apt-get install lvm2
+
+Pour créer, sur la première partition du second disque (voire le second disque entier), un volume physique (pv) pour le LVM (Opération destructrice!) :
+  sudo pvcreate /dev/sdb1
+(voire ''sudo pvcreate /dev/sdb'')
+
+Pour créer un groupe de volumes (vg) sur le pv précédent (remplacer mon_groupe_de_volumes par un identifiant, tel vg0) :
+  sudo vgcreate mon_groupe_de_volumes /dev/sdb1
+(voire ''/dev/sdb'')
+
+Activez votre vg :
+  sudo vgchange -a y mon_groupe_de_volumes
+
+Les commandes pvscan et vgscan vous diront l'essentiel...
+
+Pour créer un volume logique (lv) de 2 Go, qui sera nommé home, dans le vg mon_groupe_de_volumes (remplacer mon_groupe_de_volumes par l'identifiant valide, tel vg0) :
+  sudo lvcreate --size 2G --name home mon_groupe_de_volumes
+cela va créer le device spécial : /dev/mon_groupe_de_volumes/home que l'on va pouvoir formater en XFS :
+  sudo mkfs.xfs /dev/mon_groupe_de_volumes/home
+
+On peut ensuite monter ce volume logique, par exemple dans /home (renommer l'ancien /home en /home_OLD et créer le dossier /home avant d'effectuer cette commande) :
+  sudo mount -t xfs /dev/mon_groupe_de_volumes/home /home
+Copier ou déplacer le contenu de /home_OLD dans /home.
+
+Modifier le /etc/fstab en conséquence.
+
+Pour agrandir de 5 Go la taille du lv /dev/mon_groupe_de_volumes/home :
+
+On fait d'abord un bilan, à l'aide des 3 commandes :
+  df -h
+  sudo pvscan
+  sudo lvscan
+On agrandit le volume logique (lv) :
+  sudo lvextend --size +5G /dev/mon_groupe_de_volumes/home
+Encore faut-il que xfs prenne en compte ce nouvel espace :
+  sudo xfs_growfs /home (attention, indiquer le point de montage /home, et non le lv /dev/mon_groupe_de_volumes/home !)
+
+Les commandes :
+  sudo pvscan
+et
+  df -h
+permettent de connaître la taille occupée/restante de vos pv, et celles de vos partitions montées. 

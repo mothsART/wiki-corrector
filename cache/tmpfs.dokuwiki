@@ -1,0 +1,134 @@
+
+{{tag>système optimisation}}
+
+====== tmpfs ======
+
+<note warning>L'utilisation de la commande tmpfs peut aboutir à des pertes de données en cas de mauvaise manipulation, prenez le temps de bien comprendre ce système et ses implications !</note>
+
+===== Présentation de tmpfs =====
+
+Tmpfs est intégré directement dans le noyau Linux depuis la version 2.6
+(c'est à dire qu'il est disponible dans toutes les versions d'ubuntu supportés officiellement).
+
+Il remplace les commandes de création de **ramdisk**, et offre l'avantage de redonner la mémoire vive aux systèmes d'exploitations en cas de non utilisation de celle-ci.
+
+Un **RAMDisk** ou un volume Tmpfs dans ce cas présent est un espace dans la mémoire vive qui est utilisé pour stocker des fichiers temporairement (en effet le volume est vidé à chaque arrêt du système).
+
+Un tmpfs est donc idéal pour stocker les fichiers temporaires de votre ordinateur. Ces fichiers temporaires sont des fichiers qui sont, par exemple, créés puis effacés lors de l'extraction d'un fichier compressé, lors d'une mise à jour, etc ...
+
+===== Avantages et Inconvénients =====
+
+Tmpfs permet de créer un espace de stockage dans la mémoire vive, Il y a plusieurs conséquences :
+  * __**Tous les fichiers seront effacés dès le prochain redémarrage ou après une coupure de courant !**__ (En utilisation pour des fichiers temporaires l'inconvénient devient ici un avantage, car les fichiers seront purgés même si le programme oublie de le faire !)
+  * **Vitesse d'accès aux fichiers accrue**.
+  * Économie de consommation électrique.
+  * Baisse de l'usure des disques (surtout pour les SSD).
+  * Baisse des coûts d'accès aux disques lors ceux-ci sont payants (par exemple pour les disques réseaux EBS d'Amazon)
+  * tmpfs, si la RAM est pleine, vient automatiquement s'écrire sur le disque dur dans la partition "swap" ce qui permet de ne pas impacter les performances si le PC a besoin de toute votre RAM
+  * un tmpfs de 1 GO ne prendra 1 GO de place dans la RAM que s'il est plein, en effet il ne prendra que la place des fichiers qu'il contient.
+
+===== Mise en place =====
+
+==== Mettre /tmp en tmpfs ====
+
+C'est le but même de tmpfs à l'origine !
+
+pour ce faire il suffit [[:tutoriel:comment_modifier_un_fichier|d'ajouter au fichier texte]] **/etc/fstab** la ligne:
+
+  tmpfs /tmp tmpfs defaults,size=32M 0 0
+  
+Cette modification sera effective après redémarrage.
+
+<note important>N'hésitez pas à adapter à vos besoins l'espace en Mio (ici 32) dévolu à /tmp. En effet certains programmes demanderont plus d'espace.\\ Et avant une mise à niveau - qui exige **beaucoup** plus de 32 Mio - commentez (ou supprimez) cette ligne et redémarrez.
+
+\\ Attention au **s** de default**s** 
+
+Pour un tmpfs de 1 Gio la syntaxe est //size=1g//
+</note>
+
+==== Créer un tmpfs personnalisé ====
+
+=== Créer votre répertoire ===
+
+  sudo mkdir /media/virtuelram
+
+Tout ce qui sera dans ce répertoire sera stocké en mémoire vive.
+
+=== Définir les droits ===
+
+Et oui, pour pouvoir écrire dedans depuis n'importe quel utilisateur :
+  sudo chmod 777 /media/virtuelram
+  
+Si le répertoire est accessible en écriture pour tout le monde (comme c’est le cas pour /tmp) on a intérêt à positionner le //sticky bit//  afin qu’un utilisateur ne puisse pas supprimer les fichiers des autres :
+
+  sudo chmod 1777 /media/virtuelram
+
+=== Monter l'accès ===
+
+Si vous voulez le monter ponctuellement : 
+  sudo mount -t tmpfs -o size=512M tmpfs /media/virtuelram
+l'option size permet de définir la quantité de mémoire allouée.
+
+Si elle n'est pas définie, le système attribuera la moitié de la quantité de la mémoire physique.
+<note tip>Vous pouvez mettre ce code pour faire un raccourci (créer un lancer, rubrique commande).</note>
+
+
+Pour le monter à chaque démarrage, il faut [[:tutoriel:comment_modifier_un_fichier|éditer le fichier]] ''/etc/fstab''.
+
+Ajouter une de ces lignes dans le ficher et enregistrer les modifications
+
+  tmpfs /media/virtuelram tmpfs defaults,size=512M 0 0
+pour 512 Mo
+
+  tmpfs /media/virtuelram tmpfs defaults,size=1g 0 0
+pour 1 Go
+
+etc…
+
+=== Voir les tmpfs ===
+  
+<code>df -t tmpfs</code>
+
+===== Quelques exemples d'utilisation =====
+
+==== Le dossier /tmp ====
+contient des fichiers temporaires qui de toutes façons s'effacent au redémarrage, donc c'est sans risque de perte de données.
+
+==== /var/tmp ou /var/lock ====
+Classiquement ces dossiers contiennent des fichiers temporaires mais qui ne s'effacent pas automatiquement.
+Globalement cela ralentit un peu le lancement des programmes (qui doivent réécrire ces fichiers à chaque fois).
+
+http://refspecs.linuxfoundation.org/FHS_2.3/fhs-2.3.html#VARTMPTEMPORARYFILESPRESERVEDBETWEE
+
+==== Accélérer Firefox ====
+Sous ce titre un peu racoleur, il s'agit de placer le cache en tmpfs.
+
+Pour cela dans la barre d'adresse de firefox taper ''about:config''
+
+Rechercher la l'entrée ''browser.cache.disk.enable'' et passez la valeur à ''false'' (double click sur la ligne)
+
+Vérifiez que ''browser.cache.memory.enable'' soit "true" (valeur par défaut)
+
+Optionnel : Vous pouvez configurer la taille du cache en ajoutant une entrée (click droit -> nouveau -> entier) ''browser.cache.memory.capacity'' puis renseignez la capacité du cache (valeur en Kilo-octet)  ou -1 pour une gestion automatique du cache. (Passer cette étape aura le même effet que de mettre la valeur à -1.)
+
+
+<note help>
+**Note :** ''browser.cache.disk.parent_directory'' est obsolète
+
+Source : https://wiki.archlinux.org/index.php/Firefox_Ramdisk
+</note>
+
+==== Copier des fichiers ====
+
+L'autonomie des portables en mode lecture vidéo par exemple, est plus grande avec un fichier en mémoire vive.
+La conversion des fichiers en divx, le rippage des CD, DVD etc ... sont nettement plus rapides en mémoire vive.
+Etc...
+
+===== L'utilité des fichiers rc.local et rc.local.shutdown =====
+
+Et oui ! Ce sont des fichiers qui permettent d'exécuter des commandes au démarrage et à l'extinction
+utile pour améliorer l'utilisation de tmpfs (Vous pouvez par exemple copier des fichiers au démarrage dans votre tmpfs, ou les copier en dehors avant l'extinction automatiquement via ces deux scripts).
+
+===== Voir aussi =====
+  * **Vidéo**: [[https://www.youtube.com/watch?v=NCb4B0DAErc|Comprendre l’intérêt d'une RAM]]
+

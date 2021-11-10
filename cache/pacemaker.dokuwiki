@@ -1,0 +1,299 @@
+
+{{tag>Xenial réseau haute_disponibilité}}
+----
+
+====== Pacemaker ======
+
+{{:pacemaker_lucid_00.png?518x127}}
+
+Pacemaker est un gestionnaire de cluster haute disponibilité. Il est chargé de démarrer, arrêter et superviser les ressources du cluster. Ce projet est supporté par les entreprises Red Hat, Novel et Linbit. Un cluster est un groupe de deux ou plusieurs machines.
+
+Pour des services vraiment délicats comme un serveur web il peut être intéressant de configurer deux serveurs webs sur deux machines physiques. Si l'un des deux serveurs tombe en panne pacemaker se chargera de remplacer le serveur défaillant par le deuxième. L'utilisateur n'y aura vu que du feu et ne se sera jamais rendu compte que l'un des serveurs était tombé en panne.
+
+{{:pacemaker_lucid_01.png?400*300}}
+
+Comme l'on peut le voir sur le schéma, Pacemaker s'appuie sur les logiciels //[[:heartbeat]]// ou //[[:corosync]]// pour contrôler les machines. Cependant pacemaker utilise //corosync// par défaut sous Ubuntu.
+
+<note>
+Une interface java développée par la société [[http://www.linbit.com/en/|Linbit]] permet de configurer le cluster via une interface graphique.
+\\ \\ 
+Cette interface permet à partir d'un [[:ssh|accès ssh]] d'installer et de configurer le logiciel pacemaker et les logiciels sur lesquels pacemaker se base sur les serveurs à distance.
+\\ \\ 
+Cette interface est initialement prévue pour mettre en place la technologie de raid réseau [[:drbd]]. Bien entendu dans le cas présent, nous n'utiliserons pas cette fonctionnalité.
+\\ \\ 
+Il est tout de même conseillé de bien comprendre la configuration en ligne de commande avant d'utiliser cet outil.
+\\ \\ 
+Téléchargez l'applet java [[http://oss.linbit.com/drbd-mc/|ici]].
+</note>
+
+===== Pré-requis =====
+
+  * Savoir ce qu'est la notion de [[haute disponibilité]]
+  * Avoir des rudiments de connaissances concernant les réseaux
+
+===== Installation =====
+
+Pour installer ce logiciel, il suffit d'[[:tutoriel:comment_installer_un_paquet#paquet_present_dans_les_depots|installer le paquet]] **[[apt://pacemaker|pacemaker]]**.
+
+===== Configuration =====
+Dans cet exemple nous mettrons en place un cluster de deux machines. Avant de passer à la configuration du cluster, il est nécessaire de faire quelques modifications pour que les deux machines puissent communiquer entre elles.
+
+Voici un tableau de la configuration qui sera utilisée par la suite :
+
+|           ^ Nom de poste ^ Adresse IP       ^
+^ pc 1      | machine1     | 192.168.1.101    |
+^ pc 2      | machine2     | 192.168.1.102    |
+
+
+==== Configuration des machines ====
+
+=== Modification du nom des machines ===
+
+Donner des noms différents à chacune des machines permettra d'avoir une configuration plus lisible dans le futur. (Ne pas utiliser de majuscules pour éviter un bug avec l'interface java)
+
+  sudo hostname <nom de machine>
+
+[[:tutoriel:comment_modifier_un_fichier|Éditez le fichier]] **''/etc/hostname''** et modifiez le nom de la machine.
+
+Fermez votre session et reconnectez vous
+  
+[[:tutoriel:comment_editer_un_fichier|éditez le fichier de configuration]] **''/etc/hosts''**
+  
+Vous devriez voir un contenu semblable à celui-ci (le nom de machine dépend bien sûr de votre configuration) :
+<file>
+  127.0.0.1       localhost
+  127.0.1.1       ubuntu1
+</file>
+
+Rajoutez ceci:
+<file>
+  127.0.0.1     <nom du poste>
+  192.168.1.101 machine1
+  192.168.1.102 machine2
+</file>
+
+=== Configuration des adresses IP des interfaces ===
+
+Fixez les adresses IP des machines en suivant cette [[:tutoriel:comment_configurer_son_reseau_local#fixer_l_adresse_ip_de_nos_machines|procédure]]. 
+
+Pensez à configurer les serveurs DNS.
+
+[[:tutoriel:comment_modifier_un_fichier|Éditez le fichier]] ''**/etc/resolv.conf**'' et ajouter ceci:
+<file>
+  nameserver <adresse ip serveur dns>
+</file>
+
+==== Configuration de la partie exécutive du cluster ====
+
+Comme énoncé précédemment, pacemaker s'appuie sur d'autres logiciels pour agir et surveiller les postes (heartbeat ou corosync). Dans cette section, nous allons permettre aux deux postes de s'envoyer des informations soit par corosync soit par heartbeat.
+
+=== Configuration de corosync ===
+
+
+Création d'une clé d'authentification, cette commande créera le fichier **''/etc/corosync/authkey''**.
+
+  corosync-keygen
+
+<note tip>
+Si vous êtes connecté au poste à distance. Ouvrez une autre session et téléchargez un fichier pour créer des entrées/sorties au lieu de taper au clavier.
+</note>
+
+Envoi de ce fichier et modification des droits de ce fichier sur l'autre poste :
+
+  sudo scp /etc/corosync/authkey nom_utilisateur@machine2:
+  
+Sur la machine 2
+
+  sudo mv ~/authkey /etc/corosync/authkey
+  sudo chown root:root /etc/corosync/authkey
+  sudo chmod 400 /etc/corosync/authkey
+  
+[[:tutoriel:comment_editer_un_fichier|Editez le fichier de configuration]] **''/etc/corosync/corosync.conf''**.
+
+La partie du fichier à modifier est la partie concernant la configuration de l'interface.
+<file>
+  interface {
+                  # The following values need to be set based on your environment 
+                  ringnumber: 0
+                  bindnetaddr: 127.0.0.1
+                  mcastaddr: 226.94.1.1
+                  mcastport: 5405
+          }
+</file>    
+
+
+^ Options     ^ Description                                                                            ^
+| ringnumber  | Numéro de l'interface, laissez zéro si vous en déclarez une seule                      |
+| bindnetaddr | Correspond au réseau configuré sur la carte allant servir pour les tests entre membres |
+| mcastaddr   | Adresse de multicast utilisée pour les tests                                           |
+| mcast port  | Port multicast utilisé                                                                 |	
+
+=== Activer le démon corosync ===
+
+[[:tutoriel:comment_editer_un_fichier|Editez le fichier de configuration]] **''/etc/default/corosync''**
+
+Faites la modification suivante :
+<file>
+  START=yes
+</file>
+
+Lancement des deux démons sur les deux membres : 
+
+  /etc/init.d/corosync start
+  
+Affichage de l'état du cluster :
+
+  sudo crm_mon --one-shot
+
+Le résultat de la commande devrait ressembler à cela :
+<file>
+  Last updated: Mon May  3 10:08:55 2010
+  Stack: openais
+  Current DC: Ha-proxy-master - partition with quorum
+  Version: 1.0.8-2c98138c2f070fcb6ddeab1084154cffbf44ba75
+  2 Nodes configured, 2 expected votes
+  0 Resources configured.
+  ============
+  Online: [ machine1 machine2 ]
+</file>
+
+=== Configuration avancée de corosync ===
+
+Il peut être judicieux de configurer plusieurs interfaces redondantes pour le lien entre les deux postes. 
+
+Pour cela il suffit de déclarer une deuxième interface avec le paramètre **//ringnumber//** incrémenté. Pensez à changer l'adresse de multicast et le port de destination((bien que je ne sois pas sûr que cela soit indispensable.)).
+<file>
+  interface {
+          ringnumber:  0
+		bindnetaddr: 192.168.0.0
+		mcastaddr:   226.94.1.0
+		mcastport:   5400
+	}
+  interface {
+		ringnumber:  1
+		bindnetaddr: 192.168.1.0
+		mcastaddr:   226.94.1.1
+		mcastport:   5401
+	}
+</file>
+
+Modifiez le paramètre //**rrd_mode**// :
+<file>
+  rrd_mode: active
+</file>
+
+
+^ Options ^ Description                                                                      ^
+| active  | Les deux interfaces sont utilisées                                                |
+| passive | La deuxième est utilisée seulement dans le cas où la première ne fonctionne plus |
+
+===== Commandes de gestion du cluster =====
+
+=== Informations sur l'état du cluster ===
+
+  * Affichez l'état du cluster :<code>crm_mon</code>
+ 
+
+^ Options        ^ Explications                                                                   ^ 
+| -f             | Permet d'afficher les compteurs d'erreurs durant les migrations des ressources | 
+| -1 --one-shot  | Affiche l'état à un seul instant et quitte (utile dans les scripts)            | 
+
+=== Action sur les postes et les ressources ===
+
+  * Accéder à l'interface de configuration du cluster :<code>sudo crm</code>
+
+
+^ Commandes     ^ Explications                    ^ 
+| help          | Liste les commandes disponibles | 
+| status        | Affiche l'état du cluster       |
+| end,cd,up     | Revenir au niveau précédent     | 
+| quit,bye,exit | Quitter le crm                  | 
+
+
+  * Mettre un poste en maintenance :<code>sudo crm node standby</code>
+  * Sortir un poste de maintenance :<code>sudo crm node online</code>
+  * Migrer une ressource vers un autre poste :<code>sudo crm resource migrate <nom ressource> <nom du poste allant accueillir la ressource></code>
+  * Annuler la migration de la ressource :<code>sudo crm resource unmigrate <nom ressource></code>
+  * Mettre à zéro les compteurs d'échec pour un hôte et une ressource donnés :<code>sudo crm resource failcount <nom de la ressource> delete <nom de l'hôte></code>
+  * Mettre à zéro l'état d'une ressource :<code>sudo crm resource cleanup <nom de la ressource></code>
+
+=== Modification de la configuration du cluster ===
+
+  * Entrer dans la mode de configuration :<code>sudo crm configure</code>
+  
+== Modifier la configuration d'un cluster en activité ==
+
+  * Créer une copie de la configuration actuelle :<code>sudo crm
+crm(live)# cib new copy_config</code>
+  * Utiliser la copie de la configuration :<code>crm(live)# cib use copy_config</code>
+  * Entrer dans le mode de configuration :<code>crm(config)# configure</code>
+  * Voir la configuration :<code>crm(config)configure# show</code>
+  * Vérifier sa configuration :<code>crm(config)configure# verify</code>
+  * Supprimer une ressource :<code>crm(config)configure# delete <nom de la ressource></code>
+  * Appliquer la nouvelle configuration au cluster :<code>crm(config)# cib commit copy_config</code>
+
+===== Configuration de clusters=====
+
+Cette section regroupe tous les liens vers des tutoriels proposant des configurations de cluster. Si cette documentation vous a permis de comprendre et d'utiliser pacemaker, il serait intéressant que vous laissiez une trace de la configuration que vous avez réalisée.
+
+==== Cluster de deux machines ====
+
+Suivez le tutoriel **[[tutoriel:pacemaker_configuration_ip_virtuelle_plus_script_lsb| Adresse IP virtuelle + supervision d'un service (nginx)]]**.
+
+===== Supervision du cluster =====
+
+==== Trap snmp ====
+
+Pacemaker gère l'envoi de traps snmp. Si quelqu'un a réussi à les utiliser, sa contribution est la bienvenue.
+
+==== Supervision avec l'agent nrpe ====
+
+Cette partie s'adresse aux personnes connaissant [[:nagios]] et l'agent [[nrpe]].
+
+Il est possible de créer un script permettant de savoir si les compteurs d'échec ont été incrémentés.
+
+[[:tutoriel:comment_modifier_un_fichier|Créez le fichier du script]] sous le nom **''/usr/lib/nagios/plugins/check_pacemaker''**
+  
+Contenu de ce script :
+<code>#!/bin/sh
+OK_STATE=0
+WARNING_STATE=1
+CRITICAL_STATE=2
+cnt=0
+
+cnt=`sudo crm_mon -1f | grep -q fail-count`
+
+if [ $? -eq 0 ]
+then
+        echo "WARNING: some ressources have failed!"
+        exit $WARNING_STATE
+else
+
+echo "OK: all ressources are working properly"
+exit $OK_STATE
+
+fi</code>
+Déclarer le script dans la configuration de l'agent nrpe
+
+[[:tutoriel:comment_modifier_un_fichier|Éditez le fichier]] **''/etc/nagios/nrpe.cfg''** et rajouter dans la section **//commands//** cette ligne :
+<file>
+  command[check_pacemaker]=/usr/lib/nagios/plugins/check_pacemaker
+</file>
+
+===== Désinstallation =====
+
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée. Les journaux du système, et les fichiers de préférence des utilisateurs dans leurs dossiers personnels seront toujours conservés.
+
+===== Voir aussi =====
+
+  * **(en)** [[http://www.clusterlabs.org/]]
+  * **(en)** [[http://www.clusterlabs.org/doc/en-US/Pacemaker/1.1/html/Pacemaker_Explained/index.html|documentation officielle]]
+  * **(en)** [[http://www.clusterlabs.org/doc/en-US/Pacemaker/1.1/html/Clusters_from_Scratch/index.html|tutoriel officiel]]
+  * **(en)** [[https://wiki.ubuntu.com/ClusterStack/LucidTesting| wiki.ubuntu.com]]
+  * //Basé sur l'article [[http://wiki.lustre.org/index.php/Using_Pacemaker_with_Lustre|« Using Pacemaker with Lustre  »]].//
+
+
+----
+//Contributeurs principaux : [[:utilisateurs:Miam Miam]].//
+
+Mise en forme : //[[:utilisateurs:draco31.fr|draco31.fr]].//

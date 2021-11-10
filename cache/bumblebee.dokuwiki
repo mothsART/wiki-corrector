@@ -1,0 +1,319 @@
+
+{{tag>Xenial Bionic matériel carte_graphique nvidia}}
+----
+====== Bumblebee : Optimus sous GNU/Linux ======
+
+Cette page présente une description du logiciel Bumblebee, dont le but est de supporter la [[:nvidia_optimus|technologie Optimus de NVIDIA]] sous %%GNU/Linux%%. Un [[http://forum.ubuntu-fr.org/viewtopic.php?id=1230851|topic dédié]] est également disponible sur le forum, partie //Affichage et cartes graphiques//.
+
+<note important>
+Le projet est quasi officiellement abandonné, d'après les mots d'un des membres du projet au vu de l'évolution des pilotes [[https://github.com/Bumblebee-Project/Bumblebee/issues/947#issuecomment-371192713|il n'a plus lieu d'être]]. Son avis :
+  * Vous voulez désactiver la carte nvidia : utilisez bbswitch ou nouveau directement
+  * Vous avez des écrans externes (HDMI, DisplayPort) : utilisez nouveau + PRIME
+  * Vous faites des jeux vidéos : redémarrer le serveur X sur la carte nvidia directement
+</note>
+
+
+===== Présentation =====
+
+**Bumblebee** est un projet indépendant géré par plusieurs développeurs réunis dans une équipe nommée **[[http://bumblebee-project.org/|Bumblebee Project]]** et dont le but est de supporter la [[:nvidia_optimus|technologie Optimus]] (le support d'Hybrid SLI est aussi de la partie) sous %%GNU/Linux%%, que ce soit sous Ubuntu ou une autre distribution. Le support est néanmoins plus présent pour Ubuntu et [[https://www.archlinux.org/|ArchLinux]] que les autres distributions.
+
+**C'est la solution conseillée**. Bumblebee offre la possibilité d'utiliser la [[:nvidia|carte graphique NVIDIA]] lorsque nécessaire (via au choix le pilote propriétaire nvidia ou le pilote libre nouveau, le pilote propriétaire nvidia étant cependant fortement recommandé dans le cas de cette technologie), et d'éteindre celle-ci le reste du temps. D'autres solutions existent, mais celle-ci à l'avantage d'être la plus stable, et a comme propriété non négligeable d'être en partie développée par un membre du forum Ubuntu-fr, ArchangeGabriel, qui pourra vous aider dans le [[http://forum.ubuntu-fr.org/viewtopic.php?id=1230851|topic dédié]].
+
+===== Installation =====
+
+
+  - [[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>bumblebee]]**
+  - Après l'installation, commencez par redémarrer l'ordinateur pour vérifier qu'aucun problème n'apparaisse et afin que certains composants soient correctement mis à jour.
+
+Une alternative à Bumblebee, //[[:prime|nvidia-prime]]// est intégrée dans les dépôts par défaut il faut donc soit installer Bumblebee soit PRIME (conflit si les 2 sont installés).[[http://mylinuxexplore.blogspot.com/2013/08/ubuntu-12043-lts-review-with-much.html?showComment=1378020261699#c8076224745014488247|Commentaire sur le Blog Linuxed (en)]]
+[[http://forum.ubuntu-fr.org/viewtopic.php?pid=14697951#p14697951|Tutoriel ici]].
+
+=====Tester Bumblebee=====
+FIXME tout ce qui suit ne fonctionne plus sous Bionic et surement pas sous Xenial.
+  - Ensuite, pour vérifier que tout fonctionne, dans un [[:terminal]], entrez ceci :<code>glxspheres</code> Si ça ne marche pas, il vous dit "commande introuvable", essayer <code>glxspheres64</code> Si cela ne marche toujours pas, voir le chapitre **[[#glxspheres et glxspheres64 , commande introuvable]]**. \\ Une fenêtre apparaît, avec une animation de sphères colorées. Laisser tourner 30s, puis fermez la fenêtre, et notez le résultat.
+  - Puis comparez avec la même chose sur la carte NVIDIA :<code>optirun glxspheres</code>
+  - Si ça ne marche pas, essayer <code>optirun glxspheres64</code>
+  - Enfin, fermez la fenêtre, et notez le résultat.
+
+Normalement, les résultats devraient être supérieurs avec optirun. Cependant, l'utilisation de VirtualGL limite les performances pour le moment, mais les développeurs travaillent sur ce problème, néanmoins il se peut que dans certaines situations la carte NVIDIA n'offre pas de meilleures performances.
+
+
+Dans le cas où la commande précédente ne fonctionnerait pas, [[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>bumblebee-nvidia]]** Puis redémarrez et essayez à nouveau.
+
+==== Installations personnalisées ====
+
+Minimum :
+<code>sudo apt-get install --no-install-recommends bumblebee</code>
+
+Puis ajoutez à cette ligne selon vos besoins :
+  * **bumblebee-nvidia** : installation du driver propriétaire nvidia
+  * **virtualgl** : VirtualGL comme backend
+  * **virtualgl-libs-ia32** : support 32bit pour VirtualGL sur système 64bit
+  * **primus** : primus/primusrun comme backend (virtualgl reste le backend par défaut, il faut utiliser optirun -b primus au lieu d'optirun)
+  * **primus-libs-ia32** : support 32bit pour primus/primusrun sur système 64bit
+
+===== Utilisation =====
+
+Pour effectuer le lancement d'une application avec la carte graphique NVIDIA, tapez dans un terminal :
+
+<code>optirun <application></code>
+
+Par ailleurs, le gestionnaire de configuration [[nvidia|nVidia settings]] est accessible **seulement** en lançant dans un terminal : 
+
+<code>optirun -b none nvidia-settings -c :8</code>
+
+Pour lancer des applications avec primus (il faut l'avoir installé d'abord, cf. ci-dessus) :
+
+<code>optirun -b primus <application></code>
+
+vous pouvez aussi tester avec (gain de 50% d'FPS sur league of legend)
+<code>VGL_READBACK=pbo optirun  primus <application></code>
+ 
+Pour savoir si votre carte Nvidia est désactivée, utilisez la commande :
+<code>optirun --status</code>
+qui doit vous repondre :
+<code>Bumblebee status: Ready (3.2.1). X inactive. Discrete video card is off.</code>
+Si vous trouvez ''on'' c'est que votre carte Nvidia est active.
+
+===== Questions/Réponses ======
+
+==== Comment vérifier que la gestion d'énergie (power-management, à savoir éteindre/allumer la carte nVidia) est bien active ? ====
+
+  - Commencez par débrancher l'alimentation de votre portable pour le faire tourner sur batterie afin de pouvoir relever la valeur de sa consommation.
+  - Ensuite, après un démarrage sans aucune application tournant, ouvrez un [[:terminal]] et saisissez ceci :<code>cat /sys/class/power_supply/BAT0/power_now</code> (A noter que BAT0 peut être à remplacer par BAT1 sur certains modèles, voir même un autre chiffre)
+  - Notez le résultat.
+  - Lancez cette [[:commande_shell|commande]]:<code>optirun bash</code> Il semble a priori ne rien s'être passé, mais en réalité la carte est maintenant allumée. 
+  - Relancez la commande précédente : <code>cat /sys/class/power_supply/BAT0/power_now</code>
+  - Notez le résultat. Entrez exit ou faites Ctrl+D pour éteindre de nouveau la carte.
+  - Comparez les deux résultat, le premier obtenu devrait être amplement inférieur au second. \\ Si ce n'est pas le cas, vérifiez que votre commande de démarrage noyau (fichier /proc/cmdline) ne contient aucune option du style noacpi, pci=noacpi, acpi=off, ... \\Si l'une d'entre elle est présente, supprimez-là en éditant les fichiers de configuration de [[:grub-pc|GRUB]], n'oubliez pas de mettre à jour celui-ci avec la [[:commande_shell|commande]] <code>update-grub</code>
+  -  Redémarrez et refaites la procédure de test. \\ Ces options sont parfois présentes pour palier à certains problèmes, qui sont normalement tous corrigés par Bumblebee sur ce genre de machines.
+
+Un autre moyen de vérifier la consommation est  d'utiliser l'outil powerstat
+
+==== Ne peut-on pas utiliser exclusivement la carte NVIDIA, et éteindre la carte Intel ? ====
+
+Cela dépend des modèles, mais pour la plupart, c'est matériellement impossible. La carte NVIDIA et la carte Intel sont matériellement connectées entre elles, et seule la carte Intel est connectée à l'écran. Donc l'affichage passe forcément par la carte Intel, il n'est donc pas possible de la désactiver. Au mieux, il sera possible dans un futur lointain de tout faire tourner sur la carte NVIDIA et de n'utiliser la carte Intel que pour l'affichage à l'écran.
+
+Cependant certaines cartes mères gérent la désactivation des composants matériels video et son depuis le Bios ( carte Gigabyte sous Peripherals/Internal Graphics --> Disable ) et  certains modèles (Lenovo notamment) offrent cette possibilité.
+
+==== J'en n'ai rien à faire de l'autonomie. Puis-je faire en sorte que mon système tourne entièrement sur la carte NVIDIA ? ====
+
+Reportez-vous à ce [[http://forum.ubuntu-fr.org/viewtopic.php?pid=14344241#p14344241|tutoriel]].
+==== Pourrait-on avoir un indicateur visuel pour savoir si la carte NVIDIA est allumée ou pas, et quel sont les programmes qui tournent dessus? ====
+
+Un projet, aujourd'hui abandonné, visait à fournir cette fonctionnalité entre autres choses. Il s'agissait de bumblebee-ui. [[http://youtu.be/4JdJ6tGCH44|Une première vidéo de démonstration est disponible.]] On aura sûrement un outil similaire pour PRIME.
+Si vous utilisez Kubuntu ou autre distribution utilisant KDE, voir [[http://kde-apps.org/content/show.php/Bumblebee+Indicatior?content=154575|Plasma Bumblebee Indicator]]
+==== Le système indique que le pilote nvidia est installé mais pas activé. ====
+
+C'est normal, car c'est la réalité. Bumblebee utilise le pilote nvidia et l'a donc installé. Cependant, ce driver n'est chargé que lorsqu'il est utilisé, c'est-à-dire lorsque optirun tourne, car ce n'est pas lui qui est responsable de l'affichage. Rien d'alarmant donc.
+
+==== Je n'arrive pas à accéder au Panneau de Configuration NVIDIA (nvidia-settings) (ou il me dit que je n'utilise pas la carte NVIDIA). Que faire ? ====
+
+Tout d'abord, si on vous conseille d'utiliser nvidia-xconfig, ne le faites pas !
+
+En fait, le Panneau de Configuration NVIDIA ne détecte votre carte que si le fichier xorg.conf utilisé est celui de celle-ci et que de plus le serveur X.org sur lequel le Panneau tourne est géré par cette carte. Ces conditions font qu'il n'est pas possible d'utiliser le Panneau de Configuration NVIDIA tel quel pour le moment, nous réfléchissons aux différentes options qui s'offrent à nous pour contourner ce problème.
+
+Voir à la section "Utilisation" ci-dessus, comment lancer nvidia-settings.
+
+==== J'ai ce message d'erreur "(EE) Failed to load module "kbd" (module does not exist, 0)" qui apparaît à certains endroit, est-ce grave ? ====
+
+Non pas du tout, ce devrait plutôt être un "Warning" (Avertissement) qu'une "Error" (Erreur), mais ça ne pose en aucun cas de problèmes.
+
+==== Je n'arrive pas à utiliser mon port DVI et/ou HDMI. Est-ce lié à Optimus ? ====
+
+Très certainement. A moins qu'il ne s'agisse d'un problème simple dont les solutions existent déjà, votre port HDMI est probablement relié à la carte nVidia. Nous avons beaucoup de travaux à faire de ce point de vue là, car pour le moment, il est quasiment impossible d'utiliser un tel port HDMI sous Linux.
+
+===== Guide de dépannage =====
+
+Vous rencontrez un problème, un message d'erreur, et vous ne savez pas quoi faire ? Commencer par comparer votre problème avec ceux décrits ici (chaque problème comporte plusieurs cas qui sont tous réglés par la solution proposée a priori, vous n'avez pas nécessairement tous les symptômes), et vous trouverez peut-être le (ou les) votre et sa (leur) solution(s).
+
+==== Votre PC possède-t-il bien Optimus ou un équivalent NVIDIA ? ====
+
+C'est la première chose à vérifier, lire la page de la doc sur [[:nvidia_optimus|Optimus]] pour le vérifier.
+
+==== Utilisez vous bien la dernière version de Bumblebee ? ====
+
+Il est important d'avoir la dernière version disponible, de nombreux problèmes sont corrigés au fur et à mesure de leur découverte. Vérifiez donc qu'il n'y a pas de mises à jour disponibles avec le gestionnaire idoine.
+
+Au 26/04/2013, les paquets de Bumblebee Project en sont aux versions suivantes (distro est à remplacer par le nom de version de votre système, e.g. oneiric) :
+  * bumblebee : 3.2.1-1~distroppa1
+  * bbswitch : 0.6-1~distroppa2
+  * primus : 20130426-1~distroppa1
+  * virtualgl : 2.3.1-2~distroppa2
+
+==== Votre pilote nvidia est-il suffisamment récent ? ====
+
+Il est conseillé d'utiliser la dernière version stable du pilote nvidia (331 au 04/03/2014), cf. la partie correspondante du guide d'installation.
+
+==== Les headers du noyau sont-ils bien installés ? ====
+
+Un problème très fréquent sous Quantal est que les headers ne sont pas installés sur le système, empêchant la compilation du pilote nvidia ainsi que de bbswitch. Le message d'erreur correspondant est généralement celui-ci :
+
+<code>[ERROR]The Bumblebee daemon has not been started yet or the socket path /var/run/bumblebee.socket was incorrect.
+[ERROR]Could not connect to bumblebee daemon - is it running?</code>
+
+La solution est la suivante (remplacer nvidia-current par la version que vous utilisez) :
+<code>sudo apt-get purge bbswitch-dkms nvidia-current
+sudo apt-get install linux-headers-generic
+sudo apt-get install --reinstall nvidia-current bbswitch-dkms bumblebee</code>
+
+==== Impossible d'obtenir la résolution d'affichage correcte pour mon écran, les effets 3D ne fonctionnent pas, je suis redirigé vers Unity 2D ou Gnome Classic au lieu d'Unity 3D ou Gnome Shell ====
+
+Vérifiez s'il existe un fichier xorg.conf dans le dossier /etc/X11. Si oui, il force très probablement l'utilisation de la carte nVidia ce qui est alors fort certainement à l'origine du problème, donc supprimez-le :
+
+<code>sudo rm /etc/X11/xorg.conf</code>
+
+Puis redémarrez.
+
+Si ce n'est pas le cas (i.e. le fichier n'existe pas) où que le problème persiste, regardez le problème suivant.
+
+==== Les effets 3D ne fonctionnent pas, je suis redirigé vers Unity 2D ou Gnome Classic au lieu d'Unity 3D ou Gnome Shell, j'ai les messages d'erreurs suivants : ====
+
+<code>Xlib: extension "GLX" missing on display ":0"</code>
+
+<code>Error: couldn't find RGB GLX visual or fbconfig</code>
+
+<code>ERROR(596): Could not obtain RGB visual with requested properties</code>
+
+Ce problème vient d'une mauvaise installation du pilote nvidia qui a supplanté les librairies graphiques de la cartes Intel. Pour le corriger, ouvrez un terminal et entrez ceci :
+
+<code>sudo apt-get install --reinstall libgl1-mesa-glx bumblebee-nvidia</code>
+
+Redémarrez.
+
+==== J'ai le message d'erreur suivant : ====
+
+<code>[ERROR]Cannot access secondary GPU - error: [XORG] (EE) [drm] failed to open device</code>
+
+Premièrement, commencez par vérifier que le pilote nouveau n'est pas charge en mémoire :
+
+<code>lsmod | grep nouveau</code>
+
+S'il n'y a pas de retour, tout va bien. Sinon, effectuez ceci:
+
+<code>sudo rmmod nouveau</code>
+
+Ensuite, vérifiez que le pilote nvidia est bien construit dans le noyau en mémoire :
+
+<code>sudo modprobe nvidia-current</code>
+
+Si vous obtenez ce message d'erreur :
+
+<code>FATAL: Module nvidia_current not found.</code>
+
+Effectuez ceci :
+
+<code>sudo apt-get install --reinstall nvidia-current</code>
+
+Redémarrez et vérifiez si cela a résolu votre problème.
+
+Sinon, essayez de modifier l'option "Driver" dans /etc/bumblebee/bumblebee.conf en remplaçant "Driver=" par "Driver=nvidia", redémarrer et vérifier si cela a résolu le problème.
+
+==== J'ai l'un des messages d'erreurs suivant : ====
+
+<code>ERROR: ld.so: object 'librrfaker.so' from LD_PRELOAD cannot be preloaded: ignored.</code>
+
+<code>ERROR: ld.so: object 'libdlfaker.so' from LD_PRELOAD cannot be preloaded: ignored.</code>
+
+Si vous êtes sur une version 64bits, commencez par vérifier que le paquet virtualgl-libs:i386 est bien installé. Si ce n'est pas le cas, installez-le et regardez si votre problème est réglé.
+
+Si c'est le cas (paquet installé) ou que votre problème n'est pas réglé, vous êtes dans l'un des cas de figures suivants, et il n'existe aucune solution envisageable actuellement :
+  * le programme que vous essayez de lancer est un programme lié statiquement à la compilation (absolument aucune solution possible)
+  * le programme que vous essayez de lancer est un programme setuid ou setgid (exemple : chrome, le navigateur de Google), il existe une méthode décrite dans la documentation de VirtualGL, mais celle-ci est fortement déconseillée.
+
+
+==== J'ai l'un des messages d'erreurs suivant : ====
+
+<code>[ERROR]Cannot access secondary GPU - error: [XORG] (EE) NVIDIA(0): Failed to initialize the NVIDIA GPU at PCI:1:0:0.  Please
+[ERROR]Aborting because fallback start is disabled.</code>
+  - [[:tutoriel:comment_modifier_un_fichier|Éditer]] avec les [[:sudo|droits d'administrateur]] le fichier **/etc/default/grub**  et ajouter <file> rcutree.rcu_idle_gp_delay=1 </file> à la ligne <file> GRUB_CMDLINE_LINUX_DEFAULT= </file> **__Exemple__** : <file> GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"</file>devient <file> GRUB_CMDLINE_LINUX_DEFAULT="quiet splash rcutree.rcu_idle_gp_delay=1" </file>
+  - Enfin ne pas oublier d'actualiser le [[:grub-pc|GRUB]] en saisissant depuis un [[:terminal]] la [[:commande_shell|commande]] suivante: <code> sudo update-grub</code>
+
+**[[https://bbs.archlinux.org/viewtopic.php?id=169742|Source]]**
+
+==== Mon application ne se lance pas à travers optirun, j'obtiens le message d'erreur suivant : ====
+
+<code>[VGL] ERROR: Could not open display :8</code>
+
+Certains programmes lancent des processus fils qui ne sont alors pas récupérés pas optirun. C'est un problème sur lequel nous travaillons, une solution temporaire qui peut faire l'affaire dans de nombreux cas est de réaliser la manipulation suivante.
+
+Ouvrez un [[:terminal]], et lancez ceci :
+
+<code>optirun bash</code>
+
+Une nouvelle interface de terminal tournant sur la carte nVidia est alors disponible, vous pouvez lancer votre programme (sans optirun) via celle-ci.
+
+==== optirun attend indéfiniment. ====
+
+Vérifiez les fichiers /var/log/Xorg.8.log et /var/log/kern.log. Si le premier se termine par :
+
+<code>(EE) NVIDIA(GPU-0): WAIT: (E, 0, 0x857d)</code>
+
+Et/ou que le second contient ces lignes :
+
+<code>NVRM: Xid (0000:01:00): 16, Head 00000000 Count 00000000
+NVRM: Xid (0000:01:00): 16, Head 00000000 Count 00000001
+NVRM: Xid (0000:01:00): 16, Head 00000000 Count 00000002
+NVRM: Xid (0000:01:00): 16, Head 00000000 Count 00000003
+NVRM: Xid (0000:01:00): 16, Head 00000000 Count 00000004
+NVRM: Xid (0000:01:00): 16, Head 00000000 Count 00000005
+NVRM: Xid (0000:01:00): 16, Head 00000000 Count 00000006
+NVRM: Xid (0000:01:00): 16, Head 00000000 Count 00000007</code>
+
+Il peut s'agir d'un bug présent dans le noyau Linux avec la fonction de virtualisation des processeurs Intel. La solution est d'ajouter "intel_iommu=off" à la ligne de démarrage. Ou alors d'une incompatibilité du driver nvidia (rare).
+
+==== Bumblebee ne se lance pas sous Linux Mint ====
+
+Il faut modifier le fichier init de bumblebeed :
+<code>sudo gedit /etc/init/bumblebeed.conf</code>
+Rechercher les lignes suivantes :
+<code>start on    (login-session-start or desktop-session-start)
+stop on     (desktop-shutdown)</code>
+Et les remplacer par :
+<code>start on    runlevel [2345]
+stop on     runlevel [016]</code>
+Sauvegarder puis redémarrer.
+
+==== glxspheres et glxspheres64 , commande introuvable ====
+
+Sous [[:trusty|Ubuntu Trusty 14.04]] (et au moins dans sa version Gnome Shell Remix), il est possible qu'un certain nombre de paquets nécessaires au fonctionnement de bumblebee ne soit pas présents par défaut dans les [[:depots|dépots]] officiels (bien que les paquets principaux bumblebee et bumblebee-nvidia le soit). Dans ce cas, les différentes commandes de tests "glxspheres" ou "glxspheres64" renvoient l'erreur "commande introuvable" bien que vous ayez suivi entièrement la procédure décrite plus haut [[#pour Ubuntu 14.04]].\\
+Dans ce cas, l'ajout du PPA:Bumblebee est nécessaire:
+
+<note important> Installer un paquet hors des dépôts officiels peut présenter un risque d'instabilité du système.</note>
+Dans un [[:terminal]], saisir les [[:commande_shell|commandes]] suivantes :
+  - D'abord, [[:ppa#ajout_d_un_ppa_a_vos_sources_logicielles|Ajoutez à vos sources de logiciels le PPA]] suivant **ppa:bumblebee/stable** ((https://launchpad.net/~bumblebee/+archive/ubuntu/stable)) <code>sudo apt-add-repository ppa:bumblebee/stable</code>
+  - [[:tutoriel:comment_modifier_sources_maj#recharger_la_liste_des_paquets|recharger la liste des paquets]]: <code>sudo apt update</code>
+  - Et mettez à jour : <code>sudo apt upgrade</code>
+
+==== You've no permission to communicate with the Bumblebee daemon ====
+
+Si vous obtenez le message :
+<code>
+$ optirun -b none nvidia-settings -c :8
+[ 1313.538315] [ERROR]You've no permission to communicate with the Bumblebee daemon. Try adding yourself to the 'bumblebee' group
+[ 1313.538347] [ERROR]Could not connect to bumblebee daemon - is it running?
+</code>
+
+Exécuter la commande et redémarrer
+<code>sudo gpasswd -a user(à remplacer) bumblebee </code>
+
+
+
+==== Cannot access secondary GPU - error====
+
+
+<code>$ optirun -b none nvidia-settings -c :8
+[ 1710.110775] [ERROR]Cannot access secondary GPU - error: [XORG] (EE) Failed to load module "nvidia" (module does not exist, 0)
+[ 1710.110829] [ERROR]Aborting because fallback start is disabled.
+</code>
+
+<note warning>Que faire ???</note>
+
+Vous pouvez maintenant suivre la procédure d'installation et de test décrite plus haut [[#pour Ubuntu 14.04]].
+
+===== Lien divers =====
+
+  * **(en)**[[http://bumblebee-project.org/|Site officiel de l'organisation Bumblebee-Project]]
+  * **(en)**[[https://github.com/Bumblebee-Project/|Page GitHub de l'organisation Bumblebee-Project]]
+  * **(en)**[[https://launchpad.net/~bumblebee/|Page de l'organisation (et PPAs) sur Launchpad]]
+  * **(en)**[[https://wiki.ubuntu.com/Bumblebee|Bumblebee Project sur le wiki anglophone Ubuntu]]

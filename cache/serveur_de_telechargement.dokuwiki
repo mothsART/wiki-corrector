@@ -1,0 +1,96 @@
+
+{{tag>serveur BROUILLON}}
+
+----
+
+====== Créer et gérer un serveur dédié au téléchargement sous Ubuntu ======
+
+Si vous êtes plusieurs à télécharger les mêmes vidéos à votre domicile, vous gâchez probablement de la bande passante. Afin de remédier à cela, il est possible de confier tous vos téléchargements à la même machine, sur laquelle n'importe qui pourra récupérer ses fichiers par la suite. L'objet de ce document est de vous permettre de configurer un serveur de téléchargement qui répondra à ces critères :
+  * multi OS (n'importe quel système doit pouvoir s'y connecter, lui ordonner de commencer un téléchargement et récupérer ensuite ses données) ;
+  * commandable à distance (par exemple du boulot, vous pouvez lancer un téléchargement) ;
+  * stable, léger ;
+  * sécurisé.
+
+
+
+===== La machine dédiée =====
+
+Nul besoin d'un foudre de guerre pour simplement télécharger quelques fichiers. Pensez simplement à prendre une machine qui aura un gros disque dur et une alimentation peu gourmande en énergie. Notez qu'une fois la configuration faite, écran, clavier et souris seront superflus. Typiquement, 64 Mo de RAM seront suffisant pour faire tourner votre configuration. Si vous voulez être à l'aise, prenez 128 Mo de RAM, achetez des ventilateurs assez larges et une alimentation à faible consommation, de manière à éviter la surchauffe et le bruit. Préférez le matériel muni d'ailettes de refroidissement car celles-ci offrent un fort taux de dissipation de chaleur.
+
+
+===== Choix de la distribution =====
+
+Utilisez de préférence une ubuntu-server. Pour un tel usage, une version d'ubuntu avec interface graphique serait probablement superflue et consommerait de la mémoire inutilement. Il faut que vous cherchiez directement [[http://www.ubuntu-fr.org/telechargement|sur le ftp]] de ubuntu ([[http://www.ubuntu-fr.org/telechargement|l'interface d'ubuntu-fr dédiée]] ne proposant pas ce choix). Vous pouvez aller jeter un oeil sur [[:tutoriel:installation_configuration|la page d'aide à l'installation serveur]], même si ce cas particulier, ça n'est pas vraiment nécessaire : vous ne voulez pas en faire un serveur web ni un serveur dns. Ainsi, à l'étape « ensembles prédéfinis », vous pouvez sauter les deux choix « DNS » et « LAMP »((Sauf si vous décidez de prendre un client p2p nécessitant apache. Dans ce cas, choisissez « LAMP ».)) (tapez deux fois sur la touche « ↹ »), et continuer. Si vous avez du mal avec la configuration des partitions, voici un petit tableau récapitulatif adapté à ce genre de cas :
+
+^ Taille ^ Entrée ^ Type partition ^ Format partition ^ Indicateur d'amorçage ^
+| 1 Gio  | /     |primaire       | ext3            | présent             |
+| taille_de_la_RAM | swap | _  | linux swap     | _                   |
+| reste_de_l_espace | /home | secondaire | ext3   | absent              |
+
+L'avantage de séparer le « /home » des autres partitions étant de pouvoir facilement récupérer ses données en cas de plantage.
+
+
+
+===== Choix d'un client p2p à installer sur cette machine =====
+
+Vous pouvez installer le client qui vous plaira. Le seul pré-requis est que celui-ci doit être non-graphique si vous souhaitez l'installer sur une version serveur d'ubuntu. Il devra aussi disposer d'une interface web pour pouvoir le contrôler à distance. Voici une liste non exhaustive des clients que l'on peut utiliser pour arriver à ses fins :
+^application  ^réseaux supportés^ liens utiles^ remarques ^
+|[[:amule#faire_tourner_amule_en_daemon_amuled|amule-daemon]] |edonkey2000 (ED2K), Kademlia (Kad)| _ | _ |
+|[[:transmission#transmission-daemon|transmission-daemon]]+[[http://mymadcat.com/spip/Transmission-web,5.html|transmission-web]]| bittorrent| _ | bien maintenu, client officiel ubuntu |
+|[[:rtorrent|rtorrent]]+[[http://code.google.com/p/rtgui/|rtGui]] (nécessite apache)| Bittorrent| _ | _ |
+|[[:mldonkey|mldonkey]]|eDonkey2000, Kad, Overnet, Gnutella, Gnutella2, BitTorrent, FastTrack, OpenNapster, Direct Connect, Soulseek| _ | possède [[http://www.informatik.uni-oldenburg.de/~dyna/mldonkey/|une extension firefox]], plus très bien maintenu, tous les réseaux ne marchent pas, lent avec bittorrent |
+|[[http://www.torrentflux.com/|torrentflux]] (nécessite apache)|Bittorrent| _ | possède [[http://jamespo.org.uk/wp/archives/552|une extension firefox]] |
+Pour faire votre choix, pensez à regarder les aspects pratiques : « Y a-t-il une extension Firefox pouvant m'aider à lancer automatiquement le téléchargement sur mon serveur ? », « L'interface web supporte-t-elle le SSL ? » sont des questions qu'il peut être intéressant de se poser.
+
+
+===== L'accès à votre serveur =====
+
+Lors de la configuration du client p2p, veillez à bien sécuriser l'accès à votre serveur. Il ne faudrait pas que n'importe qui puisse avoir accès à l'interface web de votre machine pour lancer des téléchargements au hasard. Aussi est-il fortement recommandé de passer par des connexions cryptées pour se connecter à votre interface web. Le ssl n'étant pas supporté par toutes les interfaces web des clients pré-cités, nous allons donner une méthode universelle pour réaliser ceci sans danger. Après ces manipulations, vous pourrez même accéder à votre ordinateur de l'extérieur de votre réseau et faire ces manipulations du boulot!
+
+==== Côté serveur ====
+
+=== Refusez toutes les adresses sauf 127.0.0.1 ===
+
+127.0.0.1 est l'adresse de rebouclage. Elle représente la machine locale. Ainsi en refusant tout le monde sauf 127.0.0.1, vous dîtes au serveur qu'il est le seul à avoir le droit de se connecter à son interface web.
+
+=== Installez open-ssh serveur ===
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **openssh-server**.
+
+ssh est un protocole de cryptage qui va vous permettre de chiffrer les connections à l'interface web de votre client p2p.
+
+==== Côté client ====
+
+Pour vous connecter à l'interface web du serveur, il faut avoir SSH. Tous les Linux ont un client SSH pré-installé. Pour windows, nous allons voir comment on fait avec Putty, un client SSH qui ne nécessite aucune installation (et donc que vous pouvez télécharger, utiliser et jeter sans avoir « pollué » le PC duquel vous commandez votre serveur). Donnons-nous des hypothèses de départ. on va supposer :
+  * que le port YYYY est celui sur lequel tourne votre interface web sur le serveur (par exemple pour mldonkey ce port est 4080) ;
+  * que le port XXXX est libre sur votre machine client (si vous ne savez pas quoi prendre prenez XXXX=YYYY).
+
+=== Sous GNU/Linux et Mac OS ===
+
+Il vous suffira d'ouvrir un terminal et de taper une seule ligne de commande :
+<code>ssh -L XXXX:127.0.0.1:YYYY login@ipserveur</code>
+
+=== Sous windows ===
+
+[[http://www.chiark.greenend.org.uk/~sgtatham/putty/download.html|Téléchargez Putty]]. Configurez-le comme suit (l'exemple suivant a été fait avec XXXX=YYYY=4080 ; sachez qu'on met « XXXX » dans « Source port » et « YYYY » dans « Destination port », après 127.0.0.1) :
+
+{{serveur:putty1.png}} {{serveur:putty2.png}}
+
+Après ces manipulations, un lien SSH est créé entre le port XXXX de la machine client et le port YYYY du serveur : le port XXXX de la machine locale est donc devenu celui du serveur, et donc toute tentative d'accès à « localhost:XXXX » sur votre client est virtuellement devenue une tentative d'accès au « localhost:YYYY » de votre serveur, le tout par un lien chiffré. Sur la machine locale, vous pouvez désormais accéder à l'interface web de votre serveur en tapant dans la barre d'adresse :
+
+  localhost:XXXX
+
+===== Récupérer ses fichiers sur la machine =====
+
+Pour mettre à disposition des machines du réseau local les fichiers téléchargés par le serveur, 2 méthodes disponibles :
+
+  - Vous pouvez utiliser le protocole samba (pas très fiable).
+  - Vous pouvez monter un FTP local (fiable, méthode la plus facile).
+
+===== Scanner automatiquement les téléchargements =====
+
+FIXME
+
+----
+
+//Contributeurs : [[utilisateurs:ZeTotof]].//

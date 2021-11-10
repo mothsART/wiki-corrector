@@ -1,0 +1,180 @@
+
+{{tag>sécurité tutoriel pam}}
+----
+
+====== Les restrictions horaires sous Linux ======
+
+
+Avec Ubuntu Linux, il est possible d'affecter à votre ordinateur des **restrictions horaires**, afin d'empêcher la connexion d'un ou plusieurs utilisateurs à votre système.
+Grâce aux restrictions horaires, vous pourrez, par exemple, limiter l'accès à l'ordinateur pour vos enfants (une sorte de [[:tutoriel:comment_mettre_en_place_un_controle_parental|Contrôle Parental]], en somme), ou bien encore protéger la connexion à votre serveur durant certaines heures.
+
+2 grandes orientations s'offrent à vous:
+  * utiliser une interface graphique (utilisateur normal)
+  * configurer manuellement des fichiers textes (utilisateur avancé)
+
+===== Utilisation d'une interface graphique =====
+
+Pour utiliser une interface graphique, consulter la page sur le logiciel [[:timekpr]].
+
+===== Configuration semi-automatique par script =====
+
+
+Le script **CTparental** que l'on retrouve dans la page de documentation [[:tutoriel:comment_mettre_en_place_un_controle_parental#dnsmasq_et_blackliste_de_l_universite_de_toulouse|comment mettre en place un contrôle parental]]
+se base sur les principes décrits dans la partie **Configuration manuelle**, mais automatise toutes les étapes.
+
+Une fois le script installé il vous suffira de lancer :
+  sudo CTparental -off  # si vous ne voulez pas du filtrage sur Internet.
+
+puis :
+
+  sudo CTparental -tlo  # pour paramétrer les plages horaires de connexion de chaque usager. Attention à bien se laisser un compte en accès H24 7/7
+
+
+===== Configuration manuelle =====
+
+==== Comprendre ce que vous allez faire ====
+Tout au long de ce tutoriel, nous allons nous servir du **Module PAM** (Pluggable Authentication Modules, en anglais //modules d'authentification enfichables//). Il permet de contrôler l'authentification des utilisateurs lorsqu'ils se connectent. Puis, nous utiliserons les fichiers de configuration de sécurité afin de définir les heures de connexion autorisées.\\ 
+Ces manipulations peuvent être exécutées sur **n'importe quelle version d'Ubuntu**, et ne nécessitent qu'un simple éditeur de texte ([[:vim]], [[:emacs]], [[:nano]], [[:gedit]], [[:kate]], pour ne citer qu'eux).\\ 
+
+==== Activer les Restrictions Horaires via le Module PAM ====
+Tout d'abord, commencez par vous rendre dans le répertoire ''/etc/pam.d/'', où se situe l'ensemble des services configurables :
+<code>
+$ ls /etc/pam.d/
+atd   common-account   common-session  gdm                login   ppp    sudo
+chfn  common-auth      cron            gdm-autologin      other   samba
+chsh  common-password  cupsys          gnome-screensaver  passwd  su
+</code>
+Si nous souhaitons bloquer la connexion à l'ordinateur, nous allons devoir modifier le service [[:lightdm]]. [[:tutoriel:comment_editer_un_fichier|Editez donc le fichier]]  ''lightdm'' et ajoutez-y cette ligne de code (à la fin du fichier) :
+<file>
+account required pam_time.so
+</file>
+Si vous utilisez **kdm**, ce sera donc ce fichier qu'il faudra ouvrir.\\
+Et voilà, c'est terminé pour la configuration du module PAM ! Cela aura pour effet d'activer le contrôle des heures sur ce service .
+<note important>Si vous possédez un serveur, vous ne disposez sûrement pas d'interface graphique. Auquel cas, Lightdm n'est pas installé et la connexion ne sera pas bloquée. Pour empêcher la connexion aux [[:TTY]], il faut modifier le fichier ''login'' du même dossier, et y ajouter la même ligne de code que celle précédemment citée.
+Cette manipulation est également valable pour les personnes qui ont installé une interface graphique et qui souhaitent bloquer l'accès à l'écran de connexion ainsi qu'aux terminaux.</note>
+
+
+
+
+
+
+==== Configurer les Horaires d'Accès ====
+
+Maintenant que le service PAM a été activé, nous n'avons plus qu'à configurer les heures d'accès. Ouvrez le répertoire ''/etc/security''. Plusieurs fichiers de configuration s'offrent à vous :
+<code>
+$ ls /etc/security/
+access.conf  namespace.conf  pam_env.conf
+group.conf   namespace.init  time.conf
+limits.conf  opasswd         time.conf.bak
+</code>
+[[:tutoriel:comment_editer_un_fichier|Editez le fichier]] ''time.conf''. Quelques explications accompagnées d'exemples (en anglais) introduisent le fichier. Pour définir les horaires d'accès, copiez-collez la ligne de code suivante (à la fin du fichier, comme toujours) :
+<code>
+*;*;utilisateurs;horaires
+</code>
+A la place du champ ''utilisateur'', écrivez le **login** du compte que vous souhaitez bloquer. 
+<note tip>Si vous souhaitez bloquer plusieurs utilisateurs, écrivez leurs login à la suite, séparés par l'opérateur **|**.
+Par exemple, si je souhaite bloquer les comptes de ''patrick'', ''jean'' et ''emilie'' :
+<code>
+*;*;patrick|jean|emilie;horaires
+</code>
+Par contre, si vous désirez bloquer l'accès au système pour tous les utilisateurs sauf un en particulier, il faut utiliser l'opérateur **!** devant la personne concernée.\\ Par exemple, si je souhaite que l'accès à l'ordinateur soit refusé à tous les utilisateurs, excepté ''nicolas'' et ''xavier'' :
+<code>
+*;*;!nicolas|xavier;horaires
+</code>
+</note>
+Intéressons-nous maintenant au champ ''horaires''. C'est dans ce champ que la sélection du **jour** et des **horaires** de connexion autorisées sera possible.\\ Vous devez tout d'abord spécifier le jour de la semaine, au moyen des abréviations suivantes :
+<code>
+Mo : Lundi		Fr : Vendredi		Wd : Samedi/Dimanche
+Tu : Mardi		Sa : Samedi		Wk : Lundi/Mardi/Mercredi/Jeudi/Vendredi
+We : Mercredi		Su : Dimanche
+Th : Jeudi		Al : Tous les Jours
+</code>
+
+<note important>Attention de ne pas confondre les abréviations Wk et Wd qui sont trompeuses ! et surtout mal identifiées sur internet : on trouve facilement des informations contradictoires !</note>
+
+
+Puis, on spécifie les heures limites. Celles-ci doivent être au format 24H, composée de 4 chiffres. Par exemple, pour limiter de 15H17 à 18H34, on écrira : ''1517-1834''.\\ 
+Pour autoriser ''marie'' à se connecter seulement le Mardi, de 15H17 à 18H34, on obtient le résultat :
+<code>
+*;*;marie;Tu1517-1834
+</code>
+Les connexions en dehors de cette plage horaire seront interdites.\\ Tout comme pour les utilisateurs, il est possible d'utiliser les opérateurs **|** et **!** pour indiquer plusieurs horaires (l'opérateur **!** indiquera alors que toutes les heures de connexion seront autorisées, sauf celles qui seront indiquées).
+<note tip>Les deux étoiles (**jokers**) au début de la ligne de code remplissent respectivement les champs ''services'' et ''tty''. Etant donné que l'on souhaite bloquer tout accès au système, il est inutile de spécifier quel service ou quel tty vous souhaitez bloquer.\\ 
+Si toutefois vous souhaitez empêcher l'utilisation d'un service particulier, il suffit de le spécifier, comme l'exemple qui suit :
+<code>
+login;tty1|tty4|tty5;marie;!Wd0000-2400
+</code>
+Ainsi, l'utilisateur ''marie'' ne pourra pas se connecter aux TTY 1, 4 et 5 durant le week-end.</note>
+=== Quelques Exemples de Restrictions Horaires ===
+''mathilde'' est autorisée à se connecter tous les jours de 13H20 à 15H20, puis de 16H00 à 20H30 :
+<code>
+*;*;mathilde;Al1320-1520|Al1600-2030
+</code>
+''pierre'', ''franck'' et ''florian'' sont autorisés à se connecter de 14H00 à 18H45 pendant les jours de semaine, et de 14H00 à 22H15 pendant le week-end :
+<code>
+*;*;pierre|franck|florian;Wk1400-1845|Wd1400-2215
+</code>
+''olivier'' n'est jamais autorisé à se connecter. ''jessica'' peut se connecter le Mercredi de 13H00 à 16H00 :
+<code>
+*;*;olivier;!Al0000-2400
+*;*;jessica;We1300-1600
+# 2 lignes différentes, car deux horaires différentes pour chacun des utilisateurs
+</code>
+
+
+==== Expiration d'une Session ====
+Lorsqu'une Session arrive à expiration (qu'elle dépasse la limite horaire alors que l'utilisateur est déjà connecté), le module PAM ne peut atteindre l'utilisateur concerné. En effet, si ''mathilde'' se connecte pendant les horaires de temps autorisées, elle est tout à fait libre de dépasser ces plages horaires ! Pour cela, nous allons utiliser un nouveau programme : [[:cron]]. Cette application exécute des commandes à des intervalles de temps données. Dans notre cas, nous allons faire usage de la commande ''skill -KILL -u'' FIXME (man skill sous [[:xenial]]: "These tools are obsolete and unportable" => kill) pour déconnecter l'utilisateur lorsque la Session expire. \\ 
+La Manipulation est très simple. [[:tutoriel:comment_editer_un_fichier|Editez simplement le fichier]] ''/etc/crontab''. Ajoutez-y alors la ligne de code suivante :
+<code>
+Minute Heure    * * Jour(s)   root    skill -KILL -u Utilisateur
+</code>
+Comme précédemment, remplacez les champs ''Minute'' et ''Heure'' aux horaires désirées. Puis, remplissez le champ ''Jour(s)'' par le(s) jour(s) interdit(s), ou tapez simplement une étoile (*) pour indiquer tous les jours de la semaine.
+Enfin, remplacez le champ ''Utilisateur'' par le login du compte à bloquer, et voilà !
+<note warning>Les Jours ne se notent pas de la même façon avec les tâches cron ! Voici la liste des abréviations à utiliser avec ce programme :
+<code>
+mon : Lundi	fri : Vendredi
+tue : Mardi	sat : Samedi
+wed : Mercredi	sun : Dimanche
+thu : Jeudi	 *  : Tous les Jours
+</code>
+</note>
+=== Quelques Exemples de tâches cron (avec les exemples d'horaires de la partie précédente) ===
+''jessica'' peut se connecter le Mercredi de 13H00 à 16H00\\ 
+//--> Déconnexion : Mercredi, à 16H00.//
+<code>
+00 16    * * wed   root    skill -KILL -u jessica
+</code>
+''mathilde'' est autorisée à se connecter tous les jours de 13H20 à 15H20, puis de 16H00 à 20H30.\\ 
+//--> Déconnexion : Tous les Jours, à 15H20 et 20H30.//
+<code>
+20 15    * * *   root    skill -KILL -u mathilde
+30 20    * * *   root    skill -KILL -u mathilde
+</code>
+''pierre'', ''franck'' et ''florian'' sont autorisés à se connecter de 14H00 à 18H45 pendant les jours de semaine, et de 14H00 à 22H15 pendant le week-end\\ 
+//--> Déconnexion (1) : Lundi, Mardi, Mercredi, Jeudi et Vendredi, à 18H45.\\ 
+--> Déconnexion (2) : Samedi et Dimanche, à 22H15.//
+<code>
+45 18    * * mon,tue,wed,thu,fri   root    skill -KILL -u pierre && skill -KILL -u franck && skill -KILL -u florian
+15 22    * * sat,sun               root    skill -KILL -u pierre && skill -KILL -u franck && skill -KILL -u florian
+</code>
+<note>La commande ''skill -KILL -u'' déconnecte l'utilisateur de l'interface graphique, mais aussi des TTY. Elle est donc parfaitement utilisable pour les administrateurs de serveur.\\ Cependant, cette commande est immédiate et la déconnexion sera faite sans avertissement. Il serait donc préférable de prévenir de l'installation de ce dispositif les utilisateurs de l'ordinateur ou du réseau en question !</note>
+
+Il est possible de prévenir les utilisateurs avec une commande wall lancée par cron quelques minutes avant la fin de la plage horaire, qui sera affichée dans les terminaux de tous les utilisateurs.
+<code>
+40 18    * * mon,tue,wed,thu,fri   root echo "fin de session dans 5 minutes" | wall
+</code>
+
+Pour prévenir les utilisateurs d'interface graphique, on peut utiliser à la place de wall la commande notify-send qui est dans le paquet [[apt>libnotify-bin|libnotify-bin]].
+<code>
+40 18    * * mon,tue,wed,thu,fri   pierre DISPLAY=:0 notify-send "fin de session dans 5 minutes"
+</code>
+
+===== Voir aussi =====
+
+FIXME
+
+
+----
+
+
+//Contributeurs principaux : //

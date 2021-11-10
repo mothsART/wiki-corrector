@@ -1,0 +1,135 @@
+
+===== Configuration de MPD avec PulseAudio (sous Hardy et Intrepid) =====
+
+Pour configurer votre client sous PulseAudio, il faut premièrement installer le gestionnaire de configuration de PulseAudio :
+  sudo apt-get install paprefs
+Puis lancez le :
+  paprefs
+Cochez ensuite :
+- Enable network access to local sound devices et - Don't require authentication
+
+Nous allons ensuite modifier mpd.conf :
+  sudo nano /etc/mpd.conf
+Dans la section Audio Output, il faut simplement mettre ces deux lignes à audio_output (en prenant bien soins de mettre en commentaire les anciennes sorties audio ALSA/OSS) :
+  audio_output {
+          type                    "pulse"
+          name                    "My MPD PulseAudio Output"
+  }
+  mixer_type          "software"
+
+la dernière ligne permet de contrôler le volume.\\
+Finalement redémarrez MPD pour prendre en compte la nouvelle configuration :
+
+  sudo /etc/init.d/mpd restart
+  
+===== Configuration du Control du Volume avec Alsamixer (sous Hardy ) =====
+
+Ce qui suit décrit comment configurer Mpd et alsamixer pour pouvoir contrôler le volume de Mpd et pas des autres sons du système.
+
+1- ** Créer/Éditer /etc/asound.conf**
+
+Premièrement, les lignes suivantes sont requises dans /etc/asound.conf.
+Notez bien que le mixeur logiciel mpdvol avec le nom "MPD" sera utilisé quand vous éditerez le fichier /etc/mpd.conf.
+
+      # the sound card
+        pcm.real {
+          type hw
+           card 0
+            device 0
+                  }
+      # the ipc stuff is needed for permissions, etc.
+         pcm.dmixer {
+          type dmix
+          ipc_key 1024
+          ipc_perm 0666
+          slave.pcm "real"
+          slave {
+            period_time 0
+            period_size 1024
+            buffer_size 8192
+            rate 44100  
+                 }
+         bindings {
+          0 0
+          1 1 
+                   }
+    }
+   ctl.dmixer {
+     type hw
+     card 0
+     }
+   # software volume
+   pcm.softvol {
+     type softvol
+     slave.pcm "dmixer"
+     control {
+       name "Software"
+       card 0
+     }
+   }
+   # mpd volume control
+   pcm.mpdvol {
+     type softvol
+     slave.pcm "dmixer"
+     control {
+       name "MPD"
+      card 0
+     }
+   }
+   # ctrl for mpd volume
+   ctl.mpdvol {
+     type hw
+     card 0
+   }
+  # input
+   pcm.input {
+           type dsnoop
+           ipc_key 3129398
+           ipc_key_add_uid false
+           ipc_perm 0660
+           slave.pcm "810"
+   }
+  # duplex device
+   pcm.duplex {
+           type asym
+           playback.pcm "softvol"
+          capture.pcm "input"
+   }
+   # default devices
+   pcm.!default {
+     type plug
+     slave.pcm "duplex"
+   }
+   # for oss devices
+   pcm.dsp0 {
+     type plug
+    slave.pcm "duplex"
+   }
+
+2- **Modifier /etc/mpd.conf**
+
+Certaines modifications doivent être apportées au fichier  /etc/mpd.conf.
+
+Dans la section **Audio output**, ajoutez les lignes suivantes :
+      
+        audio_output {
+            type          "alsa"
+            name          "Alsa Software Volume"
+            device        "mpdvol"
+        }
+
+Dans la section **Volume control mixer**, modifiez les valeurs comme ceci :
+
+        mixer_type                      "alsa"
+        mixer_device                    "mpdvol"
+        mixer_control                   "MPD"
+
+il ne vous restera qu'à relancer MPD via la commande :
+
+    sudo /etc/init.d/mpd restart
+
+et vous devriez pouvoir contrôler le Volume a partir de Mpd, enfin de ses clients. Source : [[http://mpd.wikia.com/wiki/Configuration]]
+
+
+
+  

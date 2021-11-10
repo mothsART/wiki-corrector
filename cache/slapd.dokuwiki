@@ -1,0 +1,369 @@
+
+{{tag>Precise serveur réseau BROUILLON}}
+
+------
+====== Un serveur d'annuaire avec OpenLDAP ======
+
+Ce document est la traduction du HowTo présenté à l'adresse https://wiki.ubuntu.com/OpenLDAPServer. 
+
+LDAP signifie Lightweight Directory Access Protocol, c'est une version simplifiée du protocole X500. Vous pourrez trouver une présentation détaillée sur [[wpfr>LDAP|Wikipédia]].
+
+Pour expliquer rapidement, toutes les informations sont stockées dans un arbre. Vous devez déterminer l'arborescence des annuaires ou, autrement dit, des informations de l'arbre (Directory Information Tree). 
+Nous allons commencer ici avec un exemple simple contenant seulement 2 nœuds en plus de la racine :
+  * Le nœud "People" , où seront stockés vos utilisateurs,
+  * Le nœud "Groups" , où seront enregistrés vos groupes.
+
+Vous devez commencer par déterminer ce que sera la racine de votre LDAP. Par défaut, votre arbre peut être déterminé à partir de votre domaine Internet. Si votre domaine est exemple.com , votre racine sera  dc=exemple,dc=com .
+
+
+<note important>Dans le cas où le nom de domaine déclaré sur la machine n'est pas celui que l'on souhaite utiliser, il faut modifier le nom dans les fichiers "/etc/hostname" et "/etc/hosts" et redémarrer le serveur AVANT l'installation des paquets.
+Dans le cas contraire, il risque d'y avoir une contradiction entre le nom choisi à l'installation (ou demandé par dpkg-reconfigure) et celui récupéré automatiquement par l'installation du paquet (dc=lenomdedomaine,dc=extension). je n'ai pas réussi à modifier cela dans la base LDAP. solutionné par tout désinstaller, renommer puis réinstaller.</note>
+
+
+
+===== Installation =====
+
+Avant tout, installons le daemon du serveur ldap (slapd) sur le serveur. Pour cela, il suffit d'[[:tutoriel:comment_installer_un_paquet|installer les paquets]] ** [[apt>slapd]]**.
+
+On vous demandera votre mot de passe administrateur et votre nom de domaine. Renseignez-les. Parfois on ne vous demandera que le mot de passe et on ne vous demandera rien concernant le nom de domaine car l'installeur récupère directement le nom de domaine de la machine. Si vous souhaitez renseigner ces champs faites :
+<code>
+sudo dpkg-reconfigure slapd
+</code>
+
+Voici brièvement les réponses attendues pour une installation standard :
+<code>
+1.Passer la configuration d'OpenLDAP ? non
+2.Nom de domaine ? example.com
+3.Nom de votre société ? masociété 
+4.Quelle base de donnée ? hdb 
+5.Voulez-vous que la base de donnée soit effacée lorsque slapd est purgé ? oui 
+6.Supprimer les anciennes bases de données ? oui
+7.Mot de passe administrateur ? VotreMotDePasse
+8.Confirmer ce mot de passe ? VotreMotDePasse
+9.Authoriser le protocol LDAPv2 ? non
+</code> 
+
+Mais seulement quelques changements seront effectués sur la configuration par défaut. Tout le reste va se jouer dans le fichier **/etc/ldap/slapd.conf**.
+
+
+Nous allons commencer par enregistrer le mot de passe administrateur (de LDAP) dans le fichier de configuration en éditant ce fichier. Ce serait une folie de vouloir enregistrer votre mot de passe en clair donc nous allons générer votre mot de passe en chiffré avec la commande :
+<code>
+sudo slappasswd
+</code>
+
+On obtient quelque chose dans ce genre :
+<code>sudo slappasswd
+New password:
+Re-enter password:
+{SSHA}d2BamRTgBuhC6SxC0vFGWol31ki8iq5m
+</code>
+
+Cet exemple montre la définition de votre mot de passe en utilisant le mot de passe "secret". (D'après l'implémentation de SSHA, votre résultat peut varier) .
+
+
+[[:tutoriel:comment_editer_un_fichier|Éditez]] le fichier ** 
+/etc/ldap/ldap.conf** avec les droits administrateurs.
+
+
+S'il n'est pas déjà présent, [[:tutoriel:comment_editer_un_fichier|créez]] ce fichier avec les droits administrateurs.
+On renseigne alors les informations suivantes :
+<code>
+ldap_version 3
+URI ldap://localhost:389
+SIZELIMIT 0
+TIMELIMIT 0
+DEREF never
+BASE dc=example, dc=com
+</code>
+
+Toutes les informations relatives à **slapd.d** (dossier remplaçant slapd.conf) sont maintenant inscrites au moment où on lance la commande //dpkg-reconfigure slapd//
+
+===== Remplir LDAP =====
+
+L' annuaire a été créé lors de l'installation, il est maintenant temps de le remplir. Il sera rempli avec des entrées classiques qui seront compatibles avec la structure d'un annuaire (pour un annuaire partagé), avec les comptes classiques (pour une authentification Web par exemple) et avec les comptes Unix (posix).
+
+L'annuaire LDAP peut être rempli par des fichiers ldif (ldif signifie ldap directory interchange format). Vous pouvez commencer en créant ce fichier d'exemple (init.ldif) :
+
+<file>
+# fichier de données : ~/init.ldif
+dn: dc=example,dc=com
+objectClass: dcObject
+objectClass: organizationalUnit
+dc: example
+ou: Example Dot Com
+
+dn: ou=people,dc=example,dc=com
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=groups,dc=example,dc=com
+objectClass: organizationalUnit
+ou: groups
+
+dn: uid=lionel,ou=people,dc=example,dc=com
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: lionel
+sn: Porcheron
+givenName: Lionel
+cn: Lionel Porcheron
+displayName: Lionel Porcheron
+uidNumber: 1000
+gidNumber: 10000
+gecos: Lionel Porcheron
+loginShell: /bin/bash
+homeDirectory: /home/lionel
+shadowExpire: -1
+shadowFlag: 0
+shadowWarning: 7
+shadowMin: 8
+shadowMax: 999999
+shadowLastChange: 10877
+mail: lionel.porcheron@example.com
+postalCode: 31000
+l: Toulouse
+o: Example
+mobile: +33 (0)6 xx xx xx xx
+homePhone: +33 (0)5 xx xx xx xx
+title: System Administrator
+postalAddress: 
+initials: LP
+
+dn: cn=example,ou=groups,dc=example,dc=com
+objectClass: posixGroup
+cn: example
+gidNumber: 10000
+displayName: Example group
+</file>
+
+Dans l'exemple ci-dessus, la structure de l'annuaire, c'est-à-dire un utilisateur et un groupe ont été créés. Dans d'autres exemples vous auriez pu voir le paramètre "objectClass: top" ajouté dans plusieurs entrées, mais c'est le comportement par défaut donc pas besoin de le mettre :)
+
+Maintenant ajoutez vos entrées à LDAP :
+  * Arrêtez le daemon : 
+<code>
+sudo /etc/init.d/slapd stop
+</code>
+
+  * Supprimer ce qui a été ajouté automatiquement à l'installation :
+<code>
+sudo rm -rf /var/lib/ldap/*
+</code>
+
+Ajouter les données :
+<code>
+sudo slapadd -l ~/init.ldif
+</code>
+<note tip>Si vous rencontrez le message type : 
+<code>
+Entry (cn=example,ou=groups,dc=example,dc=com), attribute 'displayName' not allowed
+slapadd: dn="cn=example,ou=groups,dc=example,dc=com" (line=46): (65) attribute 'displayName' not allowed
+</code>
+Il faut commenter la ligne 46 comme ceci : 
+<code>
+#displayName: Example group
+</code>
+Puis refaire :
+<code>
+sudo rm -rf /var/lib/ldap/*
+</code>
+</note>
+
+Donner les droits de lecture aux fichiers de la base de données
+<code>
+sudo chown -R openldap:openldap /var/lib/ldap
+</code>
+
+N'oublions pas de relancer ldap :
+<code>
+sudo /etc/init.d/slapd start
+</code>
+
+Nous allons pouvoir vérifier que les données ont été correctement ajoutées avec les outils du paquet ''ldap-utils''. Pour effectuer une recherche dans les annuaires LDAP il vous suffit de faire :
+
+<code>
+ldapsearch -xLLL -b "dc=example,dc=com" uid=lionel sn givenName cn
+dn: uid=lionel,ou=people,dc=example,dc=com
+cn: Lionel Porcheron
+sn: Porcheron
+givenName: Lionel
+</code>
+
+Une rapide explication :
+  * -x désactive l'authentification SASL
+  * -LLL empêche l'affichage des informations LDIF 
+  * -b indique la branche utilisée
+
+NE PAS OUBLIER d'ajouter le user qui doit administrer le service ldap au group openldap à créer lors de l'installation du paquet ou bien de donner les bons droits sur les fichiers /etc/ldap/ldap.conf et /var/lib/ldap/*
+
+==== Convertir un csv en ldif ====
+Ci dessous un script bash convertissant un csv en ldif. Il faut évidemment le personnaliser selon vos besoins.
+Il lui manque de: supprimer les doublons, les valeurs nulles, les têtes de colonne ainsi que les espaces et caractères spéciaux dans l'uid.
+
+<code>
+#!/bin/bash
+
+# Le script et le fichier source doivent être dans le home.
+# Le script ne supprime ni les doublons, ni les valeurs nulles, ni les têtes de colonne.
+# Il faudrait aussi supprimer les espaces et les caractères spéciaux dans les uid=$nom$prenom
+
+source=source.csv                      # Le fichier source
+cible=cible.ldif                       # Le fichier cible
+
+> $cible                               # Nettoyage du fichier cible.
+
+while read line                        # On lit le fichier, et pour chaque ligne...
+do 
+nom=$(echo $line | cut -d ";" -f2)     # On entre dans la variable $nom la deuxième colonne (-f2).
+prenom=$(echo $line | cut -d ";" -f3)  # Remarquez le séparateur qui est le ";". On pourrait changer.
+rue=$(echo $line | cut -d ";" -f4)
+cp=$(echo $line | cut -d ";" -f5)
+ville=$(echo $line | cut -d ";" -f6)
+tel=$(echo $line | cut -d ";" -f7)
+mobile=$(echo $line | cut -d ";" -f8)
+courriel=$(echo $line | cut -d ";" -f9)
+                                       # A partir de la ligne suivante exportation par un echo.
+                                       # C'est ici que vous pouvez modifier le contenu du ldif.
+                                       # Il faudrait y ajouter une condition pour ne pas afficher les champs vides.
+echo "dn: uid=$nom$prenom,ou=fideles,dc=example,dc=com
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+objectClass: person
+objectClass: top
+cn: $nom $prenom
+gidNumber: 100
+givenName: $prenom
+homeDirectory: hd
+homePhone: $tel
+mobile: $mobile
+mail: $courriel
+street: $rue
+postalCode: $cp $ville
+sn: $nom
+uid: $nom$prenom
+uidNumber: 100
+
+" >> $cible                        # Écriture dans le fichier cible.
+done < $source                     # Lecture de la source.
+
+</code>
+
+===== Utiliser votre serveur LDAP =====
+
+Maintenant que votre serveur est prêt et démarré vous pouvez :
+  * Authentifier vos utilisateurs dans l'annuaire comme expliqué dans la documentation [[https://help.ubuntu.com/community/LDAPClientAuthentication|LDAPClientAuthentication]]
+  * Authentifier vos utilisateurs via une applications web
+  * Utiliser l'annuaire comme une base de données pour votre client mail
+  * Et bien plus encore !!!
+
+De manière plus concrète, il existe des solutions simples à installer et qui vous permettent un excellent accès à votre annuaire, que ce soit en visualisation comme en création/édition.
+
+=== phpLDAPadmin ===
+
+== Pré-requis ==
+
+  * Avoir un serveur WEB installé, voir [[LAMP]].
+  * La version 12.04 LTS d'Ubuntu. (La 13.10 étant incompatible avec phpLDAPadmin : https://bugs.launchpad.net/ubuntu/+source/phpldapadmin/+bug/1246170)
+
+== Installation ==
+
+Vous devez [[:tutoriel:comment_installer_un_paquet|installer les paquets]] **apt://phpldapadmin**.
+
+Et on y accède via [[http://votre_domaine.com/phpldapadmin/]]
+
+Attention, le login est : "cn=admin,dc=example,dc=com".
+
+== Problème : Memory Limit low ==
+
+Si lorsque vous allez sur l'interface web de phpldapadmin, vous avez cette erreur : 
+
+Memory Limit low.
+Your php memory limit is low - currently 16M
+
+Éditer en admin le fichiers php.ini :
+<code>
+ cd /etc/php5/apache2/
+ sudo nano php.ini
+</code>
+trouvez la section suivante et changez la valeur memory_limit = 16M en mettant 50M :
+<code>
+ ;;;;;;;;;;;;;;;;;;;
+ ; Resource Limits ;
+ ;;;;;;;;;;;;;;;;;;;
+
+ max_execution_time = 30     ; Maximum execution time of each script, in seconds
+ max_input_time = 60 ; Maximum amount of time each script may spend parsing   request data
+ ;max_input_nesting_level = 64 ; Maximum input variable nesting level
+ memory_limit = 50M      ; Maximum amount of memory a script may consume (16MB)
+</code>
+Il suffit ensuite de recharger la configuration de apache pour que la modification soit prise en compte :
+<code>sudo /etc/init.d/apache2 reload</code>
+
+puis relancer votre serveur ldap :
+<code>sudo /etc/init.d/slapd restart</code>
+
+[[http://www.developpez.net/forums/d489029/hardware-systemes-logiciels/linux/reseau/phpldapadmin-memory-limit-low/|source forum Developpez.com]]
+
+===== Réplication des données LDAP =====
+
+Le service LDAP peut vite devenir un service hautement critique dans votre système d'information : tout dépend (ou peut dépendre) de LDAP :
+
+  * Authentification
+  * Autorisation
+  * Mail
+  * ...
+
+Ce serait donc une bonne idée de créer un système redondant. Le mini HOWTO ci-dessous vous permettra de le faire.
+
+=== Introduction ===
+Avec OpenLDAP 2.2 (sur Breezy et Dapper), la réplication est basée sur une communication maître-esclave.
+
+__**ATTENTION **__ 
+
+Vous devez vous rappeler que les modifications devraient toujours être faites sur le maître ! Si vous modifiez un esclave, les modifications seront perdues dès la synchronisation suivante :/
+
+=== Le maître ===
+
+Sur le maître, vous devez modifier la section "base de donnée" du fichier de configuration ''/etc/ldap/slapd.conf'' pour ajouter une instruction de réplication.
+L'exemple suivant montre une réplication sur le serveur ''ldap-2.example.com'' avec le Manager //user// et le mot de passe //secret//.
+Le fichier de log est l'emplacement où les données seront stockées avant d’être envoyées sur le(s) serveur(s) esclave(s).
+
+<note important>Note d'un internaute : Comment faire pour les versions ou le fichier slapd.conf n'existe plus, comme c'est dit plus haut??</note>
+
+<code>
+replica uri=ldap://ldap-2.example.com:389 binddn="cn=Manager,dc=example,dc=com" bindmethod=simple 
+credentials=secret
+
+replogfile      /var/lib/ldap/replog
+</code>
+
+Il ne reste plus qu'a redémarrer votre serveur LDAP :)
+
+
+=== Le(s) Esclave(s) ===
+
+Sur le(s) serveur(s) esclave(s) , il vous suffit d'autoriser votre serveur maître à mettre à jour la base de donnée LDAP. Pour cela ajoutez les lignes suivantes dans votre ''/etc/ldap/slapd.conf'' à la section base de données :
+
+<code>
+updatedn        cn=Manager,dc=example,dc=com
+updateref       ldap://ldap-1.example.com
+</code>
+
+Redémarrez votre serveur LDAP (l'esclave).
+
+
+
+===== Liens =====
+
+  * [[https://wiki.ubuntu.com/OpenLDAPServer|La version Anglaise]]
+  * [[https://help.ubuntu.com/8.10/serverguide/C/openldap-server.html|La version Anglaise mis a jour pour 8.10]]
+  * [[http://www.openldap.org/|OpenLDAP.org]]
+  * [[http://www.tldp.org/HOWTO/html_single/LDAP-HOWTO/|LDAP HOWTO]]
+  * [[http://luma.sourceforge.net/|Un GUI pour LDAP]] (Disponible dans les dépots)
+  * [[http://ralf.schaeftlein.de/2009/02/04/howto-setup-a-openldap-server-for-ubuntu-810/|OpenLDAP Ubuntu 8.10 HOWTO]]
+
+------------
+
+Contributeurs : [[utilisateurs:Sp4rKy]] puis remis (un peu) en page et déplacé par [[utilisateurs:bastnic]], [[utilisateurs:Kenny432]].

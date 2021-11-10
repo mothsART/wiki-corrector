@@ -1,0 +1,151 @@
+
+{{tag>Xenial tutoriel multimédia carte_tv tnt media_center}}
+----
+
+====== VDR - The Video Disk Recorder ======
+
+[[http://www.tvdr.de|VDR]] (Video Disk Recorder) est un logiciel libre permettant de recevoir la TV sur PC.
+
+De nombreux plugins existent : consultation météo, visionnage de photos, lecture de [[wpfr>DivX]], de DVD, de musique, RSS, e-mails, jeux, motorisation de parabole, streaming vers d'autres centres multimédia, notamment [[:kodi|Kodi]]. Autant de possibilités que d'idées s'offrent aux utilisateurs de ce logiciel. 
+
+Il est possible d'installer vdr sur une machine différente de la machine qui affiche les films. Cette machine sera dénommée "serveur". Cette machine ne nécessite que très peu de puissance car elle ne décode pas le fichier vidéo. On pourra la connecter à un NAS pour le stockage.
+
+
+===== Pré-requis =====
+ * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Avoir installé les pilotes de sa [[:carte_tv|carte TV]]
+
+===== Installation =====
+
+Pour installer ce logiciel, il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>vdr|vdr]]**.
+
+Lors de l'installation, il vous est demandé si vous voulez créer le répertoire ''/var/lib/video.00'' où seront stockés les enregistrements. Vous pouvez répondre oui et changer par la suite son emplacement dans le fichier ''/etc/vdr/conf.d/00-vdr.conf''.
+
+Par la suite, vous devez indiquer le type de carte DVB (Satellite/Terrestre/Câble).
+
+Enfin [[:lirc|LIRC]] est installé.
+<note>Pour le DVB-T2 il faut vdr 2.3, soit une version d'Ubuntu >= 17.10</note>
+
+
+===== Configuration =====
+
+
+====channels.conf====
+
+Ce fichier définit la liste des chaînes disponibles.
+Pour l'obtenir, utilisez **[[apt>w-scan|w-scan]]** et exécutez le avec les paramètres correspondant à votre type de réception.
+Par exemple :
+  * pour la TNT sur le sol français :
+<code>w_scan -c FR -C UTF-8 > channels.conf</code> 
+  * pour le satellite sur Astra 19,2E :
+<code>w_scan -fs -s S19E2  -C UTF-8 > channels.conf</code>
+Vous pouvez ensuite éditer ce fichier pour modifier l'ordre des chaînes ou en supprimer.
+
+Copiez ensuite le fichier :<code>sudo cp channels.conf /var/lib/vdr</code>
+
+
+==== 00-vdr.conf ====
+Ce fichier permet de modifier l'emplacement des enregistrements. Dans l'exemple ci-dessous les enregistrements sont stockés dans /media/tnt/vdr. Vous pouvez mettre ce que vous voulez. Assurez-vous que vdr ait bien accès à ce répertoire :
+<code>sudo chown -R vdr:vdr /media/tnt/vdr</code>
+
+Le ligne de lirc a été décommenté car l'installation est sur une machine serveur.
+
+<file - /etc/vdr/conf.d/00-vdr.conf >
+#
+# This file contains the arguments for VDR if invoked without arguments on the
+# command line.
+#
+# See `man vdr`.
+#
+
+[vdr]
+--video=/media/tnt/vdr
+--config=/var/lib/vdr
+--lib=/usr/lib/vdr/plugins
+--record=/usr/lib/vdr/vdr-recordingaction
+--epgfile=/var/cache/vdr/epg.data
+--user=vdr
+--grab=/tmp
+--port=6419
+--watchdog=60
+#--lirc
+--vfat
+#--shutdown=/usr/lib/vdr/vdr-shutdown.wrapper
+#--userdump
+</file>
+
+=====Surveillance de l'activité =====
+Pour surveiller l'activité du serveur : <code bash>tail -f /var/log/syslog | grep vdr</code>
+
+===== Les plugins =====
+VDR présente un très grande modularité basée sur l'installation de plugins très variés. Une liste-quasi exhaustive est disponible [[http://linuxtv.org/vdrwiki/index.php/Plugins|ici]]. 
+
+  * Certains plugins sont disponibles dans les dépôts officiels d'Ubuntu. Voir [[https://launchpad.net/ubuntu/+search?text=vdr-plugin|ici]]. Pour les installer faites une recherche dans votre [[:gestionnaire de paquets]] avec le mot clé **vdr-plugin**. Les plugins s'installent côté serveur.
+
+  * De nombreux autres sont de plus disponibles dans les dépôts de YaVDR. Voir [[https://launchpad.net/~yavdr/+archive/testing-vdr|ici]].
+
+==== Configuration des plugins ====
+La configuration des plugins s'effectue le plus souvent par les fichiers présents dans le répertoire **/etc/vdr/plugins**
+
+==== Exemples de plugin ====
+=== Plugin Live (Live Interactive VDR Environment) ===
+Ce plugin permet de contrôler VDR via une interface Web. Il est intéressant pour programmer les enregistrements. Il suffit d'ajouter le paquet **[[apt>vdr-plugin-live]]**.
+
+Pour bénéficier de toutes les fonctionnalités, ajouter aussi **[[apt>vdr-plugin-streamdev-server]]** et **[[apt>vdr-plugin-epgsearch]]**. Relancer ensuite le service vdr. Soit en ligne de commande :
+ <code>
+sudo apt-get install vdr-plugin-live vdr-plugin-streamdev-server vdr-plugin-epgsearch
+sudo service vdr restart</code>
+
+Pour y accéder :
+http://localhost:8008/
+ou 
+http://ip_du_serveur_vdr:8008/
+
+L'utilisateur est //admin// avec le mot de passe //live//. Il est possible de désactiver cette authentification via le menu //configuration// de VDR-Live.
+
+http://www.vdr-wiki.de/wiki/index.php/Live-plugin
+
+Pour pouvoir voir l'émission en cours dans la page web, installez **[[apt>browser-plugin-vlc]]**. Redémarrez vdr. Sur la page de VDR-Live->Actuellement, un clic sur le triangle jaune lance une fenêtre avec la vidéo.
+===== Les Frontends =====
+
+VDR est avant tout un **serveur de streaming**, ce qui signifie qu'il nous faudra installer des plugins pour regarder la TV avec des logiciels tiers (frontend).
+
+==== VDR X-Frontend ====
+
+  * le plugin **[[apt>vdr-plugin-xineliboutput]]** à utiliser avec le logiciel **[[apt>xineliboutput-sxfe|vdr-sxfe]]**.
+
+==== Kodi ====
+
+  * Installez [[:kodi|Kodi]].
+  * Installez côté client **[[apt>kodi-pvr-vdr-vnsi]]**  et  côté serveur **[[apt>vdr-plugin-vnsiserver]]**.
+Il faudra probablement modifier le fichier ''/etc/vdr/plugins/vnsiserver/allowed_hosts.conf''
+  * Relancer vdr :
+<code>sudo service vdr restart</code>
+
+  * Lancer kodi et aller dans Système->Extension
+  *  activer, configurer l'extension vnsi
+
+==== VLC, mplayer ====
+
+  * le plugin **[[apt>vdr-plugin-streamdev]]** à utiliser avec **[[apt>VLC]]**, **[[apt>mplayer]]**.... 
+
+Pour [[:vlc|VLC media player]], il suffit d'ouvrir un flux réseau (Ctrl+N) et d'entrer 
+http://ip_du_serveur:3000/n pour lire la chaîne numéro n de votre **channels.conf**
+
+Il faudra certainement  [[:tutoriel:comment_modifier_un_fichier|modifier le fichier]] **/var/lib/vdr/plugins/streamdev-server/streamdevhosts.conf **
+
+===== Liens =====
+
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=974461|Le topic du Forum Ubuntu-fr.org]]
+  * [[https://wiki.debian.org/VDR|VDR - Debian Wiki]]
+  * [[http://www.yavdr.org/|Site de YaVDR]] [en]
+  * [[http://dvbkivabien2.info|Forum Français sur le DVB, partie dédiée à VDR (idéal pour être guidé)]]
+  * [[http://vdrfrance.free.fr/|Site de la communauté VDR Francophone]]
+  * [[http://www.linuxtv.org/vdrwiki|Wiki VDR]] [en]
+  * [[http://www.vdr-wiki.de/|Wiki VDR]] [allemand]. C'est la référence.
+  * [[http://www.vdr-portal.de|Forum YaVDR]] [en]
+  * [[http://www.monnetamoi.net/articles.php?lng=fr&pg=94|MonNetAMoi]] tutoriel d'installation
+
+----
+//Contributeurs : [[:utilisateurs:Fanch317]], davy39//, arlion

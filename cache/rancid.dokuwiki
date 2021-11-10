@@ -1,0 +1,174 @@
+
+{{tag>administration réseau sauvegarde}}
+----
+
+
+  * Redback : NASs
+  * ADC EZT3
+  * MRTd
+  * Alteon : switchs
+  * HP : switchs Procurve
+
+
+===== Configuration de cvsweb =====
+
+Une première étape est la configuration du serveur **cvsweb**. En effet, il faut lui spécifier le répertoire racine qu'il doit utiliser.\\
+Pour cela, il faut [[:tutoriel:comment_modifier_un_fichier|éditer avec les droits d'administration]] le fichier **/etc/cvsweb/cvsweb.conf** et ajouter un répertoire racine comme indiqué dans l'exemple ci-dessous :
+
+<file>
+@CVSrepositories = (
+        'Rancid'   => ['Rancid', '/var/CVS'],
+);
+</file>
+
+Avant de poursuivre, il est important de tester la bonne configuration des services précédemment installés en se rendant sur la page web en local [[http://127.0.0.1/cgi-bin/cvsweb/]].
+
+===== Installation =====
+
+Cette section décrit l'installation de Rancid depuis les sources disponibles sur le site de [[http://www.shrubbery.net/rancid/|Shrubbery Networks, Inc.]].\\
+
+Rancid est également disponible dans les dépôts d'Ubuntu : [[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt://rancid|rancid]]**. Ce tutoriel a été réalisé à partir des sources, les chemins indiqués dans cette page peuvent donc varier.\\
+
+Saisissez dans un [[:terminal]] les [[:commande_shell|commandes]] suivantes :
+<code>
+# En tant que root
+cd /usr/src/
+wget ftp://ftp.shrubbery.net/pub/rancid/rancid-2.X.X.tar.gz
+tar xvzf rancid-2.X.X.tar.gz
+cd rancid-2.X.X/
+./configure --prefix=/
+make install
+</code>
+
+===== Configuration =====
+
+==== Emplacement des fichiers ====
+
+Une fois installé, les dossiers et fichiers s'organisent comme suit :
+
+  * Scripts d'exécution : <code>/bin/[rancid-run,rancid-cvs,erancid,...]</code>
+  * Fichier de configuration principal : <code>/etc/rancid.conf</code>
+  * Base de données CVS : <code>/var/CVS</code>
+  * Fichiers de configuration des groupes et des équipements : <code>/var/[GROUPE]</code>
+
+==== Création d'un groupe d'équipements ====
+
+Rancid gère les équipements par groupe. Ainsi, pour chaque groupe sont associés des équipements, et des utilisateurs pour la réception des rapports de sauvegarde.\\
+Ici il s'agira de créer un premier groupe **GRP_SW_1**. Pour cela, [[:tutoriel:comment_modifier_un_fichier|modifier avec les droits d'administration]] le fichier de configuration **/etc/rancid.conf** et spécifier la valeur de **LIST_OF_GROUPS** :
+<file>LIST_OF_GROUPS="GRP_SW_1"</file>
+
+La commande suivante doit ensuite être utilisée pour créer ce groupe dans la base CVS.
+<code>sudo rancid-cvs</code>
+
+<note help>La commande **rancid-cvs** doit être utilisée chaque fois qu'un groupe est ajouté, modifié ou supprimé dans le fichier de configuration **/etc/rancid.conf**</note>
+
+Désormais, le nouveau groupe doit apparaitre sur la page [[http://127.0.0.1/cgi-bin/cvsweb/]].
+
+Cette étape crée également un répertoire spécifique pour le groupe **/var/GRP_SW_1**, contenant les fichiers de configuration utilisés par Rancid. Ce répertoire dispose de [[:droits|droits]] d'accès restrictifs, à savoir  "**750**" en [[:permissions#en_octal|octal]], afin de protéger les différents paramètres d'authentification des équipements.
+
+==== Ajouter un équipement dans un groupe ====
+
+L'ajout d'équipements dans Rancid s'effectue avec les fichiers de configuration des groupes d'équipements et s'effectue en 2 étapes :
+  - [[#configurer le groupe d'équipements]]
+  - ajouter les [[#paramètres d'authentification]]
+
+=== Configurer le groupe d'équipements ===
+
+L'ajout de l'équipement s'effectue dans le fichier **router.db** du groupe concerné. Ainsi, pour le groupe GRP_SW_1, le fichier se situe à l'emplacement **/var/GRP_SW_1/router.db**.\\
+Il est construit selon la syntaxe décrite ci-dessous : **[device]:[type]:[state]:[comments]** 
+  * **device** : nom DNS ou IP de l'équipement.
+  * **type** : spécifie la marque de l'équipement. La liste des valeurs est décrite dans son [[:man|manuel]] visible [[http:manpages.ubuntu.com/manpages/en/man5/router.db.5.html|ici]]
+  * **state** : état de fonctionnement de l'équipement : [up/down]
+  * **comments** : commentaires. Ce champs est facultatif.
+
+=== Paramètres d'authentification ===
+
+La connexion aux équipements est assurée par le script **clogin**. Ce script est appelé à chaque exécution de [[#Utilisation|rancid-run]] pour établir la connexion avec l'équipement, et consulte les paramètres d'authentification définis dans le fichier **$HOME/.cloginrc**.\\
+
+La syntaxe de ce fichier offre une compatibilité avec de nombreux modes d'authentification. Un exemple de configuration est disponible à l'emplacement suivant : <code>/usr/share/doc/rancid/examples/cloginrc.sample</code>
+
+==== Définir la mailing-list d'un groupe ====
+
+Chaque groupe peut disposer d'une liste d'adresses mails ou d'alias correspondant aux adresses mails des destinataires de rapports de sauvegarde. Pour chaque groupe, Rancid va considérer deux alias destinataires :
+  * rancid-admin-[GROUPE]
+  * rancid-[GROUPE]
+
+Il faut donc faire correspondre, pour ces alias, les destinataires réels à utiliser pour l'envoi de mails. Cette correspondance s'effectue dans le fichier **/etc/aliases**. Une fois le fichier complété, le résultat devrait être similaire à cet exemple :
+
+<file>
+# Utilisateurs
+usr1:usr1@mydomain
+usr2:usr2@mydomain
+admin:dsi-isr-mailinglist@mydomain
+
+# Alias utilisés par Rancid
+rancid-GRP_SW_1:admin,usr1,usr2
+rancid-admin-GRP_SW_1:admin
+</file>
+
+Pour tester la messagerie, veuillez vous référer à la documentation de la solution de messagerie que vous avez installé.
+
+===== Utilisation=====
+
+Le lancement des sauvegardes des équipements est assuré par le script **rancid-run**. L'utilisation de cette commande sans paramètres déclenche la sauvegarde de tous les groupes d'équipements renseignés par la variable **LIST_OF_GROUPS** dans le fichier de configuration **/etc/rancid.conf**. Cependant, il est également possible de sauvegarder un groupe unique en le renseignant en paramètre.
+
+Ainsi, voici les 2 modes d'utilisation :
+  * tous les groupes d'équipements <code>rancid-run</code>
+  * un groupe d'équipement <code>rancid-run [GROUPE]</code>
+
+<note tip>La mise en place du déclenchement régulier de Rancid peut se faire via une [[:cron|crontab]].</note>
+
+===== Désinstallation =====
+
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]] si le paquet a été installé depuis les dépôts. Pour une installation depuis les sources, saisir les commandes suivantes :
+
+<code>
+cd /usr/src/rancid-2.X.X/
+make uninstall
+</code>
+
+
+Puis supprimer les paquets indiqués dans la section **[[#Installation]]** s'ils ne sont plus requis ultérieurement. Le paquet **[[apt>expect|expect]]** est assez spécifique à l'utilisation de Rancid, il sera donc généralement à [[:tutoriel:comment_supprimer_un_paquet|supprimer]].\\
+Par exemple avec l'outil [[:apt-get]], vous pouvez saisir dans un [[:terminal]]:
+<code>sudo apt-get remove expect</code>
+
+Par ailleurs, si l'historique des configurations ainsi que l'accès via l'interface web doivent être conservés, les paquets **[[apt>cvs,cvsweb|cvs cvsweb]]** ne doivent pas être supprimés.\\
+Dans le cas contraire, par exemple avec l'outil [[:apt-get]] vous pouvez saisir dans un [[:terminal]]:
+<code>sudo apt-get remove cvs cvsweb</code>
+
+===== Dépannage =====
+
+==== cvsweb ====
+
+=== 404 Not Found ===
+
+En cas d'affichage de l'erreur **404 Not Found** lors du chargement de la page web [[http://127.0.0.1/cgi-bin/cvsweb]], cela signifie généralement que le serveur [[:Apache2]] est mal configuré. Dans ce cas, il faut vérifier :
+  * la présence du dossier **cvsweb** à l'emplacement **/usr/lib/cgi-bin/**
+  * les [[:droits]] d'accès en 755 sur le répertoire **/usr/lib/cgi-bin/cvsweb**
+  * la bonne configuration du répertoire **/usr/lib/cgi-bin/cvsweb** dans le fichier **/etc/apache2/sites-enabled/000-default** <file>
+        ScriptAlias /cgi-bin/ /usr/lib/cgi-bin/
+        <Directory "/usr/lib/cgi-bin">
+                AllowOverride None
+                Options +ExecCGI -MultiViews +SymLinksIfOwnerMatch
+                Order allow,deny
+                Allow from all
+        </Directory>
+</file>
+
+Lorsque ces 3 points ont été vérifiés, redémarrer le [[:services|service]] Apache puis effectuer un nouveau test d'accès web.
+<code>sudo service apache2 restart</code>
+
+=== Répertoire "/var/www/cvsweb" inexistant, ou styles graphiques absents ===
+
+L'interface graphique de **cvsweb** est supposée afficher des icônes et un style graphique plutôt sobre. Cependant, il arrive qu'au cours de l'installation le dossier contenant les objets et les styles graphiques ne soient pas copiés au bon endroit.\\
+Si le problème apparaît, il faut vérifier l'existence du répertoire **/var/www/cvsweb**. S'il n'existe pas, créer un lien symbolique vers le répertoire **/usr/share/cvsweb**
+<code>sudo ln -s /usr/share/cvsweb /var/www/cvsweb</code>
+
+===== Voir aussi =====
+
+  * **(en)** [[http://www.shrubbery.net/rancid/|Site hébergeant les sources]]
+  * **(en)** [[http://www.linuxhomenetworking.com/wiki/index.php/Quick_HOWTO_:_Ch1_:_Network_Backups_With_Rancid|Tutoriel alternatif]]
+
+----
+
+//Contributeurs : [[utilisateurs:fdm|fdm]]//

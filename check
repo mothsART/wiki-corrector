@@ -2,7 +2,7 @@
 
 import sys
 import os
-from os.path import join
+from os.path import join, isfile
 from datetime import datetime
 
 import fnmatch
@@ -20,13 +20,7 @@ def get_errors(content):
     errors = ""
     content_list = content.splitlines()
     last_line = 0
-    try:
-        messages = grammalecte_text(content)
-    except Error as e:
-        print("Error: {0}".format(e))
-        print("content : {0}".format(content))
-        exit(0)
-    for message in messages:
+    for message in grammalecte_text(content):
         cr = ''
         if last_line != 0 and last_line != message.line:
             cr = '\n'
@@ -39,6 +33,11 @@ def get_errors(content):
         )
         errors += error
     return errors
+
+def create_file(errors, path):
+    print(path, '[created]')
+    with open(path, 'w') as f:
+        f.write(errors)
 
 if __name__ == '__main__':
     full = False
@@ -59,18 +58,26 @@ if __name__ == '__main__':
             with open(join(root, _file), 'r') as f:
                 content = f.read()
 
-            errors = get_errors(content)
+            try:
+                errors = get_errors(content)
+            except Exception as e:
+                print("Error: {0}".format(e))
+                print("path: {0}".format(path))
+                print("content : {0}".format(content))
+                continue
             path = DIR_DESTINATION + root[len_dir_cache:] + '/' + _file.replace('.dokuwiki', '.txt')
             os.makedirs(
                 DIR_DESTINATION + '/' + root[len_dir_cache:],
                 exist_ok=True
             )
-            
+
+            if not isfile(path):
+                create_file(errors, path)
+                continue
+
             file_date = datetime.fromtimestamp(os.path.getmtime(path))
             if not full and index and index['last_date'] > file_date:
                 print(path, '[exist]')
                 continue
-
-            print(path, '[created]')
-            with open(path, 'w') as f:
-                f.write(errors)
+            
+            create_file(errors, path)

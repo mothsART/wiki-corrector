@@ -1,0 +1,316 @@
+
+{{tag>wifi réseau sécurité portail_captif VÉTUSTE}}
+----
+
+====== Chillispot : portail captif ======
+
+
+<note tip>Le projet Chillispot est abandonné le développeur principal étant parti, cependant il existe un fork très actif nommé [[:coovachilli|CoovaChilli]]</note>
+
+Chillispot est un portail captif. Il a pour rôle dans un premier temps de distribuer les adresses IP aux clients qui se connectent sur le Hotspot, puis dans un second temps de capturer toutes les requêtes à destination du web. Il force ainsi le client à passer par la page de demande d’authentification. Il n’est pas possible de passer outre, seuls les sites de dimension iT et la page d’authentification de Chillispot sont autorisés sans être, au préalable, authentifié sur le serveur Radius. Chillispot peut à la fois être installé sur une machine, via les paquets téléchargeables sur le site officiel, mais peut également être flashé dans un routeur compatible (du type Linksys WRT-54G) au moyen d’un firmware spécifique (DD-WRT).
+
+
+===== Pré-requis =====
+
+  * Deux cartes réseau (interface LAN et publique)
+  * serveur web apache2
+  * générateur de certificats
+  * freeradius (authentification)
+  * iptables (pare-feu)
+
+===== Installation =====
+FIXME / [[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>apache2,apache-ssl,phpmyadmin,mysql-server,freeradius,freeradius-mysql|apache2 apache-ssl phpmyadmin mysql-server freeradius freeradius-mysql]]**.
+
+==== Configuration Réseau (module TUN/TAP) ====
+Vous avez besoin du module **tun.o** (inclus dans les sources du kernel depuis les versions >= 2.4.7). Ubuntu/Debian ne crée pas le périphérique "tun" automatiquement. Dans un [[terminal]], taper les commandes suivantes pour la création d'une interface « tun » : <code>
+mkdir /dev/net
+mknod /dev/net/tun c 10 200
+modprobe tun
+</code>
+
+==== Installation de la partie applicative ====
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/etc/modules.conf** et vérifiez qu'il contient la ligne suivante : <file>alias char-major-10-200 tun</file>
+  * [[:tutoriel:comment_installer_un_paquet|installez le paquet]] <del>**[[apt>chillispot]]**</del> (n'existe plus)
+  * Configuration du cgi
+On copie le fichier cgi fourni dans le répertoire adéquat :
+<code>
+cp /usr/share/doc/chillispot/hotspotlogin.cgi.gz /usr/lib/cgi-bin/
+cd /usr/lib/cgi-bin
+gunzip hotspotlogin.cgi.gz
+chmod a+x hotspotlogin.cgi
+</code>
+(vous pourrez éditer ce fichier une fois chillispot fonctionnel afin de personnalisez l'installation)
+
+==== Configuration ====
+  * [[:tutoriel:comment_modifier_un_fichier|Modifiez le fichier]] **/usr/lib/cgi-bin/hotspotlogin.cgi**, décommenter et modifier le paramètre suivant :
+<file>$uamsecret = "uamsecret" /* secret partagé entre le CGI hotspotlogin.cgi et le daemon chilli */</file>
+  * [[:tutoriel:comment_modifier_un_fichier|Modifiez le fichier]] **/etc/chilli.conf**, décommenter et modifier les paramètres suivants :
+
+|  net 192.168.1.0/24  |  ou laisser commenter pour utiliser la configuration par défaut 192.168.182.0/24  |
+|  dns1 10.187.36.3  |  (le DNS de mon Fournisseur d’accès) ou laisser commenté pour utiliser la configuration par défaut ( les DNS spécifiés dans votre /etc/resolv.conf)  |
+|  radiuslisten 127.0.0.1  |  Décommenter sinon l’adresse 0.0.0.0 (NAS-IP-Address) apparaît dans les logs de freeradius  |
+|  radiusserver1 127.0.0.1  |  IP du serveur d’authentification  |
+|  radiusserver2 127.0.0.1  |  IP du serveur d’authentification Radius  |
+|  radiussecret radiussecret  |  secret partagé entre le serveur Radius et le daemon chilli  |
+|  Radiusnasid portail  |  identifiant de votre chillispot  |
+|  radiuslocationid  |  isocc=fr,cc=33,ac=87000,network=MonESSID  |
+|  dhcpif eth1  |  nom de l’interface reliée au point d’accès  |
+|  uamserver https://ipdevotreserveur/cgi-bin/hotspotlogin.cgi  |  ou mettre https://192.168.182.1/cgi-bin/hotspotlogin.cgi si vous utilisez la configuration par défaut.  |
+|  Uamsecret uamsecret  |  mettre le même secret que dans le fichier /usr/lib/cgi-bin/hotspotlogin.cgi  |
+|  Uamlisten 192.168.1.1  | adresse écoutée   |
+|  uamallowed localhost www.yahoo.fr  |  Url autorisée  |
+
+=== Configuration du pare-feu ===
+<code>cp /usr/share/doc/chillispot/firewall.iptables /etc/chilli.iptables
+chmod u+x /etc/chilli.iptables</code>
+
+Vous devez avoir à l'intérieur :
+<file>EXTIF="eth0" /* interface reliée à Internet */
+INTIF="eth1" /* interface reliée au point d'accès */</file>
+
+Si ce n’est pas déjà fait, activer le forwarding entre les interfaces réseau. Vérifier que la ligne suivante existe dans le fichier **/etc/network/options** : <file>ip_forward=yes</file>
+
+relancez ensuite les interfaces réseaux <code>/etc/init.d/networking restart</code>
+
+Dans le fichier **/etc/freeradius/clients.conf**, modifier le paramètre suivant :
+<file>client 127.0.0.1 {
+#secret = testing123
+secret = radiussecret /* mettre le même secret partagé que dans le fichier /etc/chilli.conf */</file>
+
+=== Configuration de Freeradius ===
+  * [[:tutoriel:comment_modifier_un_fichier|modifier le fichier]] **/etc/freeradius/sql.conf**:
+<file>
+server = "localhost" (ou x.x.x.x l'ip de votre serveur mysql) 
+login = "radius_login_sql" 
+password = "radius_pass_sql"
+</file>
+
+  * mettre dans **/etc/freeradius/radiusd.conf** (après le sql.conf) :
+<file>
+authorize {
+        preprocess
+        chap
+        suffix
+        eap
+        #files
+        sql
+}
+authenticate {
+        Auth-Type PAP {
+          pap
+        }
+        Auth-Type CHAP {
+          chap
+        }
+        eap
+}
+accounting {
+        detail
+        radutmp
+        sql
+}
+session {
+        sql
+}
+		radutmp {
+				filename = ${logdir}/radutmp
+				username = %{User-Name}
+		case_sensitive = yes
+				check_with_nas = yes		
+		perm = 0600
+		callerid = "yes"
+	}
+		radutmp sradutmp {
+		filename = ${logdir}/sradutmp
+		perm = 0644
+		callerid = "no"
+	}
+		attr_filter {
+		attrsfile = ${confdir}/attrs
+	}
+	counter daily {
+		filename = ${raddbdir}/db.daily
+		key = User-Name
+		count-attribute = Acct-Session-Time
+		reset = daily
+		counter-name = Daily-Session-Time
+		check-name = Max-Daily-Session
+		allowed-servicetype = Framed-User
+		cache-size = 5000
+	}
+	always fail {
+		rcode = fail
+	}
+	always reject {
+		rcode = reject
+	}
+	always ok {
+		rcode = ok
+		simulcount = 0
+		mpp = no
+	}
+		expr {
+	}
+		digest {
+	}
+		exec {
+		wait = yes
+		input_pairs = request
+	}
+		exec echo {
+				wait = yes
+				program = "/bin/echo %{User-Name}"
+				input_pairs = request
+				output_pairs = reply
+			}
+	ippool main_pool {
+		range-start = 192.168.1.1
+		range-stop = 192.168.3.254
+		netmask = 255.255.255.0
+				cache-size = 800
+		session-db = ${raddbdir}/db.ippool
+		ip-index = ${raddbdir}/db.ipindex
+		override = no
+		maximum-timeout = 0
+	}	
+}
+instantiate {	
+	exec
+		expr
+	}
+authorize {
+		preprocess
+		auth_log	
+		chap
+		mschap
+		suffix
+		eap
+		files
+		sql
+}
+authenticate {
+		Auth-Type PAP {
+		pap
+	}
+		Auth-Type CHAP {
+		chap
+	}
+		Auth-Type MS-CHAP {
+		mschap
+	}
+	unix
+	eap
+}
+preacct {
+	preprocess
+	acct_unique
+	suffix
+	files
+}
+accounting {
+	detail	
+	unix
+	radutmp
+}
+session {
+	radutmp
+}
+post-auth {
+	sql
+}
+pre-proxy {
+}
+post-proxy {
+	eap
+}
+</file>
+
+=== Configuration de MySQL ===
+
+FIXME / On s'occupe ensuite de notre base de données :
+<code>
+echo "create database radius;" mysql -u root -p
+echo "grant all on radius.* to radius_login_sql@'%' identified by 'radius_pass_sql'; flush privileges;" mysql -u root -p
+zcat /usr/share/doc/freeradius/examples/mysql.sql.gz mysql -u root -p radius
+#ou bien
+zcat /usr/share/doc/freeradius/examples/db_mysql.sql.gz | mysql -u root -p radius
+
+# sur Lucid Lynx, il est possible que les zcat ne marchent pas. 
+#Essayez celles ci (vous devez rentrer les 2) :
+mysql -u radius_login_sql -p radius < /etc/freeradius/sql/mysql/schema.sql
+mysql -u radius_login_sql -p radius < /etc/freeradius/sql/mysql/nas.sql
+
+</code>
+
+Pour ajouter des utilisateur dans la base il faut ajouter un **login + password** dans la table **radcheck** de la base radius , un login plus le type d'authentification dans la table **radgroupcheck** et enfin un login associé à un nom de groupe dans la table **usergroup**
+
+== Table usergroup ==
+^  id  ^  UserName  ^  GroupName  ^
+|  1  |  utilisateur  |  groupe  |
+|  2  |  prof1  |  professeurs  |
+|  3  |  élève1  |  élèves  |
+
+== Table radcheck  ==
+^  id  ^  UserName  ^  Attribute  ^  Op  ^  Value  ^
+|  1  |  utilisateur  |  Password  |  ==  |  passuser  |
+|  2  |  prof1  |  Password  |  ==  |  passprof  |
+|  3  |  élève1  |  Password  |  ==  |  passeleve  |
+
+== Table radgroupcheck  ==
+^  id  ^  GroupName  ^  Attribute  ^  op  ^  Value  ^
+|  1  |  groupe  |  Auth-Type  |  :=  |  Local  |
+|  2  |  professeurs  |  Auth-Type  |  :=  |  Local  |
+|  3  |  élèves  |  Auth-Type  |  :=  |  Local  |
+
+Vous pouvez vous référer au site officiel de [[http://www.chillispot.info/features.html|chillispot]] pour l'ensemble des syntaxes supportés.
+
+==== Test de fonctionnement ====
+On test l'authentification de freeradius en mode débug
+<code>
+/etc/init.d/freeradius stop
+# ou bien 
+service freeradius stop
+
+freeradius -XX
+[...]
+Debug: Listening on authentication *:1812Debug:
+Listening on accounting *:1813
+Debug: Listening on proxy *:1814
+Info: Ready to process requests
+</code>
+
+Dans une autre console on lance un radtest :
+<code>
+radtest tux tuxy 127.0.0.1 0 radiussecret
+
+Sending Access-Request of id 95 to 127.0.0.1:1812
+User-Name = "tux"
+User-Password = "tuxy"
+NAS-IP-Address = localhost
+NAS-Port = 0
+rad_recv: Access-Accept packet from host 127.0.0.1:1812, id=95, length=20
+</code>
+
+FIXME / Notre identification par rapport à mysql est donc fonctionnelle on peut dès à présent tester notre chillispot.
+
+<code>
+/etc/init.d/freeradius stop (ctrl+c pour le mode débug)
+/etc/init.d/freeradius start
+ifconfig eth1 0.0.0.0
+/etc/init.d/chilli stop
+/etc/init.d/chilli start
+/etc/chilli.iptables
+</code>
+
+Vérifiez que la borne wifi à bien pris son adresse en dhcp puis connectez vous au réseau wifi avec votre poste, lancez une page web, si tout ce passe bien vous devriez être redirigé sur [[https://ipdevotreserveur/cgi-bin/hotspotlogin.cgi|https://ipdevotreserveur/cgi-bin/hotspotlogin.cgi]]
+
+Il vous reste maintenant à vous authentifier, si le radtest à été concluant l'authentification devrait réussir sans problèmes.                                                                             
+
+Un popup s'ouvre alors avec le temps de connexion et la possibilité de se déloguer tandis que la page que vous aviez ouverte est redirigé vers le site demandé. 
+
+===== Voir aussi =====
+  * **(en)** [[http://www.chillispot.info/|Site officiel]]
+  * **(fr)** Inspiré du livre blanc http://www.guellec.fr/ressources/rapports/documentation_hotspot.pdf
+
+----
+//Contributeurs principaux : [[utilisateurs:erwik666]], [[:utilisateurs:Herrleiche]].//

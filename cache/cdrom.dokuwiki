@@ -1,0 +1,207 @@
+
+{{tag>kernel matériel}}
+
+----
+
+====== CD-ROM ======
+
+
+Il peut arriver de tomber sur des lecteurs CD-ROM capricieux, mal supportés.
+
+Cette page **ne concerne pas l'optimisation des lecteurs CD** (allez voir [[:hdparm|ici]] si c'est votre cas), mais bel et bien des solutions de dépannage si votre lecteur CD ne fonctionne pas ou mal.
+
+Nous allons aborder ici tout ce qui se rapporte aux CD-ROM :
+
+  * Carte-mère, contrôleur IDE
+  * Graveur CD-ROM
+  * Lecteur de DVD-ROM
+  * Lecteurs de disques externes
+  * Lecteurs de disques avec interface propriétaire.
+
+
+===== Introduction =====
+
+Les CD-ROM régissent à des normes strictes : IDE, ATAPI, etc.
+
+Nous abordons ici les problèmes spécifiques aux CD-ROM, mais il ne faut pas oublier que celui-ci est directement en rapport avec la **carte-mère**. Le cas le plus fréquent peut-être celui du conflit d'IRQ, auquel cas, certaines commandes comme « irqpoll » peuvent vous rendre service (voir [[:rescue|ici]] par exemple).
+
+
+
+==== Modules ====
+
+Nous commencerons bien évidemment par rappeler le principe de fonctionnement de tout matériel sous Linux : [[:tutoriel:tout_savoir_sur_les_modules_linux|cette page]] vous résumera une bonne partie de ce qui peut être intéressant à savoir sur les modules.
+
+Concernant les CD-ROM, voici les modules susceptibles de nous intéresser :
+
+<code>
+kernel/drivers/ide
+kernel/drivers/cdrom
+etc/modules/piix
+</code>
+
+ide-core & ide-cd sont les 2 modules de base.
+
+Viennent ensuite les modules de CD-ROM. Dans ce dossier, vous aurez bien entendu le module de base « cdrom », qui permet de faire fonctionner 99 % du matériel existant.
+
+
+==== Fichier « fstab » ====
+
+Le fichier « /etc/fstab » est d'une grande importance, car c'est lui qui paramètre le [[:mount_fstab|montage]] du CD-ROM :
+
+<file>
+/dev/hdc        /media/cdrom0   udf,iso9660 user,noauto     0       0
+</file>
+
+Ci-dessus, la ligne basique d'un fichier « fstab » pour un lecteur de CD-ROM.
+
+
+==== dmesg ====
+
+Il peut être utile ici de rappeler cette commande de base :
+
+**dmesg** vous permettra de voir des informations sur l'état du système. Il vous permettra par exemple d'identifier vos disques :
+
+<code>
+dmesg | grep hd
+</code>
+
+ou pour les contrôleurs SATA :
+
+<code>
+dmesg | grep sd
+</code>
+
+ou 
+
+<code>
+dmesg | grep cd
+</code>
+
+Pour plus d'infos ( nom lecteur cd, etc)  il y a cette commande qui permet d'identifier son lecteur Dvd sous Linux
+
+<code>
+cat /proc/sys/dev/cdrom/info
+</code>
+
+
+
+==== Plus d'informations ====
+
+Pour avoir plus d'informations sur ces modules, plusieurs choix possibles :
+
+  * Installer le paquet **linux-doc** (puis aller dans « /usr/share/doc/linux-doc-2.6.20/Documentation/cdrom »)
+  * Installer le paquet **linux-source** (Puis aller dans « /usr/src/ » et extraire l'archive « linux-source-2.XXX »)
+  * Récupérer un noyau de kernel.org (et faire comme au-dessus)
+  * Googler...
+
+
+
+===== Configuration avancée =====
+
+Certains CD-ROM sont vraiment capricieux, notamment ceux un petit-peu anciens, car les développeurs ont tendance à adapter les distributions pour le matériel récent, et il arrive ainsi que d'une distribution à l'autre, il faille bricoler le système pour faire fonctionner correctement le CD-ROM.
+
+Dans mon cas par exemple, mon CD-Rom fonctionnait sans problème sur Ubuntu 5.10, mais à partir du noyau 2.6.15 (donc a partir de Ubuntu 6.06), j'ai du rajouter l'option « irqpoll » pour commencer (!) à faire fonctionner le lecteur CD.
+
+Il peut donc être aussi intéressant de se tourner vers la compilation d'un noyau de la branche 2.4.x (ou d'une distribution utilisant de tels noyaux, comme l'excellente [[http://www.damnsmalllinux.org/|DSL]], basée également sur Debian).
+
+<note>
+**Rappel** : //Les CD audio ne se montent pas//. Si vous voulez lire un CD audio, lancez simplement un lecteur multimédia pouvant lire un CD audio ([[:vlc]] peut très bien faire l'affaire), et ouvrez votre CD.
+</note>
+
+==== async ====
+
+Il est possible que certains lecteurs ne puissent utiliser le mode synchrone avec le CD-ROM. Dans ce cas, il faut éditer le fichier « /etc/fstab » et rajouter l'option « async » :
+
+<file>
+/dev/hdc        /media/cdrom0   udf,iso9660 user,noauto,async     0       0
+</file>
+
+
+(FIXME : si il n'y a ni « async » ni « sync », lequel est utilisé ??)
+reponse: sync par defaut(default)
+
+
+==== DMA ====
+
+Le DMA est une option qui une fois activé accélère les transferts.
+
+Il se peut que votre CD-ROM n'aime pas trop cela, il faudra donc utiliser [[:hdparm]] :
+
+<code>
+hdparm -d0 /dev/hdc ## Ou hdc est VOTRE lecteur
+</code>
+
+N'oubliez pas d'éditer le fichier ''/etc/hdparm.conf'' en retirant les « # » à la fin du fichier, puis en mettant ceci (ou quelque chose se rapprochant) :
+
+<file bash /etc/hdparm.conf>
+command_line {
+       hdparm -d0 /dev/hdc
+}
+</file>
+
+
+=== Options démarrage ===
+
+Comme indiqué plus haut dans la page, des options de lancement peuvent aussi rendre service.
+
+La plupart sont listées dans les documentations officielles, notamment dans le fichier « kernel-parameters.txt » (dans ''/usr/share/doc/linux-doc-2.6.20/Documentation'' si vous avez [[:tutoriel:comment_installer_un_paquet|installé le paquet]] **linux-doc** par exemple).
+
+
+
+
+==== Ejecter le CD-ROM "physiquement" ====
+
+Pour des raisons de sécurité l'éjection des CD-ROM se fait logiciellement (clic droit->éjecter). Si vous voulez pouvoir le faire manuellement il vous faut  [[:tutoriel:comment_editer_un_fichier|éditer le fichier]] **''/etc/sysctl.conf''** et y ajoutez la ligne :
+
+<file bash /etc/sysctl.conf>dev.cdrom.lock = 0</file>
+
+NB : Quand vous ajoutez cette ligne dans le fichier sysctl.conf, cela n'est appliqué qu'après le redémarrage de la machine. Pour appliquer cette modification dès maintenant, lancez dans un terminal : 
+
+<code bash>sudo sysctl dev.cdrom.lock=0</code>
+
+===== Problèmes =====
+==== Baisser la vitesse du lecteur ====
+Si votre lecteur est bruyant, vous pouvez le ralentir afin de profiter de votre film ou autre activité dans un plus grand confort.\\
+La commande "eject" permet de modifier la vitesse du lecteur lorsqu'un média est chargé. Ce réglage est conservé uniquement pour le média courant. Dans un [[:terminal]] saisir la [[:commande_shell|commande]] suivante : 
+<code>eject -x 4 /dev/cdrom</code>
+[[http://www.upubuntu.com/2011/07/how-to-change-cddvd-read-speed-on.html|(en)Source]].
+
+Il existe aussi une petite application prévue à cet effet : [[:setCD]].
+
+==== Mon lecteur CD marche sous Windows©, mais pas sous Linux ====
+
+Et bien dans ce cas, profitons-en pour soutirer des informations pouvant être utiles !! :-)
+
+<note important>Ubuntu 16.04 LTS ne peut pas monter un CD / DVD depuis un lecteur SATA sans qu'on ait ajouté à la main la ligne "piix" (sans les guillemets) au fichier etc/module. \\ Voir la section 1.1 Modules plus haut sur cette page.
+</note>
+Par exemple, rendez-vous dans le gestionnaire de périphériques, puis dans les propriétés.
+
+{{  :materiel:cdrom_win.jpg  }}
+
+On voit bien sur la capture que mon Mitsumi CR-4801 TE n'est pas configuré en synchrone (équivalent à l'option « async » donc), et que le DMA est désactivé.
+
+
+==== Mon lecteur CD ne fonctionne plus au bout d'un temps X d'utilisation ====
+
+Utilisez **dmesg** pour obtenir quelques informations utiles :
+
+  dmesg
+
+Si il s'agit de problèmes d'interruption, ça peut concerner les IRQ et donc la carte-mère...
+
+<note help>FIXME Cette commande __extrêmement détaillée (une douzaine de pages-écran)__ liste tous les interrupteurs système de votre carte-mère : \\ table des IRQ, périphériques SATA, SCSI, USB,... et ce sont que quelques-unes des très nombreuses informations fournies. \\
+\\ 
+**L'avantage réside surtout dans le fait qu'elle supervise le comportement des interrupteurs système**, des pilotes utilisés ou en conflits et les périphériques afférents</note>
+
+
+==== Autres problèmes ====
+
+Il existe une méthode pour faire passer un CD-Rom comme périphérique SCSI (avec un module nommé « ide-scsi »).
+
+Ce module se trouve dans  ''/kernel/drivers/scsi/'' (je vous recommande d'utiliser **modconf**).
+
+
+
+----
+
+//Contributeurs : [[utilisateurs:adam0509]], [[utilisateurs:eagle08]], //

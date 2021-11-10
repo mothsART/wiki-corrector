@@ -1,0 +1,145 @@
+
+{{tag>Bionic Xenial tutoriel BROUILLON}}
+----
+
+<note tip>Tutoriel à mettre à jour en suivant le modèle https://doc.ubuntu-fr.org/wiki/modeles/tutoriel </note>
+
+
+====== Remplacer grub par Refind  ======
+
+L'option "Purger GRUB" de [[:Boot-Repair]] est fait en deux séquences qui donnent la main à l'utilisateur, la première pour purger, la seconde pour réinstaller. Dans ce tutoriel, nous allons utiliser cette fonctionnalité pour purger et installer  [[:refind|rEFInd]].
+
+===== Environnement =====
+
+**Nécessité de booter en technique EFI.**
+
+Le mode secure du EFI doit être déactivé: Il est très compliqué d'installer un  refind sécurisé qui refuse d'utiliser le logiciel windows pour se certifier auprès des ordinateurs EFI. La séquence de certification existe. Elle est complexe. 
+
+Les logiciels libres doivent être installés dans des partitions EXT4.  Le pilote  BTRFS existe mais il faut l'ajouter. Le pilote ZFS n' existe pas.
+==== Les motivations ====
+La principale raison est certainement le fait que certains ordinateurs refusent que leur NVRAM soit modifiée: L'installation du  grub est alors plantée. L'installation de ubuntu se termine sans aucun moyen de l'utiliser. Il est nécessaire d'utiliser des moyens manuels pour fabriquer un structure de boot. Il est actuellement encore impossible d'utiliser boot-repair car il s'appuie pour l'essentiel sur la même séquence d'installation. 
+
+Lorsque plusieurs logiciels libres sont installés dans le même ordinateur, ils veulent tous être responsable du démarrage.  L'utilisateur doit bien maîtriser:    Utiliser  une autre façon de booter résout ce problème de hiérarchie.
+
+Le choix des logiciels proposés au boot par **refind** est exactement ce qui est présent dans l'ordinateur. Il n'y a aucun travail de préparation en amont. Le choix de boot est possible en utilisant la souris et même le doigt si présence d'écran tactile. L'ajout d'une photo d'arrière-plan est facile. 
+
+Le logiciel de refind est **intégralement dans la partition de boot EFI**.  Il n'y a donc aucun risque qu'il en manque un morceau. Cela arrive avec le grub si la partition contenant le second morceau n'est pas disponible  souvent suite à une suppression non maîtrisée d'une partition.
+
+==== Installation ====
+Il y a 2 types d'installation :
+  - Installation facile
+  - Installation manuelle
+
+
+=== Installation facile ===
+L'installation facile est décrit [[:refind#installation_avec_secure_boot_desactive|dans la page rEFInd]]
+
+Pour la plupart des cas, ça revient à juste [[:tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt>refind]]**
+
+=== Installation manuelle   ===
+<note>Cette méthode devrait peut-etre etre décrite dans [[:refind#installation_avec_secure_boot_desactive|dans la page rEFInd]] plutot qu'ici pour éviter les redondances d'informations et perdre les lecteurs</note>
+
+D'autres méthodes d'installation sont décrites [[:refind#installation_avec_secure_boot_desactive|dans la page rEFInd]].
+
+Ici, nous allons voir la méthode boot-repair :
+Après avoir lancé l'application boot-repair et choisi  "options avancées", il faut remplir la grille présentée au chapitre 3.1
+
+Valider seulement  la case **réinstaller grub**.  Décocher les autres options et ouvrir l'onglet **emplacement de grub**.
+
+Il est nécessaire de sélectionner le UBUNTU retenu,  l'éventuelle partition de boot  qui est présente notamment dans les cas d'installation chiffrée et la partition EFI  qui sera appelée par la suite **ESP-N** puis il faut ouvrir l'onglet  **option de grub**.
+
+Cocher la case **purger le grub avant de le réinstaller** si elle ne l'est pas . Cliquer sur "appliquer".  Le logiciel va inspecter ce qui  est présent et fournir  une liste de commandes à exécuter.
+
+Ouvrer un terminal et exécuter-les. A titre d'exemple, voici la première et la dernière de la liste.
+<code bash>sudo chroot "/mnt/boot-sav/sdaNN" dpkg --configure -a
+sudo chroot "/mnt/boot-sav/sdaNN" apt-get purge -y grub*-common shim-signed </code>
+à condition que l'installation du grub  ne pas soit bloquée! 
+
+__Il est possible d'en profiter pour mettre à jour le logiciel en cas d'installation incomplète.__
+<code bash>sudo chroot "/mnt/boot-sav/sdaNN" apt update
+sudo chroot "/mnt/boot-sav/sdaNN" apt upgrade</code>
+
+
+**Lorsque ces commandes sont exécutées, il est nécessaire de persévérer avec la commande  suivante:** 
+<code bash>sudo chroot "/mnt/boot-sav/sdaNN"  apt install   refind </code>
+Le téléchargement va se faire. Une  [[https://pix.toile-libre.org/upload/original/1515194544.png|grille]] va s'ouvrir. Le texte est en français. C'est prépositionné sur  OUI. Il suffit d'accepter  en validant. Refind est alors installé. Il est quasiment opérationnel. Cependant, il y a un bug lié à la technique "chroot" utilisée: Les deux premières lignes du fichier de paramétrage ne sont pas bonnes.
+<code>"Boot with standard options"  "file=/cdrom/preseed/ubuntu.seed maybe-ubiquity quiet splash ---"
+"Boot to single-user mode"    "file=/cdrom/preseed/ubuntu.seed maybe-ubiquity quiet splash --- single"
+"Boot with minimal options"   "ro root=UUID=18b28382-0ec9-4bea-a0b3-24729bd90810" </code>
+Il faudrait penser à booter en choisissant la troisième ligne qui est bonne par appui sur la touche **F2**. 
+Le plus simple est de  supprimer les deux premières car ne pas avoir les options "quiet splash"  au démarrage est un plus pour les premiers suivis, en revanche ne pas avoir les options "recovery nomodeset" est un point négatif.
+La commande suivante peut être faite pour  éliminer le risque d'oubli.
+<code bash>sudo chroot "/mnt/boot-sav/sdaNN" sed  -i '1,2d'/boot/refind_linux.conf </code>
+<note help>La présence de ce fichier évite d'insérer manuellement des options classiques du grub pour son démarrage  en  les préparant. Un exemple de choix de paramétrage:
+<code>"booter en standard"   "ro root=UUID=18b28382-0ec9-4bea-a0b3-24729bd90810 quiet slash fsck.mode=force"
+"booter en recovery"   "recovery root=UUID=18b28382-0ec9-4bea-a0b3-24729bd90810" nomodeset  fsck.mode=force fsck.repair=yes"</code> </note>
+<note important>La codification est plus complexe si la partition contenant ubuntu est chiffrée. Il faut coder avec l'appel au logiciel de décodage **crypt_root=**</note>
+
+
+Le logiciel grub n'ayant plus besoin d'être utilisé, on va déactiver son utilisation .
+<code bash>sudo chroot "/mnt/boot-sav/sdaNN" chmod -x /etc/grub.d/30_os-prober
+sudo chroot "/mnt/boot-sav/sdaNN" chmod -x /usr/sbin/grub-install 
+sudo chroot "/mnt/boot-sav/sdaNN" chmod -x /etc/kernel/postinst.d/zz-update-grub</code>
+
+Voila, c'est quasiment terminé pour l'installation. Il faut stopper  boot-repair et ne pas lui dire de continuer ou de reculer. Dans les deux contextes, il réinstallerait le logiciel shim-signed! La solution est d'appuyer  sur les touches **Ctrl C** 
+Nous restons alors dans une live session afin de faire la prise en compte de la structure de boot.
+
+
+==== Activation standard ====
+
+Beaucoup d'ordinateurs standards permettent alors  de choisir **refind** comme  logiciel de boot et de le mettre prioritaire. C'est souvent par l'appui sur les  touches F9  .... F12.
+
+Certains ordinateurs (moins sécurisés?) permettent de mettre directement à jour la NVRAM en ligne de commande.
+Au moment de la mise en route de boot-repair nous avons sélectionné la partition de boot retenue pour installer l'EFI. C'est le moment  de s'en souvenir pour exécuter la commande suivante pour mettre à jour  la NVRAM:
+
+<code bash>sudo efibootmgr --create --disk /dev/ESP  --part  N  --label  "BootRepair"  --loader   "\EFI\refind\refind_x64.efi"</code>
+
+- Si la réponse est obtenue en quelques secondes, la commande a fonctionné.  Refind est souvent prioritaire. Sinon il faut le faire manuellement.
+
+- Si la réponse se fait attendre,  il est possible d'attendre au moins 30  minutes. Dans ce contexte, la réponse sera explicite  et dira que la NVRAM est interdite de modification. Si manque de patience, il est possible d'interrompre le process en frappant les caractères **Ctrl C**. Dans les deux cas, il faudra continuer en faisant tout ce qui décrit ci-après. Cela devrait faire gagner du temps.
+
+
+==== Activation complémentaire pour EFI standard ====
+
+Certains ordinateurs savent reconnaître une structure officielle de boot du logiciel Linux. Il est très rare que cette structure soit déjà présente. Nous allons la créer et prévoir quelques entrées standards.
+Il est nécessaire de "monter" la partition de boot que boot-repair a créée et d'y transférer la structure.
+<code bash>sudo mkdir -v /Repair
+sudo  mount  -v   /dev/ESP-N                          /Repair
+sudo  mkdir  -v   /Repair/EFI/Linux 
+sudo  cp     -Rv   /Repair/EFI/refind/*               /Repair/EFI/Linux 
+sudo  cp     -v   /Repair/EFI/refind/refind_x64.efi   /Repair/EFI/Linux/bootx64.efi
+sudo  cp     -v   /Repair/EFI/refind/refind_x64.efi   /Repair/EFI/Linux/grubx64.efi</code>
+
+Beaucoup d'ordinateurs savent reconnaître une structure officielle de boot identique à celle d'un support USB. Cette structure est déjà présente. Nous allons  prévoir quelques entrées standards. La partition de boot est déjà montée. Peut-être faut-il sauver l'ancienne structure?
+<code bash>sudo  cp     -Rv   /Repair/EFI/refind/*               /Repair/EFI/Boot 
+sudo  cp     -v   /Repair/EFI/refind/refind_x64.efi   /Repair/EFI/Boot/bootx64.efi
+sudo  cp     -v   /Repair/EFI/refind/refind_x64.efi   /Repair/EFI/Boot/grubx64.efi</code>
+
+
+
+==== installation complémentaire EFI Microsoft ====
+Malheureusement, certains ordinateurs ne savent booter que grâce  à la présence de windows.
+
+- Si windows est encore présent, la solution la plus simple est certainement de lui demander de booter refind. Il est nécessaire  de le lancer, de lancer le logiciel **Windows PowerShell** en mode administratif et de frapper la commande suivante sans se tromper dans le nom du fichier. Sinon, windows ne reboote pas. Suivant les versions de windows, la codification peut varier.
+<code bash>bcdedit /set {bootmgr} path \EFI\refind\refind_x64.efi
+bcdedit /set "{bootmgr}" path \EFI\refind\refind_x64.efi</code>
+ Si refus d'utiliser la technique **bcddedit**, il est possible de demander à refind de se substituer au lanceur de microsoft en sauvant ce lanceur. Cependant, refind ne le proposera pas au boot.Il faudra faire une entrée manuelle. Voir la documentation refind.
+
+- Si windows a été éliminé, il est nécessaire de refabriquer sa structure de boot et d'y transférer refind. Les commande seront
+<code bash>
+sudo  mkdir  -pv   /Repair/EFI/Microsoft/Boot 
+sudo  cp     -Rv   /Repair/EFI/refind/*               /Repair/EFI/Microsoft/Boot 
+sudo  cp     -v   /Repair/EFI/refind/refind_x64.efi   /Repair/EFI/Microsoft/Boot/bootx64.efi
+sudo  cp     -v   /Repair/EFI/refind/refind_x64.efi   /Repair/EFI/Microsoft/Boot/grubx64.efi
+sudo  cp     -v   /Repair/EFI/refind/refind_x64.efi   /Repair/EFI/Microsoft/Boot/bootmgfw.efi</code>
+
+==== Conclusion. ====
+
+Espérons que ce chapitre  ne contienne pas trop d'erreurs et qu'il sera  utile et se simplifiera au fil du temps.
+
+
+
+
+
+----
+//Contributeurs principaux : [[:utilisateurs:IDENTIFIANT]].//

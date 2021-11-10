@@ -1,0 +1,371 @@
+
+{{tag>Xenial serveur }}
+====== Serveur SYSLOG : Syslog-ng ======
+
+Linux et de multiples équipements réseaux effectuent une journalisation des événements qui s'opèrent sur leur système. Ces journaux sont stockés localement et basés sur le protocole Syslog.
+
+L'intérêt d'un serveur Syslog-ng est donc de permettre une centralisation de ces journaux d'événements, permettant de repérer plus rapidement et efficacement les défaillances de machines présentes sur un réseau.
+
+Avant même d'aller plus loin, je vous invite à lire l'excellent article [[http://okki666.free.fr/docmaster/articles/linux068.htm|"Syslog, maîtrisez l'historique"]] de Vincent Renardias, paru dans le numéro 19 de Linux Magazine.
+
+C'est une excellente base et une approche simple de la journalisation sous Linux qui va suivre...
+Syslog-ng est une solution de journalisation sous systèmes Unix et Linux depuis les années 1980.
+
+Nous nous intéresserons ici à [[wpfr>syslog-ng|syslog-ng]], un remplaçant de [[wpfr>syslog|syslog]]. Il permet notamment de dissocier les logs entrants sur d'autres critères que le 'facility' comme par exemple : le nom ou l'adresse IP de la machine qui émet le log.
+
+Son installation n'est pas très complexe, mais nécessite un peu de rigueur.
+
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]] ;
+  * Disposer d'une connexion à Internet configurée et activée ;
+  * Un [[:lamp|serveur LAMP]] (Linux Apache Mysql Php) fonctionnel si vous décidez d'installer php-syslog-ng.
+
+
+
+=====Installation=====
+
+ **Ne pas laisser les droits de modification à n'importe quel utilisateur !!** 
+.
+L'installation de syslog-ng supprimera les paquets klogd et sysklogd, respectivement en charge de la journalisation des événements liés au noyau et au reste du système. Idem pour le paquet ubuntu-minimal.
+
+  * [[:tutoriel:comment_installer_un_paquet|Installez les paquets]] suivants: **[[apt>syslog-ng,syslog-ng-core|syslog-ng syslog-ng-core]]**
+
+  * [[:tutoriel:comment_modifier_un_fichier|Editez le fichier]] ** /etc/default/syslog-ng ** \\
+  et remplacez 
+ <file>
+#CONSOLE_LOG_LEVEL=0 par
+ CONSOLE_LOG_LEVEL=1
+</file>
+
+FIXME Pouvez-vous expliquer pourquoi la valeur par défaut ne convient pas?
+
+Après avoir effectué ces changements, redémarrez syslog-ng avec la commande :
+
+<code>sudo /etc/init.d/syslog-ng restart</code>
+
+=== Configuration de Syslog-NG ===
+
+
+Le fichier de configuration par défaut est situé dans /etc/syslog-ng/syslog-ng.conf
+
+Pour que syslog-ng accepte de recevoir des messages d'une machine distante, vous devez décommenter une ligne ; pour cela remplacer :
+
+<code># (this is equivalent to the "-r" syslogd flag)
+# udp();</code>
+
+Par
+
+<code># (this is equivalent to the "-r" syslogd flag)
+udp();</code>
+
+
+<note>Pour ma part: J'ai du laisser commenté udp() et ajouter une nouvelle source:
+FIXME
+<code>
+source s_net {
+        udp();
+};
+</code>
+ sinon tous les messages venant du réseaux sont re-dirigé vers les fichiers /var/log/messages et /var/log/syslog en plus du fichier paramétré</note>
+
+<note warning>Rien de tout ça ne semble fonctionner avec Ubuntu 12.04, vu les changements dans le fichier de configuration il est possible que l'authentification et le chiffrement soit nécessaire pour accepter les logs distants.</note>
+
+==== Configuration du client Syslog d'une machine ====
+
+
+Si vous souhaitez envoyer tous les messages syslog d'une station ou d'un serveur sur le serveur syslog qui les collectera (plutôt que localement), vous devez [[:tutoriel:comment_modifier_un_fichier | Editez le fichier]] ** /etc/syslog.conf ** (ou ** /etc/rsyslog.conf **) et ajouter la ligne suivante :
+
+<code>*.*            @ip_server_syslog</code>
+exemple pour l'adresse ip 192.168.0.1
+<code>*.*            @192.168.0.1</code>
+
+Maintenant, redémarrez le client syslog de la machine :
+
+<code>sudo /etc/init.d/syslog-ng restart</code>
+
+
+À partir de maintenant, le serveur syslog-ng est fonctionnel : les logs de la machine lui sont envoyés.
+
+
+
+
+
+
+
+
+
+
+==== Configuration de php-syslog-ng ====
+
+
+php-syslog-ng est une interface web basée sur un script php qui permet de lire les logs qu'aura stocké dans une base mysql un serveur syslog-ng. Elle n'est pas indispensable mais permet d'accéder aux logs plus facilement et intuitivement. Vous devez avoir un serveur LAMP de fonctionnel (Linux Apache MySQL PHP)
+
+=== Télécharger et installer le logiciel ===
+
+
+<code>mkdir phpsyslogng
+cd phpsyslogng
+wget http://php-syslog-ng.googlecode.com/files/php-syslog-ng-2.9.8.tgz
+tar -zxvf php-syslog-ng-*
+cd ..
+sudo mv phpsyslogng /var/www/
+cd /var/www/phpsyslogng</code>
+
+=== Configuration de MySQL ===
+
+
+Le moyen le plus rapide est d'utiliser le fichier dbsetup.sql dans le répertoire 'scripts'(/var/www/phpsyslogng/html/scripts). Éditez ce fichier et renseignez les mots de passe des 3 utilisateurs (sysloguser, syslogfeeder, syslogadmin) qui seront créés (en remplaçant PW_HERE). Le script créera une table pour les journaux et une pour l'authentification des utilisateurs, et affectera des droits sensiblement différents pour chaque utilisateur.
+
+Si vous effectuez d'autres changements comme changer le nom de la base de données ou des tables, assurez-vous de faire correspondre ces changement dans le fichier config.php.
+
+Après avoir modifié le script dbsetup.sql exécutez le simplement avec la commande :
+
+<code>sudo mysql -u root -p < dbsetup.sql</code>
+
+=== Configuration de syslog-ng ===
+
+
+Maintenant vous devez configurer syslog-ng pour rediriger les messages dans la base MySQL. Vous devrez ajouter 2 entrées dans le fichier de configuration de syslog-ng. Le fichier de configuration est habituellement dans /etc/syslog-ng/syslog-ng.conf
+
+Vous devez premièrement ajouter une entrée 'destination'. Ajoutez ceci :
+
+<code>destination d_mysql {
+pipe("/var/log/mysql.pipe"
+template("INSERT INTO logs
+(host, facility, priority, level, tag, datetime, program, msg)
+VALUES ( '$HOST', '$FACILITY', '$PRIORITY', '$LEVEL', '$TAG', '$YEAR-$MONTH-$DAY $HOUR:$MIN:$SEC',
+'$PROGRAM', '$MSG' );\n") template-escape(yes));
+};</code>
+
+Ceci va prendre vos logs et les formater dans une requête SQL qui pourra être exécutée pour les ajouter dans la base de données.
+
+Vous devrez également ajouter une entrée de type 'log' qui déterminera quels évènements faire suivre dans la base de données (fonctionnement basé sur le mode First In First Out). Vous voudrez sûrement faire suivre tous les logs dans MySQL et ils seront aussi une entrée de type 'source' pour cela dans votre fichier syslog-ng.conf (habituellement appelés src ou s_all). Pour rattacher cette source à la destination que vous venez juste de créer, vous devez ajouter le code suivant :
+
+<code>log {
+source(s_all);
+destination(d_mysql);
+};</code>
+
+=== Configurer syslog-ng pour la redirection vers MySQL ===
+
+
+Un exemple de script qui redirige les logs vers la base MySQL est inclus dans le répertoire des scripts (/var/www/phpsyslogng/html/scripts). Le script se nomme syslog2mysql.sh
+
+<code>#!/bin/bash
+
+if [ ! -e /var/log/mysql.pipe ]
+then
+mkfifo /var/log/mysql.pipe
+fi
+while [ -e /var/log/mysql.pipe ]
+do
+mysql -u syslogfeeder --password=PASS_HERE syslog < /var/log/mysql.pipe >/dev/null
+done</code>
+
+Vous devez remplacer PASS_HERE par le mot de passe que vous avez affecté à l'utilisateur 'syslogfeeder'. Vous voudrez aussi probablement que le script soit lancé automatiquement à chaque démarrage du serveur syslog-ng. Aussi, ajoutez une entrée dans inittab ou démarrez le script via init.d. Mais bien faire attention à lancer le script une fois que Mysql a démarré.
+
+Avec un script init.d Ubuntu :
+Créez un fichier syslog2mysql dans /etc/init.d/ ayant comme contenu :
+
+<code>#! /bin/sh
+
+# Do NOT "set -e"
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+DESC="Fetch queries from syslog-ng to mysql db"
+NAME=syslog2mysql
+PIDFILE=/var/run/$NAME.pid
+SCRIPTNAME=/etc/init.d/$NAME
+
+# Exit if mysql client is not installed
+[ -x "/usr/bin/mysql" ] || exit 0
+
+# Load the VERBOSE setting and other rcS variables
+[ -f /etc/default/rcS ] && . /etc/default/rcS
+
+# Define LSB log_* functions.
+# Depend on lsb-base (>= 3.0-6) to ensure that this file is present.
+. /lib/lsb/init-functions
+
+#
+# Function that starts the daemon/service
+#
+do_start()
+{
+        [ ! -e /var/log/mysql.pipe ] && echo " (Creating $NAME pipe)." && mkfifo /var/log/mysql.pipe
+        if [ -e $PIDFILE ]; then
+            if ps -p $(cat $PIDFILE) >/dev/null; then
+                echo -n -e "\nError: $NAME seems to be already running!"
+                return 1
+            else
+                rm -f $PIDFILE
+            fi
+        fi
+        {
+            while [ -e /var/log/mysql.pipe ]
+            do
+                mysql -u syslogfeeder --password=PASS_HERE syslog < /var/log/mysql.pipe >/dev/null
+                sleep 1
+            done
+        } &
+        echo $! > $PIDFILE
+}
+
+#
+# Function that stops the daemon/service
+#
+do_stop()
+{
+        if [ -e $PIDFILE ]; then
+            PID=$(cat $PIDFILE)
+            if ps -p $PID >/dev/null; then
+                # get PID of child
+                CPID=$(pgrep -P $PID)
+                # kill script
+                kill $PID
+                # kill child
+                kill $CPID
+                rm -f $PIDFILE
+                return 0
+            else
+                echo -e "\nWarning: $NAME was not running."
+                echo -n -e "\nCleaning PID file"
+                rm -f $PIDFILE
+                return 1
+            fi
+        else
+            echo -n -e "\nWarning: $NAME was not running"
+            return 1
+        fi
+}
+
+case "$1" in
+  start)
+        [ "$VERBOSE" != no ] && log_daemon_msg "Starting $DESC" "$NAME"
+        do_start
+        case "$?" in
+                0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+                2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+        esac
+        ;;
+  stop)
+        [ "$VERBOSE" != no ] && log_daemon_msg "Stopping $DESC" "$NAME"
+        do_stop
+        case "$?" in
+                0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+                2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+        esac
+        ;;
+  restart|force-reload)
+        #
+        # If the "reload" option is implemented then remove the
+        # 'force-reload' alias
+        #
+        log_daemon_msg "Restarting $DESC" "$NAME"
+        do_stop
+        case "$?" in
+          0|1)
+                do_start
+                case "$?" in
+                        0) log_end_msg 0 ;;
+                        1) log_end_msg 1 ;; # Old process is still running
+                        *) log_end_msg 1 ;; # Failed to start
+                esac
+                ;;
+          *)
+                # Failed to stop
+                log_end_msg 1
+                ;;
+        esac
+        ;;
+  *)
+        echo "Usage: $SCRIPTNAME {start|stop|restart|force-reload}" >&2
+        exit 3
+        ;;
+esac
+
+:
+</code>
+
+
+Pensez à modifier le pwd de syslogfeeder dedans
+
+Créez le lien pour lancer le script au démarrage
+
+<code>sudo update-rc.d syslog2mysql defaults</code>
+
+
+Maintenant démarrez le service syslog2mysql :
+
+<code>sudo /etc/init.d/syslog2mysql start</code>
+
+ou si vous préférez ne pas utiliser init.d et utiliser directement le script :
+
+<code>sudo ./syslog2mysql.sh &</code>
+
+Note : ce script doit toujours s'exécuter en tache de fond parce qu'en l'utilisant tout les messages sont redirigés dans la base de données MySQL.
+
+Il est maintenant temps de redémarrer le démon syslog-ng et d'envoyer les logs dans la base de données :
+
+<code>sudo /etc/init.d/syslog-ng restart</code>
+
+=== Modification du fichier config.php ===
+
+
+Si vous utilisez la base de données par défaut initialisée par le fichier dbsetup.sql, tout ce que vous avez à faire est d'entrer le mot de passe pour les utilisateurs sysloguser et syslogadmin, définir l'hote et le port du serveur de base de données s'il n'est pas sur le même serveur que le serveur web, et saisir une URL valide.
+
+Sinon, parcourez le fichier config.php et configurez les paramètres dont vous avez besoin. Toutes les options sont expliquées dans le fichier.
+
+<code>sudo vi /var/www/phpsyslogng/config/config.php</code>
+
+php-syslog-ng est maintenant accessible à l'adresse : http://votre_webserver/phpsyslogng
+Un compte administrateur (admin) a été créé par dbsetup.sql avec le mot de passe admin
+
+Si après la connexion vous obtenez le message "Query failed: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '' at line 1", c'est parce que votre base mysql n'est pas encore alimentée. Pour les plus pressés, vous pouvez créer un enregistrement factice via la requête SQL suivante :
+
+<code>INSERT INTO `search_cache` ( `tablename` , `type` , `value` ,`updatetime` ) VALUES ('logs', 'HOST', 'localhost', NOW( ) );</code>
+
+
+
+
+
+==== 4. Configuration de la rotation des journaux ====
+
+
+La rotation permet d'archiver et/ou purger les plus anciens évènements des journaux afin d'éviter que leur stockage ne devienne trop volumineux
+
+Rotation des journaux de la base MYSQL
+
+Il est préférable d'utiliser le service de rotation des logs plutôt que de supprimer les enregistrements directement dans la table principale de la base de données. Ceci évite de causer des problèmes de performance. Déplacer les logs de la table principale améliore aussi les performances car la table qui contient les anciens logs est statique et peut donc être optimisée.
+
+Vous devez éditer le fichier logrotate.php dans le répertoire 'scripts' pour spécifier le chemin d'installation de php-syslog-ng.
+
+Si vous choissiez d'utiliser le script logrotate.php, ajoutez simplement celui-ci dans votre crontab et exécutez le aussi souvent que vous le souhaitez (le maximum est actuellement d'une fois par jour).
+
+Pour cela, éditez la crontab du superutilisateur...
+
+<code>sudo crontab -e</code>
+
+... pour y ajouter une entrée :
+
+<code>00 22 * * 0 php /var/www/phpsyslogng/scripts/logrotate.php</code>
+
+Ici, la rotation des logs se fera tout les lundis (0) à 22h00
+
+Si vous activez le paramètre LOGROTATERETENTION du fichier config.php, alors les logs plus anciens que ce paramètre seront supprimés à l'exécution du fichier 'logrotate.php'. (activé par défaut à 90 jours)
+
+
+
+==== 5. Résolution des problèmes ====
+
+Si vous rencontrez le messages d'erreur "//Query failed: Can't find file: 'all_logs' (errno: 2)//" après vous être identifié, il vous faut exécuter la commande suivante : 
+
+<code>php /var/www/phpsyslogng/scripts/logrotate.php</code>
+
+FIXME La commande ne résout que temporairement le problème !
+
+----
+
+//Contributeurs// : sidney_v

@@ -1,0 +1,344 @@
+
+{{tag>xenial portable grub BROUILLON}}
+
+<note importante>Cette page en construction. Des sections sont susceptibles de changer dans les jours qui viennent.</note>
+
+
+======  Medion Akoya S2217 (MD99481) ======
+
+
+
+===== Compatibilité =====
+
+Le tableau suivant récapitule la prise en charge du matériel par les différentes versions d'Ubuntu.
+
+^ Version ^ Installation ^ Son ^ Casque audio ^ Wifi ^ Bluetooth ^ Niveau batterie ^ Webcam ^ Touchpad ^
+|  [[:16.04]]  |  {{wiki:modeles:laptop_work.png|Fonctionne après config}}  |  {{wiki:modeles:laptop_notok.png|Ne fonctionne pas}}  |  {{wiki:modeles:laptop_notok.png|Ne fonctionne pas}}  |  {{wiki:modeles:laptop_work.png|Fonctionne après config}}  |  {{wiki:modeles:laptop_notok.png|Ne fonctionne pas}}  |  {{wiki:modeles:laptop_notok.png|Ne fonctionne pas}}  |  {{:icons:ok_64.png|OK 64 bits}}  |   {{:icons:ok_64.png|OK 64 bits}}  |
+|  [[http://linuxiumcomau.blogspot.com/2016/10/running-ubuntu-on-intel-bay-trail-and.html|Linuxium]] [[:16.10]] |  {{wiki:modeles:laptop_work.png|Fonctionne après config}}  |  {{wiki:modeles:laptop_notok.png|Ne fonctionne pas}}  |  {{wiki:modeles:laptop_notok.png|Ne fonctionne pas}}  |  {{:icons:ok_64.png|OK 64 bits}}  |  {{wiki:modeles:laptop_notok.png|Ne fonctionne pas}}  |  {{:icons:ok_64.png|OK 64 bits}}  |  {{:icons:ok_64.png|OK 64 bits}}  |   {{:icons:ok_64.png|OK 64 bits}}  |
+
+
+===== Périphériques =====
+
+^ Périphérique ^ ID ^ Type ^ Commentaire ^
+|  [[http://ark.intel.com/fr/products/80274/Intel-Atom-Processor-Z3735F-2M-Cache-up-to-1_83-GHz|Intel Atom Z3735F]]  |  -  |  Processeur  | voir ici https://plus.google.com/+IanMORRISON/posts/UNWdwRMqy3j |
+|  Intel HD Graphics  |  8086:0f31  |  GPU  |  -  |
+|  Linux Foundation 3.0 root hub  |  1d6b:0003  |  USB  |  Détecté (lsusb)  |
+|  Linux Foundation 2.0 root hub  |  1d6b:0002  |  USB  |  Détecté (lsusb)  |
+|  Genesys Logic, Inc. Hub  |  05e3:0608  |  Concentrateur USB  |  Détecté (lsusb)  |
+|  Elan Microelectronics Corp.  |  04f3:074a  |  Clavier et pavé tactile  |  Détecté (lsusb)  |
+|  Chicony Electronics Co., Ltd  |  04f2:b53d  |  Webcam  |  Détecté (lsusb)  |
+|  Realtek RTL8723BS Wireless LAN 802.11n  |  024c:b723  |  Wifi et Bluetooth (4.0)  |  Pilote rtl8723bs  |
+|  Intel SST Audio Device (WDM)  |  8086:0f28  |  Audio  |  Détecté (dmesg)  |
+|  Realtek I2S Audio Codec  |  10ec:5645  |  Audio  |  -  |
+|  Batterie  |  PNP 0C0A  |  Batterie  |  Détecté par [[http://linuxiumcomau.blogspot.com/2016/10/running-ubuntu-on-intel-bay-trail-and.html|Linuxium]] 16.10  |
+
+
+
+===== Installation =====
+
+L'installation d'Ubuntu sur le Medion Akoya S2217 nécessite des manipulations spéciales propres aux architectures BayTrail.
+Les problèmes rencontrés sont similaires à ceux qui concernent l'ASUS X205TA ou la tablette Winbook TW100 (qui ont aidé à concevoir ce tutoriel).
+L'objectif de ce tutoriel est d'installer Ubuntu sur l'emplacement microSD sans toucher à Windows.
+En présence de la carte microSD, c'est Ubuntu qui sera lancé.
+En l'absence de microSD, c'est Windows qui sera lancé.
+Pour suivre les prochaines étapes, vous aurez besoin de :
+
+  * une clé USB de stockage (pour le live CD)
+  * une clé USB wifi compatible Linux (fonctionnant avec les pilotes du live CD)
+
+<note importante>Soyez prudent et attentif, car certains noms ou chemins peuvent différer par rapport à ce tutoriel.</note>
+
+<note>Le principal obstacle à l'installation est l'UEFI.
+Le processeur est en 64 bits mais l'UEFI est exclusivement en 32 bits.
+Or, les distributions Ubuntu en 64 bits ne contiennent qu'un bootloader 64 bits.
+Cela implique des manipulations spéciales.</note>
+
+Récapitulatif des étapes :
+
+  * Préparation d'une clé USB bootable
+  * Configuration de l'UEFI
+  * Installation du système depuis le live USB
+  * Installation de GRUB
+  * Installation des pilotes (Wifi...)
+
+
+
+===== Préparation d'une clé USB bootable =====
+
+<note>**Linuxium** est une distribution Ubuntu recommandée pour les appareils équipés d'un processeur BayTrail (ce qui est le cas de notre machine). Le CD inclut un chargeur d'amorçage EFI 32 bits. Si vous choisissez d'utiliser une distribution Ubuntu officielle, ce chargeur d'amorçage doit être inclus manuellement.</note>
+
+==== Linuxium ====
+
+  * Téléchargez un live CD de **[[http://linuxiumcomau.blogspot.com/2016/10/running-ubuntu-on-intel-bay-trail-and.html|Linuxium]]**. Avec seulement 2 Go de RAM sur cette machine, la distribution **[[https://goo.gl/X6NG9E|Lubuntu]]** est recommandée.
+  * Créez normalement une clé USB bootable à l'aide d'un outil tel que **dd**.
+
+==== Ubuntu ====
+
+L'objectif de cette étape est de créer un chargeur d'amorçage EFI compatible (en 32 bits) pour lancer Ubuntu en 64 bits.
+Vous avez le choix de le télécharger [[https://github.com/jfwells/linux-asus-t100ta/blob/master/boot/bootia32.efi|ici (github)]] ou de le compiler :
+
+<code bash>sudo apt-get install git bison libopts25 libselinux1-dev autogen m4 autoconf help2man libopts25-dev flex libfont-freetype-perl automake autotools-dev libfreetype6-dev texinfo
+git clone git://git.savannah.gnu.org/grub.git
+cd grub/
+./autogen.sh
+./configure --with-platform=efi --target=i386 --program-prefix=''
+make
+cd grub-core/
+../grub-mkimage -d . -o bootia32.efi -O i386-efi -p /boot/grub ntfs hfs appleldr boot cat efi_gop efi_uga elf fat hfsplus iso9660 linux keylayouts memdisk minicmd part_apple ext2 extcmd xfs xnu part_bsd part_gpt search search_fs_file chain btrfs loadbios loadenv lvm minix minix2 reiserfs memrw mmap msdospart scsi loopback normal configfile gzio all_video efi_gop efi_uga gfxterm gettext echo boot chain evall</code>
+
+  * Téléchargez un live CD d'Ubuntu (en **64 bits**). Avec seulement 2 Go de RAM sur cette machine, la distribution **[[:lubuntu|Lubuntu]]** est recommandée.
+  * Créez normalement une clé USB bootable à l'aide d'un outil tel que **[[:usb-creator|usb-creator-gtk]]**.
+  * Copiez le fichier **bootia32.efi** dans le dossier **/EFI/BOOT/** de la clé USB.
+
+
+
+===== Configuration de l'UEFI =====
+
+Le Secure Boot est susceptible d'empêcher le démarrage du live USB.
+De plus, vous devez vous assurer que l'USB est lancé en priorité.
+
+  * Lors du démarrage de l'ordinateur, maintenez la touche **F2** appuyée jusqu'à arriver à une interface bleue.
+  * Rendez-vous dans l'onglet **Security**.
+  * Sélectionnez le menu **Secure Boot Configuration**.
+  * Changez **Secure Boot Option** à **Disabled**.
+  * Rendez-vous dans l'onglet **Boot** pour changer l'ordre des périphériques.
+  * A l'aide des touches "+" et ")", placez **USB HDD** en tête de liste, suivi de **Internal Shell**.
+  * Appuyez sur **F10** pour sauvegarder les changements et quitter. Pensez à insérer la clé USB bootable pour l'étape suivante.
+
+
+
+===== Installation du système =====
+
+<note importante>L'assistant d'installation lancé normalement plante avant la fin, lors de l'installation de GRUB.
+Afin de pallier ce problème, vous devez vous assurer que l'assistant n'installera pas GRUB.</note>
+
+  * Insérez la clé USB et démarrez l'ordinateur.
+  * Une fois sur le bureau, ouvrez un terminal en appuyant sur **Ctrl+Alt+t**.
+
+Exécutez les commandes :
+
+<code bash>setxkbmap fr oss
+ubiquity -b</code>
+
+<note importante>Ubuntu 16.04 et Linuxium 16.10 n'utilisent pas la même numérotation pour les partitions ! Sous Linuxium 16.10, **/dev/mmcblk0** devient **/dev/mmcblk1** et **/dev/mmcblk1** devient **/dev/mmcblk2**. Vérifiez attentivement que les manipulations sont réalisées sur le bon périphérique.</note>
+
+L'assistant d'installation se lance.
+
+<note>Partitionnez la carte microSD (**/dev/mmcblk1**) comme ci-dessous :
+  * Une partition **/dev/mmcblk1p1** en **EFI** (ou FAT32) de 33 à 100 Mo.
+  * Une partition **/dev/mmcblk1p2** en **ext4** occupant le reste de l'espace (chemin : **/**).
+</note>
+
+Une fois l'installation terminée, cliquez sur **Continuer à tester**.
+Il reste quelques étapes avant de redémarrer.
+
+Tout d'abord, nous allons modifier **/etc/fstab** pour reconnaître la partition **EFI** de la carte microSD.
+L'objectif est de faire pointer **/boot/efi** sur la microSD plutôt que sur le disque interne.
+Ceci permet de ne pas écraser le bootloader interne.
+Exécutez :
+
+<code bash>sudo blkid /dev/mmcblk1p1</code>
+
+Et notez le résultat. Puis éditez le fichier **/etc/fstab** à la ligne **/boot/efi**. Remplacez l'UUID par celui que vous avez noté.
+
+<code bash>sudo mount /dev/mmcblk1p2 /mnt
+sudo nano /mnt/etc/fstab
+sudo umount /mnt</code>
+
+L'étape suivante est nécessaire pour booter Ubuntu sur la microSD.
+Copiez le chargeur d'amorçage 32 bits dans la partition EFI de la microSD et créez un script de démarrage.
+
+<code bash>sudo mount /dev/mmcblk1p1 /mnt
+sudo mkdir -p /mnt/EFI/BOOT
+sudo cp /cdrom/EFI/BOOT/bootia32.efi /mnt/EFI/BOOT/
+echo "fs0:\EFI\BOOT\bootia32.efi" | sudo tee /mnt/startup.nsh
+sudo umount /mnt</code>
+
+Créez un script de démarrage pour Windows dans la partition eMMC interne.
+
+<code bash>sudo mount /dev/mmcblk0p1 /mnt
+echo "fs0:\EFI\Microsoft\Boot\bootmgfw.efi" | sudo tee /mnt/startup.nsh
+sudo umount /mnt</code>
+
+**Installer GRUB directement**
+
+Si vous disposez d'une clé USB wifi, vous pouvez installer GRUB 32 bits avec la procédure suivante.
+Ne l'exécutez que si vous savez ce que vous faites !
+
+<code bash>sudo -s
+mount /dev/mmcblk1p2 /mnt
+mount /dev/mmcblk1p1 /mnt/boot/efi
+for p in /dev /dev/pts /proc /sys /run; do mount -B $p /mnt$p; done
+mount -o bind /etc/resolv.conf /mnt/etc/resolv.conf
+chroot /mnt /bin/bash
+apt-get update
+apt-get install grub-efi-ia32
+grub-install --target=i386-efi --efi-directory=/boot/efi --removable --recheck
+update-grub
+exit
+exit</code>
+
+Si cette procédure réussit, vous pourrez passer à l'étape suivant l'installation de GRUB.
+
+Redémarrez et retirez la clé USB.
+
+
+
+===== Installation de GRUB =====
+
+<note>Vous aurez besoin d'une clé USB wifi pour la suite.</note>
+
+Une fois l'ordinateur démarré, vous devriez arriver sur une console GRUB.
+Il faut lancer Linux manuellement.
+Attention, le clavier est en **QWERTY**, mais GRUB gère l'autocomplétion avec la touche **TAB**.
+
+Tapez les instructions :
+
+<code>linux (hd0,msdos2)/vmlinuz root=/dev/mmcblk1p2
+initrd (hd0,msdos2)/initrd.img
+boot</code>
+
+Ceci doit permettre de démarrer la session Ubuntu.
+L'étape suivante consiste à installer GRUB en 32 bits avec les paquets officiels.
+Sur le bureau, ouvrez un terminal (**Ctrl+Alt+t**) et tapez :
+
+<code bash>setxkbmap fr oss
+sudo apt-get update
+sudo apt-get install grub-efi-ia32
+sudo grub-install --target=i386-efi --efi-directory=/boot/efi --removable --recheck
+sudo update-grub</code>
+
+Terminez en modifiant le script de démarrage pour lancer GRUB :
+
+<code bash>echo "fs0:\EFI\BOOT\grub.efi" | sudo tee /boot/efi/startup.nsh</code>
+
+
+
+===== Installation des pilotes =====
+
+
+==== Wifi ====
+
+<note>Linuxium 16.10 contient déjà un pilote Wifi fonctionnel. La procédure ci-dessous concerne les distributions Ubuntu officielles.</note>
+
+A l'heure actuelle, les pilotes Wifi n'existent ni dans le live USB, ni dans les paquets d'Ubuntu officiel.
+Il existe un dépôt git qui contient un pilote à compiler.
+
+<note importante>Attention : ce pilote fonctionne mais n'est probablement pas encore stable.</note>
+
+Pour l'installer, ouvrez un terminal et exécutez :
+
+<code bash>sudo apt-get install unzip git build-essential
+git clone https://github.com/hadess/rtl8723bs.git
+cd rtl8723bs/
+make
+sudo make install</code>
+
+
+
+===== Problèmes connus =====
+
+Cette section énumère des problèmes connus et peut donner des pistes pour les résoudre.
+
+
+
+==== Freeze aléatoire ====
+
+<note>Linuxium 16.10 résout les problèmes de freeze aléatoire.</note>
+
+Si le PC se bloque soudainement, et que les touches **Ctrl+Alt+F1** ou **Alt+Syst+b** ne répondent pas (obligation de maintenir le bouton d'extinction appuyé pour arrêter), vous pouvez essayer la manipulation suivante.
+Editez le fichier **/etc/default/grub** et ajoutez l'argument **intel_idle.max_cstate=1** à l'attribut **GRUB_CMDLINE_LINUX_DEFAULT**.
+
+<code>GRUB_CMDLINE_LINUX_DEFAULT="quiet splash intel_idle.max_cstate=1"</code>
+
+Vous pouvez essayer avec la valeur 0 si 1 ne résout pas le problème.
+Mettez à jour GRUB :
+
+<code bash>sudo update-grub</code>
+
+Dans le cas où le PC freeze toujours, vous pouvez essayer une ou plusieurs des options suivantes :
+
+<code>intel_pstate=disable</code>
+<code>relative_sleep_states=1</code>
+
+
+==== Ralentissement aléatoire persistant ====
+
+Si l'ordinateur se met à ralentir de façon durable de manière inexpliquée, la raison est peut-être visible dans le rapport **dmesg**.
+Ouvrez un terminal et tapez **dmesg**.
+Vous pourriez apercevoir un message similaire à celui-ci.
+
+<code>[93267.471191] clocksource: timekeeping watchdog on CPU2: Marking clocksource 'tsc' as unstable because the skew is too large:
+[93267.471197] clocksource:                       'refined-jiffies' wd_now: 101622460 wd_last: 1016223e0 mask: ffffffff
+[93267.471200] clocksource:                       'tsc' cs_now: 711c0ad9c6d0 cs_last: 711bdcc1e4c0 mask: ffffffffffffffff
+[93267.473888] clocksource: Switched to clocksource refined-jiffies</code>
+
+Ici, l'horloge a été automatiquement modifiée et provoque un ralentissement de l'ordinateur.
+Dans ce cas, la solution est de rechanger d'horloge :
+
+<code>sudo /bin/sh -c 'echo tsc > /sys/devices/system/clocksource/clocksource0/current_clocksource'</code>
+
+
+
+==== Pavé tactile ====
+
+Le pavé tactile fonctionne, mais ne réagit pas aux mouvements avec deux doigts (défilement).
+
+
+==== Carte son non reconnue ====
+
+La carte son est détectée physiquement, mais le système ne trouve pas de pilote qui correspond.
+
+<code>$ journalctl -k | grep sst
+sst-acpi 80860F28:00: No matching ASoC machine driver found
+intel_sst_acpi 80860F28:00: No matching machine driver found</code>
+
+<code>$ journalctl -k | grep 5645
+i2c-10EC5645:00 supply avdd not found, using dummy regulator
+i2c-10EC5645:00 supply cpvdd not found, using dummy regulator</code>
+
+<code>$ aplay -l
+aplay: device_list:268: aucune carte son n'a été trouvée...</code>
+
+
+==== Niveau de batterie ====
+
+<note>Le niveau de batterie est correctement détecté sous Linuxium 16.10.</note>
+
+Le niveau de la batterie n'est pas détecté sous les distributions Ubuntu officielles.
+
+<code>$ journalctl -k | grep 'ACPI Error'
+ACPI Error: No handler for Region [DVUM] (ffff88007a0bd168) [GenericSerialBus] (20150930/evregion-163)
+ACPI Error: Region GenericSerialBus (ID=9) has no handler (20150930/exfldio-297)
+ACPI Error: Method parse/execution failed [\_SB_.I2C1.BATC._STA] (Node ffff88007a0be708), AE_NOT_EXIST (20150619/psparse-542)
+ACPI Error: Method execution failed [\_SB_.I2C1.BATC._STA] (Node ffff88007a0be708), AE_NOT_EXIST (20150930/uteval-103)</code>
+
+
+===== Voir aussi =====
+
+  * (en) [[https://github.com/lopaka/instructions/blob/master/ubuntu-14.10-install-asus-x205ta.md|Instructions to install Ubuntu 14.10 on ASUS EeeBook X205TA]] 
+  * (en) [[https://sturmflut.github.io/linux/ubuntu/2015/01/21/installing-ubuntu-15.04-on-baytrail-tablets/|Installing Ubuntu 15.04 on BayTrail tablets]]
+  * (en) [[http://askubuntu.com/questions/619872/installing-ubuntu-14-10-64-bit-on-a-windows-8-bay-trail-atom-tablet|Installing Ubuntu 14.10 (64-bit) on a Windows 8 bay trail atom tablet]]
+  * (en) [[https://wiki.archlinux.org/index.php/Asus_x205ta|Asus x205ta - ArchWiki]]
+  * (en) [[https://wiki.debian.org/InstallingDebianOn/Asus/X205TA|Installing Debian On Asus X205TA]]
+  * (en) [[https://wiki.debian.org/InstallingDebianOn/Asus/T100TA|Installing Debian On Asus T100TA]]
+  * (fr) [[https://forum.ubuntu-fr.org/viewtopic.php?pid=19757471|Installation Ubuntu sur ASUS EeeBook X205TA avec Win8.1]]
+  * (en) [[http://askubuntu.com/questions/620369/goodix-touchscreen-acpi-bluetooth-wifi-drivers-14-10|Goodix touchscreen, acpi, bluetooth/wifi drivers]]
+  * (en) [[http://ubuntuforums.org/showthread.php?t=2249936|Realtek rtl8723bs sdio adapter]]
+  * (en) [[https://github.com/hadess/rtl8723bs|Realtek SDIO Wi-Fi driver]]
+  * (en) [[https://github.com/lwfinger/rtl8723bs_bt|Bluetooth Code for RTL8723bs]]
+  * (en) [[http://ubuntuforums.org/showthread.php?t=2254322|Asus X205TA hardware support in Ubuntu]]
+  * (en) [[http://ubuntuforums.org/showthread.php?t=2254631|byt-rt5640 byt-rt5640: ASoC: CPU DAI baytrail-pcm-audio not registered - No Sound]]
+  * (en) [[http://ifranali.blogspot.fr/2015/04/installing-arch-linux-on-asus-x205ta.html|Installing Arch Linux on Asus X205TA]]
+  * (en) [[https://bugzilla.kernel.org/show_bug.cgi?id=95681|Bug 95681 - No sound on Asus EeeBook X205TA]]
+  * (en) [[https://github.com/burzumishi/linux-baytrail-flexx10|Install GNU/Linux on NextBook Flexx 10.1]]
+  * (en) [[http://www.jfwhome.com/2016/01/04/latest-steps-to-install-ubuntu-on-the-asus-t100ta/|Latest steps to install Ubuntu on the Asus T100TA]]
+  * (en) [[http://patchwork.ozlabs.org/patch/339589/|I2C/ACPI: Add i2c ACPI operation region support]]
+  * (en) [[https://github.com/burzumishi/linux-baytrail-flexx10/blob/master/README.md|linux-baytrail-flexx10]]
+
+  * (en) [[https://patchwork.kernel.org/patch/6544961/|writing an alsa driver]]
+  * (en) [[http://www.spinics.net/lists/alsa-devel/msg49588.html|sound on asus x205ta]]
+  * (en) [[https://plus.google.com/+IanMORRISON/posts/UNWdwRMqy3j]]
+----
+
+//Contributeurs : [[:utilisateurs:ordiman85]]//

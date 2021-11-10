@@ -1,0 +1,132 @@
+
+{{tag>matériel apple BROUILLON}}
+
+====== Time Capsule  ======
+
+[[wp>Time_Capsule|Time Capsule]] est un périphérique de stockage en réseau NAS sans fil accompagné d'un routeur conçu et commercialisé par Apple Inc. L'une des fonctions clés de Time Capsule est la possibilité de faire des sauvegardes automatiques à distance à l’aide de Time Machine. Mais la sauvegarde peut aussi se faire depuis un autre système d'exploitation tel que Microsoft Windows ou Linux.
+
+
+
+
+===== Accès manuel au disque (aux disques) de la time capsule =====
+
+Pour accéder manuellement au disque (aux disques) de la time capsule depuis ubuntu, il est nécessaire de monter le (les) disque(s) en question :
+
+<TC_IP> désigne l'adresse IP de la time capsule
+
+<TC_DISK> désigne le(s) nom(s) du (des) disque(s) dur(s) time capsule
+
+<TC_PASSWORD> désigne le mot de passe de la time capsule
+
+<code>
+sudo mkdir /mnt/<TC_DISK>
+sudo mount.cifs //<TC_IP>/<TC_DISK> /mnt/<TC_DISK> -o pass=<TC_PASSWORD>, file_mode=0777,dir_mode=0777
+</code>
+
+la commande précédente peut ne plus être à jour à cause de l'implémentation d'une sécurité en plus de apple:
+
+<code>
+# mount -t cifs //server_ip/Data /mnt/Data -o user=user,passwd=user_pwd,file_mode=0777,dir_mode=0777,sec=ntlm
+</code>
+
+spécifiez à la place de Data dans %%//server_ip/Data le nom%% de l'utilisateur sinon vous tomberez sur la partition de root. 
+Le Data peut être remplacé par le nom du compte utilisateur si vous avez configuré votre TC en utilisant des comptes utilisateurs comme moyen de s'authentifier. 
+Explication ici: [[http://timesinker.blogspot.be/2014/06/mounting-osx-time-capsule-in-linux.html]]
+
+===== Automatisation =====
+
+Sous ubuntu [[:precise | 12.04 (Precise Pangolin)]], il est possible d'automatiser cette opération à l'aide d'un script shell à placer dans "/etc/NetworkManager/dispatcher.d/" sans oublier d' accorder les droits d’exécution à ce fichier (sudo chmod +x 99tc.sh).
+Ce script a été inspiré de (([[https://bbs.archlinux.org/viewtopic.php?pid=931303|Forum ArchLinux sur "networkmanager dispatcher: adding NFS-shares?" ]])), (([[http://blog.rom1v.com/2011/07/authentification-automatique-a-un-reseau-wifi-avec-networkmanager|Authentification automatique à un réseau Wifi avec Network Manager]])) et (([[http://task3.cc/418/how-to-automatically-mount-and-umount-apple-time-capsule-on-linux|Automatically mount and umount apple time capsule]])).
+
+<code>
+
+#!/bin/sh
+# /etc/NetworkManager/dispatcher.d/99tc.sh
+# Remplacer TIMECAPSULE_LOGIN, TIMECAPSULE_PASSWORD, TIMECAPSULE_IP, MOUNT_POINT par vos propres valeurs,
+# Le script est à adapté en fonction du nombre de disques durs connectés à la time capsule
+# (ici deux disques : TIME_CAPSULE_VOLUME_1 et TIME_CAPSULE_VOLUME_2)
+
+IF=$1
+STATUS=$2
+
+# Partie à compléter
+
+HOME_NETWORK="<Mon réseau Wifi>"
+
+TIMECAPSULE_LOGIN="<login>"
+TIMECAPSULE_PASSWORD="<password>"
+TIMECAPSULE_IP="<adresse IP de la time capsule>"
+
+MOUNT_POINT="/mnt/" 
+
+TIMECAPSULE_VOLUME_1="<nom disque 1 time capsule>"
+TIMECAPSULE_VOLUME_2="<nom disque 2 time capsule>"
+
+# Fin de la partie à compléter
+
+
+MOUNT_POINT_VOLUME_1=$MOUNT_POINT$TIMECAPSULE_VOLUME_1
+MOUNT_POINT_VOLUME_2=$MOUNT_POINT$TIMECAPSULE_VOLUME_2
+
+IS_MOUNTED_VOL_1=`mount 2> /dev/null | grep "$MOUNT_POINT_VOLUME_1" | cut -d' ' -f3`
+IS_MOUNTED_VOL_2=`mount 2> /dev/null | grep "$MOUNT_POINT_VOLUME_2" | cut -d' ' -f3`
+
+TIMECAPSULE_PATH_VOL_1="//$TIMECAPSULE_IP/$TIMECAPSULE_VOLUME_1"
+TIMECAPSULE_PATH_VOL_2="//$TIMECAPSULE_IP/$TIMECAPSULE_VOLUME_2"
+
+CHECK_DISK_VOL_1=`smbclient --user=$TIMECAPSULE_LOGIN%$TIMECAPSULE_PASSWORD -L $TIMECAPSULE_IP 2>&1 | grep -m1 -i $TIMECAPSULE_VOLUME_1`
+CHECK_DISK_VOL_2=`smbclient --user=$TIMECAPSULE_LOGIN%$TIMECAPSULE_PASSWORD -L $TIMECAPSULE_IP 2>&1 | grep -m1 -i $TIMECAPSULE_VOLUME_2`
+
+if [ ! -e $MOUNT_POINT_VOLUME_1 ]; then
+	logger "Create directory $MOUNT_POINT_VOLUME_1"
+	mkdir $MOUNT_POINT_VOLUME_1
+fi
+
+if [ ! -e $MOUNT_POINT_VOLUME_2 ]; then
+	logger "Create directory $MOUNT_POINT_VOLUME_2"
+	mkdir $MOUNT_POINT_VOLUME_2
+fi
+
+
+if [ "${IF}" = "wlan0" ] && [ "${STATUS}" = "up" ]; then
+
+	ESSID=`/sbin/iwgetid --raw`
+	
+	case "$ESSID" in 
+	$HOME_NETWORK)
+	
+	logger "Home wlan0 up (${ESSID})"
+
+		if [ "$CHECK_DISK_VOL_1" ] && [ ! "$IS_MOUNTED_VOL_1" ] ;then
+			logger "mounting time capsule volume 1 (${TIMECAPSULE_VOLUME_1})"
+			mount.cifs -v $TIMECAPSULE_PATH_VOL_1 $MOUNT_POINT_VOLUME_1 -o pass=$TIMECAPSULE_PASSWORD,file_mode=0777,dir_mode=0777
+		fi
+
+		if [ "$CHECK_DISK_VOL_2" ] && [ ! "$IS_MOUNTED_VOL_2" ] ;then
+			logger "mounting time capsule volume 2 (${TIMECAPSULE_VOLUME_2})"
+			mount.cifs -v $TIMECAPSULE_PATH_VOL_2 $MOUNT_POINT_VOLUME_2 -o pass=$TIMECAPSULE_PASSWORD,file_mode=0777,dir_mode=0777
+		fi
+	# Automatisation pour d'autres réseaux Wifi
+	esac
+
+elif [ "${IF}" = "wlan0" ] && [ "${STATUS}" = "down" ]; then
+	
+	if [ "$IS_MOUNTED_VOL_1" ] ;then
+		logger "unmounting time capsule volume 1 (${TIMECAPSULE_VOLUME_1})"
+		umount -f $MOUNT_POINT_VOLUME_1
+	fi
+	
+	if [ "$IS_MOUNTED_VOL_2" ] ;then
+		logger "unmounting time capsule volume 2 (${TIMECAPSULE_VOLUME_2})"
+		umount -f $MOUNT_POINT_VOLUME_2
+	fi
+
+fi
+
+
+</code>
+
+Lorsque le réseau wifi est déconnecté, le démontage du (des) disque(s) est très lent (environ 5 minutes), je n'en connais pas la raison.
+N'hésitez pas à apporter votre contribution.
+
+//Contributeurs principaux : [[:utilisateurs:electrobank]]

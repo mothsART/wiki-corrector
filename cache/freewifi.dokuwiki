@@ -1,0 +1,115 @@
+
+{{tag>réseau wifi freebox}}
+----
+====== Freewifi ======
+
+Le [[wpfr>Freebox#FreeWifi|Freewifi]] est un réseau [[:wifi]] réservé aux abonnés dégroupés disposant d'une [[:Freebox]] v5 ou v6 ; il permet le partage de leur connexion (principe du [[wpfr>Borne_Wi-Fi|hotspot]]) et rend celle-ci accessible aux autres abonnés dégroupés Free ayant eux aussi activé cette fonctionnalité.
+
+===== Pré-requis ====
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Disposer d'une carte [[:wifi]] fonctionnelle.  Il semble qu'il faille une émission d'au moins 30 dBs pour avoir une connexion stable. Cependant une valeur de 20 peut être suffisante. Afin de connaitre l'environnement, il est possible de faire cette commande:
+       <code> nmcli dev wifi | grep FreeWifi | grep -v secure | tail -3 </code>
+  * Connaitre ses identifiants FreeWifi\\ Pour les connaitre :
+    - connectez votre ordinateur à la Freebox (par connexion filaire ou Wifi) 
+    - se connecter à [[https://wifi.free.fr]] et suivre les instructions.
+
+<note>On ne peut obtenir ses identifiants qu'en se connectant chez soi sur sa Freebox fonctionnelle. Ça ne marche ni à distance, ni avec une Freebox déconnectée.</note>
+
+===== Connection manuelle ====
+Après s'être connecté au réseau wifi FreeWifi via Network manager, allez sur [[https://wifi.free.fr]] puis rentrez votre identifiant.
+
+===== Se connecter automatiquement à FreeWifi =====
+<note>Avec la version 16.04 la technique du script ne fonctionne pas, il est nécessaire de vider l'historique de firefox pour avoir la grille d'accueil classique. Vous pouvez aussi [[https://doc.ubuntu-fr.org/firefox#gestion_des_profils|créer un nouveau profil Firefox]], qui sera vierge</note>
+====  Comment vider l'historique ====
+Procédure pour firefox 57.0.4
+  * Ouvrir le menu
+  * Choisir "Préférence"
+  * Choisir "vie privée et sécurité"
+  * Cocher Vider "'historique lors de la fermeture de firefox"
+  * Cliquer sur "vider  maintenant" dans le paragraphe "contenu web en cache".
+  * Quitter firefox  et relancer firefox
+ 
+
+====Avec Network-Manager ====
+
+=== Procédure ===
+  - [[:tutoriel:comment_modifier_un_fichier|Créez un fichier]] **freewifi.sh** contenant <file bash freewifi.sh>
+#!/bin/sh
+
+[ ! -f /sbin/iwconfig -o ! -x /sbin/iwconfig ]
+exit 0
+[$(/sbin/iwconfig 2>&1 | grep -i freewifi | wc -l) -eq 0 ] 
+logger "Ce n'est pas FreeWifi ..." 
+exit 0
+
+. /etc/freewifi.conf
+
+wget -O - --post-data="login=$LOGIN&password=$PASSWORD" "https://wifi.free.fr/Auth" 2>/dev/null | grep "CONNEXION AU SERVICE REUSSIE" 1>/dev/null 2>&1 
+ifconfig wlan0 mtu 1460 2>/dev/null 
+logger "Connection FreeWifi OK"
+exit 0
+logger "Erreur de connection FreeWifi"
+exit 0
+</file>
+  - Rendez-le [[:droits|exécutable]]. Par exemple faites //Clic droit -> Propriétés -> Permissions -> Cochez la case "Autoriser l'exécution du fichier comme un programme"//
+  - Copiez-le dans le dossier **/etc/NetworkManager/dispatcher.d** (la copie doit se faire en [[:sudo|mode administrateur]]). 
+  - [[:tutoriel:comment_modifier_un_fichier|Créer avec les droits d'administration]] un fichier **/etc/freewifi.conf** qui contiendra vos identifiants FreeWifi renseignés comme suit:<file bash>
+LOGIN=VotreIdentifiantFreewifi
+PASSWORD=VotreMotDePasseFreewifi </file>
+
+=== Résumé en ligne de commande ===
+<code bash>
+sudo wget "http://doc.ubuntu-fr.org/_export/code/freewifi?codeblock=1" -O /etc/NetworkManager/dispatcher.d/freewifi.sh
+sudo chmod +x /etc/NetworkManager/dispatcher.d/freewifi.sh
+echo LOGIN=VotreIdentifiantFreewifi | sudo tee /etc/freewifi.conf
+echo PASSWORD=VotreMotDePasseFreewifi | sudo tee -a /etc/freewifi.conf
+</code>
+N'oubliez pas de remplacer //VotreIdentifiantFreewifi// et //VotreMotDePasseFreewifi// par vos identifiants !
+
+
+FIXME à tester << echo -e "LOGIN=VotreIdentifiantFreewifi"\\n"PASSWORD=VotreMotDePasseFreewifi" | sudo tee /etc/freewifi.conf >>
+
+
+===== Problèmes de connexion =====
+
+Il arrive fréquemment d'avoir des soucis de connexion aux hotspots freewifi avec Ubuntu/Kubuntu
+Voici quelques pistes à essayer
+
+==== Pas de connection sur Reseau FreeWifi ====
+Si votre carte réseau a essayé de se connecter sans succès, il semble que les servers FREE bloqueront votre carte wifi un certain temps. Pour contourner ce problème, il est possible de changer ou cloner une autre [[http://guide.ubuntu-fr.org/desktop/net-macaddress.html|adresse Mac]]
+
+==== Spécifier les adresses DNS de free manuellement ====
+Dans [[:Network-Manager]], voici un exemple de ce qui peut être renseigné
+<file>
+212.27.40.240
+212.27.40.241
+</file>
+
+==== Baisser le MTU ====
+Dans configuration connexion réseau wifi, toujours dans [[Network-Manager]], forcer le MTU de 1460 à 1432.
+==== Freewifi non sécurisé ====
+Message assez explicite en Février 2019
+
+<note important>La connexion n’est pas sécurisée
+
+Les propriétaires de wifi.free.fr ont mal configuré leur site web.
+
+**Pour éviter que vos données ne soient dérobées, Firefox ne s’est   pas connecté à ce site web**.
+
+Les sites web justifient leur identité avec des certificats émis par des autorités de certification.
+La plupart des navigateurs ne font plus confiance aux certificats émis par GeoTrust, RapidSSL, Symantec, Thawte, et VeriSign. 
+
+**wifi.free.fr utilise un certificat émis par l’une de ces autorités** ; par conséquent, l’identité du site ne peut être validée.
+
+ Vous pouvez informer l’administrateur du site web de ce problème.</note>
+
+Devenu inutilisable ?
+
+
+===== Voir aussi =====
+  * Source de la partie connexion automatique avec NM: [[http://www.webynux.net/astuce/se-connecter-automatiquement-a-freewifi-avec-network-manager.html|WebyNux]]
+  * [[http://static.webynux.net/seb/freewifi.sh|Source du script]] **freewifi.sh**
+
+----
+//Contributeurs: pfff//

@@ -1,0 +1,165 @@
+
+{{tag>matériel scanner tutoriel}}
+
+----
+
+====== Installer un scanner USB non reconnu ======
+
+Cette page est destinée aux scanners USB ne faisant pas partie des [[:scanner#Installation_selon_la_marque|marques listées]] ou si le tutoriel y étant dédié n'a pas suffi pour qu'il soit reconnu correctement par un [[:scanner#logiciels|logiciel de numérisation]].
+
+
+===== Installer les bibliothèques supplémentaires =====
+
+  - [[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>libsane-extras|libsane-extras]]** FIXME (sous ubuntu 20.04 ?) puis relancez votre logiciel de numérisation.
+  - Si votre scanner n'est toujours pas reconnu, [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>sane-utils|sane-utils]]**
+
+<note>Il semble utile d'installer sane et sane-utils, même lorsque le scanner semble reconnu.\\
+Par exemple, alors qu'il était indiqué comme reconnu dans [[:Xsane]] et Kooka, le scanner HP 5300C (avision) fonctionnait de façon chaotique, et ce jusqu'à l'installation de ces paquets.</note>
+
+===== Détecter et installer son scanner =====
+
+Il s'agit ici de connaitre les caractéristiques de votre scanner pour pouvoir les ajouter au fichier de configuration de **SANE**((Scanner Access Now Easy)) prenant en charge les scanners.
+
+
+==== Détection du scanner ====
+
+Après avoir [[#Installer_les_librairies_supplémentaires|installé les librairies supplémentaires]], saisissez dans un [[:terminal]]:
+<code>sudo sane-find-scanner -q</code>
+Celà devrait vous donner une réponse de ce type:
+<code># sane-find-scanner will now attempt to detect your scanner. If the
+  # result is different from what you expected, first make sure your
+  # scanner is powered up and properly connected to your computer.
+  # No SCSI scanners found. If you expected something different, make sure that
+  # you have loaded a SCSI driver for your SCSI adapter.
+  # Also you need support for SCSI Generic (sg) in your operating system.
+  # If using Linux, try "modprobe sg".
+  found USB scanner (vendor=0x04b8 [EPSON], product=0x0813 [USB2.0 MFP(Hi-Speed)]) at   libusb:005:004
+  # Your USB scanner was (probably) detected. It may or may not be supported by
+  # SANE. Try scanimage -L and read the backend's manpage.
+  # Not checking for parallel port scanners.
+  # Most Scanners connected to the parallel port or other proprietary ports
+  # can't be detected by this program.
+  # You may want to run this program as root to find all devices. Once you
+  # found the scanner devices, be sure to adjust access permissions as
+  # necessary.</code>
+Notez le **vendor ID** (ici //''0x04b8''//) et le **product ID** (ici //''0x0813''//) qui se situent vers le milieu du texte (la seule ligne qui ne soit pas commentée par un dièse #).
+
+<note important>Si après avoir effectué la commande ''sane-find-scanner'' cela vous retourne  "could not open USB device" référez vous à la page [[:sane-backends]].\\ Pensez ensuite à redémarrer le [[:services|service]] udev: <code>sudo service udev restart</code>
+</note>
+
+<note help>Vous pouvez également récupérer les **vendor ID** et **product ID** par la commande ''lsusb''</note>
+==== Modifications des fichiers de configuration ====
+Il est d'abord nécessaire d'ajouter les permissions concernant les scanners non détectés aux règles de sane. Pour cela [[:tutoriel:comment_modifier_un_fichier|ouvrez le fichier]]  **/lib/udev/rules.d/40-libsane.rules** avec les [[:sudo|droits d'administration]] et ajouter les lignes correspondantes à votre scanner, suivez ce modèle :
+<file>
+# EPSON xzy
+   ATTRS{idVendor}=="04b8", ATTRS{idProduct}=="0813", ENV{libsane_matched}="yes"
+</file>
+En adaptant le vendor ID (ici 0x04b8) et le product ID (ici 0x0813) à ceux de votre scanner obtenu grâce à la commande [[#Détection du scanner|plus haut]].
+
+Puis dans un [[:terminal]], vérifiez qu'il existe un fichier de configuration pour votre scanner:
+<code>ls /etc/sane.d/</code>
+Le cas échéant, [[:tutoriel:comment_modifier_un_fichier|éditez en tant qu'administrateur]] le fichier de configuration correspondant à la marque de votre scanner.\\
+Exemple pour un scanner Epson, il s'agira du fichier **/etc/sane.d/epson.conf**
+
+<note important>Pensez à faire une [[:tutoriel:comment_modifier_un_fichier#copie_de_sauvegarde_preventive|sauvegarde]] de ce fichier avant de le modifier.</note>
+Ajoutez, à partir des informations recueillies plus tôt, la ligne suivante à la fin de ce fichier (lisez bien ce qui est écrit dans votre fichier de configuration) : 
+<file>usb "vendor ID" "product ID"</file>
+
+Par exemple pour un scanner Epson
+<file># epson.conf
+  #
+  # here are some examples for how to configure the EPSON backend
+  #
+  # SCSI scanner:
+  scsi EPSON
+  # for the GT-6500:
+  scsi "EPSON SC"
+  #
+  # Parallel port scanner:
+  #pio 0x278
+  #pio 0x378
+  #pio 0x3BC
+  #
+  # USB scanner:
+  # There are two different methods of configuring a USB scanner: libusb and the   kernel module
+  # For any system with libusb support (which is pretty much any recent Linux distribution) the
+  # following line is sufficient. This however assumes that the connected scanner (or to be more
+  # accurate, it's device ID) is known to the backend. 
+  usb
+  # For libusb support for unknown scanners use the following command
+  # usb <product ID> <device ID>
+  # e.g.:
+  # usb 0x4b8 0x110
+  # And for the scanner module, use the following configuration:
+  #usb /dev/usbscanner0
+  #usb /dev/usb/scanner0
+  usb 0x4b8 0x813</file>
+
+<note>Vérifiez que la ligne contenant seulement ''usb'' ne soit pas mise en commentaire (précédée d'un dièse #).</note>
+
+Vérifiez enfin que le fichier **/etc/sane.d/dll.conf** n'a pas la marque de votre scanner en commentaire (par exemple //#epson//). Si c'est le cas, effacez le dièse ( # ).
+
+==== Test ====
+
+Lancez votre [[:scanner#logiciels|logiciel de numérisation]] qui devrait reconnaitre votre scanner.
+
+Si le test n'est pas concluant, il se peut que votre scanner nécessite un [[#Installer_un_firmware|firmware]].
+
+
+===== Installer un firmware =====
+
+<note>Cette partie est inspiré de [[http://www.ubuntuforums.org/showthread.php?t=26911|ce post sur le forum anglais]]. Vous pouvez également vous appuyer sur la page <<**[[:scanner Acer Benq]]**>>.</note>
+
+L'installation du firmware se passe en quatre étapes:
+  - [[#Trouver le firmware|Trouver le fichier contenant le firmware]] se trouvant sur le CD d'installation des pilotes pour Windows fourni avec votre matériel. Vous trouverez les correspondances de ces fichiers ''.bin'' à [[http://snapscan.sourceforge.net/|cette adresse]].
+  -  [[#Copier le firmware|Copier ce fichier]] dans le dossier **/etc/sane.d/**.
+  -  [[#Attribuer les droits|Attribuer les droits]] nécessaires à ce fichier
+  - [[#Modifier le fichier de configuration|Modifier le fichier de configuration]] **/etc/sane.d/snapscan.conf** pour la prise en compte du système.
+
+<note important>La suite est un exemple donnée pour le scanner //**Epson Perfection 660**//. Attention donc à adapter les lignes de commande à votre matériel.</note>
+
+==== Trouver le firmware ==== 
+
+Pour l'Epson Perfection 660, à [[http://snapscan.sourceforge.net/|cette adresse]] on voit la ligne suivante :
+<code>Epson	Perfection 660	USB	0x04b8, 0x0114	"Perfection 660"	tail_058.bin	Some models don't need firmware upload</code>
+ 
+<note important>Dans le CD des pilotes fournis avec le scanner, il s'agit du fichier **tail_061.bin** (Il s'agit sans doute d'une nouvelle version du fichier).\\
+En tout cas, avec ce fichier, ça marche très bien. ;-)\\
+Pour plus de facilité pour la suite, copiez dans votre dossier personnel ce fichier **''tail_061.bin''** se trouvant sur le CD (ou à télécharger sur le site d'Epson).
+</note>
+
+==== Copier le firmware ====
+
+Afin de copier le binaire, fraichement placé dans votre dossier personnel, dans le dossier **/etc/sane.d/**, saisissez dans un [[:terminal]]:
+<code>sudo cp ~/tail_061.bin /etc/sane.d/</code>
+
+<note important>**Attention à la casse** (différence majuscule/minuscule) dans les noms de fichiers.\\
+Par exemple, après [[:archivage#graphiquement|extraction]] du fichier //epson19439eu.zip// dédié à l'Epson Perfection 660, disponible à [[http://esupport.epson-europe.com/ProductHome.aspx?lng=fr-CH&data=0ccCGROWIYPTJwOWQayEWPwTcfFX7HAT&tc=6|cette adresse]], le fichier qui se trouve dans le dossier **/Euro/DATA/BIN** est en majuscule: **TAIL_061.BIN**.\\
+Il faut donc soit renommer le fichier en minuscule, soit adapter cette commande en conséquence.
+</note>
+
+==== Attribuer les droits ====
+
+Pour attribuer les droits de lecture du fichier, saisissez dans un [[:terminal]]:
+<code>sudo chmod 775 /etc/sane.d/tail_061.bin</code>
+
+==== Modifier le fichier de configuration ====
+
+Pour que le système prenne en compte ce nouveau firmware, il faut [[:tutoriel:comment_modifier_un_fichier|éditer en tant qu'administrateur]] le fichier **/etc/sane.d/snapscan.conf**.\\
+Vous y trouverez une ligne ressemblant à //**firmware /repertoire/ou/se/situe/le/firmware/file.bin**//.\\
+Vous remplacerez donc //**/repertoire/ou/se/situe/le/firmware/file.bin**// par //**/etc/sane.d/tail_061.bin**//.
+
+==== Test ====
+
+Vous pouvez vérifier que votre scanner est désormais bien pris en charge en saisissant dans un [[:terminal]]:
+<code>scanimage -L</code>
+et faire un test :
+<code>scanimage -T</code>
+
+Vous devriez enfin pouvoir utiliser votre scanner à partir de votre [[scanner#Logiciels|logiciel de numérisation]] habituel
+
+===== Si ça ne marche toujours pas=====
+Si ça ne marche toujours pas il vous reste encore à tenter une mise à de jour de Sane comme expliqué sur cette [[:sane-backends|page]].
+
+----
+//Contributeurs principaux: FIXME ; Mise en forme:[[:utilisateurs:fabux]],...//

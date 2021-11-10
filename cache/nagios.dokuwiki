@@ -1,0 +1,665 @@
+
+{{tag> sécurité serveur supervision BROUILLON}}
+----
+
+====== Nagios : moniteur de supervision ======
+
+//**Remarque :**  Cet article a été mis à jour pour nagios3, disponible pour Ubuntu 8.10//
+
+La gestion d'un parc de serveur est un travail de chaque instant. Un bon administrateur système doit savoir à tout moment l'état des différentes machines et des différents services. Un autre aspect clé est que l'administrateur ne peut pas se permettre de passer son temps devant un tableau avec des voyants verts en attendant qu'un voyant passe au rouge pour agir. Son temps est occupé à d'autres tâches et il ne peut donc pas surveiller le tableau de statut en permanence.
+
+L'examen quotidien des logs systèmes est un bon début. Cependant, si un problème survient, on s'en rend compte seulement le lendemain. Ce qui peut être trop tard.
+
+Pour simplifier le travail, nous allons utiliser un //moniteur de supervision//. Le but d'un tel programme est de surveiller les services et les machines se trouvant sous notre responsabilité. Si un problème survient, le moniteur de supervision nous prévient (courriel, SMS, coup de téléphone, etc.) ou peut entreprendre certaines actions (relancer un service, tuer un processus, demander un redémarrage, etc.).
+
+Le moniteur de supervision que nous allons décrire est **Nagios** qui est l'un des plus connus et des plus utilisés.
+
+===== Pré-requis =====
+
+Pour la suite des opérations, des pré-requis sont nécessaires : 
+  * Disposer des [[:sudo|droits d'administration]] ;
+  * Disposer d'une connexion à Internet configurée et activée ;
+  * Avoir activé l'accès au [[:depots|dépôt APT]] « Universe » ;
+  * Un [[:lamp|serveur web Apache]] fonctionnel.
+
+===== Introduction =====
+
+L'architecture de base de Nagios est simple : elle est composée d'un //scheduler//(([[wpfr>Ordonnancement|ordonnanceur]])), d'une interface web et de greffons.
+
+Nagios est, avant toute chose, un moteur gérant l'ordonnancement des vérifications, ainsi que les actions à prendre sur incidents (alertes, escalades, prise d'action corrective).
+
+L'interface web est la partie graphique visible, //via// un serveur web tel que Apache, et qui va permettre à l'administrateur d'avoir une vue d'ensemble de son réseau, de visualiser la supervision des équipements et de produire des rapports d'activité.
+
+Les greffons de Nagios (ou sondes ou plugins) sont des petits scripts ou programmes qui sont la base des vérifications.
+
+Pour plus d'information sur l'écriture de greffons, veuillez vous reporter à la section « [[#Techniques avancées]] ».
+
+===== Installation =====
+Avant d'installer Nagios, il est préférable d'installer le serveur web [[Apache]] (c'est plus commode pour tester le bon fonctionnement de Nagios). Sans entrer dans les détails d'installation d'Apache, vous pouvez déjà avoir un serveur web fonctionnel en [[:tutoriel:comment_installer_un_paquet|installant le paquet]] **apache2**.
+
+Ensuite, il ne vous reste plus qu'à installer Nagios proprement dit, [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **nagios-text**.
+
+[[:tutoriel:comment_installer_un_paquet|Installer le paquet]] [[apt://nagios3|nagios3]] (apache2 s'installera automatiquement car c'est une dépendance).
+
+À la fin de l'installation, Nagios va vous demander d'introduire un mot de passe pour « ''nagiosadmin'' ».
+
+<note warning>Avec la version 9.04 il n'est pas demandé de mot de passe a la fin de l'installation. Il faut créer un nouvel utilisateur.</note>
+
+Ici nous utilisons la version ''text'' de Nagios ; c'est-à-dire que les informations concernant les services sont stockés dans des fichiers textes. Il existe également une version ''mySQL'' dont nous ne parlerons pas dans ces quelques lignes ((Nagios est une application critique, autant réduire le nombre de composant lui permettant de fonctionner. L'avantage de la version texte de Nagios est aussi que c'est  bien plus simple de changer un paramètre particulier et ainsi garder le contrôle de la configuration. Toutefois certaines personnes ont écrit des scripts utilisant MySQL pour Nagios, Fruity, Oreon, etc.))).
+
+Pour configurer le serveur Apache de telle manière que Nagios soit accessible, le paquet Nagios fait un lien symbolique « /etc/apache2/conf.d/nagios.conf » vers « /etc/nagios3/apache.conf ».
+
+Ensuite, vous devez recharger la configuration d'Apache à l'aide de la commande suivante :
+
+  sudo /etc/init.d/apache2 reload
+
+Notez que selon les situations, la configuration a été assurée par le gestionnaire de paquets.
+
+Vous devriez avoir accès à la page principale de Nagios une fois que vous avez introduit votre mot de passe en consultant l'URL suivante, le login étant « nagiosadmin » : http://localhost/nagios3/
+
+Si ce n'est pas le cas, vérifier la configuration de votre serveur HTTP Apache. 
+
+===== Configuration =====
+
+
+==== Ajouter des utilisateurs ====
+
+La première chose à faire est d'ajouter des utilisateurs qui pourront se connecter à l'interface web de Nagios. Les droits d'accès de l'interface web se gèrent avec ''htpasswd'' qui est un utilitaire fournit avec le serveur Apache.
+
+Pour ajouter un utilisateur, vous pouvez utiliser la commande suivante :
+
+  sudo htpasswd -c /etc/nagios3/htpasswd.users <username>
+
+pour le moment vous pouvez utiliser :
+
+  sudo htpasswd -c /etc/nagios3/htpasswd.users nagiosadmin
+
+Il faut également donner les droits d'accès à cet utilisateur en [[:tutoriel:comment_editer_un_fichier|éditant le fichier]] **/etc/nagios3/cgi.cfg**. Les lignes qui nous intéressent sont les suivantes ; elles sont composées d'une ligne de noms d'utilisateurs (entrés à l'aide de ''htpasswd'') séparés par des virgules.
+
+| ''authorized_for_system_information'' | indiquent quels sont les utilisateurs pouvant voir l'état des services |
+| ''authorized_for_configuration_information'' | indiquent quels sont les utilisateurs pouvant voir la configuration de serveur Nagios |
+| ''authorized_for_system_commands'' | indiquent quels sont les utilisateurs pouvant exécuter des commandes systèmes au travers de l'interface de Nagios |
+| ''authorized_for_all_services'' | indiquent quels sont les utilisateurs pouvant voir l'état de tout les services (par défaut, on voit uniquement les services pour lesquels l'utilisateur est une personne de contact) |
+| ''authorized_for_all_hosts'' | idem que ci-dessus mais pour les hôtes (les machines) |
+| ''authorized_for_all_service_commands'' | indiquent quels sont les utilisateurs pouvant exécuter des commandes pour tous les services (par défaut, on peut exécuter des commandes uniquement sur les services pour lesquels l'utilisateur est une personne de contact) |
+| ''authorized_for_all_host_commands'' | idem que ci-dessus mais pour les hôtes (les machines) |
+
+Une fois que les droits d'accès ont été indiqués, vous pouvez vous connecter avec votre nouvel utilisateur au travers de l'interface web.
+
+
+==== Configuration de base ====
+
+La configuration de Nagios peut paraître compliquée au premier abord. Il y a beaucoup de fichiers de configuration qui se trouvent dans « /etc/nagios3 ».
+
+Il y a peut être deux écoles, mais je vous conseille de mettre tout à plat si vous installez Nagios pour la première fois.
+
+Garder dans le dossier « /etc/nagios3/ » que le fichier « nagios.cfg » (c'est le seul « .cfg » nécessaire dans ce dossier), nous allons tout mettre dans un dossier que nous créerons pour l'occasion :
+
+  sudo mkdir /etc/nagios3/conf.d
+
+Déplacer tous les fichiers « .cfg » (**sauf « nagios.cfg », « cgi.cfg » et « resource.cfg »**) dans ce dossier.
+
+Afin que Nagios retrouve ces petits nous allons lui indiquer que le dossier conf.d est la où se trouvent ces fichiers de configuration. [[:tutoriel:comment_editer_un_fichier|Ajouter]] la ligne ci-dessous au fichier « /etc/nagios3/nagios.cfg » (idéalement aux alentours de la ligne 44, pour garder le tout cohérent).
+
+  cfg_dir=/etc/nagios3/conf.d/
+
+Ensuite commenter toutes les lignes commençant par « cfg_file ».
+
+Cette étape est délicate mais importante pour la suite, c'est vraiment dommage que le paquet soit fait de telle façon. Le gros avantage c'est que vous n'êtes plus limités dans le nom des fichiers, tant qu'ils finissent par « .cfg ». Par exemple, vous pouvez générer des définitions de machines en remplissant un fichier pour chaque groupe, ceci afin d'éviter d'avoir un fichier « hosts.cfg » avec 4000 machines difficilement lisible. Donc, dans toute la suite, les noms de fichiers sont donnés à titre indicatifs, c'est ceux que vous trouverez dans l'installation par défaut de Nagios.
+
+Il y a une idée à bien saisir lorsque l'on commence avec Nagios : je ne décris un « objet » qu'une et une seule fois.
+Cela passe par l'utilisation de « modèle » (//generic/template// dans nagios) et par la réutilisation de ces modèles.
+On peut créer des modèles pour à peu près tous les objets Nagios.
+
+Afin de se simplifier la vie, nous allons d'abord examiner la configuration basique de Nagios (définition des périodes, utilisateurs et des serveurs), ensuite nous envisagerons la configuration des services de surveillance.
+
+Après chaque modification d'un fichier, faites un  :
+
+  sudo nagios3 -v /etc/nagios3/nagios.cfg
+
+Cela vous permettra de voir si vous avez oublié un morceau de configuration, mentionné des objets qui n'existent pas, etc.
+
+
+=== Configuration des périodes de temps ===
+
+Nous allons commencer par configurer les périodes de temps qui préoccupe notre serveur. Ces périodes de temps se configurent dans le fichier « /etc/nagios3/conf.d/timeperiods.cfg »« /etc/nagios3/conf.d/timeperiods_nagios2.cfg » .
+
+Vous remarquerez que certaines périodes de temps sont déjà indiquées dans le fichier. Ces périodes sont ''24x7'' qui signifie 24h/24h et 7j/7j ; ''workhours'' qui est l'horaire habituel de travail ; ''nonworkhours'' qui définit l'horaire habituel de non-travail.
+<note important>ne pas commenter les périodes déjà présentes</note>
+
+FIXME Ces périodes peuvent être reconfigurées à votre guise pour coller à l'organisation de votre surveillance. Par exemple, sur ce serveur de supervision, nous pouvons ajouter l'horaire ''service_open'' de la manière suivante :
+
+<file>
+define timeperiod{
+        timeperiod_name service_open
+        alias           Heures de service
+        monday          07:00-22:00
+        tuesday         07:00-22:00
+        wednesday       07:00-22:00
+        thursday        07:0
+        saturday        07:00-22:00
+        }
+</file>
+
+Les mots-clés utilisés pour la configuration d'une plage horaire se passent de commentaires.
+
+Cet horaire indique les périodes d'activité de certains services. Les définitions des plages horaires nous serviront dans la suite de la configuration.
+
+=== Configuration des personnes de contacts ===
+
+Les personnes de contacts sont les personnes physiques à contacter en cas d'incident. Quand un problème survient, Nagios va //notifier// ces personnes d'après les //degrés de notification//.
+
+Les personnes de contacts peuvent se configurer dans le fichier « /etc/nagios3/conf.d/contacts.cfg »«  /etc/nagios3/conf.d/contacts_nagios2.cfg »
+ ((Le nom peut être changé ou vous pouvez en définir plusieurs : « sys-admins.cfg » et « network-admins.cfg ».)) et les entrées ont un format similaire à celui-ci :
+
+<file>
+define contact{
+        contact_name                    ostaquet
+        alias                           Oscar Staquetowski
+        service_notification_period     24x7
+        host_notification_period        24x7
+        service_notification_options    w,u,c,r
+        host_notification_options       d,u,r
+        service_notification_commands   notify-service-by-email
+        host_notification_commands      notify-host-by-email
+        email                           username@domaine.net
+        pager                           +329999999999
+        }
+</file>
+
+Voici à quoi servent les différents champs :
+| ''contact_name'' | pseudo de la personne de contact, ce pseudo sera utilisé dans d'autres fichiers de configuration |
+| ''alias'' | nom complet de la personne de contact |
+| ''service_notification_period'' | période de temps durant laquelle le contact peut être notifié d'un problème qui survient pour un service. Les périodes sont définies dans le fichier ''/etc/nagios3/timeperiods.cfg'' |
+| ''host_notification_period'' | période de temps durant laquelle le contact peut être notifié d'un problème qui survient pour un hôte (un serveur). Les périodes sont définies dans le fichier ''/etc/nagios3/timeperiods.cfg''. |
+
+| ''service_notification_options'' | états des services pour lesquels le contact doit être notifié. Les lettres qui suivent signifient :\\ − ''w'' : le service est en état avertissement (//warning//).\\ − ''u'' : le service est en état inconnu (//unknown//).\\ − ''c'' : le service est en état critique (//critical//).\\ − ''r'' : le service est revenu dans un état OK (//recovery//). |
+| ''host_notification_options'' | états des hôtes (machines) pour lesquels le contact doit être notifié. Les lettres qui suivent signifient :\\ − ''d'' : l'hôte est éteint (//down//).\\ − ''u'' : l'hôte est injoingnable (//unreachable//).\\ − ''r'' : l'hôte est à nouveau accessible (//recovery//). |
+| ''service_notification_commands'' | commandes à utiliser pour notifier un état pour un service. Ces commandes sont décrites dans le fichier ''/etc/nagios3/commands.cfg'' |
+| ''host_notification_commands'' | commandes à utiliser pour notifier un état pour un hôte. Ces commandes sont décrites dans le fichier ''/etc/nagios3/commands.cfg'' |
+| ''email'' | email de la personne de contact.\\ http://nagios.sourceforge.net/docs/2_0/checkscheduling.html |
+| ''pager'' | numéro de pager pour la personne de contact (à utiliser aussi pour les notifications par SMS) |
+
+
+=== Configuration des groupes de contacts ===
+
+Les groupes de contacts sont des groupes regroupant plusieurs contacts. On utilisera cette notion de groupe dans les déclarations concernant les hôtes et les services à surveiller.
+
+Les groupes de contacts se définissent dans le fichier « /etc/nagios3/conf.d/contactgroups.cfg »
+Les groupes de contacts se définissent aussi dans le fichier «  /etc/nagios3/conf.d/contacts_nagios2.cfg » (en fin de fichier)
+et les entrées ont un format ressemblant à ceci :
+
+<code>
+define contactgroup{
+        contactgroup_name       admins-ubuntu
+        alias                   Administrateurs machines Ubuntu
+        members                 ostaquet,david,manu
+        }
+</code>
+
+Il n'est pas nécessaire d'expliquer les champs plus en détail.
+
+==== Configuration des surveillance de services et d'hôtes ====
+
+La surveillance de services et d'hôtes s'articule autour de plusieurs fichiers de configuration et ces fichiers sont tous liés les uns aux autres. C'est pour cela que je vais plutôt envisager un petit exemple plutôt que de me lancer dans une explication détaillée de toutes les options. 
+
+Pour utiliser un test de service il faut plusieurs choses :
+
+  * un greffon ou plugin utilisable en ligne de commande (le nom commence par check_ ) , il est très intéressant de le tester via la ligne de commande pour voir ses arguments 
+  * Un objet Nagios définissant la //command//  utilisant le plugin précédent
+  * un objet Nagios définissant le //service// utilisant la commande précédente
+
+Pour récapituler : 
+
+script shell -> chekcommands.cfg -> services.cfg
+
+//Remarque : // Les explications concernant les différentes options sont disponibles sur votre serveur Nagios au travers de l'interface web. En haut à gauche de l'écran, il y a un lien //Documentation// qui mène directement à la doc. Elle explique exhaustivement les différents paramètres.
+
+Notre exemple consiste en deux hôtes (un serveur mail et un serveur de fichier). Le serveur mail possède un service SMTP et un service IMAP. Le serveur de fichier possède un service NFS. Ces deux hôtes sont connectés sur un routeur-switch qui est le lien vers l'extérieur. Nous allons tester ces différents hôtes et services.
+
+=== Les hôtes ===
+
+Tout d'abord, nous allons définir notre fichier d'hôtes. Ce fichier se trouve dans ''/etc/nagios3/hosts.cfg''.''/usr/local/nagios/etc/objects/localhost.cfg '' (à vérifier) ''/etc/nagios3/conf.d/localhost_nagios2.cfg''
+
+<code>
+define host{
+        use                     generic-host
+        host_name               router
+        alias                   Routeur vers exterieur - connexion internet
+        address                 192.168.0.254
+        check_command           check-router-alive
+        }
+
+define host{
+        use                     generic-host
+        host_name               fileserver
+        alias                   Serveur fichiers
+        address                 192.168.0.10
+        check_command           check-host-alive
+        }
+
+define host{
+        use                     generic-host
+        host_name               mail
+        alias                   Serveur mail
+        address                 192.168.0.20
+        check_command           check-host-alive
+        }
+
+</code>
+
+Ce qu'il est important de remarquer dans ces quelques lignes, c'est le fait que tous utilisent un modèle (//template//) qui définit un comportement commun de base pour tous les hôtes. Personnellement, je n'ai pas modifié l'entrée ''generic-host'' ajoutée automatiquement pas Nagios. Je ne definis dans ces 'hosts' que ce qui leur est propre.
+
+Une autre chose à laquelle vous devez faire attention, ce sont les noms d'hôtes. En effet, ce sont ces noms qui serviront dans les autres fichiers de configuration (notamment, pour lier un  hôte a un groupe d'hotes).
+
+Enfin, remarquez que pour chaque hôte on a indiqué quelle commande de vérification est utilisée. Ces commandes sont, soit des commandes de bases de Nagios, soit des commandes ajoutées manuellement dans le fichier ''commands.cfg''. Vous pouvez obtenir toute la liste des commandes disponibles à travers l'interface web de Nagios (lien //Configuration//, //Commands//). Cette commande permet a Nagios de savoir si l'hôte est 'vivant', s'il ne l'est pas il enverra une notification pour signaler 'Host down' mais rien sur les services associes (qui seront aussi 'down' puisque le serveur est tombe). Le plus simple est de faire un test sur le ping ; mais ça peut ne pas convenir dans tous les cas, ex. si une machine a un firewall sur lequel vous n'avez pas la main, vous pouvez essayer de faire un check_ssh.
+
+=== Les groupes d'hôtes ===
+
+Pour que les notifications soient effectives pour les hôtes, les hôtes doivent être mis dans des groupes d'hôtes. Dans ces groupes d'hôtes, un (ou plusieurs) groupe de contact est assigné. C'est-à-dire que si il y a un problème sur un hôte et que le degré de notification est atteint, les contacts du groupes d'hôtes sont notifiés. Les groupes d'hôtes sont définis dans le fichier ''/etc/nagios3/conf.d/hostgroups.cfg''.'' /etc/nagios3/conf.d/hostgroups_nagios2.cfg ''
+
+Ici, nous allons déterminer deux groupes d'hôtes:
+<code>
+define hostgroup{
+        hostgroup_name  connectique
+        alias           Routeurs, firewalls et gateway
+        contact_groups  admins-router
+        members         router
+        }
+
+define hostgroup{
+        hostgroup_name  mail-server
+        alias           Serveurs de mails Ubuntu
+        contact_groups  admins-ubuntu
+        members         mail1, mail2
+        }
+</code>
+
+Avec les groupes d'hôtes et les groupes de contacts, on peut subdiviser les machines par zone géographique ou par fonctions. De cette manière, on notifie ainsi le groupe de contact qui peut intervenir au plus vite.
+
+=== Les services ===
+
+L'avant dernière étape de configuration est de définir quels sont les services à surveiller. Ces services sont toujours attachés à un hôte ou a un groupe d'hôtes. Les informations concernant les services sont contenues dans le fichier ''/etc/nagios3/conf.d/services.cfg'' ''/etc/nagios3/conf.d/generic-service_nagios2.cfg''.
+
+
+<code>
+# Generic service definition template
+define service{
+        ; The 'name' of this service template, referenced in other service definitions
+        name                            generic-service
+        active_checks_enabled           1       ; Active service checks are enabled
+        passive_checks_enabled          1       ; Passive service checks are enabled/disabled
+        parallelize_check               1       ; Active service checks should be parallelized
+                                                ; (disabling this can lead to major performance problems)
+        obsess_over_service             1       ; We should obsess over this service (if necessary)
+        check_freshness                 0       ; Default is to NOT check service 'freshness'
+        notifications_enabled           1       ; Service notifications are enabled
+        event_handler_enabled           1       ; Service event handler is disabled
+        flap_detection_enabled          1       ; Flap detection is enabled
+        process_perf_data               1       ; Process performance data
+        retain_status_information       1       ; Retain status information across program restarts
+        retain_nonstatus_information    1       ; Retain non-status information across program restarts
+        is_volatile                     0
+        check_period                    24x7
+        normal_check_interval           5       ; Do a check for this service every X minutes
+        max_check_attempts              3       ; After X checks non OK , status will change from soft to hard and trigger notifications if any
+        retry_check_interval            1       ; If the status was non OK, redo a check for this service every X minutes
+        notification_interval           0       ; Every X minutes, Nagios will resend a notification, 0 to disable that
+        notification_period             24x7
+        notification_options            c,r
+
+        register                        0       ; DONT REGISTER THIS DEFINITION - ITS NOT A REAL SERVICE, JUST A TEMPLATE!
+        }
+
+
+
+define service{
+       use                             generic-service
+       host_name                       router
+       service_description             PING
+       contact_groups                  admins-routers,admins-ubuntu
+       check_command                   check_ping!100.0,20%!500.0,60%
+       }
+
+define service{
+        use                             generic-service
+        hostgroup_name                  mail-server
+        service_description             SMTP
+        contact_groups                  admins-ubuntu
+        check_command                   check_smtp
+        flap_detection_enabled          0       ; Flap detection is disabled for this service
+        }
+
+define service{
+        use                             generic-service
+        host_name                       mail
+        service_description             IMAP
+        contact_groups                  admins-ubuntu
+        check_command                   check_imap
+        }
+</code>
+
+Ce qu'il faut noter au travers de ces quelques lignes est la manière dont on peut passer des paramètres aux commandes. Dans la définition du service ''ping'' pour le routeur, on indique les différents arguments avec des ''!'' (point d'exclamation). Dans ce cas, cela signifie que l'on passe en état //warning// lorsqu'on perd plus de 20% des paquets ou si le temps de réponse est > 100ms. On indique également que l'on passe en état //critical// lorsqu'on perd plus de 60% des paquets ou si le temps de réponse est > 500ms. Dans tous les cas il faut se rapporter a la définition de la commande et tester le script pour voir comment il se comporte.
+
+Les lignes :
+        normal_check_interval           5       ; Do a check for this service every X minutes
+        max_check_attempts              3       ; After X checks non OK , status will change from soft to hard and trigger notifications if any
+        retry_check_interval            1       ; If the status was not OK, redo a check for this service every X minutes
+
+méritent peut-être un peu d'attention. Rien de pire que les fausses alertes, ici Nagios testera les services toutes les 5 minutes, si un des services est dans un statut non OK (warning, critical, unknown) il va ressayer de le contacter une minute plus tard, et ceci 3 fois de suite puis déclenchera l'alerte (envoi de mail, etc), dès que le service répond de nouveau OK Nagios 'réinitialise' les compteurs et reprend les checks sur l'intervalle normale (normal_check_interval).
+
+Avantages :
+
+  * On réduit les chances de fausse alerte : le service a été testé 3 fois comme non OK.
+
+Inconvénients :
+
+  * On n'a pas d'alerte à la seconde ou Nagios a détecté le problème.
+
+À vous de régler ''max_check_attempts'' suivant vos services. Plus d'infos sur la page [[http://nagios.sourceforge.net/docs/2_0/checkscheduling.html|Checkscheduling]].
+
+Pensez aussi à la notion de //flapping// : imaginons que vous surveilliez le [[loadaverage|load]] d'une machine vous définissez les valeurs pour lequel Nagios doit vous alerter. Si cette valeur est '3' (pour le load à 5 minutes), imaginons que votre machine est chargée, le load vu par Nagios va osciller entre 2.5 et 3.5… À chaque oscillation Nagios va vous envoyer un mail, **sauf** si vous avez activé le [[http://nagios.sourceforge.net/docs/2_0/flapping.html|flapping]] :
+
+   flap_detection_enabled          1       ; Flap detection is enabled
+
+
+=== Escalation ===
+
+L'escalation est optionelle, donc ne commencez pas par ça ... Elle permet de mettre en place des niveaux d'alerte.
+Scénario simple : vous définissez les contacts pour vous et vos collègues administrateurs : c'est tout ce beau monde qui recevra immédiatement une alerte en cas de soucis, si l'alerte est encore effective après 2 notifications des principaux intéressés, d'autres personnes peuvent être prévenues, les commerciaux, votre supérieur hierarchique, la cellule communication/relation presse... à vous de voir en fonction des besoins de votre entreprise.
+
+Cette étape est décrite dans le fichier « /etc/nagios3/conf.d/service-escalations.cfg ».
+
+<code>
+define serviceescalation{
+        host_name                       router
+        service_description             PING
+        first_notification              2
+        last_notification               6
+        contact_groups                  router-admins
+        notification_interval           0
+        }
+</code>
+
+Si vous ne voulez pas utiliser l'escalation renommez le fichier en .cfg.no ou tout autre extension différente de .cfg
+
+=== Gestion des informations étendues ===
+
+À chacun des hôtes et services peuvent être rattachés des arguments de type liens hypertextes et images. Pour cela, éditer le fichier de configuration cgi.cfg
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/nagios3/cgi.cfg** et rajoutez-y les 2 lignes suivantes :
+
+
+
+<code>
+xedtemplate_config_file=/etc/nagios3/conf.d/hostextinfo.cfg
+xedtemplate_config_file=/etc/nagios3/conf.d/serviceextinfo.cfg
+</code>
+
+Créer les 2 fichiers suivants qui géreront respectivement les informations liées aux hôtes et services :
+
+<code>
+touch /etc/nagios3/conf.d/hostextinfo.cfg
+touch /etc/nagios3/conf.d/serviceextinfo.cfg
+</code>
+
+Exemple de fichiers et d'arguments possibles pour chacun des 2 fichiers :
+
+<code>
+define hostextinfo{ 
+ host_name monitoring
+ icon_image ubuntu.png 
+ icon_image_alt Ubuntu 
+ vrml_image ubuntu.png
+ statusmap_image s_ubuntu.jpg
+ notes_url http://192.168.2.1
+    }
+</code>
+
+<code>
+define serviceextinfo{ 
+ host_name monitoring 
+ service_description service apache 
+ notes_url http://monitoring/nagios/
+ icon_image apache.jpg 
+ icon_image_alt Acces a Nagios 
+    }
+</code>
+
+Le paramètre //icon_image// correspond à l'image associée à un host (la miniature est gérée automatiquement) ; //vrml_image// correspond à l'image utilisée dans la 3-D statusmap ; et //statusmap_image// à l'image affichée dans la 2-D statusmap.
+
+Les images doivent être stockées dans le répertoire /usr/share/nagios/htdocs/images/logos
+
+
+
+==== Démarrage et rechargement de Nagios ====
+
+Pour démarrer ou arrêter Nagios, vous pouvez le faire en ligne de commande de la manière suivante :
+
+   sudo /etc/init.d/nagios3 start
+   sudo /etc/init.d/nagios3 stop
+
+Pour recharger la configuration de Nagios (et en même temps la tester), utilisez la commande suivante :
+
+   sudo /etc/init.d/nagios3 reload
+
+
+===== Techniques avancées =====
+
+
+==== Pilotage d'un GSM ====
+
+Lorsqu'on fait de la supervision, on fait essentiellement de la notification par email. C'est la méthode la moins coûteuse et la plus aisée à mettre en place.
+
+Cependant, si votre serveur mail ou la ligne internet est inaccessible, l'email n'arrive jamais (ou vous ne savez pas le lire) et vous ne savez donc pas prendre les mesures qui s'imposent.
+
+Une solution est d'utiliser un serveur de SMS (ou Texto). Il existe des solutions clé sur porte proposées par la plupart des opérateurs de téléphonie mobile. Mais ces solutions sont assez coûteuse si vous devez envoyer un SMS de temps en temps.
+
+Nous avons adopté une solution basique qui fonctionne bien pour les petits volumes; il s'agit de piloter un GSM directement par le serveur Ubuntu en utilisant un câble data USB. La plupart des GSM conviendront à cet usage, l'unique condition est que le **GSM possède un modem intégré qui répond aux commandes AT**.
+
+//Remarque :// Certains Nokia peuvent poser des problèmes de compatibilités car ils utilisent un protocole propriétaire à la firme finlandaise.
+
+Nous avons choisi un GSM de marque Siemens AX75 et son câble data DCA-510 pour effectuer nos notifications SMS. Il suffit juste d'acheter une carte prépayée ou un abonnement uniquement SMS pour pouvoir se connecter au réseau de l'opérateur mobile. Nous avons choisi Siemens car les câbles data servent également à recharger le téléphone cellulaire via l'alimentation de la fiche USB. En effet, sur la plupart des mobiles, vous ne pouvez pas connecter le cordon d'alimentation et le câble data en même temps. C'est un des points à surveiller quand vous acheterez le GSM servant à la notification.
+
+Pour piloter le GSM, nous avons besoin de la bibliothèque ''gsmlib''. Cette bibliothèque se trouve dans le paquet ''gsm-utils'' du dépôt //Universe//. Pour installer le paquet, introduisez la commande suivante :
+   sudo apt-get install gsm-utils
+
+Ensuite, connectez le GSM //via// son câble data à un des connecteurs USB. Si tout se passe bien, le système //Hotplug// va charger le module ''usbserial'' et vous obtenez une device supplémentaire ''/dev/ttyUSB0''. Pour vérifier ceci, entrez cette commande :
+   sudo ls -al /dev/ttyUSB*
+
+Si vous n'avez pas de ''ttyUSBx'', chargez le module manuellement :
+   sudo modprobe usbserial
+
+Le paquet ''gsm-utils'' fournit quelques commandes pour dialoguer avec le GSM. Pour vérifier si le GSM répond bien, introduisez la commande suivante :
+   sudo gsmctl -d /dev/ttyUSB0 ALL
+
+Vous devriez obtenir toutes les informations disponibles sur le GSM.
+
+Maintenant, essayez d'envoyer un SMS de la manière suivante :
+   sudo gsmsendsms -d /dev/ttyUSB0 +3299999999 "Nagios - Test SMS OK"
+
+Si tout se passe bien, vous n'avez plus qu'à configurer Nagios pour qu'il puisse envoyer des SMS (en utilisant le champ ''pager'' des contacts).
+
+   * Vous devez autoriser l'utilisateur ''nagios'' à utiliser les commandes modems en l'ajoutant au groupe d'utilisateur ''dialout''.
+   * Vous devez configurer la commande permettant à Nagios d'envoyer des SMS. Pour ce faire, j'utilise les commandes suivantes définies dans le fichier ''/etc/nagios3/misccommands.cfg'' :
+<code>
+define command{
+        command_name    notify-by-sms
+        command_line    /usr/bin/gsmsendsms -d /dev/ttyUSB0 $CONTACTPAGER$ "Nagios - $NOTIFICATIONTYPE$ : $HOSTALIAS$/$SERVICEDESC$ is $SERVICESTATE$ ($OUTPUT$)"
+        }
+
+define command{
+        command_name    host-notify-by-sms
+        command_line    /usr/bin/gsmsendsms -d /dev/ttyUSB0 $CONTACTPAGER$ "Nagios - $NOTIFICATIONTYPE$ : Host $HOSTALIAS$ is $HOSTSTATE$ ($OUTPUT$)"
+        }
+</code>
+
+//Remarque :// Il est inutile de me contacter pour des problèmes de compatibilité de GSM, câble et gsmlib. Veuillez directement vous adresser au développeur de gsmlib ([[http://www.pxh.de/fs/gsmlib/index.html|site web]]).
+==== Notifications par SMS / Voice call / iPhone push notification : TeamTILT pour Nagios ====
+
+Une solution très simple existe pour envoyer ses notifications Nagios via SMS ou voice call : le client TeamTILT pour Nagios. 
+
+__Brève description :__ 
+
+Un client Java est à installer sur le serveur de monitoring. Ce client se connecte via une requête SOAP à un serveur distant qui est chargé de renvoyer les alertes recues par SMS ou voice call selon le schéma d'alerte du contact. Cette solution à plusieurs avantages : 
+
+   * Aucun matériel à installer : aucun modem, module GSM ou carte SIM n'est nécessaire. Le tout fonctionne en tant que SaaS.
+   * Fonction heartbeat : la connexion entre le client TeamTILT pour Nagios et TeamTILT est constamment surveillée. Une alerte est envoyée depuis TeamTILT s'il y a une coupure.
+   * iPhone APP gratuite : installez gratuitement l'APP pour iPhone. Recevez et répondez en utilisant les notifications push et visualisez les alertes sur votre iPhone.
+   * Aucun abonnement : Les alertes par émail et notifications push iPhone sont gratuites. Achetez des crédits SMS et appels vocaux si besoin.
+   * Pas de dépendance émail/SMTP : défaillance SMTP? Le pare-feu bloque? Pas de soucis, vous recevrez un SMS !
+
+__Quelques fonctionnalités :__ 
+
+   * Alertes bidirectionnelles : chaque média est capable de recevoir les réponses ou confirmations.
+   * Interface web pour visualiser les réponses en temps réel.
+   * Schéma d'alerte : définissez selon quel ordre et quel média un contact doit être alerté (d'abord SMS, ensuite appel vocal, etc).
+   * Support en ligne GRATUIT : vous avez des questions? Un problème? Chattez en direct avec un agent du support à travers le support en ligne.
+   * Couverture mondiale : recevez vos alertes où que vous soyez dans le monde.
+
+__Procédure d'installation :__
+
+   * Télécharger l'archive : 
+//sudo wget http://www.alarmtilt.com/clients/TeamTILTClientForNagios_CL_JRE_32.tar.gz => version console 32 bits\\
+sudo wget http://www.alarmtilt.com/clients/TeamTILTClientForNagios_CL_JRE_64.tar.gz => version console 64 bits //
+
+   * Décompresser l'archive : 
+//sudo tar xzvf TeamTILTClientForNagios_CL_JRE_32.tar.gz//
+   * Entrez dans ce répertoire et lancer le runTeamTILT.sh :
+//cd TeamTILTForNagios/
+sudo ./runTeamTILT.sh//
+   * Suivez la procédure d'installation
+
+\\
+Vous pourrez trouver à cette adresse toutes les procédures d'installation ainsi que le prix des unités : http://www.alarmtilt.com/fr/gerez-vos-alertes-nagios-avec-teamtilt.html
+
+
+==== Greffons personnalisés ====
+
+Comme nous l'avons dit précédemment, les vérifications sont assurées par des greffons, dont le développement est séparé du moteur principal.
+
+La relation entre le moteur et les greffons est assurée d'une part dans la configuration de Nagios (dans les //services// et les //misccommands//), pour que Nagios sache quelles vérifications lancer sur ou à destination de quelles machines ou services, d'autre part par le code de retour ainsi que la sortie standard d'un greffon.
+
+En effet, un greffon n'est qu'un script/programme/ce que vous voulez, pourvu que ce greffon sache fournir un code retour (0 : tout va bien, 1 : avertissement, 2 : alerte), et éventuellement un petit message décrivant le déroulement de l'exécution.
+
+Pour information, les codes retours sont :
+  * 0 : OK
+  * 1 : WARNING
+  * 2 : CRITICAL
+  * 3 : UNKNOWN
+
+Ce sont donc ces états qui seront ensuite remontés au moteur qui prendra les décisions et lancera les actions programmées.
+
+Ces greffons fonctionnent soit en local sur la machine supervisée (par exemple les vérifications sur les disques), soit effectuent des tests à distance (tests sur des protocoles réseaux tels SMTP ou exécution à distance via SSH ou autre).
+
+Exemple :
+
+Sur  notre serveur de supervision, nous utilisons un GSM pour envoyer des SMS en cas d'incident. Normalement, ce GSM est alimenté par le port USB du serveur ainsi que par sa batterie. Cependant, si le GSM n'est plus alimenté (problème avec le port USB ou si quelqu'un place l'interrupteur du cable sur //No charge//), les administrateurs doivent être avertis.
+
+Pour ce faire, on utilise le script suivant :
+
+<code>
+#!/bin/sh
+
+# Inclusion de le mini librairie definissant les etats et quelques fonctions de base
+source /usr/lib/nagios/plugins/utils.sh
+
+/usr/bin/gsmctl -d /dev/ttyUSB0 BATT > /tmp/check_gsm_battery
+
+POWER=`awk '$1 == "<BATT1>" {print $2}' /tmp/check_gsm_battery`
+
+if test `grep -c "battery connected, but is not powered by it" /tmp/check_gsm_battery` -ne 1
+then
+        echo "Battery disconnected or gsm powered by battery (load: $POWER%)"
+        exit $STATE_CRITICAL
+else
+        echo "Battery connected, powered by cable (load: $POWER%)"
+        exit $STATE_OK
+fi
+</code>
+
+Sans entrer dans les détails, on indique des informations sur le sortie standard avec les commandes ''echo'' et on retourne des codes d'erreurs ou d'alertes avec les commande ''exit''.
+
+
+==== Serveurs redondants ====
+
+Nagios est capable de tourner en mode redondance. C'est-à-dire que deux serveurs de supervision se partagent les mêmes fichiers de configuration. Ainsi, si l'un tombe en panne, la supervision est quand même assurée par le second.
+Je vous renvoie au [[http://www.nagios.org|site web de Nagios]] pour de plus amples informations à ce sujet.
+
+
+==== Supervision de la charge des serveurs ====
+
+-> Vous trouverez toutes les informations nécessaires sur la page traitant des [[:loadaverage|Load Average]].
+
+
+===== Plugins divers =====
+
+
+
+==== NSClient pour superviser les machines Windows™ ====
+
+Le plugin check_nt permet de récupérer des informations sur des hôtes basés sur le système d'exploitation Windows. Il fonctionne avec NSClient, qu'il faut installer sur la machine cliente à superviser.
+
+Penser à préciser le mot de passe qui protège NSClient des requêtes frauduleuses. Le mot de passe est stocké sur le pc où est installé l'agent dans la clé de registre « HKEY_LOCAL_MACHINE\SOFTWARE\NSClient\Parms ». Le mot de passe est à inclure dans la requête après le commutateur -s qu'il faut donc rajouter. Si la clé ne contient aucun mot de passe, alors le mot de passe est None (respect de la casse).
+
+Pour paramétrer le mot de passe sur la requête envoyée par le serveur Nagios, [[:tutoriel:comment_editer_un_fichier|éditer le fichier]] **/etc/checkcommands.cfg** puis modifier les lignes correspondant à l'exécution du plugin ''check_nt'' pour ajouter « ''-s <mot de passe >'' » :
+<code>
+# 'check_nt_disk' command definition
+ define command{
+ command_name check_nt_disk
+ command_line $USER1$/check_nt -H $HOSTADDRESS$ -p 12489 -v USEDDISKSPACE -l $ARG1$ -w $ARG2$ -c $ARG3$ **-s None**
+ }
+</code>
+
+
+
+
+==== Bibliothèques de greffons ====
+
+Nagios Exchange fournit un joli choix de scripts de check pour Nagios, evidemment vous pouvez écrire votre propre script (voir plus haut) et s'il fonctionne bien pourquoi ne pas le proposer sur NagiosExchange.
+
+
+==== Installation du plugin VRML ====
+
+Le Virtual Reality Modeling Language (abrégé en VRML) est un Langage de programmation spécialisé dans la représentation d'univers virtuels en 3 dimensions. Ce langage interprété est une norme internationale ISO et les fichiers VRML ont habituellement pour extension .wrl. C'est ce type de fichier qui s'affiche pour consulter la 3-D Status Map.
+
+Il faudra donc installer sur les postes clients un plugin VRML ; le plugin Cortona fait office de référence pour Windows et Mac mais n'existe pas pour Linux. Nous utiliserons [[http://freewrl.sourceforge.net/|FreeWRL]].
+
+Un paquet au format deb existe pour Ubuntu Dapper et fonctionne pour Edgy ; commencer par récupérer le paquet [[http://freewrl.sourceforge.net/download.html|sur le site sourceforge.net]] ou par la commande :
+<code>wget http://prdownloads.sourceforge.net/freewrl/freewrl_1.18.2-1_i386.deb?download</code>
+
+Ce paquet est dépendant de celui nommé //lesstif2//, disponible dans le dépot Universe. Il faudra donc exécuter les commandes suivantes :
+<code>sudo apt-get install lesstif2
+sudo dpkg -i freewrl_1.18.2-1_i386.deb</code>
+
+==== Extension Nagios pour Firefox / Thunderbird / Chromium ====
+
+Vous pouvez installer le plugin Nagios Checker pour les navigateurs internet Firefox et Chromium, ou pour le gestionnaire de courrier Thunderbird. Le paramétrage est complet (possibilité de notifications visuelles et/ou sonore, gestion des accès authentifiés...). Vous aurez ainsi la possibilité de superviser les problèmes directement dans la barre d'état de votre navigateur ou gestionnaire de courrier !
+  * [[https://addons.mozilla.org/fr/firefox/addon/nagios-checker/|Plugin pour Mozilla Firefox]]
+  * [[https://addons.mozilla.org/thunderbird/3607/|Plugin pour Mozilla Thunderbird]]
+  * [[https://chrome.google.com/webstore/detail/oghnfiojdffbaihbdlcjkcefiblbdmch?hl=fr|Plugin pour Chromium]]
+==== Extension Gnome ===
+
+À partir d'Ubuntu 10.10, le paquet [[apt://nagstamon|nagstamon]] permet d'ajouter une applet en barre des tâches ou une simple fenêtre flottante. Plusieurs options permettent de personnaliser les alertes.
+
+//Nb: le fonctionnement de la fenêtre flottante demanderait à être testé en environnement 11.04/Unity//
+
+==== PNP : un plugin pour ajouter des graphes à Nagios ===
+
+L'add-on [[http://www.ederdrom.de/pnp|PNP]] permet d'ajouter des graphes générés à partir des plugins Nagios. Des liens vers ces graphes peuvent être intégrés directement dans l'interface Web de Nagios. Pour un procédure d'installation de PNP sous Ubuntu, vous pouvez suivre ce [[http://blog.nicolargo.com/2007/12/des-graphes-dans-nagios-avec-pnp.html|tutoriel]].
+
+===== Voir aussi =====
+
+  * **(en)** [[http://www.nagios.org|Le site officiel de Nagios]]
+  * **(en)** [[http://www.nagios.org/docs/|La documentation officielle de Nagios]]
+  * **(fr)** [[http://blog.nicolargo.com/nagios-tutoriels-et-documentations|Articles et tutoriels sur Nagios]]
+  * **(fr)** [[http://forum.nicolargo.com/|Forum sur Nagios et la supervision système et réseau]]
+  * **(fr)** [[http://www.geekhelpme.fr/tutoriels/systemes/linux/27-installer-nagios-centreon-sous-ubuntu.html|Tutoriel installation Nagios-Centreon sous Ubuntu]]
+  * **(en)** [[http://www.icinga.org|icinga]], un fork de nagios basé sur Nagios 3.
+  * **(fr)** [[http://www.opendoc.net/solutions/comment-superviser-avec-nagios-icinga|Comment superviser avec Nagios / Icinga ?]] Article Opendoc.net
+  * **(fr)** [[http://www.alarmtilt.com/fr/gerez-vos-alertes-nagios-avec-teamtilt.html]]
+  * [[Shinken]], écrit en python et pleinement compatible avec Nagios
+
+----
+
+//Contributeurs : [[utilisateurs:Ostaquet]], [[utilisateurs:sidney_v]],[[utilisateurs:ju|Ju.]], [[utilisateurs:Nicolargo]].//

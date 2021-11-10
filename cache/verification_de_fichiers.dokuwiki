@@ -1,0 +1,152 @@
+
+{{tag>Xenial fichier partitions tutoriel }}
+----
+
+====== Vérification de systèmes de fichiers (partition) ======
+
+Ce tutoriel à  pour but d'apprendre à un **débutant** à vérifier ses systèmes de fichiers quand il le souhaite. Vous serez aussi probablement confrontés à la problématique de vérification de systèmes de fichiers si votre ordinateur plante.
+
+Au démarrage de Linux, une étape de contrôle de toutes les partitions à monter est systématiquement effectuée. En général cette étape est succincte, mais parfois, s'il y a eu plantage, cela peut s'avérer plus délicat. Lorsque cette opération se lance automatiquement, le message "**routine check of drives**" s'affiche pendant le chargement d'Ubuntu.
+
+Cette page a été rédigée pour permettre de dissiper chez le débutant une inquiétude diffuse mais fréquente (le syndrome de "scandisk") et lui expliquer simplement comment adapter la fréquence de vérification à ses besoins. \\
+Pour cela, il y a deux façons de faire sous Ubuntu, la bonne et la mauvaise. Il est important de connaître les deux. Elles ont un point commun qui est l'usage de la console. 
+
+Une autre procédure, qui ne sera pas examinée ici,  consiste à [[fsck|s'appuyer sur un Live CD ou équivalent pour effectuer la vérification souhaitée]]. 
+
+
+===== Un fichier important : /etc/fstab =====
+
+Si **fsck** était un marteau (!), le fichier **/etc/fstab** serait son enclume. En effet la liste des partitions, objets des vérifications, s'y trouve. Vous pouvez la consulter en console en tapant simplement : <code> cat /etc/fstab</code>
+Elle peut être [[:tutoriel:comment_modifier_un_fichier|modifiée]] avec [[:sudo|les droits d'administration]]. 
+
+Pour en savoir plus à ce sujet : [[mount_fstab|mount et fstab : Le montage des systèmes de fichiers]]
+
+
+===== Conditions d'emploi de l'interface fsck =====
+L'​interface **[[:fsck]]**​ lance le vérificateur adapté au système de fichiers de la partition ciblée : si sda8 est en ext**4**, 
+<code>$ ​sudo fsck -yfv /​dev/​sda8</code>
+
+lancera ainsi fsck.ext**4**. 
+
+En cas d'arrêt brutal notamment, **fsck** lancera une vérification au démarrage suivant. 
+
+Il y a une condition **impérative** pour que **fsck** vérifie une partition : il faut que le dernier chiffre - le sixième champ - de la ligne décrivant chaque partition dans /etc/fstab ne soit pas nul. En général la partition racine a une priorité 1 et les autres partitions Linux une priorité 2. Vérifiez-le.
+
+L'autre condition **impérative** est que **fsck** ne soit lancé que sur une partition non montée. En pratique, cela veut dire qu'il faut utiliser **fsck** à un stade premier du démarrage, antérieur au montage du système de fichiers. Nous allons voir comment. 
+
+
+
+===== La mauvaise façon de procéder =====
+L'erreur à éviter est donc de tenter de lancer **fsck** (ou **e2fsck**) directement depuis la console :
+<code>sudo fsck /dev/sda1</code>
+Vous aurez droit à la réponse suivante : 
+<code>fsck de util-linux 2.27.1
+e2fsck 1.42.13 (17-May-2015)
+/dev/sda1 est monté.
+e2fsck: Ne peut continuer, arrêt immédiat.
+</code>
+La console refusera donc l'éxécution du programme.
+
+
+===== La bonne façon de procéder =====
+
+Ubuntu en connaît au moins trois qui consistent en résumé à se contenter du mode de vérification sûr choisi par défaut et à ne jouer éventuellement que sur sa fréquence.
+
+L'utilitaire **[[apt>showfsck]]** permet de visualiser, en ligne de commande, le nombre de montages restant avant la prochaine vérification de chaque système de fichiers.
+
+==== Fréquence par défaut  ====
+Elle est de tous les trente démarrages.
+Cette option a été choisie par défaut pour Ubuntu. Vous ne vous occupez de rien. C'est un compromis dicté par la prudence. Le seul inconvénient est que la périodicité peut ne pas vous convenir. Dans ce cas...
+
+==== Fréquence choisie ====
+(exprimée en nombre de montages ou par unités de temps)
+
+Attention : si vous décidez de faire l'économie de toute vérification, ou de l'annuler quand le système vous la propose, vous courrez le risque de ne pas détecter en temps utile un défaut qui aurait pu être facilement réparé à un stade précoce. 
+
+<note warning>Vous devez être conscient des conséquences si vous désactivez entièrement la vérification dépendante du compteur de montage. \\
+Des **disques, câbles, mémoires** défectueux ou des bogues du noyau peuvent corrompre un système de fichiers sans que celui-ci ne soit marqué comme « sale » ou « erroné ». (...) \\
+Une erreur de système de fichiers détectée par le noyau peut encore forcer un fsck lors du prochain redémarrage, mais il sera peut être déjà trop tard à ce moment là pour prévenir la perte de données.</note>
+
+Ce n'est pas dans votre intérêt. Choisissez donc un intervalle raisonnable.
+
+=== Utilisation de "tune2fs" ===
+
+ Pour choisir cette fréquence, vous allez faire appel à l'outil "**tune2fs**" qui permet notamment de configurer la fréquence de lancement de **fsck**((Le nouveau réglage étant inscrit dans la partition elle-même, il sera pris en compte, et le décompte sera actualisé quel que soit le système d'exploitation GNU/Linux montant cette partition)). 
+
+"**tune2fs**" (//cf.// man tune2fs) est lancé depuis le [[:terminal]]. Il vous permet de fixer le délai de déclenchement de **fsck** selon les options suivantes :
+  * soit en nombre de montages maximum sans vérification ("maximum mount count") : option **-c** suivie du nombre choisi ;
+  * soit en unités de temps : option **-i**  +  jours=d, semaines=w, mois=m ;
+  * soit les deux ensemble.
+
+=== Exemples pour "tune2fs" ===
+
+1. Effectuer ces deux réglages \\
+On choisit de tester l'intégrité du système de fichiers porté par la partition "sda4" tous les dix jours, tout en gardant le nombre maximum de montages sans vérification à sa valeur par défaut de 30 :
+<code>sudo tune2fs -c 30  -i 10d /dev/sda4</code>   
+Pour revenir à l'état précédent (uniquement trente montages) :
+<code>sudo tune2fs -c 30 -i 0d /dev/sda4</code> 
+ \\ 2. Lire les caractéristiques du système de fichiers de sda4 (ou plus précisément le contenu de son "superbloc") \\ soit vous voulez toutes les informations (une cinquantaine de lignes) :
+<code>sudo tune2fs -l /dev/sda4</code> 
+  soit vous voulez simplement les lignes les plus fréquemment utiles. Alors :
+<code>
+sudo tune2fs -l /dev/sda4 | grep -Ei "Mount count|Maximum mount|Filesystem created|check"
+</code>
+extrait juste ces informations : \\
+  * Filesystem created:             Sat Oct 10 12:52:11 2015  - (//Date de création du système de fichiers)//
+  * Mount count:                           **4**  - //(nombre de montages effectués depuis le dernier fsck)//
+  * Maximum mount count:            **30**  - //(donc il reste 30 - 4 = 26 montages avant vérification)//
+  * Last checked:                      Sat **Apr 30** 06:49:59 2016  - //(Date de la dernière vérification)//
+  * Check interval:           864000 (1 week, 3 days)  - //(Durée maximale entre deux vérifications)//
+  * Next check after:         Tue **May 10** 06:49:59 2016  - //(Date de la prochaine vérification)//
+==== Manuelle et immédiate ====
+Vous pouvez aussi faire réaliser une vérification quasi-immédiate, c'est-à-dire au redémarrage de l'ordinateur. La procédure est la suivante :
+
+  * Tapez : <code bash>sudo touch /forcefsck</code>
+
+Vous venez de créer un fichier vierge qui aura une fonction de signal unique lors de la lecture du script de démarrage.
+
+Le script de démarrage va identifier ce signal en temps utile et lancera **fsck**.
+
+<note important>Ceci ne fonctionne plus depuis Ubuntu 16.04, il faut maintenant passer ''fsck.mode=force'' comme paramètre au noyau dans la ligne ''GRUB_CMDLINE_LINUX_DEFAULT'' de GRUB</note>
+  * Redémarrez l'ordinateur avec :<code>sudo reboot</code>  
+Ne touchez plus à rien et attendez. 
+
+Lors du redémarrage, les partitions dont la ligne caractéristique dans **fstab** se termine par 1 ou par 2, et seulement celles-ci, seront successivement vérifiées. Puis le fichier /forcefsck que vous aviez créé sera supprimé.
+
+==== Mise à jour pour les systèmes plus récents : postérieure à 13.10 ====
+
+La procédure suivante permet de détecter puis réparer — exclure les mauvais blocs endommagés — le système d'allocation de fichiers.
+
+<note important>**Cette procédure est automatique et programmée à l’extinction du système**, pour respecter le démontage du disque et ne pas gêner l'utilisateur. \\
+Elle est particulièrement utile sur des systèmes à disques mécaniques (HDD) anciens.</note>
+
+<note warning>Il est __strictement interdit d'exécuter la commande ''FSCK''__ et ses dérivées sur un système de type Solid State Drive (disque SSD) __sous peine de le rendre inutilisable!__</note>
+
+<note important>La personne qui a écrit la remarque ci-dessus devrait expliquer.
+
+Merci d'y mettre des liens prouvant la véracité de cette information.
+
+Tant que tels liens ne seront pas mis, il faut considérer que c'est une fausse alerte et ne pas en ternir compte
+
+[[https://forum.ubuntu-fr.org/viewtopic.php?pid=22032768#p22032768|Un utilisateur très inquiet]] qui a finalement décidé d'ignorer la remarque
+</note>
+  * Créez [[:tutoriel:comment_modifier_un_fichier|un script au format]] ''S01.nom_du_fichier.sh'', (par exemple: « ''S01.Réparation.Table.sh'' »). Copiez-y le texte suivant :
+<file>
+# Set FSCKFIX to "yes" if you want to add "-y" to the fsck at startup.
+FSCKFIX=yes
+</file>
+
+La commande Bash ''FSCKFIX=yes'' permet de répondre par l'affirmative à toute procédure de réparations des blocs corrompus lors de la vérification du disque.
+
+  * Sauvegardez le fichier avec [[sudo|les droits d'administration]] dans le répertoire système ''/ect/rcS.d'' (ou ''rcS'' — lettre S, comme Shutdown, et non le chiffre 5 — selon la version, si le dossier précédent n'existe pas).
+  * Redémarrez votre ordinateur ou éteignez-le, le cas échéant. <code bash>sudo reboot</code> ou <code bash>sudo shutdown</code>
+==== Voir aussi ====
+
+  * **(fr)** [[probleme_de_disque|Problème de disque ou partition]]
+  * **(en)** [[wu>AutoFsck|Auto!Fsck sur le forum Ubuntu Wiki]] : script qui lance l'opération de vérification des disques lors de l'arrêt du système (évitant ainsi d'attendre au démarrage du système) 
+<note important>Cette note de blog date de Ubuntu 8.04, donc du 3 avril 2008. Reportez vous à la section mise à jour pour les systèmes plus récents.</note>
+  * **(fr)** [[http://forum.ubuntu-fr.org/viewtopic.php?pid=4931851#p4931851|Discussion sur le forum « Erreur au démarrage du disque dur »]] concernant l'erreur "Le superbloc n'a pu être lu ou ne contient pas un système de fichiers ext2 correct." ; \\ Auteur: Emile72 ; date: 10 juin 2011.
+
+----
+
+//Contributeur : [[utilisateurs:roger64]] [[utilisateurs:eagle08]]// 

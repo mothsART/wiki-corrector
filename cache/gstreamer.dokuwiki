@@ -1,0 +1,122 @@
+
+{{tag>audio vidéo multimédia}}
+
+----
+
+
+====== Lecteur multimédia : GStreamer ======
+
+**GStreamer** est, en bref, un moteur utilisé par d'autres applications pour lire les fichiers multimédia. Il est produit sous licence LGPL.
+
+De façon plus détaillée, GStreamer est une collection de bibliothèques permettant la connexion de composants de gestion de média, allant de la simple lecture Ogg/Vorbis à de l'édition audio complexe (mixage) et vidéo (édition non linéaire).
+
+Les applications peuvent ainsi profiter des avancées technologiques faites au niveau des codecs et des filtres de manière totalement transparente. Les développeurs peuvent ajouter des nouveaux codecs et filtres en écrivant de simples greffons avec une interface générique propre.
+
+
+===== Installation =====
+
+GStreamer est installé de base sous Ubuntu mais il faudra suivant vos besoins installer des greffons de gstreamer, permettant de décoder des codecs vidéos ou audios qui ne sont pas lisibles par défaut : voir plus bas.
+
+Le paquet permettant d'activer une sortie vidéo en opengl n'est pas disponible par défaut à ce jour (Maverick). Voir le rapport [[https://bugs.launchpad.net/debian/+source/gstreamer0.10/+bug/227770|de bug sur launchpad]].
+Pour l'activer si besoin il faut compiler le paquet **gstreamer0.10-plugins-gl**.
+On récupère les dernières sources sur [[http://gstreamer.freedesktop.org/src/gst-plugins-gl/|le site de gstreamer]].
+On décompresse et on se place avec un terminal dans le répertoire des sources.\\
+Vous aurez besoin d'installer les dépendances suivantes : [[apt://libglew1.5-dev,libgstreamer0.10-dev,libgstreamer-plugins-base0.10-dev, libjpeg-dev|libglew1.5-dev, libgstreamer0.10-dev, libgstreamer-plugins-base0.10-dev, libjpeg-dev]].
+  ./configure --prefix=/usr
+  make
+  sudo checkinstall --pkgversion "0.10.2" --pkgname=gstreamer0.10-plugins-gl --showinstall --default --fstrans=no
+
+===== Utilisation =====
+
+Vous utilisez de manière totalement transparente GStreamer lors de la lecture de fichiers multimédia par le biais d'une des [[http://gstreamer.freedesktop.org/apps/|applications utilisant GSTreamer]].
+==== Configuration ====
+
+Lancer : <code>gstreamer-properties
+</code>
+==== Optimisation ====
+
+''xvimagesink'' offre de meilleures performances. Vous devriez donc l'utiliser si cela est possible (voir note).
+
+<note important>''xvimagesink'' n'est pas compatible avec Xsun. Vous devez utiliser Xorg pour pouvoir utiliser ''xvimagesink'' et ainsi bénéficier des gains de performances.</note>
+
+<code>gconf-editor</code>
+
+Dans ''system > gstreamer > 0.10 > default'', changer la valeur de ''videosink'' par ''xvimagesink''.
+
+==== Greffons ====
+
+Comme précisé dans l'introduction, GStreamer est modulaire et de nombreux greffons viennent enrichir ses possibilités. En voici quelques-uns (tiré d'autres pages du wiki) :
+
+   * Voici les paquets à ajouter (avec un [[:gestionnaire_de_paquets#Les_interfaces|gestionnaire de paquets]]) pour lire différents formats de fichiers.
+
+^ Format ^ Paquet ^ [[:dépôts]] ^ Plus d'informations ^
+| Ogg, Vorbis, Theora, Flac, etc   | gstreamer0.10-plugins-good | main | installé par défaut |
+| [[:lecture_et_encodage_de_fichiers_audio#le_cas_du_mp3|mp3]], DVD, mpeg2, asf     |gstreamer0.10-plugins-ugly     | universe |  |
+| <video>    | gstreamer0.10-ffmpeg | universe |  |
+| <diffusion> + [[:lecture_et_encodage_de_fichiers_audio#Le cas du format MPC|mpc]], m4a   | gstreamer0.10-plugins-bad | universe | Flash (swf), QT, flux mms etc |
+| [[:formats_non-libres#Décodage du AAC|aac]]   | gstreamer0.10-plugins-bad-multiverse | multiverse |  |
+| QuickTime QTX and DirectShow/DMO DLL   | ? |  | |
+En une ligne, ça donne :
+
+<code>sudo apt-get install gstreamer0.10-ffmpeg gstreamer0.10-fluendo-mp3 gstreamer0.10-pitfdll gstreamer0.10-sdl gstreamer0.10-plugins-ugly gstreamer0.10-plugins-ugly-multiverse gstreamer0.10-plugins-bad gstreamer0.10-plugins-bad-multiverse mpg321</code>
+
+Ou en un clic : [[apt>gstreamer0.10-ffmpeg,gstreamer0.10-fluendo-mp3,gstreamer0.10-pitfdll,gstreamer0.10-sdl,gstreamer0.10-plugins-ugly,gstreamer0.10-plugins-ugly-multiverse,gstreamer0.10-plugins-bad,gstreamer0.10-plugins-bad-multiverse,mpg321|Installer les greffons gstreamer]].
+
+Vous pouvez aussi lister les greffons supportés avec la commande suivante : <code>gst-inspect-0.10</code>
+
+<note important> 
+Certains greffons ne sont plus disponibles dans les dépôts ci-dessus. Depuis [[:trusty|Ubuntu 14.04]], pour disposer de ce greffon qui est essentiel, il faut ajouter ce dépôt :  
+<code>sudo add-apt-repository ppa:mc3man/trusty-media</code>
+Puis ne pas oublier de recharger la liste des paquets avec la commande suivante :
+<code>sudo apt-get update</code>
+Vous pourrez alors installer le paquet **[[apt>gstreamer0.10-ffmpeg]]**
+</note>
+
+==== Les pipelines ====
+
+Un pipeline relie la sortie d'une fonction à l'entrée de la suivante. Il est symbolisé par le point d'exclamation ''!'' (exemple de fonctions : lecture du fichier, décodage, conversion et envoi vers le pilote de la carte son).
+
+Les pipelines sont utilisés pour décoder les flux multimédia bien sûr mais aussi pour les encoder. Ainsi pour encoder vos CD de musique, l'application [[:Sound-Juicer]] les utilise.
+Vous pouvez les éditer en lançant directement la commande suivante :
+<code>gnome-audio-profiles-properties</code>
+
+Vous trouverez donc ici les exemples qui vous permettront d'encoder votre musique vers différents formats :
+^ Extension ^ Pipeline GStreamer ^ Commentaire(s) ^ 
+| ogg | ''audio/x-raw-float,rate=44100,channels=2 ! vorbisenc name=enc quality=0.5 ! oggmux'' | |
+| flac | ''audio/x-raw-int,rate=44100,channels=2 ! flacenc name=enc'' | |
+| mp3 | ''audio/x-raw-int,rate=44100,channels=2 ! lamemp3enc name=enc'' | nécessite le [[#Greffons|greffon]] correspondant |
+| aac | ''audio/x-raw-int,rate=44100,channels=2 ! faac ! ffmux_mp4'' | nécessite le [[#Greffons|greffon]] correspondant |
+| wav | ''audio/x-raw-int,rate=44100,channels=2 ! wavenc name=enc'' | |
+
+<note tip>Une précision au sujet de la qualité des fichiers .ogg :
+
+Selon [[http://fr.wikipedia.org/wiki/Vorbis|la page wiki du codec Vorbis]], "//À partir d'un flux audio stéréo échantillonné à 44,1 kHz (échantillonnage standard d'un CD audio), le codeur produit en sortie un flux à un débit de 45 à 500 kbit/s suivant la qualité choisie (cf tableau). Le coefficient de qualité est une métrique arbitraire et peut varier de -1 à 10//"( voir notamment dans la page la correspondance entre facteur de qualité et débit ).
+Dans un pipeline gstreamer, il semble nécessaire d'indiquer ce facteur de qualité **//divisé par 10//** ( valeur comprise entre -0,1 et 1 ); Par exemple, une valeur **quality=0,9** donnera un débit de 320 kb/s...</note>
+
+D'autres précisions pour le mp3 :
+  - l'encodeur lame de gstreamer est obsolète, il est toujours présent pour des questions de rétrocompatilités, il est recommandé d'utiliser l'encodeur lamemp3enc
+  - vous pouvez rajouter d'autres paramètres pour Lame (en plus de //name=enc//). La liste complète est la sortie de la commande suivante : <code> gst-inspect lamemp3enc</code>
+  - Si les méta-informations (id3tag) ne sont pas correctes, ajoutez les pipelines suivants après le pipeline de Lame : // ! xingmux ! id3v2mux// __exemple pour le mp3__ <code>audio/x-raw-int,rate=44100,channels=2 ! lamemp3enc name=enc ! id3v2mux</code>
+
+pour l'encodage en mp3 [[:sound-juicer|plus d'informations ici]]
+
+
+D'autres exemples sur les pipelines : 
+  * ''$ man gst-launch-0.10''
+  * [[http://www.coagul.org/article.php3?id_article=316|gst-launch : la puissance de gstreamer en ligne de commande]]
+
+==== Utilisation avec KDE4 ====
+
+Les applications de l'environnement KDE utilisent Phonon pour gérer le son. Sous Ubuntu avec l'environnement Gnome, le son est géré par [[:PulseAudio]]. Pour que le son marche correctement dans les applications utilisant Phonon, il faut installer le paquet **[[apt://phonon-backend-gstreamer|phonon-backend-gstreamer]]**.
+
+===== Voir aussi =====
+
+  * **(en)** [[http://gstreamer.freedesktop.org/|Site Officiel]]
+  * [[:lecture_et_encodage_de_fichiers_audio|Lecture et encodage de fichiers audio]]
+  * **(en)** [[http://simos.info/blog/archives/566|Une explication des bibliothèques de GStreamer]]
+  * **(en)** [[http://lame.cvs.sourceforge.net/*checkout*/lame/lame/doc/html/presets.html|Les réglages de l'encodeur LAME]]
+  
+----
+
+//Contributeurs : Rédigée et maintenue par [[utilisateurs:Id2ndR]].
+Inspiré de la documentation anglophone [[https://help.ubuntu.com/community/CDRipping]]//

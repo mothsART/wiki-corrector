@@ -1,0 +1,150 @@
+
+{{tag>BROUILLON}}
+
+----
+
+====== Syntaxe des liens physiques ou symboliques ======
+
+<note warning>Attention, ce tutoriel est à l'état d'ébauche !</note>
+I. Lien symbolique entre répertoires
+
+De manière générale, un lien symbolique (ou : "symlink") est un raccourci. Voici comment utiliser la commande « ln » pour créer un lien symbolique :
+<code>ln -s dossier_cible nom_du_lien.</code>
+
+Dans cet exemple, nous souhaitons qu’en allant sur le répertoire /opt/jdk, nous atterrissions en réalité sur /opt/jdk1_7.2. Cela permet de facilement gérer le changement de version de Java.
+
+Nous allons commencer par créer un lien symbolique entre deux répertoires. Nous utiliserons pour cela la commande « ln » (links) :
+
+<code>ln –s /opt/jdk1_7.2 /opt/jdk</code>
+
+Le lien symbolique « /opt/jdk » sera alors créé.
+
+II. Lien physique vers un fichier
+
+Un lien physique (ou : "hardlink") est utilisé pour faire un lien direct vers un fichier. Le lien physique se crée aussi //via// la commande "ln", cette fois-ci sans option :
+<code>ln /chemin/fichier/a/lier chemin/fichier/lié</code>
+
+===== Définitions =====
+
+Il existe deux types de liens qui permettent de rediriger un fichier vers un autre : les **liens physiques** (ou matériels) et les **liens symboliques**. 
+
+Avec un lien physique, les données du disque sont pointées par plusieurs entrées de répertoire, contrairement à ce qui se passe avec un lien symbolique.
+
+Un lien matériel (ou physique) est l'information exacte elle-même, située à la même position sur le disque dur. Avec un lien physique, vous pouvez copier certaines données du fichier cible, effacer le reste du fichier, et il continuera à exister. 
+
+Un lien symbolique est un fichier qui pointe vers un autre fichier ; si vous supprimez le fichier cible, les liens symboliques pointeront vers un fichier inexistant.
+
+Mais, d'après la documentation originale, il est plus facile de distinguer les différences entre un tout petit lien symbolique et le fichier cible, que les différences entre plusieurs liens matériels. En fait, c'est impossible à distinguer, car il s'agit exactement de la même chose.
+
+  * **Lien physique** : permet de donner plusieurs noms/chemin d'accès à un même fichier en pointant sur un numéro de fichier (en interne, Linux enregistre les fichiers sur la base d'un numéro (appelé numéro d'index ou inode) et pas sur la base d'un nom). Un fichier peut donc avoir plusieurs noms, et existera tant qu'il a au moins un nom. Contrairement aux liens symboliques, **ils ne peuvent pointer que vers un autre élément du même système de fichiers.**
+
+Voici le résultat obtenu en entrant la commande **ls** avec l'option -i (ou --inode), qui permet d'afficher le numéro d'inode dans le système de fichiers :
+
+<code> dupont@dupont-pc:~$ ls -i ~/fichiersource ~/Bureau/monlienphysique 
+5954521 ~/fichiersource       5954521 ~/Bureau/monlienphysique
+</code>
+
+Comme dit plus haut, les différents liens physiques pointent vers un **même** numéro d'index.
+
+
+  * **Lien symbolique** : permet d'attribuer un autre chemin d'accès à un fichier en pointant sur un nom de fichier. 
+
+Voici le résultat obtenu en entrant la même commande **ls -i** :
+ 
+<code> dupont@dupont-pc:~$ ls -i ~/fichiersource ~/Bureau/monliensymbolique 
+5954521 ~/fichiersource       6876911 ~/Bureau/monliensymbolique
+</code>
+
+On voit que les deux fichiers pointent vers deux numéros d'inode **différents**.
+
+<note help>Dans quels cas est-il plus judicieux d'utiliser un lien symbolique plutôt qu'un lien physique et vice-versa ? 
+
+Réponse partielle 1 : dans les environnements graphiques (Dolphin, etc.), on ne trouve pas l'option pour créer de lien fixe ... et je le regrette parfois.
+
+Réponse partielle 2 : les liens symboliques permettent une meilleure maintenance de l'espace disque. Avec des liens en dur (physiques) partout, il deviendrait difficile de savoir si on a vraiment effacé un fichier du disque.
+
+Réponse partielle 3 : dans le cas où le lien doit pointer vers un autre système de fichiers (autre partition ou autre support de stockage), seul le lien symbolique est possible. 
+
+Réponse partielle 4 : dans la gestion des sauvegardes, les liens symboliques ne sont généralement pas suivis, ce qui permet d'éviter de sauvegarder les mêmes fichiers plusieurs fois. 
+
+Réponse partielle 5 : inversement, dans certains cas, il faut passer par le lien physique pour que la sauvegarde fonctionne. Il faut alors passer par la console (ligne de commande ou "mc" à installer et essayer). Exemple : je sauvegarde régulièrement "/etc", mais quelques rares paquets demandent un peu de configuration dans "/var/lib/..." ; je mets alors des liens en dur dans un sous-répertoire ad hoc de mon répertoire /etc, pour que la sauvegarde de ces paquets soit aussi assurée.
+
+Réponse partielle 6 : le système de sauvegarde "rsnapshot" utilise les liens physiques, et c'est vraiment bien, renseignez-vous. Mais dans ce cas, comme c'est géré par le script, vous n'avez pas à vous en préoccuper.
+
+</note>
+
+===== Explication graphique =====
+=== situation de départ ===
+fichier source : [source]-->[secteur n du disque]
+=== situation après création des liens ===
+lien physique/dur : [source]-->[secteur n du disque]<-- [lien_dur]
+
+lien symbolique : [lien_symb]-->[source]-->[secteur n du disque]
+
+=== situation après effacement du fichier source ===
+
+lien physique/dur : [lien_dur]-->[secteur n du disque]
+
+lien symbolique : [lien_symb]-->?
+
+=== situation après renommage ou déplacement du fichier source ===
+
+lien physique/dur : [source_modif]-->[secteur n du disque]<-- [lien_dur]
+
+lien symbolique : [lien_symb]-->?       [source_modif]-->[secteur n du disque]
+
+<note important>Malheureusement, les liens symboliques ne sont pas mis à jour lorsque le fichier source est déplacé ou renommé. Il faut les recréer.</note>
+===== Prérequis pour l'exemple =====
+
+On montrera cela par un exemple simple :
+
+On crée un document texte (ici la liste des paquets installés) dans le répertoire home :
+
+   dpkg -l>source
+
+===== Exemple de lien physique =====
+
+On crée un lien physique (que l'on nomme lien_dur) :
+   ln source lien_dur
+
+À présent, on peut également lire le document source à partir de lien_dur :
+   gedit lien_dur
+
+Il est possible de connaître le nombre de liens qui amènent au même fichier :
+   ls -l source
+   ls -l lien_dur
+Si on souhaite effacer le fichier source, le document existera toujours :
+   rm source
+   gedit lien_dur
+
+===== Exemple de lien symbolique =====
+
+Pour créer un lien symbolique, on utilise aussi la commande ln, en ajoutant toutefois l'option -s. 
+
+On crée un lien symbolique (que l'on nomme ici lien_symb) :
+   ln -s source lien_symb
+
+On pourra toujours lire source depuis lien_symb :
+   gedit lien_symb
+
+À la différence du lien physique, après la destruction de source, le fichier ne sera plus accessible !
+   rm source
+   gedit lien_symb
+
+On peut repérer les liens symboliques avec ls -F, ils apparaissent avec un @ à la fin. 
+   ls -F
+
+===== Autres documentations disponibles =====
+  * [[http://wiki.linux-france.org/wiki/Les_commandes_fondamentales_de_Linux | Explication sur linux-france.org]] *
+
+===== En dual-boot Windows =====
+Sur un ordinateur en double amorçage (dual-boot) avec Windows, il peut être intéressant de savoir quels liens symboliques ou physiques fonctionnent, puisque depuis Windows 7, outre les traditionnels raccourcis, Windows offre la possibilité de créer des liens (cette possibilité existait auparavant avec l'utilitaire //junction// ).
+Bien sûr, comme MS Windows ne peut pas lire les partitions ext4 et antérieures, tout lien impliquant une partition de type ext ne pourra pas être compris par Windows de manière native (à voir si cela fonctionne avec les drivers permettant de monter des partitions ext sur Windows).
+
+Par contre, Linux lit nativement les partitions NTFS, donc tant Linux que Windows peuvent créer des liens sur des partitions NTFS.
+Empiriquement (d'après tests sous Windows 7 et Linux Mint 17.3), on remarque que :
+  * aucun lien symbolique créé sous Linux n'est compris sous Windows ;
+  * les liens symboliques créés sous Windows (commande //MkLink /D//) fonctionnent sous Linux si la cible et le lien sont sur la même partition NTFS, mais pas s'ils sont sur des partitions différentes.
+----
+
+//Contributeurs : à partir des documents cités, [[utilisateurs:Matifou]], pour l'explication graphique : [[utilisateurs:mohican]] //

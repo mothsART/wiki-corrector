@@ -1,0 +1,352 @@
+
+{{tag>ssh sécurité}}
+----
+====== SSH Filesystem ======
+SshFS sert à monter sur son système de fichier, un autre système de fichier distant, à travers une connexion [[SSH]], le tout avec des droits utilisateur.
+L'avantage est de manipuler les données distantes avec n'importe quel gestionnaire de fichier (Nautilus, Konqueror, ROX, ou même la ligne de commande), ce qui est bien plus pratique que la commande scp couplée avec ssh.
+SshFS apporte ce qui pouvait manquer à certains utilisateurs Windows qui utilisaient WinSCP.
+
+===== Pré-requis =====
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Avoir installé et configuré [[fuse#installation_de_fuse|FUSE]].
+
+===== Installation =====
+Il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>sshfs]]**
+
+Il faut veiller à ce que les utilisateurs potentiels de sshfs fassent bien partie du groupe fuse.
+
+Il est probable, surtout si vous utilisez l'authentification ssh par certificat, que vous deviez redémarrer la machine...
+
+Vous obtiendrez l'erreur //failed to open /dev/fuse: Permission denied// si les points précédents ne sont pas vérifiés.
+
+Voilà, vous pouvez utiliser SshFS !
+
+===== Utilisation en mode console =====
+Rien de plus simple maintenant :
+  ~$ mkdir tmp
+  ~$ sshfs toto@lecole.fr:Document/Blagues tmp
+  
+Ou plus généralement :   
+       sshfs [user@]host:[dir] mountpoint [options]
+
+Pour démonter, vérifier que rien n'accède au point de montage (fichier ouvert ou gestionnaire de fichier), et effectuer la commande :
+  ~$ fusermount -u tmp
+
+<note>
+Si vous avez l'erreur suivante : **fuse: bad mount point `tmp': Transport endpoint is not connected**, le point de montage st probablement déjà utilisé.
+Pour le libérer (démontage), exécutez la commande suivante :
+<code>$ fusermount -u tmp</code> ou <code>$ sudo umount tmp</code> 
+Relancer la procédure ci-dessus (sans la partie **mkdir**, bien entendu.)
+</note>
+
+<note>
+Si vous obtenez l'erreur obscure suivante : **fuse: bad mount point `tmp': Too many levels of symbolic links**, il faut vous connecter au moins une fois au serveur distant en tant que root (de la machine locale), par exemple avec **sudo** :
+<code>$ sudo ssh  toto@lecole.fr</code>
+Ceci permet d'ajouter la clé publique du root local sur le serveur distant (sachant que c'est root qui monte les répertoires au démarrage). Plus d'infos [[https://blog.luukhendriks.eu/2019/01/25/sshfs-too-many-levels-of-symbolic-links.html|ici]].
+</note>
+
+**Remarque 1 : **
+Il arrive que le répertoire monté ait un autre user.group que ceux attendus sur le client.  C'est que ce sont les uid et gid en chiffres qui sont passés et qu'ils ne correspondent pas toujours aux mêmes utilisateurs et groupes sur le serveur et sur le client.  Utiliser les options : 
+
+  $ sshfs -o uid=xxxx -o gid=yyyy [user@]host:[dir] mountpoint [options]
+
+**Remarque 2 : **
+Pour monter un disque dans un répertoire autre que le home afin de faire une sauvegarde du home par exemple il faut tout d'abord créer ce répertoire puis autoriser son accès (en remplaçant your-username par votre login):
+<code>
+sudo mkdir /mnt/backup
+sudo chown your-username /mnt/backup
+</code>
+Le reste de la procédure est identique
+
+**Fusauto:**
+Il est possible de monter/démonter en une seule commande simple, [[fusauto|voir la documentation]].
+<code>fusauto /point/de/montage</code>
+
+===== Utilisation via /etc/fstab =====
+si vous montez souvent les mêmes répertoires, il peut être sympa de les entrer dans le fichier [[mount_fstab|fstab]].
+
+D'abord, créez un répertoire, dans cet exemple sous /mnt, puis assignez-lui les droits :
+  sudo mkdir /mnt/mon_rep
+  sudo chown root:users /mnt/mon_rep
+  sudo chmod 0770 /mnt/mon_rep
+
+Ensuite [[:tutoriel:comment_modifier_un_fichier|modifiez le fichier]] **/etc/fstab**
+
+Il faut y rajouter la ligne suivante : (attention: cette syntaxe est décrite comme dépréciée dans le manuel de fstab - voir la note ci-après)
+<file>sshfs#user@machine:/répertoire/distant                /mnt/mon_rep          fuse            port=22,user,noauto,noatime     0 0</file>
+
+<note>La syntaxe décrite ci-dessus est dépréciée. Bien que totalement juste et fonctionnelle, elle peut poser problème selon la configuration du montage, notamment lors du démontage par un utilisateur via nautilus ou la commande umount.\\ On privilégiera alors la syntaxe suivante qui résout le problème lors du démontage 
+<file>user@machine:/répertoire/distant                /mnt/mon_rep          fuse.sshfs           port=22,user,noauto,noatime     0 0</file></note>
+
+===== Montage à la connexion =====
+Une autre possibilité est de monter le disque à la connexion de l'utilisateur. Cela peut être très utile lorsque la connexion ne se fait pas immédiatement (Connexion Wifi e.g.), et représente une alternative à Autofs (cf ci-dessous).
+
+Pour ce faire,  [[:tutoriel:comment_modifier_un_fichier|créez le fichier]] **/usr/bin/monterSSHFS** en mode [[:sudo|sudo]]:
+
+<code>
+#!/bin/bash
+sleep 15
+sshfs <user>@<serveur>:/répertoire/distant /Point/de/montage
+</code>
+
+Modifiez les droits du fichier pour le rendre exécutable:
+
+<code>
+~$ sudo chmod 0755 /usr/bin/monterSSHFS
+</code>
+
+La commande //sleep 15// permet d'attendre que le réseau soit bien monté. Elle peut être réduite en cas de réseau filaire.
+
+Ensuite, [[:ssh#authentification_par_un_systeme_de_cles_publiqueprivee|créez une clef ssh avec passphrase vide]] (ça permettra de lancer la connexion sans avoir à attendre SSH-Askpass.
+
+Enfin, ajoutez le fichier **/usr/bin/monterSSHFS** aux actions de démarrage. Et roulez jeunesse !
+
+Vous pouvez ainsi monter un nombre quasi-illimité de répertoires. Attention tout de même la connexion est permanente et consomme des ressources (limitées).
+=====Autofs=====
+Le montage manuel ou par fstab a plusieurs inconvénients.
+Le principal, c'est qu'il n'est pas toujours possible de rendre le montage automatique : Si lors du montage vous n'êtes pas encore connecté (en wifi par exemple), et bien le montage ne se fait pas, et il faut effectuer le montage manuellement.
+Un autre inconvénient, moins important, est que même si vous n'utilisez pas les répertoires montés, ils restent montés et consomment des ressources.
+
+**autofs** permet de résoudre ces 2 problèmes.
+
+<note>Une autre alternative est d'ajouter **_netdev** et de supprimer le paramètre **noauto** à la fin de la ligne de son fstab ce qui donnera alors:
+<code>sshfs#user@machine:/répertoire/distant                /mnt/mon_rep          fuse            port=22,user,noatime,allow_other,_netdev     0 0</code>
+L'installation d'Autofs devient donc inutile. L'ajout du paramètre **_netdev** dit à l'ordinateur: "Attention ce répertoire que tu veux monter est un répertoire réseau, il faut donc que tu attendes de t'être bien connecté avant d'essayer de le monter"</note>
+
+====Installation d'autofs====
+Pour l'installer, il suffit d'[[:tutoriel:comment_installer_un_paquet|installer les paquets]] **[[apt>fuse]]**, **[[apt>autofs]]** et **[[apt>sshfs]]**
+
+====Configuration d'autofs====
+=== Identification automatique en ssh ===
+Contrairement au montage NFS par autofs, SSHFS a besoin d'une authentification, et cette authentification doit se faire "automatiquement".
+Pour cela, il faut utiliser le système de clés publiques/privées pour l'authentification ssh, et utiliser l'user-agent (par ssh-add) si vous avez défini une passphrase. Pour cela reportez-vous à la page [[ssh]].
+
+Le problème avec autofs, c'est qu'il s'exécute en root. Il faut donc créer une paire de clés publiques/privées pour l'utilisateur root sur le client:
+<code>sudo ssh-keygen -t rsa</code>
+et l'autoriser sur le serveur en rajoutant le contenu ///root/.ssh/id_rsa.pub// du poste client dans //~/.ssh/authorized_keys// du poste serveur, pour chaque compte utilisateur auquel il sera possible de se connecter.
+
+<code>sudo ssh-copy-id -i /root/.ssh/id_rsa.pub <utilisateur>@<ip serveur></code>
+
+===Désactiver le montage dans fstab===
+Maintenant que les problèmes de connexions ssh sont résolus, supprimez (ou commentez) dans ///etc/fstab// les montages que vous voulez gérer par **autofs** (si vous en aviez écrit auparavant).
+
+===Récupération des userid et groupe===
+Afin d'être propriétaire des répertoires qui vont être créés automatiquement par autofs, nous allons récupérer l'userid de l'utilisateur :
+<code>benoit@Jack:~$ cat /etc/passwd | grep benoit
+benoit:x:1000:1000:Benoit,,,:/home/benoit:/bin/bash
+</code>
+
+===Ajout des montages===
+Ensuite, [[:tutoriel:comment_modifier_un_fichier|éditez le fichier]] **/etc/auto.master**, pour y ajouter la ligne :
+<file>/net   /etc/auto.sshfs  uid=1000,gid=1000, --timeout=30, --ghost</file>
+L'option ghost permet de toujours afficher les répertoires, même lorsqu'ils ne sont pas montés. Il ne reste plus qu'à double-cliquer dessus dans le navigateur pour les monter automatiquement.
+
+Créez alors un fichier **/etc/auto.sshfs** :
+<file>monRepertoire -fstype=fuse,port=22,rw,allow_other :sshfs\#votrelogin@192.168.0.1\:/media/share</file>
+Le montage se fera alors dans ///net/monRepertoire// et pointera vers la machine //192.168.0.1// sur le répertoire ///media/share//.
+Vous pouvez dans ce même fichier écrire plusieurs lignes pour chacun de vos points de montage.
+
+Autre exemple :
+<file>ZIK-portable -fstype=fuse,rw,nodev,nonempty,noatime,allow_other,max_read=65536 :sshfs\#benoit@192.168.1.110\:/musique</file>
+Le montage se fera dans ///net/ZIK-portable// et pointera vers la machine //192.168.1.110// sur le répertoire //musique//.
+
+===Lancer le serveur===
+Il ne reste plus qu'à lancer le serveur :
+<code>sudo start autofs</code>
+ou
+<code>sudo service autofs restart</code>
+
+===Gestion de la passphrase===
+Si vous avez défini une passphrase pour la clé de l'utilisateur root, vous devrez enregistrer auparavant (une seule fois pour chaque session) cette clé dans l'user-agent, par ssh-add.
+
+Malheureusement, après avoir entré une clé dans ssh-add, il faut relancer le serveur autofs:
+<code>sudo restart autofs</code>
+ou
+<code>sudo service autofs restart</code>
+
+Si vous avez une autre solution, éditez cette page et contactez l'auteur par jabber (rom1v@jabber.fr) svp :)
+
+===== Utilisation en mode graphique =====
+==== 1re méthode : fusauto ====
+À exploiter directement depuis votre gestionnaire de fichier, voir la documentation [[fusauto]].
+
+{{ application:xsshfs_0.4.png?300}}
+
+==== 2e méthode : Xsshfs ====
+=== Présentation ===
+[[https://framagit.org/kepon/xsshfs/|xsshfs]] est un petit programme écrit en perl/glade offrant une interface graphique à sshfs
+
+Quelques fonctions de ce programme :
+  * Monter des répertoires sshfs
+  * Démonter des répertoires sshfs
+  * Enregistrer vos connexions préférées
+  * [[http://xsshfs.zici.fr/changelog|...]]
+
+=== Installation ===
+Deux possibilités : 
+  - Suivre les [[http://xsshfs.zici.fr/installation|instructions]] et ouvrir un terminal et taper directement la commande : <code>wget http://xsshfs.zici.fr/files/xsshfs_current.deb && sudo dpkg -i xsshfs_current.deb && sudo apt-get install -f && rm xsshfs_current.deb</code>
+  - Utiliser le dépôt PPA suivant: **ppa:profnoel/xsshfs** et tapez la commande suivante : <code>sudo add-apt-repository ppa:profnoel/xsshfs && sudo apt-get update >/dev/null && sudo apt-get install xsshfs</code>
+
+==== 3e méthode : sshfs-dialog.sh ====
+=== Création et explication de sshfs-dialog.sh ===
+Voici un petit programme écrit en GtkDialog, il faut donc l'installer. De plus, il faut pouvoir renseigner le mot de passe d'une manière sécurisée, pour cela il y a ssh-askpass-gnome : installez les paquets **[[apt://gtkdialog,ssh-askpass-gnome|gtkdialog ssh-askpass-gnome]]**.
+
+Le programme est un script, [[:tutoriel:comment_modifier_un_fichier|éditez le fichier]] **sshfs-dialog.sh** puis collez-y le code suivant : [[sshfs#code_de_ssh-dialog.sh|bas de page]]
+
+
+Ne pas oublier de le rendre exécutable :
+  chmod u+x sshfs-dialog.sh
+
+----
+
+{{ sshfs-dialog_00.png|Fenêtre d'sshfs-dialog}}
+
+Exécutez le script directement dans votre gestionnaire de fichiers ou dans une console (le mot de passe sera demandé dans la console), et vous obtiendrez une fenêtre nécessitant quelques renseignements comme :
+  * l'adresse du serveur
+  * le numéro de port
+  * le nom de l'utilisateur distant
+  * le point de montage distant (par défaut, le HOME de l'utilisateur distant)
+  * le nom du point de montage
+
+
+Une fois tout renseigné, cliquez sur **mount**, et un répertoire du nom du point de montage doit se créer, le mot de passe de l'utilisateur distant vous est demandé, et votre connexion montée sur le système de fichier !!
+
+Quand vous avez fini, quittez le répertoire monté, et faîtes **Umount**
+Il est possible de sauvegarder la configuration en appuyant sur **Save**
+
+Pour recharger la configuration, il faut passer un fichier .essh en paramètre du script (en faisant un glisser-déposer avec un gestionnaire de fichiers).
+
+=== Suggestion d'utilisation ===
+{{ sshfs-dialog_01.png?250|Utilisation d'sshfs-dialog avec Rox-filer}}
+
+Créez quelque part dans votre arborescence, un répertoire SSH ( /home/toto/Network/SSH ).\\
+
+Déplacez le script dans ce répertoire.\\
+
+Remplissez la fenêtre normalement, testez la connexion, et sauvegardez.\\
+
+Vous obtenez des fichiers .essh, comme par exemple "toto@portable.essh" "tata@gouv.fr.essh".\\
+
+Glisser/déposer le fichier toto@portable.essh sur sshfs-dialog.sh, et la fenêtre s'ouvre directement avec les informations renseignées.\\
+
+Vous pouvez aussi cliquer-droit sur le fichier *.essh puis propriétés -- > onglet "ouvrir avec" --> ajouter   et là vous sélectionnez l'emplacement du script sshfs-dialog.sh grâce à la commande "parcourir". Ainsi vous pourrez créer des lanceurs sur le bureau. Le script s'exécutera maintenant automatiquement en cliquant sur un fichier *.essh. \\ 
+
+=== Code de ssh-dialog.sh === 
+<code bash>
+#! /bin/bash
+export SSH_ASKPASS=/usr/lib/openssh/gnome-ssh-askpass
+
+export DIR=$PWD
+
+if [ $1 ] ; then
+	export DIR=`dirname $1`
+	while read ligne ; do
+		first=1
+		val=""
+		for mot in $ligne ; do
+			if [ $first -eq 1 ] ; then
+				var=$mot
+				first=0
+			else
+				val=$val$mot" "
+			fi
+		done
+		export $var="$val"
+	done < $1
+fi
+
+if [ -z "$PORT" ] ; then
+	export PORT=22
+fi
+
+if [ -z "$DISTUSER" ] ; then
+	export DISTUSER=$USER
+fi
+
+if [ -z "$MOUNT" ] ; then
+	export MOUNT=$DISTUSER$SERVEUR
+fi
+
+export MAIN_DIALOG='
+ <vbox>
+  <hbox>
+		<text><label>Serveur:</label></text>
+		<entry>
+			<input>echo $SERVEUR</input>
+			<variable>SERVEUR</variable>
+		</entry>
+	</hbox>
+	<hbox>
+		<text><label>Port:</label></text>
+		<entry>
+			<input>echo $PORT</input>
+			<variable>PORT</variable>
+		</entry>
+	</hbox>
+  <hbox>
+		<text><label>User:</label></text>
+		<entry>
+			<input>echo $DISTUSER</input>
+			<variable>DISTUSER</variable>
+		</entry>
+	</hbox>
+  <hbox>
+		<text><label>Remote Point:</label></text>
+		<entry>
+			<input>echo $REMOTE</input>
+			<variable>REMOTE</variable>
+		</entry>
+	</hbox>
+  <hbox>
+		<text><label>Mount Name:</label></text>
+		<entry>
+			<input>echo $MOUNT</input>
+			<variable>MOUNT</variable>
+		</entry>
+	</hbox>
+  <hbox>
+		<button>
+			<label>Term</label>
+			<action>x-terminal-emulator -e ssh -p $PORT $DISTUSER@$SERVEUR</action>
+		</button>
+		<button>
+			<label>Mount</label>
+			<action>fusermount -u $DIR/$MOUNT</action>
+			<action>rmdir $DIR/$MOUNT</action>
+			<action>mkdir $DIR/$MOUNT</action>
+			<action>sshfs $DISTUSER@$SERVEUR:$REMOTE $DIR/$MOUNT -p $PORT</action>
+		</button>
+		<button>
+			<label>Umount</label>
+			<action>fusermount -u $DIR/$MOUNT</action>
+			<action>rmdir $DIR/$MOUNT</action>
+		</button>
+		<button>
+			<label>Save</label>
+			<action>echo SERVEUR $SERVEUR | tee $DIR/$MOUNT.essh</action>
+			<action>echo PORT $PORT | tee -a $DIR/$MOUNT.essh</action>
+			<action>echo DISTUSER $DISTUSER | tee -a $DIR/$MOUNT.essh</action>
+			<action>echo REMOTE $REMOTE | tee -a $DIR/$MOUNT.essh</action>
+			<action>echo MOUNT $MOUNT | tee -a $DIR/$MOUNT.essh</action>
+		</button>
+  </hbox>
+ </vbox>
+'
+
+gtkdialog --program=MAIN_DIALOG
+</code>
+
+===== débogage en mode console =====
+Il arrive qu'on ne comprenne pas pourquoi la connexion ne fonctionne pas.
+Exemple message : //**read: Connection reset by peer**//
+On peut alors utiliser les option suivantes : 
+**-odebug,sshfs_debug,loglevel=debug**, en plus de la commande habituelle :
+<code>sudo sshfs -odebug,sshfs_debug,loglevel=debug nom_utilisateur@mon_serveur:repertoire_distant repertoire_local -p num_port | more</code>
+
+===== Voir aussi =====
+  * [[https://github.com/libfuse/sshfs|Site officiel]]
+  * [[https://forum.ubuntu-fr.org/viewtopic.php?id=38912|commentaires et discussion ici]]
+
+----
+//Contributeurs principaux : ...//

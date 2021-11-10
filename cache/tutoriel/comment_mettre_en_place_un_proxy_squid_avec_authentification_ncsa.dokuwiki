@@ -1,0 +1,89 @@
+
+{{tag>réseau tutoriel proxy}}
+
+----
+
+====== Mise en place d'un proxy Squid avec authentification NCSA (pop up d'authentification) ======
+
+Ce tutoriel va expliquer la méthode à suivre pour utiliser la méthode d'authentification NCSA (pop up d'authentification similaire à celle généré par les htaccess) avec le proxy Squid
+
+===== Pré-requis =====
+
+  * Une machine (ici sous Ubuntu 8.10).
+  * Le proxy libre [[:squid|Squid]]
+  * Installer le paquet [[:tutoriel:comment_installer_un_paquet|apache2-utils]] (pour pouvoir utiliser htpasswd)
+
+===== Installation et configuration de Squid =====
+
+==== Installation de Squid ====
+
+Voir la page de la documentation correspondante : [[:squid|Installer Squid]]
+
+==== Fichier utilisateurs ====
+
+**Remarque** : les commandes suivantes sont à taper dans un terminal de **root**, comme celui obtenu avec 'sudo -i'
+
+Pour pouvoir être authentifié par Squid il faut tout d'abord créer notre fichier d'utilisateurs et lui donner les permissions appropriées. Pour cela, effectuez les commandes suivantes :
+
+<code>
+truncate -s 0 /etc/squid3/users
+chown root:proxy /etc/squid3/users
+chmod 0640 /etc/squid3/users
+</code>
+
+Pour ajouter des utilisateurs, utilisez :
+<code>htpasswd -m /etc/squid3/users <nom de l'utilisateur></code>
+
+Il faut répéter la dernière opération autant de fois que vous avez d'utilisateurs. Sachez que les mots de passe sont cryptés avec la méthode //MD5//.
+
+Pour vérifier que le fichier est correct et fonctionnera avec Squid utilisez la commande suivante :
+
+<code>/usr/lib/squid3/basic_ncsa_auth /etc/squid3/users</code>
+
+Rentrez votre login et votre mot de passe de la manière suivante :
+<code><login> <mot de passe></code>
+
+Si la réponse est **OK** tout est bon, si la réponse est **ERR** vérifiez votre fichier users.
+
+Pour sortir de la boucle appuyez sur **ctrl + D**.
+
+==== Configuration de Squid ====
+
+[[:tutoriel:comment_editer_un_fichier|
+Éditez le fichier]] **/etc/squid3/squid.conf** de configuration de Squid,
+
+  * dans la partie **''TAG: auth_param''**, décommentez les lignes suivantes : auth_param et remplacez-les si besoin par celles ci-dessous :
+
+<file>
+auth_param basic program /usr/lib/squid3/basic_ncsa_auth /etc/squid3/users
+auth_param basic children 5
+auth_param basic realm Squid proxy-caching web server
+auth_param basic credentialsttl 2 hours
+</file>
+
+**children :** 5 est une valeur usuelle. Si vous avez de nombreux utilisateurs, il sera peut-être nécessaire d'augmenter ce nombre.
+
+**realm :** texte qui apparaîtra dans la fenêtre de demande d'identification.
+
+**credentialsttl :** durée de vie de l'identification.
+
+Ensuite, dans la partie **acl** rajouter la ligne suivante :
+<file>acl Users proxy_auth REQUIRED</file>
+
+Enfin, dans la partie **http_access** rajouter la ligne suivante :
+<file>http_access allow GroupePC Users</file>
+
+**GroupePC** représente le groupe de machines que vous avez autorisé à avoir accès à votre proxy. Pour plus de renseignements, il faut se référer au site de [[http://www.squid-cache.org|Squid]]
+
+À partir de 10.04 serveur jusqu'à 14.04, Il faut utiliser :
+<file>http_access allow Users</file>
+
+Pour finir il faut relancer Squid :
+
+<code>sudo /etc/init.d/squid3 restart</code>
+
+Vous pouvez désormais utiliser votre proxy en mode authentifié !
+
+----
+
+//Contributeur : [[:utilisateurs:k20]], [[:utilisateurs:chopinhauer]]//

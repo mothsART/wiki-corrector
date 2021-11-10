@@ -1,0 +1,539 @@
+
+{{tag> partitions administration système}}
+----
+
+====== LVM, une autre manière de partitionner =====
+
+===== Introduction =====
+
+
+**LVM** (Logical Volume Manager, ou //gestionnaire de volumes logiques// en français) permet la création et la gestion de volumes logiques sous Linux. L'utilisation de volumes logiques remplace en quelque sorte le partitionnement des disques. C'est un système beaucoup plus souple, qui permet par exemple de diminuer la taille d'un système de fichier pour pouvoir en agrandir un autre, sans se préoccuper de leur emplacement sur le disque.\\
+
+
+==== Avantages de LVM ====
+
+  * Il n'y a pas de limitations « étranges » comme avec les partitions (primaire, étendue, etc.).
+  * On ne se préoccupe plus de l'emplacement exact des données.
+  * On peut conserver quelques giga-octets de libres pour pouvoir les ajouter n'importe où et n'importe quand.
+  * Les opérations de redimensionnement deviennent quasiment sans risques, contrairement au redimensionnement des partitions.
+  * On peut créer des snapshots de volume sans perturber le fonctionnement de la machine et sans interruption de services.
+
+==== Inconvénients de LVM ====
+
+  * Si un des volumes physiques devient HS, alors c'est l'ensemble des volumes logiques qui utilisent ce volume physique qui sont perdus. Pour éviter ce désastre, il faudra utiliser LVM sur des disques raid par exemple.
+
+===== Pré-requis =====
+
+  * Un disque ou une partition libre.
+  * Ne pas avoir peur de la ligne de commande.
+
+===== Installation =====
+
+[[gestionnaire_de_paquets|Installez]] le paquet [[apt://lvm2|lvm2]].
+Avant d'utiliser LVM, il faut comprendre un peu de vocabulaire. Ne vous inquiétez pas si tout n'est pas encore très clair, ça viendra au fur et à mesure, en passant à la pratique.
+
+===== Notions et vocabulaire =====
+
+==== Volume physique =====
+
+Un volume physique ou « PV » pour « //physical volume// » est tout simplement un disque ou une partition. Bref, c'est un espace de stockage bien réel (autrement dit un périphérique de la forme ''/dev/sda2'' par exemple), que l'on va confier à LVM. Bien évidemment, tout ce qui était présent sur la partition sera effacé.
+<note important>avant de pouvoir définir le volume physique, il est nécessaire qu'une partition existe. Pour cela vous pouvez avoir recours à [[gparted|gparted]] sur un PC desktop et à [[http://www.gnu.org/software/parted/manual/parted.html|parted]] sur serveur</note>
+
+==== Groupe de volumes =====
+Un groupe de volumes ou « VG » pour « //volume group// » est, comme son nom l'indique, un ensemble de volumes physiques. On a donc un ou plusieurs volumes physiques dans un groupe de volumes, et pour utiliser LVM, il faut obligatoirement au moins un groupe de volumes. Habituellement, sur les gros serveurs, on essaye de regrouper les disques en fonction de leur caractéristiques (capacités, performances, etc.). Pour un particulier, le fait de mettre plusieurs disques dans un même groupe de volume peut permettre « d'étaler » un système de fichiers sur plusieurs disques, et d'avoir donc ''/home'' par exemple qui utiliserait 2 disques. Une telle configuration est tout de même assez dangereuse en cas de perte d'un disque… De plus, cela n'apporterait aucun gain de performance contrairement à du RAID-0 par exemple.
+:)
+==== Volume logique =====
+
+Un volume logique ou « LV » pour « //logical volume// » est ce que nous allons utiliser au final. Un volume logique est un espace « quelque part dans un groupe de volume » où l'on peut mettre un système de fichiers. C'est donc ce qui remplace les partitions. On peut donc utiliser un volume logique pour mettre la mémoire virtuelle, un pour ''/home'', "/", etc.
+
+<note important>Évitez de mettre "/boot/grub" dans un volume logique car cela peut poser des problèmes pour le démarrage du système. En effet, grub ne sait pas encore (novembre 2015) écrire dans un fichier localisé dans un tel volume. Or grub mémorise le résultat du démarrage courant dans le fichier /boot/grub/grubenv de manière à modifier le démarrage qui suit un démarrage défaillant.
+</note>
+
+On peut y mettre à peu près tout … mais il vaut mieux éviter d'y mettre "/boot". Techniquement, ça doit fonctionner à peu près correctement depuis Grub 2, mais cela est encore sensible suivant la configuration (et perdre la capacité de démarrer est … gênant), pour le moment il est vivement conseillé d'avoir au moins une partition de l'ancien temps avec "/boot" (ou "/" si le dossier "/boot" n'est pas séparé) pour éviter les ennuis.
+==== Synthèse graphique ====
+
+On peut voir les choses ainsi :
+
+{{:lvm.jpg|}}
+
+===== Création =====
+
+Bien, passons à la pratique !
+
+Puisque nous allons entrer toutes les commandes à venir en tant que //root//, je vous conseille de passer //root// « une bonne fois pour toutes » :
+
+  sudo -i
+
+Voilà : le //prompt// est maintenant en mode root « # », cela nous évitera d'avoir à préfixer chaque commande par //sudo//.
+
+Bonne nouvelle, les commandes LVM sont extrêmement simples à utiliser, et elles intègrent toutes une aide en ligne très bien conçue, claire, courte, mais suffisante. De plus, leurs noms se « devinent » assez facilement :
+  * toutes les commandes agissant sur les volumes physiques commencent par //pv// (pour //physical volume//);
+  * toutes les commandes agissant sur les groupes de volumes commencent par //vg// (pour //volumes group//);
+  * toutes les commandes agissant sur les volumes logiques commencent par //lv// (pour //logical volume//).
+
+La première chose à faire est de créer **un volume physique**, en attribuant une partition à LVM.
+
+Essayez la commande suivante pour connaître la liste des commandes disponibles pour les volumes physiques :
+
+  man -k pv
+  
+Parmi toutes les commandes renvoyées, on remarque une « pvcreate », ça doit être celle-là… ;-) Cette astuce fonctionne avec toutes les commandes LVM et permet de les retrouver facilement.
+<code>
+pvchange (8)         - change attributes of a physical volume
+pvck (8)             - check physical volume metadata
+pvcreate (8)         - initialize a disk or partition for use by LVM
+pvdisplay (8)        - display attributes of a physical volume
+pvmove (8)           - move physical extents
+pvremove (8)         - remove a physical volume
+pvresize (8)         - resize a disk or partition in use by LVM2
+pvs (8)              - report information about physical volumes
+pvscan (8)           - scan all disks for physical volumes
+</code>
+
+Il faudra donc créer (plutôt initier) notre volume physique par la commande :
+<code>
+pvcreate /dev/sdc1
+</code>
+
+Cela nous permettra de l'utiliser dans notre groupe de volume
+
+//Noter que la création d'un volume physique avec un disque complet comme ''/dev/sdc'' n'est pas recommandé : [[https://tldp.org/HOWTO/LVM-HOWTO/initdisks.html]]//
+==== Groupe de volumes ====
+
+Il existe de nombreuses options lors de la création d'un groupe de volumes… Mais continuons de faire au plus simple. Le seul paramètre indispensable sera de lui donner un nom, nous utiliserons les valeurs par défaut pour tout le reste. Pour une raison que j'expliquerai par la suite, donnons-lui un nom très court (2 ou 3 caractères). Par exemple : « mvg » pour « mon vg ».
+
+Pour connaitre la syntaxe de la commande //vgcreate// (comme pour toutes les autres commandes LVM), tapez simplement son nom :
+
+  vgcreate
+
+La syntaxe est donc :
+
+  vgcreate VolumeGroupName PhysicalVolume [optionnellement d'autres PhysicalVolume]
+
+Allons-y :
+
+  vgcreate mvg /dev/sdc1
+
+Si tout se passe bien, vous avez maintenant un groupe de volumes, contenant un disque physique. Vous pouvez obtenir d'autres informations sur ce groupe de volumes en tapant //vgdisplay//:
+
+  vgdisplay
+  --- Volume group ---
+  VG Name               mvg
+  System ID             
+  Format                lvm2
+  Metadata Areas        1
+  Metadata Sequence No  3
+  VG Access             read/write
+  VG Status             resizable
+  MAX LV                0
+  Cur LV                2
+  Open LV               0
+  Max PV                0
+  Cur PV                1
+  Act PV                1
+  VG Size               186,31 GiB
+  PE Size               4,00 MiB
+  Total PE              47695
+  Alloc PE / Size       15360 / 60,00 GiB
+  Free  PE / Size       32335 / 126,31 GiB
+  VG UUID               BaTuai-1I8o-3rkY-Ut1r-ybta-mJnl-9X0oNZ
+
+
+==== Volume logique ====
+
+Nous y voilà… Cette fois-ci, nous allons vraiment créer deux espaces que l'on pourra ensuite « formater » en //ext4// par exemple.
+
+Comme précédemment, le plus simple est de commencer par jeter un œil sur la syntaxe de la commande :
+
+  lvcreate
+
+Les deux options vraiment importantes sont « -n » pour son nom, et « -L » pour sa taille. Le paramètre principal est « OriginalLogicalVolume ». Il s'agit peut-être d'une erreur dans le manuel (//man//). En fait, ce qu'il faut indiquer, c'est bien le groupe de volumes dans lequel nous allons créer le volume logique. Pour l'exemple présent, je fais ici deux volumes, 10 Gio et 50 Gio :
+
+  lvcreate -n Vol1 -L 10g mvg
+  lvcreate -n Vol2 -L 50g mvg
+
+Idem, on peut vérifier avec la commande //lvdisplay//:
+
+  ~# lvdisplay
+  --- Logical volume ---
+  LV Name                /dev/mvg/Vol1
+  VG Name                mvg
+  LV UUID                q0D6cQ-mcMP-q8sf-XTlI-DdxX-QHd1-qkaB5J
+  LV Write Access        read/write
+  LV Status              available
+  # open                 0
+  LV Size                10,00 GiB
+  Current LE             2560
+  Segments               1
+  Allocation             inherit
+  Read ahead sectors     auto
+  - currently set to     256
+  Block device           252:0
+   
+  --- Logical volume ---
+  LV Name                /dev/mvg/Vol2
+  VG Name                mvg
+  LV UUID                JZjMxI-cTAw-cbs6-02BM-4Mev-P2E7-b8JX0x
+  LV Write Access        read/write
+  LV Status              available
+  # open                 0
+  LV Size                50,00 GiB
+  Current LE             12800
+  Segments               1
+  Allocation             inherit
+  Read ahead sectors     auto
+  - currently set to     256
+  Block device           252:1
+
+
+==== Système de fichiers ====
+
+Avec les partitions, on avait des noms ressemblant à ''/dev/sda3'', etc. Avec LVM, on utilise aussi des périphériques dans ''/dev'', mais le chemin est de la forme ''/dev/nom_du_vg/nom_du_lv''.
+Autrement dit, puisqu'on a décidé d'appeler nos volumes logiques "Vol1" et "Vol2", les noms de ces périphériques de ce volume logique sont "/dev/mvg/Vol1" et "/dev/mvg/Vol2".
+À partir de maintenant, ''/dev/mvg/Volx'' peut être utilisé dans toutes les situations et avec toutes les commandes qui attendent quelque chose de la forme ''/dev/…'' Par exemple :
+
+  mkfs -t ext4 /dev/mvg/Vol1
+  mkfs -t ext4 /dev/mvg/Vol2
+  mkdir /Essai1
+  mount /dev/mvg/Vol1 /Essai1
+  df -h
+
+Et normalement, ''/dev/mvg/Vol1'' devrait être monté sur ''/Essai''. Regardez bien la ligne correspondante. Si on avait choisi un nom de VG ou de LV plus long, la sortie de //df// aurait été modifiée, car le nom aurait « touché » les valeurs… On aurait été obligé de passer des lignes et l'affichage aurait été plus difficile à lire. Techniquement, choisir des noms « longs » pour les VG et les LV ne pose aucun problème, mais c'est l'affichage qui sera parfois délicat. Pour cette raison uniquement, je préconise de se limiter à 7 caractères au total (donc par exemple 3 pour le VG et 4 pour le LV, ou 2 et 5, comme vous voulez).
+
+> Pourquoi est-il écrit ''/dev/mapper/mvg-Vol1'' et non ''/dev/mvg/Vol1'' ?
+
+Avec LVM en version 1, c'est bien ''/dev/mvg/Vol1'' qui aurait été affiché. Depuis la version 2, LVM utilise le périphérique //mapper//, ce qui permet pas mal de choses (comme chiffrer les volumes logiques, etc.). Pour simplifier, disons que ces deux notations « /dev/mvg/Vol1 » et « /dev/mapper/mvg-Vol1 » sont synonymes. Dans la pratique, il est conseillé quand même d'utiliser plutôt la forme « /dev/mvg/Vol1 », certaines commandes ne passeront pas autrement.
+
+
+
+===== Suppression =====
+
+Rien de plus simple :
+
+  umount /Essai1  # si le volume Vol1 est monté en /Essai1
+  lvremove /dev/mvg/Vol1
+
+:!: Attention, une fois un volume logique effacé, il est **totalement impossible** de récupérer les données qu'il contenait.
+
+
+
+===== Redimensionnement =====
+
+
+
+==== Volume physique ====
+=== Agrandissement ===
+
+Imaginons maintenant que notre groupe de volume (mvg) n'ait plus suffisamment d'espace libre. On souhaite donc lui rajouter un volume physique afin de rajouter de l'espace libre. Ça tombe bien, on dispose d'un volume physique sdc2 que l'on va pouvoir ajouter à mvg :
+
+On initialise le volume en vue de son utilisation dans LVM :
+
+  pvcreate /dev/sdc2
+
+On rajoute le volume sdc2 au groupe de volume mvg :
+
+  vgextend mvg /dev/sdc2
+  
+=== Rétrécissement ===
+Imaginons maintenant que la partition Boot soit devenue trop petite et que tout le reste du disque qui contient cette partition soit défini comme une partition  utilisée en LVM (/dev/sda2 dans l'exemple). Il sera alors nécessaire de diminuer l'espace  physique de ce groupe de volume (mvg).
+
+
+En premier, il est nécessaire de rétrécir le ou les LVM qui sont définis dans ce volume-groupe. Voir ci-après.
+
+Puis il faut rétrécir l'enveloppe physique. Normalement c'est sans risque: Les commandes sont refusées si la demande est trop agressive.
+
+Commençons par vérifier l'implantation physique des données dans la partition. Le but est de vérifier que la fin de la partition n'est pas utilisée. <code bash>sudo pvs -v --segments /dev/sda2</code> La dernière ligne de la réponse indique si la fin de la partition est libre  ou non.
+Si la fin de la partition n'a pas suffisamment d'espace libre, il est possible de procéder a une réorganisation physique.<code bash>sudo pvmove --alloc anywhere /dev/sda2:88888888-9999999999 /dev/sda2:0-88888887</code> (les valeurs 88888887 et 88888888 sont à adapter en fonction de la réponse précédente notamment la quantité d'espace libre en début de partition. 
+Lancer alors l'[[gparted|éditeur de partitions]] . Indiquer alors la nouvelle taille de la partition. Le minima possible est exprimé en MiO et obtenu par la formule 88888888*4
+
+
+
+
+==== Volume logique ====
+
+Il est très facile d'augmenter ou de diminuer la taille d'un volume logique. Mais attention, la taille d'un LV n'a pas de lien direct avec la taille de ce qu'il contient (//swap// ou système de fichier). Le LV est une boîte, le système de fichier est le contenu de la boîte. Augmenter la taille de la boîte sans augmenter la taille du contenu ne pose pas de problème, mais l'inverse…
+
+=== Agrandissement ===
+
+Bien qu'il soit évidemment moins risqué d'agrandir ou de diminuer la taille d'un système de fichiers après l'avoir démonté, la plupart des formats (ext3, reisersfs, ext4...) supportent désormais cette modification "à chaud" (avec des données qui restent donc accessibles en lecture/écriture durant toute l'opération).
+
+Pour agrandir un volume il est nécessaire de démonter le système de fichier, ici, prenons celui du volume logique Vol2 :
+  umount /Essai2
+
+Maintenant nous allons ajouter 5Gio au volume et agrandir son système de fichier :
+  lvresize --resizefs --size +5G /dev/mvg/Vol2
+  
+<note important>Le paramètre ''--resizefs'' ne fonctionne pas avec tous les systèmes de fichiers (voir [[http://linux.die.net/man/8/fsadm|ici]]).</note>
+
+Une fois l'opération terminée, le volume une fois monté a gagné 5Gio.
+
+Il est également possible d'augmenter la taille du volume logique à l'ensemble de l'espace libre disponible sur le support en utilisant **lvextend -l +100%FREE**.
+<code>
+usr@pc:~$ lvextend -l +100%FREE /dev/mvg/Vol2
+</code>
+
+=== Rétrécissement ===
+
+Diminuer la taille d'un système de fichier est un peu plus délicat. En effet, il faut dans un premier temps s'assurer de pouvoir réduire d'autant qu'on le souhaite.
+
+<note important>Tous les systèmes de fichiers ne supportent pas d'être redimensionnés (voir [[http://linux.die.net/man/8/fsadm|ici]])</note>
+
+Voyons d'abord l'espace du système de fichier :
+  df -h -BM | grep ca
+  /dev/mapper/svg-ca    512M  230M  283M  45% /home/ca
+
+Les valeurs qui nous intéressent sont la deuxième et la quatrième, à savoir :
+  * 512Mio d'espace total
+  * 283Mio d'espace libre
+
+L'espace disque étant de 283Mio, nous pouvons réduire l'espace de 256Mio et c'est ce que nous allons faire.
+
+Commençons par démonter le volume :
+  umount /dev/mapper/svg-ca
+
+Maintenant, nous allons retirer 256Mio :
+  lvresize --resizefs --size -256M /dev/mapper/svg-ca
+
+<note tip>Si la partition n'est pas démontée, la commande propose de la démonter et s'occupera de la remonter une fois le redimensionnement terminé.</note>
+
+Le volume peut maintenant être monté :
+  mount /dev/mapper/svg-ca /home/ca
+
+Et on peut alors afficher sa nouvelle taille :
+  df -h -BM| grep ca
+  /dev/mapper/svg-ca    256M  230M   27M  90% /home/ca
+  
+<note warning>Attention: Il est possible que le rétrécissement soit refusé suite à une dé-organisation qui se fait  pendant la vie du LVM car la demande est trop importante. Dans cas, voici la démarche à effectuer:
+  -    Démonter le volume <code bash> sudo umount /dev/mapper/svg-ca </code>
+  -    Contrôler la qualité du volume <code bash> sudo e2fsck -f /dev/mapper/svg-ca </code>
+  -    Demander l'espace réel minima nécessaire <code bash> sudo resize2fs -PM /dev/mapper/svg-ca </code>
+  -    Rétrécir à la taille minima indiquée. Mettre la valeur retournée par la commande précédente (ou une valeur plus importante) à la place de la valeur 123456789 de cette commande <code bash> sudo lvresize --resizefs --size $((123456789/256+1))M  /dev/mapper/svg-ca </code>
+  - Remonter le volume  <code bash>mount /dev/mapper/svg-ca /home/ca</code>
+   </note>
+===== Snapshot =====
+__Comprendre la magie du Snapshot LVM :__ 
+
+//Pourquoi donner une taille au snapshot ? Tout simplement parce que celui-ci est intelligent, donc il ne va pas copier l'intégralité du LV original. Au contraire, il ne va stocker que les différences. C'est pourquoi il est instantané et commence avec une occupation taille nulle. La commande lvdisplay permet de voir l'évolution de la taille.//
+
+**Avec LVM 1**, les instantanés sont en lecture seule. Ils fonctionnent par l'utilisation d'une table d'exception qui trace les blocs modifiés : lorsqu'un bloc est modifié sur la source, il est d'abord copié dans l'instantané, marqué comme modifié dans la table d'exceptions et ensuite modifié sur le volume source avec les nouvelles données.
+
+
+**Avec LVM 2**, les instantanés sont par défaut en lecture/écriture. Le fonctionnement est similaire aux instantanés en lecture seule avec la possibilité supplémentaire d'écrire sur l'instantané : le bloc est alors marqué comme utilisé dans la table d'exceptions et ne sera plus récupéré du volume source. Cela ouvre de nouvelles perspectives par rapport au fonctionnement en lecture seule de LVM 1. Par exemple, on peut faire l'instantané d'un volume, le monter et tester un programme expérimental qui modifie les fichiers dessus. Si le résultat n'est pas satisfaisant, on peut le démonter, le supprimer et remonter le système de fichiers originel à la place. C'est aussi utile pour créer des volumes utilisés avec Xen. Vous pouvez créer une image disque et en faire un instantané que vous pourrez modifier avec une instance spécifique de domU. Vous pourrez ensuite créer un autre instantané de l'image originale et le modifier avec une autre instance de domU. Comme les instantanés ne stockent que les blocs modifiés, la majeure partie du volume sera partagée entre les domUs.
+
+Voir [[http://doc.ubuntu-fr.org/tutoriel/sauvegarder_a_chaud|ici]] Pour sauvegarder son système à chaud avec LVM
+==== Création d'un snapshot LVM ====
+<code>lvcreate -L 10g -s -n lv_test_20110617 /dev/vg_data/lv_test</code>
+Va créer un snapshot du LV "**lv_test**" à la taille de **10Go** qui va avoir comme nom "**lv_test_20110617**".
+Attention, la taille d'utilisation du snapshot évolue avec l'utilisation. Si ce snapshot se retrouve rempli à 100%, il devient alors inutilisable (état "INACTIVE") mais pas d’inquiétude car il n'y a pas d’impact pour le LV d'origine. 
+
+
+==== Redimensionnement du snapshot ====
+La taille du snapshot est trop petite et elle arrive bientôt à 100%, pourtant vous avez encore besoin d'utiliser ce snap ? Il faut donc redimensionner !
+Vérifier avec vgdisplay que le VG dispose encore d'assez d'espace libre (Free PE / Size) puis effectuer :
+<code>lvresize -L +3GB /dev/vg_data/lv_test_20110617</code>
+Va ajouter **3Go** au snap **lv_test_20110617** qui est présent dans le VG **vg_data**.
+==== Fusionner un snapshot ====
+Le but ici est de fusionner un snapshot modifié vers le LV d'origine. Pour ainsi dire, "faire que les modifications apportées sur le snapshot se retrouvent sur le LV d'origine".
+<code>lvconvert --merge /path/to/dev/snap</code>
+Attention : vous avez besoin d'un kernel (>=2.6.33)
+
+===== Changement d'un disque défectueux =====
+
+Votre disque /dev/sda présente des signes de faiblesse (signalés par SMART, par la présence de nombreux fichiers dans les dossiers "lost + found" de vos partitions). Vous désirez le remplacer par un disque neuf, de taille plus importante (surtout pas plus petite !), que vous avez installé dans la machine (ou sur un port USB) et qui est reconnu par le système comme étant /dev/sdb.
+==== Principe ====
+
+Supposons que votre disque initial (/dev/sda) ait été formaté ainsi :
+/dev/sda1 est une partition primaire, de type bootable, montée sur /boot.
+/dev/sda2 est une partition étendue, contenant la partition logique /dev/sda5 de type lvm2.
+
+Vous avez besoin de copier /dev/sda1 sur une partition /dev/sdb1, et /dev/sda5 sur une partition /dev/sdb5.
+
+Vous allez utiliser l'outil GParted pour préparer le disque /dev/sdb et copier la partition de boot. Gparted ne gérant pas lvm2, nous utiliserons la ligne de commande pour la copie de /dev/sda5.
+
+==== Avec GParted ====
+
+Lancez Gparted (Système -> Administration -> Editeur de partitions GParted). 
+Les partitions de votre disque /dev/sda s'affichent. Notez la taille de /dev/sda1, ainsi que son filesystem (ext2/ext3/ext4). 
+
+Passez au disque /dev/sdb. Créez-y une nouvelle partition primaire /dev/sdb1, de taille légèrement supérieure à celle de /dev/sda1. "Appliquez" pour que la création soit effective, puis modifiez (par clic droit) les drapeaux de /dev/sdb1 pour rendre cette partition bootable. Créez une partition étendue /dev/sdb2, occupant le reste du disque. Sur cette partition, créez une partition logique /dev/sdb5 non formatée. "Appliquez" pour que vos créations soient effectives.
+
+Repassez au disque /dev/sda. Cliquez-droit sur /dev/sda1 et choisissez "Démonter" puis "Copier". Repassez au disque /dev/sdb. Cliquez-droit sur /dev/sdb1 et choisissez "Coller" (ou "Paste"). "Appliquez" à nouveau. Fermez GParted.
+
+==== En ligne de commande ====
+
+Remontez votre partition de boot : 
+  sudo mount /boot
+
+Faites un scan des volumes physiques de LVM :
+  sudo pvscan 
+    PV /dev/sda5   VG delphy   lvm2 [148,81 GiB / 4,87 GiB free]
+    Total: 1 [148,81 GiB] / in use: 1 [148,81 GiB] / in no VG: 0 [0   ]
+Cela signifie que le volume physique (PV) /dev/sda5 est inclus dans le groupe de volumes (VG) nommé ici delphy (bien sûr le vôtre porte un autre nom).
+
+Déclarez /dev/sdb5 comme volume physique :
+  sudo pvcreate /dev/sdb5
+    Physical volume "/dev/sdb5" successfully created
+
+Vérifiez qu'il existe bien, mais n'est pas encore attribué à un groupe de volumes :
+  sudo pvscan 
+    PV /dev/sda5   VG delphy          lvm2 [148,81 GiB / 4,87 GiB free]
+    PV /dev/sdb5                      lvm2 [465,47 GiB]
+    Total: 2 [614,28 GiB] / in use: 1 [148,81 GiB] / in no VG: 1 [465,47 GiB]
+
+Attribuez /dev/sdb5 à votre groupe de volumes (ici delphy). Ce groupe de volumes est "étendu" à /dev/sdb5 :
+  sudo vgextend delphy /dev/sdb5
+    Volume group "delphy" successfully extended
+
+Vérification :
+  sudo pvscan 
+    PV /dev/sda5   VG delphy   lvm2 [148,81 GiB / 4,87 GiB free]
+    PV /dev/sdb5   VG delphy   lvm2 [465,46 GiB / 465,46 GiB free]
+    Total: 2 [614,27 GiB] / in use: 2 [614,27 GiB] / in no VG: 0 [0   ]
+
+Lancez enfin le déplacement des données, du volume physique /dev/sda5 vers le volume physique /dev/sdb5 :
+  sudo pvmove /dev/sda5 /dev/sdb5
+    /dev/sda5: Moved: 0,3%
+    /dev/sda5: Moved: 0,7%
+    /dev/sda5: Moved: 1,0%
+    /dev/sda5: Moved: 1,3%
+    ...  
+    /dev/sda5: Moved: 99,8%
+    /dev/sda5: Moved: 100,0%
+
+Attention, l'opération peut prendre du temps (plusieurs heures pour les grosses partitions), suivant la taille des données à transférer, la rapidité des disques, etc.
+
+Vérifiez que le contenu de /dev/sda5 a bien été transféré sur /dev/sdb5 :
+  sudo pvscan 
+    PV /dev/sda5   VG delphy   lvm2 [148,81 GiB / 148,81 GiB free]
+    PV /dev/sdb5   VG delphy   lvm2 [465,46 GiB / 321,53 GiB free]
+En effet, la totalité de /dev/sda5 est libre, et /dev/sdb5 est occupée par les données transférées.
+
+Supprimez /dev/sda5 du groupe de volumes delphy :
+  sudo vgreduce delphy /dev/sda5
+    Removed "/dev/sda5" from volume group "delphy"
+
+Vérifiez :
+  sudo pvscan 
+    PV /dev/sdb5   VG delphy          lvm2 [465,46 GiB / 321,53 GiB free]
+    PV /dev/sda5                      lvm2 [148,81 GiB]
+    Total: 2 [614,28 GiB] / in use: 1 [465,46 GiB] / in no VG: 1 [148,81 GiB]
+
+Enlevez le disque des volumes physiques :
+  sudo pvremove /dev/sda5
+    Labels on physical volume "/dev/sda5" successfully wiped
+
+**Vous pouvez désormais enlever le disque.**
+==== Finalisation ====
+
+Réinstallez GRUB sur le MBR de votre disque dur :
+  sudo grub-install /dev/sdb
+
+Éteignez votre ordinateur, enlevez l'ancien disque et remplacez-le par le nouveau, au niveau des branchements.
+
+
+===== Mieux comprendre ou aller plus loin =====
+
+==== Notion d'« extent » ====
+
+Un //extent//, ou « //physical extent// » aussi appelé « PE », est un tout petit morceau d'un groupe de volumes. En fait, au moment de la création d'un groupe de volumes, le ou les disques sont découpés en morceaux de quelques Mio (4 Mio par défaut). Lorsqu'on crée un volume logique, LVM va utiliser autant de PE que nécessaires. La taille d'un volume logique sera donc toujours un multiple de la taille d'un PE.
+
+
+
+
+==== Glossaire ====
+
+|abréviation|anglais|français|description|
+|VG|**V**olume **G**roup |**G**roupe de **V**olumes | |
+|LV|**L**ogical **V**olume|**V**olume **L**ogique| une "partition" dans un groupe de volumes |
+|PV|**P**hysical **V**olume|**V**olume **P**hysique| |
+|PE|**P**hysical **E**xtent| **E**tendue **P**hysique|un tout petit morceau d'un groupe de volumes |
+
+==== LVM et RAID ===
+
+Il est tout à fait possible d'utiliser LVM sur un volume en RAID logiciel. Une fois que le RAID a été créé (''/dev/md0'' par exemple), il suffit de le donner à LVM, avec la commande habituelle :
+
+  pvcreate /dev/md0
+
+Bien qu'il soit possible de partitionner le raid ''/dev/md0'' comme n'importe quel disque ordinaire (ce qui permet d'obtenir des devices de la forme /dev/md0p1, /dev/md0p2 etc), je vous le déconseille vivement. En effet le but est bien d'utiliser LVM pour découper l'espace, et plus l'ancienne notion de partition physique. De plus, l'utilisation de ces partitions nécessiterait des changements dans la configuration de LVM (filter dans /etc/lvm/lvm.conf). Bref, C'est se donner du mal pour pas grand chose.
+
+Donc comme le montre la commande plus haut, le mieux est de donner l'intégralité du RAID. Un exemple de création de RAID est donné sur la [[:raid_logiciel|page raid logiciel]].
+
+Vous pouvez aussi aller voir le tutoriel [[tutoriel:installation_raid_lvm]]
+
+==== LVM miroir ===
+Convertir un LVM en miroir
+
+  lvconvert -m 1 Volume_Group/Logical_Volume /dev/sdx1 /dev/sdy1
+
+ou /dev/sdx1 est la partition LVM miroir à ajouter et /dev/sdy1 est la partition LVM de journalisation du miroir
+
+Voir l'état du miroir
+
+  lvs -a -o +devices
+
+  LV                          VG                   Attr  LSize    Origin Snap%  Move Log                   Copy%    Convert Devices                          
+  Logical_Volume              Volume_Group mwi-a-        465.00g                     Logical_Volume_mlog   1.56             Home_mimage_0(0),Home_mimage_1(0)
+  [Logical_Volume_mimage_0]   Volume_Group Iwi-ao        465.00g                                                            /dev/sdw1(0)                     
+  [Logical_Volume_mimage_1]   Volume_Group Iwi-ao        465.00g                                                            /dev/sdx1(0)                     
+  [Logical_Volume_mlog]       Volume_Group lwi-ao        4.00m                                                              /dev/sdy1(0)
+==== Interface graphique pour LVM ===
+
+Il existe une interface graphique pour LVM, qui permet de manipuler les volumes logiques : system-config-lvm. (disponible dans les dépôts de la 11.04).  Cette interface n'est pas disponible avec la version[[https://launchpad.net/ubuntu/+source/system-config-lvm| 18.04]]
+
+Attention néanmoins, celle-ci applique DIRECTEMENT les changements, vérifiez donc bien ce que vous faites, ainsi que le disque sur lequel vous appliquez vos modifications, sans quoi vous risquez de perdre irrémédiablement vos données.
+
+
+==== Monter une partition ====
+=== Obtenir la liste des groupes logiques ===
+<code>
+lvm vgscan
+</code>
+=== Obtenir la liste des partitions === 
+<code>
+lvm lvs
+</code>
+=== Rendre la partition disponible === 
+<code>
+lvm lvchange -ay /dev/VolGroup01/LogVol00
+</code>
+
+=== Monter la partition ===
+<code>
+mount /dev/VolGroup01/LogVol00 /media/user/point_de_montage
+</code>
+===  Exemple === 
+<code>
+user@ubuntu:~$ sudo lvm vgscan
+  Reading all physical volumes. This may take a while...
+  Found volume group "Groupe_lvm" using metadata type lvm2
+user@ubuntu:~$ sudo lvm lvs
+  LV      VG                 Attr          LSize          Pool Origin Data% Move Log Copy% Convert
+  home Groupe_lvm   -wi-ao---  500.00g
+  root   Groupe_lvm   -wi-a----    20.00g
+  swap Groupe_lvm   -wi-a----     4.00g
+
+user@ubuntu:~$ sudo lvm lvchange -ay /dev/Groupe_lvm/home
+user@ubuntu:~$ sudo mkdir /media/user/montage
+user@ubuntu:~$ sudo mount /dev/Groupe_lvm /home /media/user/montage
+</code>
+==== Vérifier une partition ====
+=== Rendre la partition disponible ===
+<code>
+lvm lvchange -ay /dev/VolGroup01/LogVol00
+</code>
+=== Lancer fsck ===
+<code>
+sudo fsck -f -y /dev/VolGroup01/LogVol00
+</code>
+==== Références ====
+  * [[http://hoper.dnsalias.net/tdc/index.php?pages/Documentation-LVM|l'origine de cette page ]] par [[utilisateurs:Hoper]]
+  * [[http://www.lea-linux.org/documentations/index.php/Leapro-pro_sys-lvm|Article de Léa Linux]] un peu vieux (LVM 1) mais plus complet que le mien…
+  * [[http://linux.developpez.com/lvm/#L4.1.1|Article de developpez.com]] excellent aussi (attention, sauf la partie réduction !)
+  * [[http://tldp.org/HOWTO/LVM-HOWTO/|LVM HOW TO (en)]] un how to assez complet en anglais
+  * [[http://www.traduc.org/Guides_pratiques/Suivi/LVM-HOWTO/Document| Guide pratique de LVM (fr)]] un guide assez complet en français
+  * [[http://www.korben.info/comment-chiffrer-une-partition-systeme-linux-ici-ubuntu.html#comment-164907|Comment chiffrer une partition système Linux]]
+  * [[http://www.it-connect.fr/gestion-des-lvm-sous-linux/|Gestion des LVM sous Linux]] sur IT-Connect.fr
+  * [[https://doc.ubuntu-fr.org/lvm_tutorial_install|Mise en place LVM tout simplement]] 
+
+----
+//Contributeurs : Koshie-2.0, [[utilisateurs:claudiux]] (remplacement disque défectueux), Alexandre LG ; merci à [[utilisateurs:Ner0lph]] et à tous les autres correcteurs :)//

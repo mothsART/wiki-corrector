@@ -1,0 +1,178 @@
+
+{{tag>partitions système}}
+----
+
+====== fsck : contrôle de l'intégrité et réparation de partitions ======
+
+
+FSCK est l'outil de contrôle d'intégrité et de réparation pour les systèmes de fichiers Linux.
+Pour plus d'informations voir la page : [[:verification de fichiers]].
+
+<note tip>Pour certains problèmes propres au système de fichiers NTFS, voir [[:ntfsfix]].
+
+Pour le système de fichier FAT, se référer à la page [[:dosfsck]].</note>
+
+fsck est un programme en mode console. Il se décompose en plusieurs sous-programmes, appelés automatiquement en fonction du type de la partition :
+
+<code>
+fsck.ext2      fsck.ext4      fsck.minix     fsck.nfs       fsck.vfat
+fsck.cramfs    fsck.ext3      fsck.msdos     fsck.reiserfs  fstobdf
+</code>
+
+
+===== Utilisation ======
+
+3 étapes simples :
+  - Identifier la partition à vérifier
+  - Démonter la partition
+  - Vérifier la partition
+
+==== Identifier la partition à vérifier =====
+Pour pouvoir utiliser ''fsck'', vous devez au préalable connaître le [[:partitions|partitionnement]] de votre disque.
+
+3 façons simples :
+  * [[gnome-disk-utility|L'utilitaire de disque]] (écrivez "disq" dans votre menu des applications) 
+  * L'utilitaire de disque [[:gparted]]
+  * La commande suivante :
+<code>
+  lsblk -fe7 -o +size
+</code>
+==== Démonter la partition =====
+<note warning>Il faut impérativement que votre partition soit démontée, c'est-à-dire non accessible, ce qui est le cas avec un live CD/DVD, c'est pourquoi il est plus simple d'effectuer la vérification ''fsck'' depuis un [[live CD|live CD/DVD]] ou un [[live USB]].</note>
+
+Une fois choisie la partition à examiner, il faudra la démonter, par exemple si la partition est **dev/sda1** :
+<code>sudo umount /dev/sda1</code>
+Si la partition est la partition root => voir le chapitre qui traite de ce cas
+
+==== Vérifier la partition =====
+<note>On prend comme hypothèse que le disque est sda1</note>
+
+=== Utilisation standard ====
+  sudo fsck /dev/sda1
+
+=== Forcer une vérification ====
+  sudo fsck -f -v /dev/sda1
+
+Explication :
+  * **-f** : force => forcer la vérification même si l'outil pense qu'il n'y a pas de problème
+  * **-v** : verbose => donne plus d'informations
+
+=== Vérifier les secteurs défectueux ====
+  sudo fsck -f -c -v /dev/sda1
+
+Explication :
+  * **-f** : force => forcer la vérification même si l'outil pense qu'il n'y a pas de problème
+  * **-v** : verbose => donne plus d'informations
+  * **-c** : vérifie les secteurs défectueux
+
+==== Un exemple de la commande fsck =====
+
+Dans notre exemple, l'examen de la partition retourne :
+<code bash>
+fsck 1.40.2 (12-Jul-2007)
+e2fsck 1.40.2 (12-Jul-2007)
+/dev/sda1 n'a pas été démonté proprement, vérification forcée.
+Passe 1 : vérification des i-noeuds, des blocs et des tailles
+I-noeud 2392126, i_size est 77055, devrait être 110592.  Corriger<o>? oui
+
+I-noeud 2392126, i_blocs est 192, devrait être 224.  Corriger<o>? oui
+
+Passe 2 : vérification de la structure des répertoires
+Passe 3 : vérification de la connectivité des répertoires
+Passe 3A : optimisation des répertoires
+Passe 4 : vérification des compteurs de référence
+Passe 5 : vérification de l'information du sommaire de groupe
+
+/dev/sda1: ***** LE SYSTÈME DE FICHIERS A ÉTÉ MODIFIÉ *****
+/dev/sda1: 68816/6750208 files (0.9% non contigus), 12039728/13492584 blocs
+</code>
+
+Si des corrections doivent être effectuées, fsck vous demandera de les confirmer : 
+
+<code bash>
+I-noeud 2392126, i_blocs est 192, devrait être 224.  Corriger<o>? oui
+</code>
+
+la lettre entre "<>" indique la réponse recommandée. Ici "o" soit "oui".
+
+
+
+===== Forcer un check fsck ( la partition racine : / ) =====
+
+Pour vérifier la partition racine, vous devez créer un fichier //forcefsck// à la racine :
+<code>sudo touch /forcefsck</code>
+Ce qui aura pour effet de lancer //fsck// au prochain démarrage. (grâce au service ///etc/init.d/checkfs.sh// ou ///etc/init.d/checkroot.sh//)
+
+<note important>Ceci ne fonctionne plus depuis Ubuntu 16.04, il faut maintenant passer fsck.mode=force comme paramètre au noyau dans la ligne GRUB_CMDLINE_LINUX_DEFAULT de grub (fichier **/etc/default/grub**) puis lancer la commande **update-grub**</note>
+
+Si le système vous le demande suite à un problème, vous devrez faire un fsck manuel, étant normalement déjà en root et la partition étant montée en ro.\\ Pour repérer la partition à analyser (/dev/...) :
+<code>fdisk -l</code>
+Puis lancement de fsck (ici avec l'option -y pour répondre "oui" à toutes les questions) :
+<code>fsck -y /dev/...</code>
+
+ou (avec plus d'options):
+
+<code>fsck -yfv -C0 /dev/...</code>
+
+L'​interface fsck​ lance le vérificateur adapté au système de fichiers de la partition ciblée : si la partition est formatée en ext4, alors fsck lancera automatiquement fsck.ext4
+
+Les différentes options :
+  * y => répond yes aux questions
+  * f => force la vérification même si le système est propre
+  * v => mode verbeux
+  * -C0 //[c'est un zéro]// => affichage de la barre de progression, même sur ext4 depuis 2015 ((Constaté avec la version 1.42-1ubuntu2.2 de e2fsprogs et de e2fslibs.))\\ (en 2014, uniquement sur ext2/3).
+
+===== Afficher les propriétés d'une partition =====
+
+Pour afficher la liste des propriétés d'une partition, il faut utiliser **tune2fs**.
+<code>sudo tune2fs -l /dev/sda1</code>
+ou
+<code>sudo LANG=C tune2fs -l /dev/sda1 | egrep -i "mount count|Check interval|Last|Next"</code>
+
+Parmi les informations retournées on peut voir :
+<code bash>
+Filesystem created:       Sat Apr 18 16:58:12 2009
+Last mount time:          Thu Oct  7 23:00:57 2010
+Last write time:          Thu Oct  7 23:00:57 2010
+Mount count:              16
+Maximum mount count:      37
+Last checked:             Sat Mar  4 13:52:50 2017
+Check interval:           15552000 (1 months)
+Next check after:        Sun Apr  5 13:52:50 2017
+</code>
+
+Dans cet exemple, le système de fichier sera vérifié automatiquement avec **fsck** après le 5 avril 2017 13:52 ou avant si jamais la partition est montée plus de 21 fois //(Maximum mount - Mount count)// d'ici là.
+
+
+===== Changer la fréquence d'analyse =====
+
+Pour les volumes //ext2 ou ext3//, il est possible de paramétrer une vérification automatique.
+
+C'est déjà le cas par défaut sous Ubuntu (au bout d'environ 30 montages).
+
+Pour modifier les paramètres, il faut utiliser **tune2fs**.
+Exemple 1 :
+<code>sudo tune2fs -c 50 /dev/sda1</code>
+permet de lancer //fsck// tous les 50 montages de la partition.
+Exemple 2:
+<code>
+sudo tune2fs -c 60 /dev/sda1
+sudo tune2fs -i 30d /dev/sda1
+</code>
+permet de lancer //fsck// tous les 60 montages ou tous les 30 jours pour partition sda1.
+===== Interface graphique =====
+[[:Gparted]] peut servir d'interface graphique à fsck. Ouvrez Gparted faite un clic droit sur la partition et choisissez l'option **Vérifier**.
+
+[[gnome-disk-utility|L'outil de disque]] peut aussi servir d'interface graphique (à vérifier)
+===== Voir aussi =====
+
+  * [[probleme_de_disque|Problème de disque ou partition]]
+  * Pour les sytèmes __antérieurs à ext4__ (soit avant Ubuntu 9.04) **Bonager** : interface graphique pour le contrôle des vérifications disque, [[http://ubuntuforums.org/showthread.php?t=295262|ce post]]. 
+  * [[wpfr>Fsck]],
+  * [[https://wiki.ubuntu.com/AutoFsck|autofsck]] : permet de lancer fsck lors de l'arrêt système plutôt que lors de son démarrage.
+  * 
+  * [[testdisk|Testdisk]], récupération de données sur un disque illisible
+  * [[ddrescue|ddrescue]], récupération de données sur un disque endommagé
+
+----
+//Contributeurs principaux : ...//

@@ -1,0 +1,967 @@
+
+{{tag>installation système sécurité tutoriel raid brouillon vétuste}}
+
+----
+
+
+====== Comment installer Ubuntu sur un RAID-1 logiciel ? ======
+
+Une des plus grandes hantises pour l'utilisateur de l'outil informatique est de perdre ses précieuses données ; ses lettres, ses morceaux de musiques préférés, la configuration de sa machine,... mais également (surtout depuis l'explosion de la photo numérique) les photos du petit dernier.
+
+Une des causes les plus fréquentes de cette perte de données est le crash du disque dur. Un composant matériel qui peut flancher (comme tout composants) et qui peut vous causer de gros tracas surtout si vous n'avez pas fait de sauvegarde de vos données.
+
+Si vous avez un peu d'argent dans votre tirelire, une solution simple et pas trop onéreuse peut vous prémunir de ce genre de désagrément ; il s'agit du RAID. Le concept du RAID est d'écrire simultanément sur plusieurs disques les mêmes données afin d'éviter toute perte en cas de panne de l'un des disques.
+
+La solution que je vais vous expliquer repose sur un RAID-1. Le RAID-1 est en fait, une copie miroir d'un disque sur un autre (ou plus mais alors, je vous conseille d'utiliser le RAID-5). Pour installer une solution de type RAID-5 ou RAID-1 avec plusieurs disques, vous pouvez vous baser sur cet article et l'adapter légèrement à vos besoins.
+
+**ATTENTION : bien que le risque de perdre vos données soit limité avec l'usage d'une solution RAID, cela ne vous dispense pas d'effectuer des backups !!!**
+
+Quelques idées pour les backups :
+   * Les CDs ou les DVDs et plus encore ([[:backup-manager]]).
+   * Les synchronisations avec une autre machine ([[:rsync]]).
+   * Une sauvegarde automatique et incrémentielle de son répertoire //home// ([[:rdiff-backup]])
+
+//Remarque : l'article ci-dessous repose sur le fait que vous possédez __deux disques dans une même machine__; si les deux disques sont dans deux machines différentes, je vous conseille de lire l'article concernant le [[:drbd|RAID-1 over IP avec DRBD]].//
+
+La solution RAID-1 proposée ci-dessous est une solution **logicielle**. Il ne s'agit pas d'une carte contrôleur RAID que l'on installe dans la machine. Remarquez cependant que plusieurs contrôleurs RAID grand public __ne font pas du RAID en hardware__, une explication les concernant est disponible en fin de l'article.
+
+===== Préambule =====
+
+Je vais vous exposer comment j'ai installé un RAID-1 logiciel sur un serveur //Fujitsu Siemens RX100 S2// équipé d'un contrôleur fake-RAID //Promise Fasttrack S150 TX4//. Les disques durs sont deux disques SATA de 80 Go et sont reconnus comme étant les devices ''/dev/sda'' et ''/dev/sdb''. Si vous ne disposez pas d'un système //fake-RAID//, la technique est identique à l'exception de la récupération en cas de panne qui nécessite quelques ajustements.
+
+Cet article considère que vous savez comment installer une Ubuntu Hoary de manière normale et que vous possédez une gravure sur CD d'Hoary; vous trouverez plus d'information concernant l'installation d'Hoary sur [[:installation|cette page]].
+
+===== Installation =====
+
+  * Pour commencer l'installation, démarrer sur le CD-ROM Ubuntu. Personnellement, j'ai installé Ubuntu en mode ''server''. Ce n'est pas nécessaire mais il est utile de préciser que tout ce qui suit sera en ligne de commande car aucune interface X n'est installée lors d'une installation en mode ''Server''((Pour rajouter l'environnement graphique à la fin de l'installation en mode ''Server'', il suffit d'ajouter les paquets kubuntu-desktop pour KDE, ubuntu-desktop pour Gnome ou xubuntu-desktop pour XFCE.)).
+
+**Attention : Il est impératif d'utiliser le CD "Server" ou le CD "Alternate", car il n'y a pas les options pour le RAID avec le CD "Desktop".**
+  * Effectuez l'installation normalement jusqu'au partitionnement des disques avec l'outil ''partman''.
+
+==== Partitionnement ====
+
+A ce moment, vous devriez avoir à l'écran l'ensemble des disques durs détectés ainsi qu'une option permettant de modifier les tables de partitions manuellement.
+
+  * Choisissez ''Modifier manuellement la table de partition''.
+  * Partitionnez les disques et gardez en tête que les deux disques doivent être parfaitement identiques. C'est-à-dire que si vous avez deux disques de tailles différentes, veillez à garder le début des disques identiques et ajoutez une partition au plus grand que vous monterez plus tard si nécessaire (Attention, cette partition ne sera pas en RAID-1).
+  * Avec des disques de 80 Go, j'ai choisi de partitionner de la manière suivante :
+<code>
+sda1         /boot        509.9 MB  (amorçable)
+sda2         swap         1.0 GB
+sda3         raid         78.5 GB
+</code>
+
+  * Voici un autre exemple avec 2 disques de 250 Go :
+Je crée d'abord 3 partitions RAID sur chacun des disques.
+
+Disque 1
+<code>
+sda1         raid         1 GB
+sda2         raid         2 GB
+sda3         raid         247 GB
+</code>
+Disque 2
+<code>
+sdb1         raid         1 GB
+sdb2         raid         2 GB
+sdb3         raid         247 GB
+</code>
+Puis je crée 3 périphériques multidisques RAID.
+Et enfin je formate ces 3 périphériques comme suit :
+<code>
+raid1         /boot     1 GB
+raid2         swap      2 GB
+raid3         /         247 GB
+</code>
+
+
+  * Pour d'autres informations sur cette étape voir aussi [[tutoriel:comment_installer_ubuntu_sur_raid0_logiciel|Comment installer]] Ubuntu sur un RAID-0 logiciel ?
+**Important :** notez les informations concernant l'ordre et les tailles des partitions que vous venez de créer car ces informations pourraient (j'espère pour vous que non) vous être utiles si un des disques devait être remplacé.
+
+**Remarque :** on m'a indiqué que GRUB et LILO sont capables de booter directement sur une device de type RAID software (''/dev/mdX''). Je n'ai cependant pas eu l'occasion d'essayer la procédure. La machine qui est à ma disposition est maintenant en production. Je mettrai cette page à jour dès que possible; vous trouverez les informations concernant GRUB et LILO dans les notes (en fin d'article).
+
+  * Pour indiquez que ''sda3'' est un volume RAID, il vous suffit de créer une partition et de sélectionner ''Volume physique RAID'' pour le champ ''Utiliser comme''.
+  * Répercutez la même table de partition sur le second disque ''sdb''. Mais, **attention** : veillez bien à ne pas indiquer de point de montage pour la première partition (''/boot''), ni pour la seconde partition (''swap''). Indiquez ces partitions comme étant ''Ne pas utiliser cette partition'' pour le champ ''Utiliser comme''.
+  * **Remarque importante :** N'oubliez pas d'indiquer à chaque fois que la première partition est amorçable.
+  * Maintenant, vous pouvez définir votre RAID-1 logiciel en allant sur le champ ''Configurer le RAID logiciel''.
+  * Ubuntu va vous demander si vous voulez appliquer les changements, faites ''oui''.
+  * Choisissez ''Configurer un périphérique multi-disques''.
+  * Choisissez l'option ''RAID-1'', nombre de périphériques actifs : ''2'', nombre de périphériques de réserves : ''0''.
+  * Sélectionnez les deux périphériques actifs; chez moi, il s'agit de :
+<code>
+/dev/scsi/host1/bus0/target0/lun0/part3
+/dev/scsi/host0/bus0/target0/lun0/part3
+</code>
+  * Choisissez ''Continuer'' et ''Terminer''.
+  * Vous avez maintenant une ligne supplémentaire avec quelque chose ressemblant à ceci, dans le cas du premier exemple de disques 80 Go, :
+<code>
+Périphérique RAID1 n°0 - 78.5 GB    Périph. RAID1 logiciel
+  n°1   78.5 GB
+</code>
+  * Allez sur ''n°1   78.5 GB'' et faites ''ENTER''.
+  * Changez le champ ''Utiliser comme'' pour obtenir ''Système de fichiers journalisés ext3'' et changez le point de montage en ''/''.
+  * Sélectionnez ''Fin  du paramétrage pour cette partition''.
+  * Tout en bas de l'écran, allez sur l'élément ''Terminer le partitionnement et appliquer les changements'' et faites ''ENTER''.
+  * Confirmez le fait qu'il faut appliquer les changements sur les disques.
+  * A partir de maintenant, vous pouvez terminer l'installation normalement.
+
+== Quelques explications ==
+
+Tout d'abord, vous avez sans doute remarqué la création d'une partition ''/boot''. Cette partition ''/boot'' est nécessaire car elle va nous permettre de stocker le noyau afin qu'il soit accessible par le BIOS. En effet, le BIOS n'est pas capable de lire une partition RAID-1 logicielle; seul le noyau Linux peut le faire. Or, à ce moment du démarrage, on doit être capable de charger le noyau, c'est pour cela qu'on va placer le noyau et la base du système nécessaire au démarrage dans cette partition ''/boot''.
+
+Ensuite, vous me direz que les données RAID-1 seront sauvegardées mais pas les informations de démarrage (ce qui se trouve dans ''/boot''). C'est exact. Comme cette partition ne peut pas être mise sur le RAID, on va devoir la dupliquer manuellement à chaque modification du noyau ou des paramètres de démarrage (GRUB,...).
+
+Enfin, les partitions ne sont pas utilisées sur le second disque (notamment, ''sdb1'' et ''sdb2'') afin que l'installeur Ubuntu ne configure pas les accès à ces partitions (qui serviront en cas de panne du premier disque).
+
+
+
+
+
+==== Premier démarrage ====
+
+<del>**Attention** : n'effectuez pas de reboot ou d'arrêt lors du premier démarrage tant que la construction du RAID n'est pas finie !!!</del>
+(s'il vous arrive de redémarrer votre machine avant la fin de la construction du Raid, celle ci reprendra quasiment là ou elle s'est arreté)
+
+Pour savoir si la construction est finie, vous trouverez les informations en affichant le fichier ''/proc/mdstat'' via la commande suivante:
+
+<code>
+cat /proc/mdstat
+</code>
+
+ou mieux : 
+<code>
+watch -n 10 cat /proc/mdstat
+</code>
+qui affiche l'état de la construction toutes les 10 secondes (à interrompre sans danger par un Ctrl-C).
+
+Lorsque la construction est en cours, vous obtenez quelques lignes ressemblant à ceci :
+
+<code>
+Personalities : [raid1]
+md0 : active raid1 sdb3[0] sda3[1]
+      76670144 blocks [2/2] [UU]
+      [=================>...]  resync = 88.9% (68220800/76670144) finish=4.3min speed=32422K/sec
+unused devices: <none>
+</code>
+
+Lorsque la construction est terminée, vous obtenez quelques lignes ressemblant à cela :
+
+<code>
+Personalities : [raid1]
+md0 : active raid1 sdb3[0] sda3[1]
+      76670144 blocks [2/2] [UU]
+
+unused devices: <none>
+</code>
+
+<del>Je me répète mais c'est important : **SURTOUT, NE REDEMARRER PAS LA MACHINE TANT QUE LA CONSTRUCTION N'EST PAS FINIE !!!**.</del>
+
+== Quelques explications ==
+
+Cette phase de construction prend un certain temps mais rassurez-vous, elle ne se produit que lorsque vous installez le RAID pour la première fois, ou que vous avez subi une avarie et que vous remettez votre système à la normale.
+
+<del>Si vous redémarrez la machine alors que le système RAID n'est pas cohérent, le noyau ne saura pas déterminer quel est le disque qui contient les données valables et quel est le disque qui était en train d'être reconstruit. Dès lors, le noyau se retrouve face à deux disques sans savoir lequel est valide... Ce qui est relativement problématique.</del>
+
+En RAID 1, chaque disque physique a un numéro d'ordre et un status, le système sait donc toujours ce qu'il est nécessaire de mettre à jour, même en cas de reboot. Les super-blocs récents (version 1.2) permettent même de marquer quelles parties du disque ne sont pas synchronisées.
+
+En RAID 5, il est possible que le système ne sache pas quels sont les données à utiliser dans le cas où la matrice est désynchronisée ET est en mode dégradé (il manque un disque); il faut alors forcer la construction de la matrice pour pouvoir reprendre la synchronisation, avec le risque que quelques blocs contiennent des données obsolètes ou pire, aléatoires (il faut alors faire un fsck sur le système).
+
+==== Duplication du boot ====
+
+**Remarque :** Si vous avez configuré GRUB ou LILO pour un démarrage direct sur ''/dev/mdX'', il n'est pas nécessaire de dupliquer le boot. (voir notes en fin d'article)
+
+Maintenant que la construction du RAID-1 est terminée, vous possédez deux disques partitionnés de manière identique. Cependant, un seul des disques contient une partition ''/boot'' (qui permet donc le démarrage du système) et une partition ''swap'' (pas indispensable mais utile de temps à autre). Le second disque possède juste une partition RAID-1.
+
+Dans l'état actuel des choses, cela signifie que si votre premier disque tombe en panne, vous ne savez pas démarrer sur le second. Ce qui pose problème car le but de cet article est d'avoir un système qui peut démarrer //surtout// si un des deux disques flanche.
+
+Pour faire cela, nous devons configurer une partition ''/boot'' avec les **mêmes informations que le premier disque** ainsi qu'une partition ''swap'' qui sera utilisée lorsqu'on démarrera sur le disque "de réserve". Les utilisations des partitions n'ont pas été définie lors de l'installation pour éviter que le fichier ''fstab'' soit configuré comme connaissant 2 partitions supplémentaires.
+
+=== Préparation des partitions et formatage ===
+
+Voici comment nous allons préparer ces deux partitions non-RAID afin que notre système puisse quand même démarrer sans le premier disque.
+
+Pour ce faire, nous allons lancer ''fdisk'' afin d'examiner les partitions de notre second disque (dans mon cas ''sdb'') :
+
+<code>
+sudo fdisk -l
+</code>
+
+Cette commande va nous indiquer quelque chose de similaire à ce qui suit :
+
+<code>
+Disk /dev/sda: 80.0 GB, 80026361856 bytes
+255 heads, 63 sectors/track, 9729 cylinders
+Units = cylinders of 16065 * 512 = 8225280 bytes
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sda1   *           1          62      497983+  83  Linux
+/dev/sda2              63         184      979965   82  Linux swap / Solaris
+/dev/sda3             185        9729    76670212+  fd  Linux raid autodetect
+
+Disk /dev/sdb: 80.0 GB, 80026361856 bytes
+255 heads, 63 sectors/track, 9729 cylinders
+Units = cylinders of 16065 * 512 = 8225280 bytes
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sdb1   *           1          62      497983+  83  Linux
+/dev/sdb2              63         184      979965   83  Linux
+/dev/sdb3             185        9729    76670212+  fd  Linux raid autodetect
+
+Disk /dev/md0: 78.5 GB, 78510227456 bytes
+2 heads, 4 sectors/track, 19167536 cylinders
+Units = cylinders of 8 * 512 = 4096 bytes
+
+Disk /dev/md0 doesn't contain a valid partition table
+</code>
+
+Vous remarquerez que ''sdb2'', notre future partition ''swap'' de secours n'est pas reconnue en tant que telle comme une ''swap''. Pour ce faire, nous devons légèrement modifier la table de partition de ''/dev/sdb2''. Pour ce faire, introduisez la commande suivante :
+
+<code>
+sudo fdisk /dev/sdb
+</code>
+
+Ensuite, vous demandez de changer le code d'identification de la partition en entrant la commande ''t'' (pour ''toggle''), ensuite le numéro de partition ''2'' (dans mon cas) et enfin, le code d'identification ''82'' qui signifie qu'il s'agit d'une partition ''swap''.
+
+Enfin, entrez la commande ''w'' (pour ''write'') afin d'écrire la table de partition définitivement sur le disque.
+
+Il nous reste plus qu'à formater les partitions, pour la partition ''/boot'' de réserve, nous introduisons la commande suivante (dans mon cas) :
+
+<code>
+sudo mkfs.ext3 /dev/sdb1
+</code>
+
+Et pour formater la partition ''swap'', il vous suffit d'introduire la commande suivante (dans mon cas) :
+<code>
+sudo mkswap /dev/sdb2
+</code>
+
+Redémarrez la machine pour que tout soit propre (en ligne de commande : ''sudo reboot'').
+
+=== Copie des informations de boot ===
+
+**Remarque :** Si vous avez configuré GRUB ou LILO pour un démarrage direct sur ''/dev/mdX'', il n'est pas nécessaire de dupliquer le boot. (voir notes en fin d'article)
+
+Une fois le démarrage effectué, il ne vous reste plus qu'à copier les données boot du premier disque vers le deuxième. C'est cette procédure qu'il faut suivre si vous effectuer une modification de GRUB ou du Kernel (en fait, **vous devez mettre à jour les partitions /boot à chaque fois qu'elle est modifiée !!!**).
+
+Pour ce faire, c'est très simple. Si ce n'est pas fait, créer un répertoire ''/boot2'' via la commande suivante :
+
+<code>
+sudo mkdir /boot2
+</code>
+
+Montez la partition ''/boot'' du second disque avec la commande qui suit (dans mon cas) :
+
+<code>
+sudo mount /dev/sdb1 /boot2
+</code>
+
+Copiez l'intégralité des fichiers de la partition ''/boot'' avec la commande suivante :
+<code>
+sudo cp -Rf /boot/* /boot2/
+</code>
+
+Il ne vous reste plus qu'à démonter la partition ''/boot'' de réserve (qui est actuellement montée en ''/boot2'') : 
+<code>
+sudo umount /boot2
+</code>
+
+Maintenant, vous devez configurer Grub2 pour le deuxième disque (il faut bien pouvoir démarrer si le sda crash).
+Tapez :
+<code>
+sudo umount /boot
+</code>
+
+Montez alors le deuxième disque à la place :
+<code>
+sudo mount /dev/sdb1 /boot
+</code>
+
+Configurez Grub2 :
+<code>
+sudo dpkg-reconfigure grub-pc
+</code>
+
+Faites ok et ok (rien à changer jusque là). Ensuite vient le choix entre sda1 et sdb1. Décochez alors sda1 pour cocher sdb1. Puis faites ok. Votre ordinateur est maintenant prêt à démarrer avec le deuxième disque. Redémarrez pour constater par vous même en choississant votre disque au démarrage Bios à l'aide de "F8".
+
+Votre système est maintenant prêt à subir une panne de disque dur.
+
+
+
+==== Installer un RAID1 en mode terminal "à la main" ====
+
+Exécuter le terminal ''Applications -> Accessoires -> terminal''
+Puis passer en root (Plus simple)
+
+<code>
+sudo -i
+</code>
+
+On part du principe que vous avez installé 2 disques durs identiques comme moi de 500 Go. (sdb et sdc) comme il sont gros nous allons faire 2 partitions.
+
+<code>
+fdisk /dev/sdb
+</code>
+
+créer une partition principale donc ''n'' puis ''p'' puis ''1'' de 1 à 25000
+créer une autre partition pricipale  donc ''n'' puis ''p'' puis ''2'' de 25001 à la fin du disque.
+
+Cela donne ceci :
+
+<code>
+Commande (m pour l'aide): p
+
+Disque /dev/sdb: 500.1 Go, 500107862016 octets
+255 têtes, 63 secteurs/piste, 60801 cylindres
+Unités = cylindres de 16065 * 512 = 8225280 octets
+
+Périphérique Amorce    Début         Fin      Blocs    Id  Système
+/dev/sdb1               1       24316   195318238+  83  Linux
+/dev/sdb2           24317       60801   293065762+  83  Linux
+</code>
+
+maintenant il faut installer le flag sur les deux partitions donc ''t'' puis ''1'' puis ''fd'' idem sur la deuxième partition donc ''t'' puis ''2'' puis ''fd'' cela va donner ceci :
+
+<code>
+Commande (m pour l'aide): p
+
+Disque /dev/sdb: 500.1 Go, 500107862016 octets
+255 têtes, 63 secteurs/piste, 60801 cylindres
+Unités = cylindres de 16065 * 512 = 8225280 octets
+
+Périphérique Amorce    Début         Fin      Blocs    Id  Système
+/dev/sdb1               1       24316   195318238+  fd  Linux raid autodetect
+/dev/sdb2           24317       60801   293065762+  fd  Linux raid autodetect
+</code>
+
+sauver les modifications ''w'' et puis faire exactement la même chose sur le second disque ''/dev/sdc''
+
+Après, formater les 4 partitions (je ne sais pas si c'est utile, mais bon) ;
+
+<note tip>Non, ce n'est pas utile</note>
+
+<code>
+mkfs.ext3 /dev/sdb1; mkfs.ext3 /dev/sdb2; mkfs.ext3 /dev/sdc1; mkfs.ext3 /dev/sdc2
+</code>
+
+C'est un peu long... 
+
+Maintenant, créer deux nouveaux devices
+
+<code>
+mknod /dev/md0 b 9 0
+mknod /dev/md1 b 9 1
+</code>
+
+c'est à ce stade que nous avons besoin de mdadm (donc installez-le)
+
+<code>
+apt-get install mdadm
+</code>
+
+C'est presque fini. Enfin, là, ça va prendre beaucoup de temps mais c'est le plus simple : Il suffit de créer les deux volumes raid en raid1 et taper ''y'' à la question 
+
+<code>
+mdadm --create --metadata=0.90 --verbose /dev/md0 --level=raid1 --raid-devices=2 /dev/sdb1 /dev/sdc1
+mdadm --create --verbose /dev/md1 --level=raid1 --raid-devices=2 /dev/sdb2 /dev/sdc2
+</code>
+
+<note important>Le --metadata=0.90 est nécessaire pour pouvoir booter sur /dev/md0 !</note>
+
+ça affiche ceci
+
+<code>
+ mdadm --create --verbose /dev/md1 --level=raid1 --raid-devices=2 /dev/sdb2 /dev/sdc2
+mdadm: /dev/sdb2 appears to contain an ext2fs file system
+    size=293065760K  mtime=Thu Jan  1 01:00:00 1970
+mdadm: /dev/sdc2 appears to contain an ext2fs file system
+    size=293065760K  mtime=Thu Jan  1 01:00:00 1970
+mdadm: size set to 293065664K
+Continue creating array? y
+mdadm: array /dev/md1 started.
+</code>
+
+On peut contrôler tout de suite avec 
+
+<code>
+mdadm --detail -scan
+</code>
+
+ce qui doit afficher ceci
+
+<code>
+ARRAY /dev/md0 level=raid1 num-devices=2 UID=b0be37d4:54202dc1:0e9efb29:244465d1
+ARRAY /dev/md1 level=raid1 num-devices=2 UID=17538a36:6bce6973:73fafbc4:d6a357b0
+</code>
+
+<note important>à partir de la version 11.04, ubuntu peut assigner la grappe sous le périphérique md127 lors du démarrage de l'ordinateur. Pour éviter cela, il faut enregistrez la grappe</note>
+
+<code>
+mdadm -Es | grep md/0  >>/etc/mdadm/mdadm.conf
+mdadm -Es | grep md/1  >>/etc/mdadm/mdadm.conf
+</code>
+
+initramfs doit contenir le fichier de configuration mdadm.conf durant le démarrage de l'ordinateur donc on le met à jour :
+
+<code>
+sudo update-initramfs -u
+</code>
+
+Maintenant vous devez attendre la construction du raid. Vous pouvez voir le détail de l'avancement comme ceci :
+
+<code>
+mdadm --detail /dev/md0
+</code>
+
+ça affiche ceci :
+
+<code>
+/dev/md0:
+        Version : 00.90.03
+  Creation Time : Tue Dec 18 12:36:06 2007
+     Raid Level : raid1
+     Array Size : 195318144 (186.27 GiB 200.01 GB)
+    Device Size : 195318144 (186.27 GiB 200.01 GB)
+   Raid Devices : 2
+  Total Devices : 2
+Preferred Minor : 0
+    Persistence : Superblock is persistent
+
+    Update Time : Tue Dec 18 12:36:06 2007
+          State : clean, resyncing
+ Active Devices : 2
+Working Devices : 2
+ Failed Devices : 0
+  Spare Devices : 0
+
+ Rebuild Status : 44% complete
+
+           UUID : b0be37d4:54202dc1:0e9efb29:244465d1
+         Events : 0.1
+
+    Number   Major   Minor   RaidDevice State
+       0       8       17        0      active sync   /dev/sdb1
+       1       8       33        1      active sync   /dev/sdc1
+</code>
+
+Là il est a 44%. Il parait que l'on peut le formater pendant la création du raid mais j'attendrais avant de lancer la commande de formatage. Il ne faut absolument pas interrompre la création du raid. Il n'y a plus qu'a monter les volumes ou vous voulez. Par exemple :
+
+<code>
+mount /dev/md0 /home/ftp
+mount /dev/md1 /home/samba
+</code>
+
+Pour le reste suivre les procédures habituelles voir l'utilisation de mount et de fstab.
+ 
+
+===== Utilisation du système RAID-1 logiciel =====
+
+==== Comment obtenir des informations sur le statut du RAID ? ====
+
+Pour obtenir des informations sur le statut du RAID, vous pouvez le faire soit de manière non détaillée avec la commande suivante :
+
+
+<code>
+cat /proc/mdstat
+</code>
+
+Et vous obtenez une sortie de la sorte :
+<code>
+Personalities : [raid1]
+md0 : active raid1 sdb3[0] sda3[1]
+      76670144 blocks [2/2] [UU]
+
+unused devices: <none>
+</code>
+
+Pour obtenir les RAID existant dans le système : 
+<code>
+sudo mdadm --detail -scan
+</code>
+
+Qui génère ceci chez moi :
+<code>
+ARRAY /dev/md0 level=raid1 num-devices=2 UUID=48b74990:15f454d9:93947193:76d9ea46
+   devices=/dev/sdb3,/dev/sda3
+</code>
+
+Ou alors, vous pouvez demander des informations beaucoup plus détaillée via la commande suivante (chez moi le RAID est sur la device ''/dev/md0'') :
+<code>
+sudo mdadm --detail /dev/md0
+</code>
+
+Avec cette commande, vous savez tout ;-) :
+<code>
+/dev/md0:
+        Version : 00.90.01
+  Creation Time : Wed Aug 31 09:38:34 2005
+     Raid Level : raid1
+     Array Size : 76670144 (73.12 GiB 78.51 GB)
+    Device Size : 76670144 (73.12 GiB 78.51 GB)
+   Raid Devices : 2
+  Total Devices : 2
+Preferred Minor : 0
+    Persistence : Superblock is persistent
+
+    Update Time : Fri Sep  9 10:50:48 2005
+          State : active
+ Active Devices : 2
+Working Devices : 2
+ Failed Devices : 0
+  Spare Devices : 0
+
+           UUID : 48b74990:15f454d9:93947193:76d9ea46
+         Events : 0.60924
+
+    Number   Major   Minor   RaidDevice State
+       0       8       19        0      active sync   /dev/sdb3
+       1       8        3        1      active sync   /dev/sda3
+</code>
+
+==== Comment invalider un disque ? ====
+
+Quand un disque à l'air de poser problème (ou qu'il pose réellemment problème), il est de bonne pratique de l'invalider le temps que l'on puisse le retirer physiquement. 
+
+Par exemple, si votre disque tombe en panne et que vous ne pouvez pas arrêter le serveur tout de suite, vous allez être inondé de messages d'erreurs et le système sera plus lent. Dans ce cas, vous l'invalidez le temps de pouvoir arrêter le serveur pour effectuer le remplacement physique (à moins d'avoir l'HotPlug bien entendu).
+
+Pour marquer le disque comme étant invalide (ou ''faulty''), on introduit la commande suivante (ici, j'invalide la partition ''/dev/sdb3'' de l'array RAID ''/dev/md0'') :
+
+<code>
+sudo mdadm /dev/md0 -f /dev/sdb3
+</code>
+
+
+
+
+==== Comment démarrer en cas de panne d'un des disques ? ====
+
+J'ai effectué plusieurs tests dans le cas où un disque viendrait à tomber en panne. Ces tests ont été effectués sur le serveur ci-dessus avec le fake-RAID. Si vous n'avez pas de contrôleur, il y a certaines choses qui doivent être effectuées.
+
+=== Sans contrôleur ===
+
+Voici une solution qui fonctionne :  
+
+<code>   
+*invoquer le shell grub : 
+grub>
+* Dans le shell de grub exécuter: 
+
+#Ecrire le MBR de /dev/sda
+root (hd0,0)
+setup (hd0)
+#Ecrire le MBR de /dev/sdb
+device (hd0) /dev/sdb
+root (hd0,0)
+setup (hd0)
+</code>
+
+Grâce à l'écriture dans le MBR des deux disques, ils démarrent l'un sans l'autre.
+J'ai simulé tour à tour la panne de sdb puis de sda, sans problème, il faut simplement taper ctrl+D pour continuer le lancement quand on vous le demande.
+
+=== Avec contrôleur fake-RAID ===
+
+C'est le charme du contrôleur fake-RAID, il n'y a rien à faire ;-).
+
+En fait, votre Linux est configuré pour travailler sur le disque ''sda'', ce qui signifie que vous trouverez uniquement des allusions à ''sda'' dans les fichiers de configuration (comme ''fstab'' par exemple). Le disque ''sdb'' sert juste de réserve. 
+
+Si vous retirez le disque ''sda'', le contrôleur montrera au système que le disque ''sdb'' devient le ''sda'' et dès lors, tous vos fichiers de configuration se rapporteront au bon ''device''.
+
+==== Comment remplacer le disque défectueux et réactiver le RAID ? ====
+
+Pour remplacer un disque défectueux, vous devez retirer le disque, en placer un nouveau et le partitionner de la même manière que celui qui est tombé en panne (**c'est pour cette raison qu'il faut noter les différentes tailles de partitions utilisées**).
+
+Ensuite, vous indiquez correctement les identifications des partitions (''Linux'', ''swap'' et ''raid'' dans mon cas) avec ''fdisk''. Vous suivez la procédure décrite ci-dessus //Copie des informations de boot// et enfin, vous ajoutez la partition RAID à l'array dégradé (le RAID auquel il manque un disque) via la commande suivante (dans mon cas) :
+
+<code>
+sudo mdadm /dev/md0 -a /dev/sdb3
+</code>
+
+**Attention :** la reconstruction du système RAID commence. Veillez à ne pas éteindre ou redémarrer la machine tant que ce n'est pas fini. (pour savoir quand c'est fini et le pourquoi, relisez la section //Premier démarrage// ci-dessus.
+
+Une fois la reconstruction finie, votre système est comme neuf.
+
+===== Agrandir un système RAID-1 logiciel =====
+Le principe même d'un RAID-1 est particulièrement gourmant en espace disque: pour deux disques de capacité égales, vous ne disposerez que de la capacité d'un seul.
+
+Il est donc très probable que vous en arriviez à vouloir agrandir l'espace disponible:
+  * Soit en ajoutant de nouveaux disques
+  * Soit en remplaçant les disques existants par des disques de plus grande capacité
+
+==== Ajout de nouveaux disques ====
+Dans un RAID-1, l'information est recopiée sur l'ensemble des disques contenus dans chaque système, cette copie a un coût en terme de performance. A moins que vous ayez vraiment très peu de confiance dans vos disques, il est souvent superflu d'utiliser du mirroring sur plus de deux disques. 
+
+Dans tous les cas, ajouter des disques à un système RAID-1 existant n'augmentera pas l'espace disponible mais la fiabilité de votre stockage. 
+Ainsi pour augmenter la capacité d'un système en RAID-1 en ajoutant des disques, cela revient à créer de nouveaux points de montage ou a recourir aux partitions logiques (LVM).
+
+En effet, si votre périphérique RAID est le support de partition logique, il est en fait vu comme un PV (ou physical volume) au sein d'un VG (Virtual Group) et dans ce VG vous avez défini des LV (Logical Volume). Ajouter des disques reviens à ajouter des PV au VG actuel puis à étendre vos partitions logiques. De cette manière vous aurez agrandis l'espace disponible sur vos partitions existantes.
+
+<note important>
+Si vous ajoutez à votre VG comportant des PV en RAID1, des PV qui ne sont pas en RAID1, vous fragilisez votre stockage et le premier RAID1 devient inutile. 
+
+En cas de défaillance d'un Physical Volume vous perdez les informations contenues dans le Volume Group. Il n'y a donc aucun sens d'ajouter un périphérique RAID0 (dont la fiabilité est faible) à un VG contenant des périphériques en RAID1 (beaucoup plus robustes mais plus couteux).
+</note>
+
+==== Remplacement des disques existants ====
+
+Tout d'abord on vérifie que le sytème actuel n'est pas en défaut et que les deux disques sont correctement synchronisés:
+<code>$sudo cat /proc/mdstat
+Personalities : [raid1] 
+md1 : active raid1 sdb2[0] sda2[1]
+  312440064 blocks [2/2] [UU]
+      
+md0 : active raid1 sdb1[0] sda1[1]
+  128384 blocks [2/2] [UU]
+      
+unused devices: <none>
+</code>
+<note> Ici chaque disque possède une partition de boot d'une centaine de Mo et une partition avec le reste de l'espace utilisable. 
+  * La première partition de chacun des deux disques est attribué à un md0 qui sert de /boot.
+  * La seconde partition de chacun des deux disques est attribué à un md1 qui sert de support pour LVM (md1 est un PV).
+</note>
+On va ensuite vérifier que chacune des partition de /boot est bien bootable:
+<code>fdisk /dev/sda
+
+WARNING: DOS-compatible mode is deprecated. It's strongly recommended to
+         switch off the mode (command 'c') and change display units to
+         sectors (command 'u').
+
+Command (m for help): p
+
+Disk /dev/sda: 2000.4 GB, 2000398934016 bytes
+255 heads, 63 sectors/track, 243201 cylinders
+Units = cylinders of 16065 * 512 = 8225280 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x494ca524
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sda1   *           1          16      128488+  fd  Linux raid autodetect
+/dev/sda2              17      19452   156151800   fd  Linux raid autodetect
+</code>
+Il y a bien une étoile dans la colonne "Boot" en face de /dev/sda1.
+
+On répète l'opération avec /dev/sdb.
+
+Si tout est bon, on peut arrêter la machine afin de procéder au premier échange.
+<note> En théorie les disques sata peuvent être connectés et déconnectés à chaud (sans éteindre la machine), personnellement je ne m'y risque pas.</note>
+
+On redémarre ensuite, il est possible qu'au cours du démarrage le démon mdadm qui gère le RAID vous dise que le RAID1 est endommagé et vous demande si vous souhaitez quand même continuer à utiliser la machine, c'est normal puisque vous avez volontairement retiré un disque.
+
+Vous pouvez vérifier l'état du RAID avec la commande 
+<code>cat /proc/mdstat
+
+Personalities : [raid1] 
+md1 : active raid1 sda2[1]
+      312440064 blocks [2/1] [_U]
+      
+md0 : active raid1 sda1[1]
+      128384 blocks [2/1] [_U]
+
+</code>
+Il y a donc un seul volume de disponible sur les deux qui le compose.
+
+
+Un fois le système démarré, on partitionne le nouveau disque de manière à avoir :
+  * la partition /boot de la même taille que l'ancienne (pas besoin de davantage) et bootable
+  * l'autre partition aussi grande que possible
+<code>
+fdisk /dev/sdb
+Device contains neither a valid DOS partition table, nor Sun, SGI or OSF disklabel
+Building a new DOS disklabel with disk identifier 0x1c8e53bb.
+Changes will remain in memory only, until you decide to write them.
+After that, of course, the previous content won't be recoverable.
+
+Warning: invalid flag 0x0000 of partition table 4 will be corrected by w(rite)
+
+WARNING: DOS-compatible mode is deprecated. It's strongly recommended to
+         switch off the mode (command 'c') and change display units to
+         sectors (command 'u').
+
+Command (m for help): p
+
+Disk /dev/sdb: 2000.4 GB, 2000398934016 bytes
+255 heads, 63 sectors/track, 243201 cylinders
+Units = cylinders of 16065 * 512 = 8225280 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x1c8e53bb
+
+   Device Boot      Start         End      Blocks   Id  System
+
+Command (m for help): n
+Command action
+   e   extended
+   p   primary partition (1-4)
+p
+Partition number (1-4): 1
+First cylinder (1-243201, default 1): 
+Using default value 1
+Last cylinder, +cylinders or +size{K,M,G} (1-243201, default 243201): 16
+
+Command (m for help): n
+Command action
+   e   extended
+   p   primary partition (1-4)
+p
+Partition number (1-4): 2
+First cylinder (17-243201, default 17): 
+Using default value 17
+Last cylinder, +cylinders or +size{K,M,G} (17-243201, default 243201): 
+Using default value 243201
+
+Command (m for help): a
+Partition number (1-4): 1
+
+Command (m for help): p
+
+Disk /dev/sdb: 2000.4 GB, 2000398934016 bytes
+255 heads, 63 sectors/track, 243201 cylinders
+Units = cylinders of 16065 * 512 = 8225280 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x1c8e53bb
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sdb1   *           1          16      128488+  83  Linux
+/dev/sdb2              17      243201  1953383512+  83  Linux
+
+Command (m for help): t
+Partition number (1-4): 1
+Hex code (type L to list codes): fd
+Changed system type of partition 1 to fd (Linux raid autodetect)
+
+Command (m for help): t
+Partition number (1-4): 2
+Hex code (type L to list codes): fd
+Changed system type of partition 2 to fd (Linux raid autodetect)
+
+Command (m for help): p
+
+Disk /dev/sdb: 2000.4 GB, 2000398934016 bytes
+255 heads, 63 sectors/track, 243201 cylinders
+Units = cylinders of 16065 * 512 = 8225280 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x1c8e53bb
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sdb1   *           1          16      128488+  fd  Linux raid autodetect
+/dev/sdb2              17      243201  1953383512+  fd  Linux raid autodetect
+
+Command (m for help): w
+The partition table has been altered!
+
+Calling ioctl() to re-read partition table.
+Syncing disks.
+</code>
+
+Ensuite, il suffit de rajouter les partitions aux volumes RAID-1:
+<code>sudo mdadm /dev/md0 --add /dev/sdb1</code>
+et
+<code>sudo mdadm /dev/md1 --add /dev/sdb2</code>
+
+La reconstruction commence immédiatement, elle est très rapide pour md0, le volume étant très faible, un peu plus longue pour md1 (le temps qu'il recopie toutes les informations octets par octets d'un disque sur l'autre.
+<code>
+cat /proc/mdstat 
+Personalities : [raid1] 
+md1 : active raid1 sdb2[2] sda2[1]
+      312440064 blocks [2/1] [_U]
+      [=>...................]  recovery =  5.9% (18516224/312440064) finish=52.4min speed=93437K/sec
+      
+md0 : active raid1 sdb1[0] sda1[1]
+      128384 blocks [2/2] [UU]
+      
+unused devices: <none>
+</code>
+
+Une fois la reconstruction finie, il faut renouveler l'opération en remplaçant le second disque.
+<note help>
+Il est possible que le grub vous joue des tours (une partie se trouve sur le MBR qui n'est pas recopié lors de la reconstruction). Je vous engage à vous renseigner selon le grub que vous utilisez et à garder vos anciens disques intacts tant que les nouveaux ne sont pas pleinement fonctionnels.
+</note>
+
+Lorsque la synchro est terminée avec vos deux nouveaux disques en place, vous pouvez alors augmenter la taille des volumes en partant du plus bas (plus proche de la couche physique) jusqu'à celui qui est le plus éloigné de la couche physique, en ce qui me concerne c'est à dire:
+  - Redimensionnement du md <code>mdadm -G /dev/md1 -z max
+mdadm: component size of /dev/md1 has been set to 1953383424K</code>
+  - Redimensionnement du pv <code> pvresize /dev/md1</code>
+  - Redimensionnement d'une partition logique (LV) <code> lvextend -L +800 /dev/mynew_vg/vol01 </code>
+  - Redimensionnement du système de fichier sur la partition logique en question: <code>resize2fs  /dev/mynew_vg/vol01 </code>
+===== Notes =====
+
+==== Concernant les fake-RAID ====
+
+La plupart des contrôleurs RAID ATA (ou SATA) (à l'exception de 3Ware Escalade, Adaptec 24x0, Areca, HP/Compaq, IBM ServeRAID, Intel SRC*/ICP Vortex, LSI Logic MegaRAID 150-4/150-6 et Tekram) ne sont pas des RAID réellement hardware mais ce sont plutôt des RAID software ou des fake-RAID dépendant du BIOS. Les fonctionnalités matérielles manquantes sont traditionnellement émulés de manière particulière, non documentée et avec des pilotes propriétaires pour pouvoir sortir du matériel à des prix compétitifs.
+
+Les fake-RAID sont difficiles à supporter sous Linux. En effet, le reverse-engineering est difficile, les pilotes sont propriétaires et particuliers et il y a peu de coopération avec les constructeurs.
+
+Le plus souvent, **Linux est incapable de lire des volumes fake-RAID existants** avec ce type de contrôleur; **à moins que** vous n'utilisiez les pilotes fake-RAID propriétaire (quand ils existent...). A moins de vouloir avoir un dual-boot avec MS-Windows, vous ne devez pas vous soucier de ces pilotes. Car le RAID logiciel (software) Linux (le pilote ''md'' du noyau) est __plus rapide et plus fiable__. (vous trouverez une série de tests comparatifs reproductibles sur cette page : http://spamaps.org/raidtests.php)
+
+Vous serez donc bien avisé de fuir les volumes fake-RAID, d'utiliser vos disques SATA comme des périphériques blocs et d'activer le RAID software Linux durant l'installation ;-).
+
+//Remarque d'un utilisateur://
+J'ai fait l'expérience sur mon poste de travail avec un contrôleur NVIDIA qui était géré par Linux en natif (Avec Ubuntu 8.10) et cela a fonctionné quelques temps. Puis le RAID 1 s'est corrompu pour je ne sais quelle raison. J'ai été dans l'incapacité de récupérer le RAID 1. Donc depuis je gère mes partitions en RAID logiciel purement Linux et exit les RAIDs irrécupérables ;)
+
+**Remarque importante :** La critique énoncée ci-dessus à propos des fake-RAID est justifiée mais il n'en est pas moins vrai que les contrôleurs (même si il ne s'occupe pas du RAID) sont très pratiques pour la séquence de boot lorsqu'un disque tombe en panne. Voir la section ci-dessus : //Comment démarrer en cas de panne d'un des disques ?//.
+
+
+==== Concernant le démarrage avec des contrôleurs Promise ====
+
+Lors de l'installation d'Ubuntu sur le serveur décrit ci-dessus, j'ai été confronté à un problème peu ordinaire (enfin, c'était la première fois que j'ai rencontré un tel problème et qui plus est, n'était pas documenté sur le web).
+
+En fait, après plusieurs tentatives d'installation infructueuse sur les disques SATA de ce serveur, j'en suis arrivé à essayer de comprendre comment fonctionnait le contrôleur Promise. 
+
+Le problème auquel j'étais confronté était le suivant :
+  * Les deux disques sont connectés sur le contrôleur.
+  * Le contrôleur m'indique à l'écran que les disques sont en ''1x2 mirror''.
+  * Je boote sur le CD d'installation Ubuntu.
+  * Premier problème, Ubuntu détecte 2 disques et ne voit pas les disques comme un périphérique RAID.
+  * Je me dis "Pas grave, j'installe sur le premier et à priori, le second devrait avoir les mêmes données."
+  * J'installes Ubuntu sur le premier disque.
+  * A la fin de l'installation, je redémarre la machine et là j'obtiens un message du style ''No operating system''.
+
+Après quelques recherches, j'ai appris que les contrôleurs Promise de ce type ne sont pas des contrôleurs RAID hardware mais bien des **fake-RAID** (voir note ci-dessus à ce propos).
+
+Je me dis, bon ok mais ça n'explique pas que mon système ne boote pas (même lorsque je déconnecte physiquement le second disque).
+
+Voici ce que j'ai fait :
+   - J'ai désactivé tous les arrays dans le BIOS du contrôleur (CTRL+F au démarrage),
+   - j'ai retiré physiquement le second disque
+   - et j'ai installé Ubuntu sur le premier comme si de rien était.
+   - Ensuite, j'ai reconnecté le second disque et j'ai créé un nouvel array dans le BIOS du contrôleur. **Attention :** lors de la création du nouvel array, j'ai demandé au contrôleur de faire un ''Create and duplicate''. A partir de ce moment, Ubuntu bootait (sans RAID mais le système démarrait).
+   - Enfin, j'ai suivi la procédure expliquée dans cet article pour avoir du RAID-1.
+
+Ma théorie concernant ce comportement pour le moins étrange...
+
+Je pense que le MBR pour le RAID est stocké dans le contrôleur et non sur le disque. Etant donné qu'on utilise pas les pilotes de Promise, le MBR (qui indique où booter) est inscrit uniquement sur le disque d'installation et dès lors, il n'est pas connu au niveau du contrôleur. En effectuant une duplication, le MBR Grub/Ubuntu inscrit sur le premier disque est copié sur le second **et** dans le contrôleur.
+
+Cependant, lors de la mise à jour du kernel via apt-get, le reboot est impossible.
+
+==== Boot directement sur la partition RAID ====
+
+Comme dit plus haut, on m'a indiqué que GRUB et LILO sont capables de booter directement sur une device de type RAID software (/dev/mdX). Je n'ai cependant pas eu l'occasion d'essayer la procédure. La machine qui est a ma disposition est maintenant en production. Je mettrai cette page à jour dès que possible.
+
+Il s'agit d'un cas idylique, aucune modification n'est à effectuer en cas de mise à jour du noyau.
+
+== Avec GRUB ==
+
+Exécutez
+<code>
+login@hostname:~$ sudo grub
+</code>
+
+Pour trouver où sont installés les fichiers de configuration du chargeur de démarrage GRUB du RAID 1 (Ici la partition est dédiée au boot donc elle est montée dans le répertoire /boot de la partition racine /, __si les fichiers de boot sont directement sur la partition racine__ / saisissez **grub>find /boot/grub/stage1**):
+<code>
+Grub>find /grub/stage1
+(hd0,0)
+(hd1,0)
+</code>
+
+Si vos disques du RAID 1 sont **/dev/sda** et **/dev/sdb**.
+Pour installer le chargeur de démarrage GRUB dans le **MBR de /dev/sda**: 
+<code>
+Grub>device (hd0) /dev/sda
+Grub>root (hd0,0)
+Grub>setup (hd0)
+</code>
+
+Pour installer le chargeur de démarrage GRUB dans le **MBR de /dev/sdb**:
+<code>
+Grub>device (hd0) /dev/sdb
+Grub>root (hd0,0)
+Grub>setup (hd0)
+</code>
+
+Éditez le fichier de configuration du chargeur de démarrage GRUB:
+<code>
+login@hostname:~$ sudo nano /boot/grub/menu.lst
+</code>
+
+Modifiez la configuration du chargeur de démarrage GRUB pour une partition racine / sur le RAID 1 /dev/md1:
+<code>
+title           Ubuntu n°version, kernel n°kernel-generic
+root            (hd0,0)
+kernel          /vmlinuz-n°kernel-generic root=/dev/md1 ro quiet splash
+initrd          /initrd.img-n°kernel-generic
+quiet
+</code>
+
+Mise à jour de la configuration du chargeur de démarrage GRUB
+<code>
+login@hostname:~$  sudo update-grub
+</code>
+
+== Avec Lilo ==
+
+Voici l'état des partitions (pas comme décrite ci-dessus) et la configuration :
+
+<code>
+# fdisk -l
+
+Disk /dev/sda: 36.4 GB, 36401479680 bytes
+255 heads, 63 sectors/track, 4425 cylinders
+Units = cylinders of 16065 * 512 = 8225280 bytes
+
+  Device Boot      Start         End      Blocks   Id  System
+/dev/sda1   *           1          13      104391   fd  Linux raid autodetect
+/dev/sda2              14          17       32130   fd  Linux raid autodetect
+/dev/sda3              18        4425    35407260   fd  Linux raid autodetect
+
+Disk /dev/sdb: 36.4 GB, 36401479680 bytes
+255 heads, 63 sectors/track, 4425 cylinders
+Units = cylinders of 16065 * 512 = 8225280 bytes
+
+  Device Boot      Start         End      Blocks   Id  System
+/dev/sdb1   *           1          13      104391   fd  Linux raid autodetect
+/dev/sdb2              14          17       32130   fd  Linux raid autodetect
+/dev/sdb3              18        4425    35407260   fd  Linux raid autodetect
+
+# cat /etc/lilo.conf
+
+disk=/dev/md0
+partition=/dev/md1
+map=/boot/map
+prompt
+delay=20
+timeout=20
+vga=normal
+default=Linux
+
+image=/boot/vmlinuz
+       root=/dev/md0
+       label=Linux
+       read-only
+
+
+# df -h
+Filesystem            Size  Used Avail Use% Mounted on
+/dev/md0               99M   19M   75M  20% /
+tmpfs                1013M     0 1013M   0% /dev/shm
+/dev/md1               31M  5.9M   23M  21% /boot
+/dev/mapper/svg-home  496M   31M  440M   7% /home
+/dev/mapper/svg-tmp   248M  8.1M  228M   4% /tmp
+/dev/mapper/svg-usr   2.0G  776M  1.2G  41% /usr
+/dev/mapper/svg-var   248M  207M   29M  89% /var
+/dev/mapper/svg-log  1008M   33M  924M   4% /var/log
+/dev/mapper/svg-loc    20G   12G  7.9G  59% /local
+</code>
+
+<note important>
+Si vous insérez un périphérique de stockage amovible boutable, il risque de perturber l'ordre des disques!
+donc si votre ensemble raid1 est sur /dev/sdb1 et /dev/sdc1, il se peut que le périphérique de stockage utilise un de ces dev et que votre partition raid soit déplacée sur /dev/sdd1 !
+Vous obtenez alors un message d'erreur du type 'invalid RAID superblock on sd??'
+</note>
+
+Pour éviter le problème ci-dessus, soit vous boutez sans périphérique de stockage branché, soit vous mettez tous les noms éventuels sous lequel peuvent se retrouver les partitions RAID à assembler. Par exemple, pour un RAID 1 avec deux disques je mets dans mdadm.conf :
+<code>
+DEVICE /dev/sdb1 /dev/sdc1 /dev/sdd1 /dev/sde1 /dev/sdf1
+</code>
+ET mdadm trouvera les deux bonnes partitions de type RAID là-dedans!
+
+
+===== Liens =====
+  * http://spamaps.org/raidtests.php
+  * http://gentoo-wiki.com/HOWTO_Gentoo_Install_on_Software_RAID_mirror_and_LVM2_on_top_of_RAID
+  * http://guitou.serveftp.org/geek/index.php?option=com_content&task=view&id=14
+  * http://www200.pair.com/mecham/raid/raid1.html (anglais)
+  * http://users.piuha.net/martti/comp/ubuntu/raid.html (anglais)
+
+----
+//Contributeurs : ostaquet, houyeux, [[:utilisateurs:claudiux]], [[:utilisateurs:cot_al]]//

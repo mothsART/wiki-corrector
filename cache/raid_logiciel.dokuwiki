@@ -1,0 +1,917 @@
+
+{{tag>bionic focal sauvegarde sécurité système raid}}
+
+----
+
+====== RAID logiciel avec mdadm ======
+
+===== Introduction - Qu'est-il possible de faire ? =====
+
+Vous venez de terminer une installation d'Ubuntu et voulez protéger vos données ou améliorer les performances en utilisant un système RAID (1, 5 et 6 pour la sécurité des donnés + perfs; 0 pour les perfs brutes au prix d'un risque accru de perte de donnés). \\
+Le RAID utilise une logique très simple. Pour sauvegarder efficacement les données, il suffit de les copier à plusieurs endroits. \\
+Le RAID permet donc d'utiliser les performances de plusieurs disques de manière optimale tout en diminuant les risques de perte de données au prix d'une légère perte d'espace disque (pour les RAID 5 et 6)
+
+
+==== Ce que RAID n'est pas ====
+
+Le RAID n'est pas une solution de sauvegarde, il s'agit d'une solution qui permet un rétablissement rapide de la situation lors d'un cas de figure favorable.
+Les deux (ou plus) disques utilisés étant souvent de la même époque, de la même marque, et même de la même série, il se peut que vous n'ayez pas de chance et que plus d'un disque grille à la fois, dans ce cas, il est possible que vous ne puissiez pas récupérer la moindre bribe de données ...
+Lors d'un événement qui conduirait à des dégâts électriques tous les composants de votre PC peuvent griller en même temps ... Ce genre de dégâts est fréquent si votre alimentation est dite "NONAME" c'est-à-dire une alimentation souvent vendue avec les ordinateurs pré-assemblés. La remplacer par une Alim de marque reconnue permet de baisser ce risque énormément à tel point qu'il en devient négligeable. Malgré tout une sauvegarde externe reste très vivement conseillée.
+
+Dans le cas d'un RAID 0, il ne s'agit aucunement d'une solution de sauvegarde, bien au contraire, le fait d'étaler les données sur plusieurs disques augmente certes les performances, mais il en résulte une plus grande chance de panne. En effet si un seul des disques d'un groupe RAID 0 grille, l'intégralité des données devient illisible !
+Ce type de RAID est donc utile seulement dans les cas où les données sont non cruciales mais dont les besoins de performances de lecture/écriture sont importants. (Partition système ou partition dite "Scratch area" c'est-à-dire endroit où est fait le travail courant avant d'être stocké plus en sécurité)
+
+==== Les types de RAID ====
+
+  * RAID 0: 2 disques minimum - "Taille du plus petit disque" x "nombre de disques" - Ce type de RAID ne protège pas du tout vos données, mais obtient les performances maximales de vos disques. Ce mode permet en effet de combiner plusieurs disques en un seul. Les données seront distribuées entre chaque disque (le nombre de disques utilisables est illimité, mais les risques de pannes augmentent, en toute logique, proportionnellement) ce qui permet de presque doubler les performances avec deux disques, presque tripler avec 3, etc ... ("Vitesse du disque le plus lent" x "nombre de disques")
+  * RAID 1: 2 disques minimum - Taille du plus petit disque - En RAID 1 vos données sont copiées sur deux disques ou plus. C'est-à-dire que chaque disque sera l'exacte copie du premier. Si l'un d'eux grille, il suffit de le remplacer pour créer une nouvelle copie sur ce nouveau disque. Côté performances, en écriture, elles seront les mêmes qu'avec un seul disque (le plus lent du groupe). En lecture les performances sur la copie d'un seul fichier devraient être proches de la vitesse d'un seul disque, mais vous pourrez lire à pleine vitesse autant de fichiers qu'il y a de disques en miroir (Exemple: Avec 3 disques identiques vous pouvez lire un fichier à 120 mo/s tout comme 3 fichiers à la fois, toujours à 120 mo/s par fichier)
+  * RAID 5: 3 disques minimum - "Taille du plus petit disque" x ("Nombre de disques" - 1) - Le RAID 5 est un mélange de RAID 0 et de RAID 1. Les fichiers sont à la fois coupés en plusieurs disques pour optimiser les performances et à la fois clonés de telle manière à ce qu'ils soient récupérables lors de la perte d'un disque. La vitesse est d'environ celle de //"vitesse du pire disque" x ("Nombre de disques" - 1)// que ce soit en lecture ou écriture, même si les performances en écriture peuvent être limitées par la puissance du CPU quand le nombre de disques est élevé (+ de 6 sur un PC actuel haut de gamme). Vous pouvez ajouter autant de disques que vous le souhaitez, mais le nombre de disques pouvant tomber en panne avant la perte totale des données du groupe restera toujours de 1.
+  * RAID 6: 4 disques minimum - "Taille du plus petit disque" x ("Nombre de disques" - 2) - Même chose que le RAID 5 sauf que 2 disques peuvent griller avant de perdre toutes les données contenues. Cette version du RAID est faite pour ceux utilisant un grand nombre de disques (5 ou plus) en RAID 5
+  * RAID 10: 4 disques minimum (par paire) - 2 x "Taille du plus petit disque" -  Le RAID 10 ou RAID 1+0 est le fait de créer deux (ou plus) RAID 1 que vous combinez ensuite en un RAID 0. Cette technique est automatisée par le mode RAID 10 qui fait le travail pour vous. Les performances en lecture sont du niveau d'un RAID 0 de deux (ou plus) disques mais deux fichiers peuvent êtres accédés à pleine vitesse en même temps. En écriture les performances sont celles de deux disques. Ce mode est recommandé pour des performances optimales tout en ayant une copie de sauvegarde. Malgré tout sa complexité n'en fait pas un mode recommandé ni pour les débutants, ni pour les particuliers en général. Beaucoup préféreront le mode RAID 5 avec le même nombre de disques, qui malgré des performances légèrement moindres vous offre plus d'espace utilisable.
+
+Pour plus de détails, Wikipédia est bien fourni : \\
+[[wpfr>RAID_(informatique)|Les différents types de RAID]]
+
+
+===== Mise en œuvre =====
+
+Tout ce qui suit fonctionne aussi bien avec la version serveur que la version Desktop d'Ubuntu. \\
+L'exemple utilisé est un montage RAID 5 **logiciel**, mais la méthode pour les autres types de RAID logiciel est la même.\\
+L'avantage est que vous ne vous ruinez pas dans l'achat d'une carte fille supportant le RAID  5 et en quelques lignes de commandes vous avez l'équivalent pour uniquement le prix des disques ! \\
+Mdadm remplace aussi avantageusement l'utilisation d'un [[:tutoriel/comment_utiliser_le_raid_onboard|fake-raid]] qui n'offre généralement pas d'aussi bonnes performances.\\
+L'utilisation de disques durs SATA, est plus que recommandée, car ils permettent une extraction à chaud (Hot Plug) pour un prix abordable. 
+
+Le logiciel qui va nous permettre de remplir notre objectif s'appelle **mdadm**.
+
+
+<note tips>
+Si vous avez besoin de la prise en charge du RAID logiciel dès l'installation de votre système, vous pouvez vous tourner vers
+une iso [[:/installation_alternate#obtenir_une_iso_alternate|alternate]] ou une iso serveur.
+</note>
+
+===== Pré-requis =====
+
+  - Il faut les droits root/administrateur
+  - Il faut un noyau supérieur à 2.6 (ne devrait pas être difficile à atteindre)
+  - Connexion Internet configurée et activée (utilisez le DHCP, si possible, cela évite de se casser la tête). 
+  - Configurez votre fichier /etc/apt/sources.list pour qu'Ubuntu aille tout chercher sur Internet. (déjà fait par défaut à priori)
+  - Ayez au moins 2 disques durs (cas du RAID 0 ou 1) ou 3 disques durs (cas du RAID 5) ou 4 disques durs (cas du RAID 6 et RAID 10)
+  - ... branchés sur des contrôleurs IDE Sata/P-ata/SCSI reconnus par Ubuntu (C'est à dire la quasi totalité)
+  - Il est recommandé que les disques soient de même taille, mais ce n'est pas indispensable, vous pouvez partitionner vos disques de telle manière que chaque disque ait une partition de la taille du disque le plus petit, le restant des disques pourra être utilisé en mode conventionnel "NON-RAID"
+
+===== Installation =====
+
+==== Installation de mdadm =====
+
+Il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>mdadm|mdadm]]**.
+
+Un boot est nécessaire pour permettre la découverte des structures RAIDS pré-existantes dans le cas d'une nouvelle installation de l'OS en plus (ou à la place) d'une installation existante utilisant des RAIIDS.
+
+
+==== Configuration des disques durs =====
+
+Comme indiqué ci-dessus dans les pré-requis, il faut au moins 3 disques durs pour faire du RAID 5. Dans cet exemple j'ai pris 4 disques, mais l'opération est la même si vous en utilisez plus ou moins que moi.
+
+Il faut partitionner les disques durs que nous allons utiliser grâce à l'utilitaire fdisk. Ici je vous guide pour un disque, à vous de le faire autant de fois que vous voulez utiliser de disques. Vous pouvez aussi utiliser [[:Gparted]]
+
+<code>
+sudo fdisk /dev/sdX
+</code> 
+
+
+Il faut comprendre que le `sdX` représente votre disque dur et que `X` représente sa lettre. Par exemple `sda`, `sdb`, `sdc`, etc... (vous pouvez utiliser [[Gnome-disk-utility]] pour connaître le "nom" de votre disque.)
+
+
+
+Info : Pour des partitions de plus de 2.2To, <del>il faut</del> utiliser "gdisk", de la même manière (fdisk semble gérer les tables de partition GPT à ce jour)
+<code>
+sudo gdisk /dev/sdX
+</code> 
+Choisir un type de table de partition "GPT", puis suivre a nouveau ce tuto
+
+
+Vous obtiendrez (grâce à l'option `m`) les lignes suivantes : 
+
+{{:securite:menu_fdisk.gif}}
+
+Il faut donc appliquer l'option `n` comme montré ci-dessus pour créer une nouvelle partition.
+
+fdisk vous demande alors le type de partition (p pour primaire ou e pour étendue).\\
+Nous n'allons créer qu'une seule partition par disque, nous choisirons donc le type primaine : 'p'
+
+Vous entrez ensuite dans le processus de création de partition étendue : 
+
+{{:securite:creation.1.gif|}}
+
+Tapez `1` comme montré ci-dessus
+
+{{:securite:creation.2.gif|}}
+
+Tapez sur la touche `Entrée`
+
+{{:securite:creation.3.gif|}}
+
+Tapez encore sur la touche `Entrée`
+
+Tapez sur la touche 't' pour changer le type de partition.
+
+Tapez 'fd' (Valeur hexadécimale correspondant à "Linux Raid Autodetect") puis `Entrée` afin de valider.
+
+Enfin, validez les modifications en tapant `w` : 
+
+{{:securite:validation.gif|}}
+
+Vous venez de créer une partition primaire sur votre disque /dev/sdX
+
+
+<note tip>**Il est aussi possible de créer des RAID sans l'utilisation des lignes de commandes via l'application graphique [[:gnome-disk-utility|palimpsest]] !** (Il faut quand même installer mdadm et renseigner le fichier mdadm.conf avec **ARRAY /dev/mdx devices=/dev/... /dev/... auto=yes** sinon votre raid ne démarrera pas tout seul au boot du système) </note>
+
+==== Construction du volume RAID =====
+
+Nous pouvons maintenant utiliser mdadm pour construire notre volume RAID 5 : 
+<code>
+sudo mdadm --create /dev/md0 --level=5  --raid-devices=4 /dev/sdb1 /dev/sdc1 /dev/sdd1 /dev/sde1
+</code>
+
+**sudo** permet de dire que le programme que nous allons exécuter aura les droits administrateur
+**mdadm** est le nom du programme à utiliser (oui j'explique même pour ceux qui ne sont pas adeptes de la ligne de commande)
+**--create /dev/md0** permet de donner un nom à votre RAID. Ceci est le disque dur virtuel que vous êtes en train de créer à partir de vos disques
+**--level=5** devra être modifié par le type de RAID que vous souhaitez utiliser (0,1,5,6,10). Exemple: --level=1 \\
+**--raid-devices=4** devra être modifié pour donner le nombre de disques que vous souhaitez utiliser (ici 4, vous 2 ou 3 ou 5, etc)
+**/dev/sdb1 /dev/sdc1 /dev/sdd1 /dev/sde1** il s'agit de la liste des partitions que je dois ajouter à mon RAID. À vous de les adapter à votre configuration. Aidez-vous de [[Gnome-disk-utility]] si trou de mémoire ^^
+
+<note important>N'utilisez pas l'option - -assume-clean lors de la création d'un nouveau volume RAID. Car vous risquez de perdre des données en cas de panne d'un disque dans une grappe raid5.
+https://raid.wiki.kernel.org/index.php/Initial_Array_Creation</note>
+
+<note help>Si cette commande échoue avec un message d'erreur parlant de md0, c'est parce que des modules n'ont pas été ajoutés automatiquement au noyau (cela nécessite un redémarrage après installation du paquet mdadm). De ce fait, effectuer :
+<code>
+sudo modprobe raid5
+sudo modprobe md
+</code>
+
+Si l'erreur persiste, faire au redémarrage suivant :
+<code>
+sudo echo raid5 >> /etc/modules
+sudo echo md >> /etc/modules
+</code>
+
+On trouvera aussi des informations intéressantes dans l'article [[:tutoriel:raid1_software]].
+</note>
+
+On termine cette construction par la daemonisation du volume RAID, c'est-à-dire que nous allons faire en sorte que le système charge le volume à chaque démarrage : 
+<code>
+sudo mdadm --daemonise /dev/md0
+</code>
+
+<note help> Si la commande ci-dessus renvoie un message du type :
+<code>
+mdadm: --daemonise does not set the mode, and so cannot be the first option.
+</code>
+essayez la commande suivante :
+<code>
+sudo mdadm --monitor --daemonise /dev/md0
+</code>
+</note>
+
+On peut maintenant demander quelques détails à notre disque virtuel :
+
+<code>
+sudo fdisk -l
+sudo mdadm --detail /dev/md0
+</code>
+
+==== Finalisation =====
+
+Il reste quelques modifications à effectuer : 
+
+  - Il faut formater le volume RAID nouvellement créé  : 
+<code>
+sudo mkfs.ext4 /dev/md0
+</code>
+**-Attention il vous est demandé de valider (y/N), il faut répondre O pour y**
+  - Déclarez ce volume dans `fstab` pour que le système le monte au démarrage (le système de fichier, pas le volume en lui même). Pour ce faire [[:tutoriel:comment_modifier_un_fichier|Editez le fichier]] **/etc/fstab** et ajoutez à sa fin la ligne : 
+<code>
+/dev/md0 	/media/raid	ext4	defaults 	0	1
+</code>
+Cela signifie que le système montera au démarrage le contenu du volume RAID dans le dossier /media/raid.
+  - Il ne reste plus qu'à créer le dossier /media/raid grâce à la commande mkdir : 
+<code>
+sudo mkdir /media/raid
+</code>
+
+<note tip>AJOUT DU 22/06/2017.    La chose qu'il est impératif de faire pour éviter des déboires :
+Mettre immédiatement le raids sous monitorat avec alerte par courriel afin de recevoir une alerte lorsque l'un des disques vient à flancher et simuler un incident afin d'être sûr que cela fonctionne. En effet, il me semble que 100% des incidents rencontrés dans le forum de discussion sont ouverts à la suite de la panne d'un second disque qui met en évidence que le premier a cessé de fonctionner depuis des mois</note>.
+
+
+===== Utilisation/Configuration =====
+
+==== Que faire pour agrandir l'array ? - Ajouter un disque ====
+
+Une fois les disques connectés et les partitions créées avec fdisk, il suffit de les ajouter :
+(par défaut, les partitions sont mise en SPARE)
+<code>
+sudo mdadm --manage /dev/md0 --add /dev/sdf1
+</code>
+Ensuite étendre l'array sur ces nouvelles partitions :
+<code>
+sudo mdadm --grow /dev/md0 --raid-devices=5
+</code>
+
+mdadm va partir en agrandissement (reshape) qui est une opération longue. On peut surveiller la progression avec l'une des trois commandes:
+<code>
+sudo mdadm --detail /dev/md0
+cat /proc/mdstat
+watch cat /proc/mdstat
+</code>
+<note help>Cette opération peut être **extrêmement longue**  (regardez le débit) <code bash>cat /proc/mdstat
+Personalities : [linear] [multipath] [raid0] [raid1] [raid6] [raid5] [raid4] [raid10] 
+md50 : active raid5 sdd5[1] sdd10[6] sdd7[3] sdd4[0] sdd9[5] sdd6[2] sdd8[4]
+      51900416 blocks super 1.2 level 5, 512k chunk, algorithm 2 [7/7] [UUUUUUU]
+      [>....................]  reshape =  0.3% (99836/25950208) finish=566.0min speed=760K/sec
+</code> Elle bloque quasiment l'accès au disque: gparted se bloque, les applications qui accèdent  à ce raid se bloquent, un arrêt machine se bloque.  Heureusement le redémarrage se passe sans difficulté avec reprise de l'opération!</note>
+
+Lorsque l'agrandissement (reshape) est terminé, mdadm va exécuter automatiquement la synchronisation des disques   qui est une opération moins lente. 
+<code bash> cat /proc/mdstat 
+Personalities : [linear] [multipath] [raid0] [raid1] [raid6] [raid5] [raid4] [raid10] 
+md50 : active raid5 sdd5[1] sdd10[6] sdd7[3] sdd4[0] sdd9[5] sdd6[2] sdd8[4]
+      155701248 blocks super 1.2 level 5, 512k chunk, algorithm 2 [7/7] [UUUUUUU]
+      [==>..................]  resync = 10.1% (2621812/25950208) finish=93.5min speed=4157K/sec </code>
+
+Une fois l'opération  finie, il vous faudra agrandir votre partition ext4 (ou similaire) via resize2fs.
+<code>
+sudo resize2fs /dev/md0
+</code>
+[[https://forum.ubuntu-fr.org/viewtopic.php?pid=22075419#p22075419|Voir un exemple concret.]]
+
+
+
+<note tip> Il devrait être aussi possible de gérer le changement de taille du RAID avec l'application GPARTED à partir de la version 20.04.0 
+<code bash>sudo gparted /dev/sda
+Unit boot.mount does not exist, proceeding anyway.
+GParted 1.0.0
+configuration --enable-libparted-dmraid --enable-online-resize
+libparted 3.3 </code>
+{{:mdadm:mdadm01.png?200|}}
+
+Quelques extraits récupérés du log.  	
+<code bash>e2fsck -f -y -v -C 0 '/dev/md50'  00:01:53    ( SUCCÈS )   	
+Passe 1 : vérification des i-noeuds, des blocs et des tailles
+L'arbre d'extent de l'i-noeud 2752601 (au niveau 2) pourrait être plus étroit. Optimiser ? oui
+
+resize2fs -p '/dev/md50'  00:01:44    ( SUCCÈS )</code>
+</note>
+
+==== Que faire pour agrandir l'array ? - Remplacer les disques ====
+Ce choix n'est probablement pas le premier auquel on pense. Cependant lorsque les disques initiaux sont anciens et qu'ils approchent les 100000 heures de fonctionnement, il faut envisager de les remplacer par des disques de plus grande capacité. Les disques doivent être remplacés les uns après les autres. Lorsque le dernier disque aura été remplacé, il sera possible d'utiliser la nouvelle capacité. La procédure proposée est la suivante:\\
+1) Lancer l'application smartctl pour tous les disques à remplacer. Consulter les retours pour trouver un ordre de changement. il y a probablement des disques en plus mauvais état que d'autres.\\
+2) Déclarer un disque inutilisable. La commande se fait en quelques secondes.
+<code bash>sudo mdadm --manage /dev/md0 --fail /dev/sdb1 --remove /dev/sdb1 </code>
+3) Vérifier que le disque n'a plus rien d'utilisé. Il peut  posséder d'autres partitions qu'il faudra alors traiter.
+<code bash>sudo fdisk -l /dev/sdb</code>
+4) Démonter le disque et le remplacer par le nouveau disque. Cette opération peut nécessiter  un arrêt de la machine gérant le raids.\\
+5) Formater le nouveau disque. Il conservera certainement le même nom. Il faut lui créer une table de partition GPT. Il faut lui remettre les "autres partitions" si l'ancien disque en avait puis créer une partition utilisant la totalité de l'espace disque restant. Il ne faut surtout pas créer une partition qui a la taille de l'ancienne partition.\\
+6) Mettre le disque dans le circuit et  regarder la remise en état se faire.  
+<code bash>sudo mdadm --manage /dev/md0 --add /dev/sdb1
+watch -n 60 cat /proc/mdstat</code>
+7) Lorsque tous les disques opérationnels sont traités, identifier et supprimer tous les disques de secours s'il en existe.
+<code bash>sudo mdadm --detail /dev/md0 | grep spare
+sudo mdadm --manage /dev/md0 --remove /dev/sdx1  /dev/sdy1 /dev/sdz1</code>
+8) Procéder à l'agrandissement du RAID, du système de fichier et  regarder l'agrandissement du système de fichier se réaliser.   
+<code bash>sudo mdadm --grow /dev/md0 --size=max
+sudo mdadm --detail /dev/md0 | grep Size     
+sudo resize2fs /dev/md0</code>
+
+
+==== Que faire lorsqu'un des composants de l'Array vient à défaillir ? ====
+
+Ne paniquez pas ! Vous n'avez pas perdu de données.
+L'objectif maintenant est d'identifier le disque dur défaillant, même si le disque ne tombe pas en panne physiquement, il peut défaillir. (Un bon outil de diagnostic est le visualiseur de données SMART de [[Gnome-disk-utility]] ou smartctl dans [[SMARTMonTools]])
+Maintenant que vous avez identifié le disque dur défectueux, il faut le déclarer comme tel. 
+
+1. Pour cela, on utilise mdadm :
+
+<code>
+mdadm --manage /dev/md0 --set-faulty /dev/sdb1
+</code>
+
+Explication :
+
+On utilise toujours le paramètre `%%--manage%%` de mdadm pour gérer le volume RAID.
+On utilise l'option `%%--set-faulty%%` pour déclarer le disque dur `/dev/sdb1` du volume RAID `/dev/md0` comme défaillant.
+
+2. Une fois déclaré défaillant, le disque dur est écarté du volume RAID. Il faut maintenant le désactiver pour pouvoir le retirer : 
+
+<code>
+mdadm --manage /dev/md0 --remove /dev/sdb1
+</code>
+
+Vous pouvez maintenant retirer le disque défaillant en toute sécurité et le remplacer par un disque sain.
+
+3. Une fois le remplacement effectué, il faut ajouter un disque sain dans le volume RAID pour bénéficier à nouveau de la tolérance de panne (cette opération doit être précédée du partitionnement du nouveau disque, aidez-vous des descriptions faites plus haut) :
+
+<code>
+mdadm --manage /dev/md0 --add /dev/sdb1
+</code>
+
+Maintenant vous devez patienter, le temps que le volume Raid se reconstruise. Pendant cette phase de reconstruction les performances peuvent être altérées. Mais la reconstruction ralentit si vous avez besoin des disques.
+
+==== Que faire pour diminuer l'array ? - Supprimer un disque? ====
+Le besoin de supprimer définitivement un disque d'un RAID est certainement rare.
+La documentation pour cette réalisation n'est pas pléthorique. Voici une proposition de mode d'emploi testée en version 20.04 sur un RAID5 composé de six entités.\\
+Cela est certainement valable pour les  RAID6.\\
+Les essais réalisés montrent que le risque est inexistant si des arrêts accidentels ont lieu pendant l'opération.\\
+Le principe est de d'abord rétrécir le contenu avant le contenant.\\
+Il n'y a pas d'outil contrôlant que la taille du système de fichier  va devenir supérieure à la taille de l'enveloppe RAID.\\
+Il n'y a pas d'outil réalisant cette opération de façon automatique.\\
+Si la réalisation manuelle est mal faite, les données utilisateurs sont irrémédiablement perdues.\\  
+Il faudra démonter le RAID pendant  une opération.\\
+
+1) Trouver la taille que peut héberger une unité physique du RAID.  L'unité de mesure est le KiB.
+<code bash>        sudo mdadm --detail /dev/md55 |grep "Dev Size"
+        Used Dev Size : 5237760 (5.00 GiB 5.36 GB) </code>    
+2) Trouver la taille actuelle occupée par les données du RAID.\\
+Supprimer d'abord les répertoires et les fichiers que vous considérez inutilement stockés dans le RAID puis regarder la taille utilisée.
+<code bash>        df -B 1024 |egrep "/dev/md55|Utilisé"
+        Sys. de fichiers blocs de 1K    Utilisé Disponible Uti% Monté sur
+        /dev/md55           15335408   11207536    3325832  78% /media/RAID55</code>
+En déduire le nombre de disques nécessaires et la taille du système de fichier.\\
+Nombre de disques =  taille du système de fichier utilisé divisé par la taille d'une unité physique arrondi à l'unité supérieure et éventuellement  un de plus si le résultat de la division est très proche de l'unité supérieure. \\
+Taille du système de fichier= Nombre de disques trouvés multiplié par la taille d'une unité physique.\\
+**Nombre de disques devant rester dans le RAIDS: Ajouter 1 (RAID5) ou 2 (RAID6) pour prendre en compte l'existence du "disque de parité."**\\ 
+Ici dans le contexte 4 et 15713280 \\  
+3) Démonter le raids. Il ne va plus être disponible pendant les deux opérations de réduction de taille ci-dessous. C'est une contrainte du logiciel de base.
+<code bash>         sudo umount -v /dev/md55 </code>
+4) Contrôler le système de fichier du raids. Cette opération peut être faite en utilisant gparted permettant un suivi de l'opération. Sinon:
+<code bash>        sudo e2fsck -f /dev/md55 </code>   
+5) Rétrécir  le système de fichier du raids. Cette opération peut être faite en utilisant gparted permettant un suivi de l'opération. Sinon:
+<code bash>        sudo resize2fs  /dev/md55  15713280K
+        resize2fs 1.45.5 (07-Jan-2020)
+        resize2fs: La nouvelle taille est plus petite que le minimum (4991762)</code> 
+Comme on le voit dans cet exemple, on ne risque pas de diminuer plus que la taille calculée.\\
+Si ce contexte arrive, il faut certainement revoir les opérations de calcul.\\
+Si l'incident perdure
+<code bash>        sudo resize2fs  /dev/md55  15713280K
+        resize2fs 1.45.5 (07-Jan-2020)
+        resize2fs: La nouvelle taille est plus petite que le minimum (4438811)   </code>
+6) Itérer sur  la réduction minima, cela diminuera par petites entités.\\
+A chaque itération, multiplier la nouvelle taille obtenue par le coefficient de taille (3 dans le contexte).\\ 
+Si la valeur est enfin inférieure, il est inutile de continuer, sinon il faut continuer  jusqu'au message final.       
+<code bash>        sudo resize2fs -M /dev/md55  
+        resize2fs 1.45.5 (07-Jan-2020)
+        Le système de fichiers a déjà 4434586 blocs (4k). Rien à faire ! </code>
+Il est alors possible de faire le point en remontant le système de fichier puis regarder la situation.
+<code bash>        df -B 1024 |egrep "/dev/md55|Utilisé"
+        Sys. de fichiers blocs de 1K    Utilisé Disponible Uti% Monté sur
+        /dev/md55           17327524   15300236    1124004  94% /media/RAID55</code>
+Dans ce contexte, on voit qu'on ne sait pas récupérer tout l'espace disponible!\\
+Il reste  la solution de supprimer un disque en moins pour que cela tienne...\\
+Le contexte va donc devenir: Conserver **5** disques avec une taille de 20954040 KiO
+<code bash>        sudo resize2fs  /dev/md55  20951040K
+        resize2fs 1.45.5 (07-Jan-2020)
+        En train de redimensionner le système de fichiers sur /dev/md55 à 5237760 (4k) blocs.
+        Le système de fichiers sur /dev/md55 a maintenant une taille de 5237760 blocs (4k).</code>
+7) Diminuer la taille de l'espace disque que le RAIDS doit gérer pour être en conformité avec la nouvelle taille du système de fichier
+<code bash>        sudo mdadm --grow /dev/md55 --array-size 20951040</code>
+Cette commande est sans réponse. L'application gparted permet de visualiser la nouvelle taille. \\
+Si par accident, une  faute de frappe a lieu, il est possible de la relancer. \\
+Attention: La valeur frappée ne doit pas être inférieure à la vraie valeur du système de fichier. Cela empêcherait de le monter et le rendrait inutilisable et irréparable aussitôt que le nombre de disques du RAID sera modifié.\\ 
+ 
+8) Remonter éventuellement le raids s'il doit être utilisé en lecture et lancer dans un autre terminal  le suivi des opérations de réorganisation du nombre de disques.
+<code bash>        watch -n 60 cat /proc/mdstat</code> 
+9) Eventuellement, indiquer que le RAIDS peut être utilisé en écriture.
+<code bash>        sudo mdadm --readwrite /dev/md55</code>
+10) Indiquer que le nombre de disques pour gérer le RAID va être diminué de un  en précisant la nouvelle valeur.
+<code bash>        sudo mdadm --grow /dev/md55 --    raid-devices=5 --backup-file /home/md55  
+        mdadm: Need to backup 10240K of critical section..</code>
+Il ne reste plus qu'à surveiller et patienter.
+<code bash>        [>....................]  reshape =  3.7% (195980/5237760) finish=54.6min speed=1536K/s</code>
+11) Indiquer que le disque désiré doit être supprimé. 
+<code bash>        sudo mdadm /dev/md55 --fail /dev/sdd7
+        mdadm: set /dev/sdd7 faulty in /dev/md55</code>
+Il ne reste plus qu'à surveiller et patienter.
+<code bash>        [===>.................]  recovery = 18.2% (956360/5237760) finish=10.0min speed=7107K/sec</code>
+Si, par chance, le disque à retirer  était un disque de sécurité, l'opération est immédiate et n'était pas nécessaire. \\
+   
+12) Enlever le disque désiré du raids.
+<code bash>        sudo mdadm /dev/md55 --remove /dev/sdd7
+        mdadm: hot removed /dev/sdd7 from /dev/md55</code>
+13) Itérer sur les actions décrites aux points  10 11 et 12.\\
+Si la commande de suppression du  disque donne ce retour
+<code bash>        sudo mdadm --grow /dev/md55 --raid-devices=4 --backup-file /home/md55
+        mdadm: this change will reduce the size of the array.
+        use --grow --array-size first to truncate array.
+        e.g. mdadm --grow /dev/md55 --array-size 15713280</code>
+La tentation est grande de faire un copier/coller de la commande proposée.\\
+Elle fonctionne très bien! La taille du RAID devient alors  nettement plus petite que le système de fichier qu'il héberge.\\
+Le système de fichier ne sera plus montable ni réparable.\\
+Le logiciel aurait du proposer la commande suivante:
+<code bash>        resize2fs  /dev/md55  15713280K</code>
+Mais il ne connaît absolument pas le système de fichier qu'il héberge et ne peut donc pas le faire!!!\\
+Il est nécessaire de faire la commande de resize. Si celle-ci ne fonctionne pas il n'y a pas de solution mais c'était très probablement une erreur de calcul dans le nombre de disques pouvant être enlevés ou une implantation de fichiers laissant des "trous"!
+
+ 
+ 
+
+==== Comment migrer les données vers une nouvelle machine ? ====
+
+Cette partie va montrer comment migrer les données d'un RAID à un autre RAID. Je vais considérer qu'il s'agit ici de la création d'une nouvelle machine pour recouvrir tous les aspects du problème.
+Il faut d'abord créer le nouveau RAID comme décrit dans la partie précédente. Et ré-assembler le RAID existant de façon à les faire cohabiter le temps de la copie des données.
+Pour cela il faut créer un nouveau fichier FIFO mais pour ne pas rentrer en conflit avec le fichier existant nous allons lui donner l'identifiant 1 :
+
+<code>
+mknod /dev/md1 b 9 1
+</code>  
+
+Ensuite il ne reste plus qu'à démarrer le vieux RAID comme suit :
+
+<code>
+mdadm -A /dev/md1 --update=super-minor -m0 /dev/sd... /dev/sd...
+</code>  
+
+La commande précédente demande l'assemblage en mettant à jour les informations d'identification. Le paramètre -m0 s'assure que nous utiliserons que les disques/partitions qui avaient un identifiant 0.
+
+<note important> <code bash>sudo mdadm --assemble /dev/md2   --update=super-minor  /dev/sdc11  /dev/sdc12  /dev/sdc13  /dev/sdc14</code>
+mdadm: --update=super-minor not understood for 1.x metadata
+</note>
+
+<note><code>sudo mdadm --assemble /dev/md2  --run /dev/sdc11   /dev/sdc12  /dev/sdc13  /dev/sdc14</code>
+mdadm: /dev/md2 has been started with 3 drives (out of 4) and 1 rebuilding.
+</note>
+
+
+Pour s'assurer que tout s'est bien passé vous pouvez afficher les informations mdadm :
+
+<code>
+cat /proc/mdstat
+</code>
+
+La sortie devrait ressembler à cela :
+
+<code>
+md1 : active raid5 sda[0] sdb[3] sde[2] sdf[1]
+      1465159488 blocks level 5, 128k chunk, algorithm 2 [4/4] [UUUU]
+      
+md0 : active raid5 sdc[0] sdg[2] sdd[1]
+      1953524992 blocks level 5, 128k chunk, algorithm 2 [3/3] [UUU]
+</code>  
+
+Si vous voulez faire persister les informations sur ce RAID vous pouvez passer la commande suivante :
+
+<code>
+mdadm --daemonise /dev/md1
+</code>
+
+===== Problèmes & solutions courantes =====
+==== Que faire si je n'arrive plus à accéder à mon raid ====
+Ne pas agir à la hâte !
+
+
+<note warning>En particulier **ne jamais utiliser**
+<code>mdadm --create ...</code> pour réassembler une grappe existante, à moins d'être guidé par un expert. 
+Car c'est certainement un des meilleurs moyen de rendre votre grappe raid irrécupérable. (Même si dans certains cas, et en particulier après avoir trop bidouillé, ça peut être le seul moyen de réassembler votre raid)</note>
+
+
+Essayez d'abord des choses simples : 
+
+Si une grappe raid s'avère inutilisable, commencez par l'arrêter avec <code>mdadm --stop ...</code> (Souvent l'activation d'un grappe raid qui échoue crée un périphérique inutilisable et verrouille tous les composant de la grappe)
+
+\\
+Ensuite tentez de relancer l'assemblage avec <code>mdadm --assemble ...</code> Rien de mal ne peut être fait par cette commande sauf avec certaines options supplémentaires. 
+
+<note warning>**n'utilisez surtout pas** les options - -force ou - -update sans demander l'avis d'un expert. Car si pour une raison ou une autre les composants ne sont pas à leurs place (risque surtout d'arriver si vous avez d'abord tenté de réassembler avec mdadm - -create ...) cela risque de provoquer une resynchronisation qui va remplacer des données valides par des données incorrecte)
+</note>
+\\
+Vous pouvez éventuellement forcer l'activation d'une grappe incomplète (s'il manque un seul disque sur un raid 1 ou 5) en ajoutant les options - -run - -read-only <code>mdadm --assemble --run --read-only ...</code> Si l'utilisation de l'option - -run à permis l'assemblage, examinez ensuite le contenu de vos systèmes de fichier, et profitez en pour faire une sauvegarde de vos données, avant de tenter de réintroduire un disque manquant.
+
+<note warning>N'utilisez pas <code>mdadm --add, --re-add, --fail, --remove, ou --replace</code> pour résoudre un problème d'activation et d'accès à la grappe raid. Ca n'a aucun sens, et ne peut que compliquer la remise en état de votre raid.
+</note>
+<note important>Et si vous n'arrivez pas à assembler votre raid avec les recommandations ci-dessus. Copiez tout les disques de la grappe raid individuellement avant de tenter autre chose (et ceci même si vous vous faites aider par un expert !)
+
+Et si vous êtes amené à utiliser mdadm - -create pour réassembler votre grappe, l'utilisation de l'option - -assume-clean **est impérative** 
+</note>
+
+==== Problème de taille de block & superblock ====
+Si en faisant une vérification, vous obtenez ceci :
+<code>La taille du système de fichiers (selon le superbloc) est de 7727257 blocs
+La taille physique du périphérique est de 7727232 blocs
+Le superbloc ou la table des partitions est peut-être corrompue !
+</code>
+ou ceci  (au boot par exemple):
+<code>
+my_documents: The filesystem size (according to the superblock) is 7727257 blocks
+The physical size of the device is 7727232 blocks
+Either the superblock or the partition table is likely to be corrupt!
+
+my_documents: UNEXPECTED INCONSISTENCY; RUN fsck MANUALLY.
+	(i.e., without -a or -p options)
+</code>
+
+Cela provient certainement du fait que vous avez construit le raid sans recréer un système de fichier par dessus !  Dans ce cas faites ceci :
+<code>e2fsck -f /dev/mdX</code> (où X est la partition raid) et **sans** interrompre, taper 'n' et laisser continuer (si vous n'avez pas de backup faites le avant, on ne sait jamais). Une fois fini faites :
+<code>resize2fs /dev/mdX</code>
+Cela va redimensionner la partition en fonction des info du superblock. pour être sûr revérifier (via e2fsck) la partition et cela devrait aller sans aucun problème !
+
+
+==== Device or ressource busy ...  ====
+Si, au démarrage, vous avec un message du genre :
+>fsck.ext3: Device or resource busy while trying to open /dev/sdbX
+>Filesystem mounted or opened exclusively by another program?
+
+Alors que /dev/sdX est un membre du raid et n'est pas lui-même présent dans fstab, cette solution peut peut-être vous aider : 
+(on sauvegarde pour le cas où ...)
+<code>sudo mv /etc/blkid.tab /etc/blkid.tab.baktimeofday</code>
+Ensuite redémarrer cela devrait être résolu.
+
+==== md127 ====
+<note tip>Rien ne prouve que le changement de nom soit grave. Il est même possible que les nouveaux O.S. numérotent à partir de 127 en décroissant. Faites très attention lors de vos corrections. Commencer par vérifier que vos données sont sauvées avant de vouloir rectifier.</note>
+<note tips>
+En changeant de système un RAID1 mdadm, la grappe peut-être reconnu comme /dev/md127
+<code bash>
+cat /proc/mdstat
+Personalities : [raid1] [linear] [multipath] [raid0] [raid6] [raid5] [raid4] [raid10] 
+md127 : active (auto-read-only) raid1 sda1[0] sdb1[1]
+      488385472 blocks [2/2] [UU]
+      
+unused devices: <none>
+</code>
+La méthode donnée sur ce lien a bien fonctionné avec une [[:xenial|Ubuntu 16.04]]
+
+<del>[[https://www.leforuminfo.com/index.php/articles-53/34-linux/64-renomme-un-raid-md127|renommer-un-raid-md127]]</del>
+<code bash>
+#tout oublier et rescanner
+sudo mdadm -Ss 
+# Assembler l' Array pré-existante (à adapter)
+sudo mdadm -A /dev/md0 /dev/sd[ab]1
+# s'en souvenir 
+sudo mdadm --detail --scan >> /etc/mdadm/mdadm.conf
+# mettre à jour initrd
+sudo update-initramfs -v -u
+# vous pouvez redémarrer /dev/md0 sera présent.
+sudo reboot
+</code>
+</note>
+
+Avec la version **16.04.1** et une ligne de création toute simple:
+<code>sudo mdadm --create /dev/md0 --level=1 --raid-devices=2 --name=MesDaTaRAIDS0 /dev/sdb12 /dev/sdc17</code>
+<code>sudo mdadm --create /dev/md1 --level=1 --raid-devices=2 --name=MesDaTaRAIDS1 /dev/sdc18 /dev/sdc19</code>
+<code>sudo mdadm --create /dev/md2 --level=1 --raid-devices=2                                           /dev/sdc20 /dev/sdc20</code>
+et faire  le montage des partitions md127     md126   et md125 .    Il semble que tout fonctionne.
+
+Avec [[:precise| Ubuntu 12.04]]
+Si votre RAID est non fonctionnel et reconnu comme /dev/md127
+
+Cette erreur semble principalement apparaître lors d'une création de volume RAID avec l’outil graphique  [[:gnome-disk-utility|palimpsest]] (inclus dans gnome-disk-utility).
+
+Il faut commencer par récupérer le numéro de UUID de votre volume RAID. Pour ce faire, il faut que votre RAID soit monté avec l'outil graphique puis depuis un terminal taper la commande suivante :
+
+<code>sudo mdadm -Es</code>
+
+Vous devez avoir ce type de résultat avec le numéro de UUID :
+
+<code>ARRAY [...] level=raid1 metadata=1.2 num-devices=2 UUID=ed684f7c:0756fe74:cd2238a8:62f7ed56 [...]</code>
+
+Déclarer votre volume RAID dans /etc/mdadm/mdadm.conf (Toujours avec vos valeurs et pas forcement md0 s'il est utilisé par un autre disque) :
+
+<code>ARRAY /dev/md0 level=raid1 metadata=1.2 num-devices=2 UUID=UUID de votre volume RAID</code>
+
+Exemple extrait d'un des threads ci-dessous :
+
+<code>ARRAY /dev/md0 level=raid1 metadata=1.2 num-devices=2 UUID=ed684f7c:0756fe74:cd2238a8:62f7ed56</code>
+
+Éventuellement ajouter votre volume dans  /etc/fstab (pour le montage au démarrage du système) après avoir créé votre point de montage (ici ->/media/VolumeRAID)  :
+
+<code>/dev/md0	/media/VolumeRAID	ext4	defaults	0	0</code>
+
+Mettre à jour [[https://wiki.ubuntu.com/Initramfs|initramfs]] afin de prendre en compte votre fichier mdadm.conf au démarrage :
+
+<code>sudo update-initramfs -u</code>
+
+De nombreux threads traitent de ce sujet (étonnamment toujours pas résolu !):
+<note tip>Ce phénomène est lié à la présence de la variable 'name=xxxx:0' dans la ligne de configuration de mdadm.conf.
+
+En supprimant cette variable de la ligne et après avoir mis à jour 'initramfs', le problème disparaît.
+</note>
+
+http://forum.ubuntu-fr.org/viewtopic.php?id=372346
+
+http://ubuntuforums.org/showthread.php?t=1764861
+
+http://ubuntuforums.org/showthread.php?t=1468064
+
+http://ubuntuforums.org/archive/index.php/t-1883173.html
+
+https://forum.ubuntu-fr.org/viewtopic.php?id=1997683
+
+https://forum.ubuntu-fr.org/viewtopic.php?pid=22383805#p22383805
+
+==== Droits d'écriture ====
+
+Lorsque votre RAID est activé automatiquement au boot, il se peut qu'en le montant avec le gestionnaire de fichier Nautilus, vous n'ayez pas les droits d'écriture.
+
+Pour corriger cela, il faut d'abord localiser le point de montage et vérifier les propriétés :
+<code>ls -l /media
+total 8
+drwxr-xr-x 2 root root 4096 juil.  7 02:03 cdrom
+drwxr-xr-x 3 root disk 4096 nov.  30 15:48 my_raid
+</code>
+On voit que le montage est réalisé sur '/media/my_raid' appartient à 'root' et a pour groupe 'disk', mais que seul 'root' peut écrire.
+Il faut remédier à cela en intégrant votre utilisateur dans le groupe 'disk' et en autorisant l'écriture dans le RAID pour ce groupe.
+<code>
+sudo adduser <votre_nom> disk
+sudo chmod -R 775 /media/my_raid
+</code>
+
+Vous aurez maintenant, en tant que membre du groupe 'disk', le droit d'écrire.
+
+Si cela ne résout pas le problème, une solution peut consister à déplacer le point de montage de /media/raid vers /media/user/raid. En effet, comme indiqué [[montage|ici]] (2.3), « Depuis quelques versions (16.04 ?), il existe un point de montage dédié à ces montages ponctuels dans le répertoire /media, et il porte votre nom. Ainsi, si vous avez choisis comme nom utilisateur fred, il existe un répertoire /media/fred. Il est intéressant d'utiliser ce répertoire (ou un répertoire dans votre compte utilisateur normal), car les montages qui ne sont pas faits dans votre compte /home/user ou dans /media/user ne sont pas visibles dans votre gestionnaire de fichiers (mais ils fonctionnent). »
+
+===== Des idées pour aller plus loin =====
+
+
+==== Découpage du volume avec LVM ====
+
+Lorsque l'on crée un volume RAID, on se retrouve vite avec de capacités très importantes. Or, créer un seul système de ficher de 500 Go, voire beaucoup plus, n'est pas forcement une bonne idée ! Pour pouvoir découper cet espace de stockage à volonté et pouvoir créer autant de système de fichier que nécessaire (et les redimensionner au besoin) il peut être très intéressant d'utiliser, "au dessus" du RAID la fonctionnalité LVM :
+
+[[:lvm]]
+
+Il existe aussi la possibilité de mettre du  [[https://raid.wiki.kernel.org/index.php/Initial_Array_Creation|RAID]]  à l'intérieur d'un LVM.
+
+
+
+==== La combinaison des niveaux de RAID ====
+
+Vous pouvez très bien combiner les niveaux de RAID. 
+La manière la moins onéreuse de créer un RAID combiné est d'effectuer plusieurs RAID matériels puis de les combiner entre eux au niveau logiciel. 
+
+On pourra prendre comme exemple le RAID 1,0 qui fonctionne très bien.
+Imaginons que nous ayons 6 disques durs de 30Go, plus un disque dur système et trois cartes-filles supportant le RAID 1. Créons donc trois ensembles RAID 1 (mirroring) qui feront tous 30Go. 
+Appliquons ensuite un RAID 0 au niveau logiciel. 
+On possède alors un seul ensemble de 90Go (3 x 30Go) et une tolérance de panne de trois disques durs (1 par unité RAID 1).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+==== Un disque de spare : votre roue de secours en cas de défaillance ====
+
+Pour ceux qui sont intéressés par la commande mdadm, sachez qu'elle possède d'autres options. L'une de ses options permet notamment d'ajouter un disque de spare, c'est-à-dire un disque "dormant", qui prend la relève dès qu'un disque tombe en panne. Cela vous permet une plus grande tolérance de panne. 
+
+Voici l'option permettant de prendre en compte un disque de spare : 
+<code>
+mdadm --create /dev/md0 --level=1 --raid-devices=2 --spare-devices=1 /dev/sdX
+</code>
+
+Par contre, si vous avez déjà un array RAID en service, sur sda2 et sdb2, et que vous voulez ajouter le spare sdc2 (préalablement partitionné à l'identique avec sfdisk par exemple) :
+<note>Afin de créer un disque de spare, il nous faut lui donner le même partitionnement que les autres disques du RAID. Pour cela, la commande sfdisk va nous aider.</note>
+Une fois votre disque supplémentaire connecté, il vous faut créer les mêmes partitions, pour cela tapez en root dans un terminal (sudo -i, ou sudo bash je vous le rappelle) :
+
+<code>
+sfdisk -d /dev/sda > sda.out
+sfdisk /dev/sdc < sda.out
+</code>
+ 
+ou sda est le disque "source", et sdc le disque "target"
+
+
+<code>
+mdadm --manage /dev/md0 --add /dev/sdc2
+</code>
+
+Vérifiez alors en tapant :
+<code>
+mdadm --detail /dev/md0
+</code>
+
+Et vous verrez votre nouveau disque sdc2 comme spare disk.
+
+
+
+==== Test ====
+
+Pour tester, et être sûr que tout fonctionne, faisons un test (qui revient à débrancher un disque) :
+<code>
+mdadm --manage /dev/md0 --set-faulty /dev/sdb
+mdadm --manage /dev/md0 --remove /dev/sdb
+</code>
+
+Alors le spare disque (ou le miroir...) prend le relais automatiquement.
+Si vous n'avez pas de spare, remettez le disque en service :
+<code>
+mdadm --manage /dev/md0 --add /dev/sdb
+</code>
+
+Constatez la reconstruction avec :
+<code>
+cat /proc/mdstat
+</code>
+
+Chaque disque retiré puis remis fera une reconstruction complète. Pour un array de 40 Go, comptez 15 min pour atteindre les 100% (60 mo/s environ). Évitez de rebooter la machine pendant la progression.
+
+
+Sans simuler la défaillance d'un disque, voici un outil qui vous permettra de vérifier si vos disques sont bien synchronisés, le test sera long. voir ///usr/share/mdadm/checkarray  --help// pour plus d'options.
+<code>
+sudo /usr/share/mdadm/checkarray  /dev/md0
+</code>
+
+Pour ceux qui fouillent un peu, les fichiers de configurations sont
+  *  [[file:///etc/default/mdadm]] 
+  *  [[file:///etc/mdadm/mdadm.conf]]
+
+<note warning>Si vous découvez que ces fichiers de configuration ne sont plus à jour, il est possible de les regénérer en ligne de commande <code bash>sudo bash /usr/share/mdadm/mkconf | sudo tee /etc/mdadm/mdadm.conf && sudo update-initramfs -u 
+</code> </note>
+
+
+==== Supervision du RAID ====
+Dans le fichier mdadm.conf ou lorsque l'on utilise mdadm en mode monitoring il est possible de se faire envoyer un email lorsqu'il y a un évènement qui se produit, c'est bien, c'est le comportement par défaut, mais si on n'est pas sur un serveur (et même dans ce cas) ce n'est pas toujours l'idéal. Enfin, rien ne vous empêche d'installer [[:messagerie_intranet|mailx]]
+
+L'idéal serait donc :
+  * Des traces d'évènement dans les log système
+  * Un script d'alerte perso.
+
+Pour les logs système, si vous utilisez la ligne de commande suivante :
+<code>
+mdadm --monitor --syslog --delay=1800 /dev/md0
+#équivalent à mdadm --monitor -y --delay=1800 /dev/md0
+</code>
+Ou encore, via le fichier de configuration /etc/mdadm/mdadm.conf en ajoutant :
+<code>
+# START_DAEMON:
+#   should mdadm start the MD monitoring daemon during boot?
+START_DAEMON=true
+
+# DAEMON_OPTIONS:
+#   additional options to pass to the daemon.
+DAEMON_OPTIONS="--syslog"
+</code>
+
+
+
+Cependant, le mieux et le plus intéressant reste un script maison. Plusieurs paramètres sont fournis par mdadm :
+  * $1 : chaîne de caractères décrivant ce qui s'est passé repris parmi celle-ci :
+    * SparesMissing : spare disque manquant
+    * Fail : un ou plusieurs disques défectueux
+    * RebuildStarted : un nouveau disque est présent et une reconstruction a débuté
+    * Rebuild20, 40, 60, 80 : reconstruction en cours à 20, 40, 60 ou 80%
+    * RebuildFinished : la reconstruction vient de finir
+    * SpareActive : disque spare vient d'être ajouté à un array
+  * $2 : nom du disque raid md concerné, par exemple /dev/md2
+  * $3 : disque concerné, par exemple /dev/sda5
+
+Un exemple de programme se trouve [[file:///usr/share/doc/mdadm/examples/syslog-events|localement]]
+
+Pour tester son programme on peut utiliser ceci :
+<code>
+sudo mdadm --monitor --scan --oneshot --test --program /cheminversmonprogramme
+</code>
+
+Afin de l'ajouter, 2 chemins sont possibles :
+ligne de commande, si vous lancez le RAID de cette manière :
+<code>
+mdadm --monitor --alert /cheminversmonprogramme --delay=180 /dev/md0
+#ou -p ou --programm
+#par defaut le delay est de 60 secondes
+</code>
+
+Ou encore, via le fichier de configuration /etc/mdadm/mdadm.conf en ajoutant :
+<code>
+# PROGRAM
+# programme qui sera exécuté en cas d'évènement
+PROGRAM /cheminversmonprogramme
+</code>
+
+==== Création d'un RAID sans avoir tous les disques ====
+Il est possible de créer un RAID sans avoir tous les disques au moment de la création. Pour cela au lieu de préciser /dev/sdXY on mettra missing.
+Par exemple, dans le cas ci-dessous il faudra ajouter un disque plus tard :
+<code>
+mdadm -C /dev/md0 -l1 -n2 /dev/sda1 missing
+</code>
+
+N.B.:
+
+Pour créer un RAID 10 avec seulement deux disques, les deux autres disques, marqués comme manquants, devront être alternés avec ceux présents :
+<code>
+mdadm --create /dev/md0 --level=10 --raid-devices=4 /dev/sda1 missing  /dev/sdb1 missing
+</code>
+Si l'on met deux missing à la suite, cela ne fonctionne pas
+
+Ensuite il suffit d'ajouter le (ou les) disque(s) manquant(s) via :
+<code>
+mdadm --manage /dev/md0 --add /dev/sdb1
+</code>
+
+Attention, ne pas oublier de regarder que la reconstruction du disque est finie *AVANT* de redémarrer, via <code>cat /proc/mdstat</code>
+
+==== Création d'un RAID1 sans avoir tous les disques et sans copie ====
+
+Dans l'exemple qui suit, on va mettre la partition /dev/sda4 en mirroir avec la partition /dev/sdb4. Cette procédure ne fait pas appel au rsync pour la copie, mais utilise la recopie du mdadm. Ce qui permet une remise en service plus rapide.
+
+L'exemple est fait pour une partition en ext2/ext3/ext4. Pour le reiserfs c'est aussi faisable mail il faut ajuster les commandes (resize_reiserfs au lieu de e2fsck et resize2fs)
+
+On démonte le file system, puis on calcule la nouvelle taile du file system car le RAID1 va rajoute un bloc de contrôle :
+<code>
+
+cd && umount /dev/sda4
+TAILLE_INITIAL=$(fdisk -l /dev/sda4 2>/dev/null|grep "/dev/sda4" |cut -d "," -f2| cut -d " " -f2)
+TAILLE_F=$(( $(( TAILLE_INITIAL / 1024 )) - 12 ))K
+echo $TAILLE_INITIAL
+echo $TAILLE_F
+
+e2fsck -f /dev/sda4
+resize2fs /dev/sda4 $TAILLE_F
+</code>
+Ici a partition est prete a accueillir le bloc de controle du raid.
+On construit le RAID
+<code>
+mdadm --create /dev/md0 --metadata=1.0 --level=1 --raid-devices=2 missing /dev/sda4
+	mdadm: /dev/sda4 appears to contain an ext2fs file system
+		size=3979656K  mtime=Fri Mar 11 20:21:34 2011
+	Continue creating array? y
+	mdadm: array /dev/md0 started.
+
+e2fsck -f /dev/md0
+	e2fsck 1.41.12 (17-May-2010)
+	La taille du système de fichiers (selon le superbloc) est de 525013 blocs
+	La taille physique du périphérique est de 524992 blocs
+	Le superbloc ou la table des partitions est peut-être corrompue !
+	Arrêter<o>? non
+	
+	Passe 1 : vérification des i-noeuds, des blocs et des tailles
+	Passe 2 : vérification de la structure des répertoires
+	Passe 3 : vérification de la connectivité des répertoires
+	Passe 4 : vérification des compteurs de référence
+	Passe 5 : vérification de l'information du sommaire de groupe
+	DATA : 12/131376 fichiers (0.0% non contigus), 156488/525012 blocs
+</code>
+On redimensionne le disque au cas où, mais cela ne devrait pas être utile. S'il indique qu'il fait une modification, c'est que le calcul de TAILLE_F était insuffisant.
+<code>
+resize2fs /dev/md0
+resize2fs 1.41.12 (17-May-2010)
+Le système de fichiers a déjà 525010 blocs. Rien à modifier !
+</code>
+On finit en marquant le disque comme étant un raid et on sauvegarde la configuration
+<code>
+	~# sfdisk --id /dev/sda 4 fd
+	
+	~# cp -a /etc/mdadm/mdadm.conf /etc/mdadm/mdadm.conf.origin
+	~# mdadm --misc --detail --brief /dev/md0 | tee -a /etc/mdadm/mdadm.conf
+</code>
+
+Vérification du status :
+
+<code>
+	~# cat /proc/mdstat 
+	Personalities : [linear] [multipath] [raid0] [raid1] [raid6] [raid5] [raid4] [raid10] 
+	md0 : active (read-only) raid1 sda4[1]
+	      3979584 blocks [2/1] [_U]
+
+	~# blkid /dev/md0
+	/dev/md0: LABEL="DATA" UUID="ff1521f6-e70d-4134-bb33-fb9f555ff6c5" TYPE="ext4"
+	# le raid à bien hérité du File system et du nom
+
+	# on vérifie qu'une entrée pour le RAID existe dans le ficher de configuration
+	tail /etc/mdadm/mdadm.conf
+</code>
+
+Mise en miroir : à partir du moment que le deuxième disque est disponible :
+
+<code>
+
+	~# mdadm --add /dev/md0 /dev/sdb4
+</code>
+
+On suit la reconstruction
+
+<code>
+
+	watch "cat /proc/mdstat"
+	Personalities : [linear] [multipath] [raid0] [raid1] [raid6] [raid5] [raid4] [raid10] 
+	md0 : active raid1 sdb4[2] sda4[1]
+	      3152192 blocks [2/1] [_U]
+	      [>....................]  recovery =  4.5% (144384/3152192) finish=0.6min speed=72192K/sec
+</code>
+
+===== Un peu de référence =====
+  * Comme toujours, une fois le paquet installé, de la doc est disponible [[file:///usr/share/doc/mdadm/rootraiddoc.97.html|localement]]
+  * <del>[[http://svn.debian.org/wsvn/pkg-mdadm/mdadm/trunk/debian/FAQ?op=file&rev=0&sc=0|FAQ de Debian sur mdadm]]</del>
+  * [[https://raid.wiki.kernel.org/index.php/Linux_Raid|Wiki de référence du raid logiciel Linux (à partir du kernel 2.6)]]
+  * [[http://tldp.org/HOWTO/Software-RAID-HOWTO.html|How-TO complet sur la question du raid (kernel antérieur à 2.6)]]
+  * [[http://www.noisette.ch/wiki/index.php/Mdadm]]
+  * [[https://hoper.dnsalias.net/atdc/index.php/2010/06/18/20100618quand-il-n-y-a-plus-aucun-espoir/|Deux disques RAID5 détruits au même moment]]
+  * <del> [[http://kev.coolcavemen.com/tag/mdadm/]]</del>
+  * [[https://forum.ubuntu-fr.org/viewtopic.php?id=2044377|Récupérer un vieux RAID géré par un NAS qui lâche]]
+  * [[https://raid.wiki.kernel.org/index.php/RAID_superblock_formats|Les formats des métadata]]
+----
+
+//Contributeurs : [[:utilisateurs:goldkey|goldkey]], [[:utilisateurs:Deejc|Deejc]], [[:utilisateurs:Grummfy]], gene69.//

@@ -1,0 +1,63 @@
+
+{{tag> tutoriel nagios }}
+-------
+====== Configurer nagios pour rkhunter ======
+
+===== Pré-requis =====
+
+  -  [[::rkhunter|Rkhunter]] doit être installé sur la machine et on considère que son binaire se trouve à l'emplacement **/usr/bin/rkhunter**
+  -  [[::nagios|Nagios]] est installé et configuré sur la machine
+  -  L'addon [[::nrpe|NRPE]] et le service est configuré et installé
+  -  [[::sudo|sudo]] doit être installé sur la machine
+
+===== Configuration des droits pour nagios =====
+
+Il faut permettre à nagios d’exécuter rkhunter qui nécessite les droits d'administration root. Au lieu de donner les droits root à l'utilisateur nagios (ce qui ferait de votre installation nagios une backdoor potentielle) nous allons lui donner des droits uniquement sur le binaire rkhunter. Pour cela on modifie le fichier de configuration */etc/sudoers* en y ajoutant cette ligne :
+
+<file>nagios  ALL=(root) NOPASSWD: /usr/bin/rkhunter</file>
+
+===== Ajout de la commande check_rootkit à nagios (avec NRPE) =====
+
+==== Placer le script ====
+
+Récupérer le script [[http://sk.bux.fr/~bux/check_rootkit|ici]] ([[http://exchange.nagios.org/directory/Plugins/Operating-Systems/Linux/check_rootkit/details|source]]) et le placer dans le répertoire **/usr/lib/nagios/plugins**. Puis lui donner des droits d’exécution :
+
+<code>chmod +x /usr/lib/nagios/plugins/check_rootkit</code>
+
+==== Ajouter la commande à la configuration ====
+
+On ajoute la commande au serveur NRPE, on ajoute cette ligne dans le fichier **/etc/nagios/nrpe.cfg** :
+
+<code>command[check_rootkit]=/usr/lib/nagios/plugins/check_rootkit</code>
+
+===== Ajout du service de surveillance =====
+
+On ajoute le service à la surveillance. On modifie le fichier **/usr/local/nagios/etc/objects/localhost.cfg** (ou autre selon votre besoin) :
+
+<code>
+define service{
+        use                             local-service
+        host_name                       localhost       ; nom de votre machine (selon votre configuration toujours)
+        service_description             rootkit         ; descriptif
+        check_command                   check_nrpe!check_rootkit -t 180   ; pensez a préciser ici le temps maximum d’exécution, sinon nagios peut croire que la commande ne répond pas
+        notifications_enabled           1
+        check_interval                  1440   ; on effectue la verification qu'une fois par jour
+        retry_interval                  60
+        max_check_attempts              1
+}
+</code>
+
+===== Redémarrage des services =====
+
+
+On relance les [[:services]] de nagios et nagios nrpe (sur les machines respectives)
+
+<code>
+sudo service nagios restart
+</code>
+<code>
+sudo service nagios-nrpe-server restart
+</code>
+
+----
+//Contributeurs: [[:utilisateurs:buxbux|bux]] //

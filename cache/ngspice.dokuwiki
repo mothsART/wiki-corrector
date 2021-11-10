@@ -1,0 +1,310 @@
+
+{{tag>Xenial conception_électronique BROUILLON}}
+
+----
+====== Ngspice rework ======
+
+Ngspice est un logiciel de simulation électronique permettant notamment d'étudier des montages électriques, de tracer des diagrammes de Bode, de calculer des gains, etc.
+
+Il est basé sur Spice3f5, Cider1b1 et Xspice.
+
+===== Installation=====
+Il suffit [[:tutoriel:comment_installer_un_paquet|d'installer les paquets]] **[[apt>ngspice]]** et **[[apt>ngspice-doc]]**.
+
+===== Utilisation =====
+
+Copiez les exemples de netlist de ngspice
+<code bash>
+mkdir ngspice
+cd ngspice
+cp -R /usr/share/doc/ngspice-doc/examples ./
+cd examples/cider/serial/
+</code>
+
+Simulation de la charge d'une capacitée
+<code bash>
+ngspice charge.cir
+</code>
+
+Exécution de la simulation
+<code>
+******                                                            
+** ngspice-20 : Circuit level simulation program                  
+** The U. C. Berkeley CAD Group                                   
+** Copyright 1985-1994, Regents of the University of California.  
+** Please submit bug-reports to: ngspice-bugs@lists.sourceforge.net
+** Creation Date: Wed Dec 16 22:39:18 UTC 2009                     
+******                                                             
+
+Circuit: mos charge pump
+
+ngspice 1 -> run
+Doing analysis at TEMP = 27.000000 and TNOM = 27.000000
+
+
+Initial Transient Solution
+--------------------------
+
+Node                                   Voltage
+----                                   -------
+4                                            0
+5                                            1
+6                                            1
+7                                            0
+2                                            1
+3                                            1
+1                                            1
+vc#branch                                    0
+vs#branch                         -1.46927e-11
+vbb#branch                         1.45234e-11
+vdd#branch                         1.46927e-11
+vin#branch                         3.03623e-19
+
+ Reference value :  1.97932e-07
+
+No. of Data Rows : 368
+
+ngspice 2 ->
+</code>
+
+Affichage du résultat des nœuds vin vs et vc
+<code>
+ngspice 2 -> plot vin#branch vs#branch vc#branch
+ngspice 3 ->
+</code>
+
+Pour réaliser vos propres netlist utilisez //gschem// de [[geda]] pour dessiner le schéma électronique (**schema.sch**) ou [[kicad]]. Puis pour //gschem// convertissez le schéma en un fichier netlist (**schema.net**) avec la commande //gnetlist// suivante :
+<code>
+gnetlist -g spice -o schema.net schema.sch
+</code>
+
+===== Images =====
+{{:application:ngspice.png?450|}}
+
+===== Syntaxe des fichiers circuit =====
+
+Les paramètres entre <> sont optionnels.
+
+==== Résistances ====
+Syntaxe
+<code>Rnom n1 n2 valeur</code>
+
+=== Exemple ===
+
+<code>Rin 2 0 100</code>
+
+=== Notes ===
+	
+
+n1 et n2 sont deux nœuds de connexion. Valeur est la résistance (en ohms), elle peut-être positive ou négative mais non nulle.
+
+==== Résistances Semi conducteur ====
+Syntaxe
+<code>Rnom n1 n2 <valeur> <Mnom> <L=Longueur> <W=Largeur> <Temp=T></code>
+
+=== Exemple ===
+<code>Rcharge 3 7 RMODEL L=10u W=1u</code>
+
+=== Notes ===
+C'est la forme la plus générale de résistance, elle permet de modéliser les effets de la température et de calculer sa résistance en fonction de sa géométrie et de spécifications propre.
+
+==== Capacités ====
+Syntaxe
+<code>Cnom n+ n- valeur <IC=INCOND></code>
+=== Exemple ===
+<code>Cout 13 0 1UF IC=3V</code>
+
+=== Notes ===
+n+ et n- sont les bornes positive et négative du condensateur. Valeur est la capacité en Farads. La condition initiale IC (optionnelle) est la valeur en volts de la tension au temps 0 de la capacitée.
+
+==== Capacités Semi conductrice ====
+Syntaxe
+<code>Cnom n1 n2 <value> <Mnom> <L=Longueur> <W=Largeur> <IC=VAL></code>
+
+=== Exemple ===
+<code>Cfilter 3 7 CMODEL L=10u W=1u</code>
+
+=== Notes ===
+C'est la forme la plus générale de condensateur, elle permet de calculer la valeur de la capacité à partir de la géométrie et de spécifications.
+
+==== Inductances ====
+Syntaxe
+<code>Lnom n+ n- valeur <IC=INCOND></code>
+
+=== Exemple ===
+<code>LSHUNT 23 51 10U IC=15.7MA</code>
+
+=== Notes ===
+n+ et n- sont les bornes positive et négative. Valeur est l'inductance en Henry.  La condition initiale IC (optionnelle) est la valeur du courant en ampère au temps 0 de la borne n+ à la borne n-.
+
+==== Inductance Mutuelle  ====
+Syntaxe
+<code>Knom Lnom1 Lnom2 valeur</code>
+
+=== Exemple ===
+<code>Kin L1 L2 0.87</code>
+
+=== Notes ===
+Lnom1 et Lnom2 sont les nom des deux inductances couplées. VALEUR est le coefficient de couplage K, il doit être plus grand que 0 et inférieur ou égal à 1.
+
+==== Switches ====
+Syntaxe
+<code>Snom n+ n- nc+ nc- Mnon <ON><OFF>
+Wnom n+ n- VNAM MnomL <ON><OFF></code>
+
+=== Examples ===
+<code>Switch1 1 2 10 0 smodel1
+W1 1 2 vclock switchmod1</code>
+
+
+==== Sources de tension ====
+Syntaxe
+<code>Vnom n+ n- <DC<> DC/TRAN VALUE> <AC <ACMAG <ACPHASE>>> <DISTOF1 <F1MAG <F1PHASE>>> <DISTOF2 <F2MAG <F2PHASE>>></code>
+
+=== Exemples ===
+<code>VCC 10 0 DC 6
+Vin 13 2 0.001 AC 1 SIN(0 1 1MEG)</code>
+
+=== Notes ===
+n+ et n- sont les bornes positive et négative. Les sources de tension ne sont pas à la masse. Le courant passe de la borne Positive à la borne négative. Un courant positive passe de la borne n+ à la borne n- au travers du circuit connecté.
+
+DC/TRAN sont le régime continu et transitoire d'analyse, AC est la valeur alternative.
+
+==== Sources de courant ====
+Syntaxe
+<code>Iname n+ n- <<DC> DC/TRAN VALUE> <AC <ACMAG <ACPHASE>>> <DISTOF1 <F1MAG <F1PHASE>>> <DISTOF2 <F2MAG <F2PHASE>>></code>
+
+=== Exemples ===
+<code>Igain 12 15 DC 1
+Irc 23 21 0.333 AC 5 SFFM(0 1 1K)</code>
+
+=== Notes ===
+ACMAG est la grandeur AC et ACPHASE est la phase AC. La source est réglée sur cette valeur dans l'analyse CA. Si ACMAG est omis après le mot-clé AC, une valeur de l'unité est supposée. Si ACPHASE est omis, une valeur de zéro est supposée. Si la source n'est pas une entrée de petit signal AC, le mot-clé AC et les valeurs AC sont omis.
+
+DISTOF1 et DISTOF2 sont les mots-clés qui spécifient que la source indépendante a des entrées de distorsion aux fréquences F1 et F2 respectivement (voir la description de la ligne de contrôle .DISTO). Les mots-clés peuvent être suivis d'une magnitude et d'une phase facultatives. Les valeurs par défaut de l'amplitude et de la phase sont 1,0 et 0,0 respectivement.
+
+==== Sources de courant linéaires à tension contrôlée ====
+Syntaxe
+<code>Gname n+ n- nc+ nc- value</code>
+
+=== Exemple ===
+<code>G1 2 0 5 0 0.1MMHO</code>
+
+=== Notes ===
+n+ et n- sont les noeuds positif et négatif, respectivement. Le flux de courant est du nœud positif, de la source au nœud négatif. nc+ et nc- sont les nœuds de contrôle positifs et négatifs, respectivement. VALUE est la transconductance (en mhos).
+
+==== Sources de tension linéaires à tension contrôlée ====
+Syntaxe
+<code>Ename n+ n- nc+ nc- value</code>
+
+=== Exemple ===
+<code>E1 2 3 14 1 2.0</code>
+
+=== Notes ===
+n+ est le noeud positif, et n- est le noeud négatif. nc+ et nc- sont les noeuds de contrôle positifs et négatifs, respectivement. La valeur est le gain de tension.
+==== Sources de courant à courant continu linéaire ====
+Syntaxe
+<code>Fname n+ n- Vname value</code>
+
+=== Exemple ===
+<code>F1 13 5 Vsen 5</code>
+
+=== Notes ===
+n+ et n- sont les noeuds positif et négatif, respectivement. Le flux de courant est du nœud positif, à travers la source, au nœud négatif. Vname est le nom d'une source de tension à travers laquelle circule le courant de commande. La direction du flux de courant de commande positif est du noeud positif, à travers la source, au noeud négatif de Vname. La valeur est le gain courant.
+
+==== Sources de tension linéaire commandée en courant ====
+Syntaxe
+<code>Hname n+ n- Vname value</code>
+
+=== Exemple ===
+<code>Hx1 5 17 Vz 0.5K</code>
+
+=== Notes ===
+n+ et n- sont les noeuds positifs et négatifs, respectivement. Vname est le nom d'une source de tension à travers laquelle circule le courant de commande. La direction du flux de courant de commande positif est du nœud positif, à travers la source, au noeud négatif de Vname. La valeur est la transresistance (en ohms).
+
+==== Sources non linéaires dépendantes ====
+Syntaxe
+<code>Bname n+ n- <I=EXPR> <V=EXPR></code>
+
+=== Exemple ===
+<code>B1 0 1 I=cos(v(1))+sin(v(2))</code>
+
+=== Notes ===
+n+ est le nœud positif, et n- est le nœud négatif. Les valeurs des paramètres V et I déterminent respectivement les tensions et les courants à travers et à travers le dispositif. Si I est donné alors le dispositif est une source de courant, et si V est donné le dispositif est une source de tension. Un seul de ces paramètres doit être donné. Le comportement AC à petit signal de la source non linéaire est une source (ou sources) linéairement dépendante avec une constante de proportionnalité égale à la dérivée (ou aux dérivées) de la source au point de fonctionnement en courant continu.
+
+==== Lignes de transmission sans perte ====
+Syntaxe
+<code>Oname n1 n2 n3 n4 Mname</code>
+
+=== Exemple ===
+<code>O23 1 0 2 0 LOSSYMOD</code>
+
+=== Notes ===
+Il s'agit d'un modèle de convolution à deux ports pour les lignes de transmission à un seul conducteur avec perte. n1 et n2 sont les nœuds au port 1; n3 et n4 sont les nœuds du port 2. Il est à noter qu'une ligne de transmission avec perte sans perte peut être plus précise que la ligne de transmission sans perte en raison des détails d'implémentation.
+==== Lignes RC uniformément réparties (avec perte) ====
+Syntaxe
+<code>Uname n1 n2 n3 Mname L=LEN <N=LUMPS></code>
+
+=== Exemple ===
+<code>U1 1 2 0 URCMOD L=50U</code>
+
+=== Notes ===
+n1 et n2 sont les nœuds à deux éléments que la ligne RC connecte, tandis que n3 est le nœud auquel les capacités sont connectées. Mname est le nom du modèle, LEN est la longueur de la ligne RC en mètres. Lumps, si spécifié, est le nombre de segments agrégés à utiliser dans la modélisation de la ligne RC (voir la description du modèle de l'action effectuée si ce paramètre est omis).
+
+==== Diodes de jonction ====
+Syntaxe
+<code>Dname n+ n- Mname <Area> <OFF> <IC=VD> <TEMP=T></code>
+
+=== Exemple ===
+<code>Dfwd 3 7 DMOD 3.0 IC=0.2</code>
+
+=== Notes ===
+n+ et n- sont les noeuds positifs et négatifs, respectivement. Mname est le nom du modèle, Area est le facteur de zone et OFF indique une condition de départ (optionnelle) sur le périphérique pour l'analyse de courant continu.
+
+==== Transistors de jonction bipolaire (BJT) ====
+Syntaxe
+<code>Qname nC nB nE <nS> Mname <AREA> <OFF> <IC=VBE, VCE> <TEMP=T></code>
+
+=== Exemple ===
+<code>Q23 10 24 13 QMOD IC=0.6, 5.0</code>
+
+=== Notes ===
+nC, nB et nE sont respectivement les nœuds de collecteur, de base et d'émetteur. nS est le nœud de substrat (facultatif). Si non spécifié, la terre est utilisée. Mname est le nom du modèle, Area est le facteur de zone, et OFF indique une condition initiale (facultative) sur le périphérique pour l'analyse DC.
+
+==== Transistors à effet de champ de jonction (JFET) ====
+Syntaxe
+<code>Jname nD nG nS Mname <Area> <OFF> <IC=VDS, VGS> <TEMP=T></code>
+
+=== Exemple ===
+<code>J1 7 2 3 JM1 OFF</code>
+
+=== Notes ===
+nD, nG et nS sont respectivement les nœuds drain, gate et source. Mname est le nom du modèle, Area est le facteur de zone, et OFF indique une condition initiale (facultative) sur le périphérique pour l'analyse CC.
+==== MOSFETs ====
+Syntaxe
+<code>Mname ND NG NS NB MNAME <L=VAL> <W=VAL> <AD=VAL> <AS=VAL> <PD=VAL> <PS=VAL> <NRD=VAL> <NRS=VAL> <OFF> <IC=VDS, VGS, VBS> <TEMP=T></code>
+
+=== Exemple ===
+<code>M31 2 17 6 10 Mname L=5U W=2U</code>
+
+=== Notes ===
+nD, nG, nS et nB sont respectivement les nœuds drain, gate, source et bulk (substrat). Mname est le nom du modèle. L et W sont la longueur et la largeur du canal, en mètres. AD et AS sont les zones des diffusions drain et source, à 2 mètres. Notez que le suffixe U spécifie microns (1exp-6 m) 2 et P microns (1exp-12 m). Si l'un de L, W, AD ou AS n'est pas spécifié, les valeurs par défaut sont utilisées.
+==== MESFETs ====
+Syntaxe
+<code>Zname nD nG nS Mname <Area> <OFF> <IC=VDS, VGS></code>
+
+=== Exemple ===
+<code>Z1 7 2 3 ZM1 OFF</code>
+
+=== Notes ===
+nD, nG et nS sont respectivement les nœuds drain, gate et source. Mname est le nom du modèle, Area est le facteur de zone, et OFF indique une condition initiale (facultative) sur le périphérique pour l'analyse CC.
+===== Liens =====
+
+[[http://ngspice.sourceforge.net/docs.html|Documentation]] (en)
+
+[[http://www.iznogood-factory.org/pub/gEDA/gEDA_Spice_HOWTOfr.pdf|Tutoriel]]
+
+[[http://wiki.geda-project.org/start_fr|gEDA]]
+
+----
+//Contributeur principal :[[:utilisateurs:Sefran|Sefran]] Le 17/12/2009, 00:31//

@@ -1,0 +1,199 @@
+
+{{tag>Xenial Bionic sécurité chiffrement tutoriel}}
+======Installer Ubuntu avec LVM sur une partition chiffrée via dm-crypt ======
+===== Introduction =====
+==== Pourquoi ? ====
+Ce tutoriel décrit une méthode pour améliorer la [[:sécurité]] de vos données personnelles ou professionnelles, non pas lorsque votre ordinateur est allumé, mais lorsque celui-ci est éteint, dans le cas d'une perte ou d'un vol d'un ordinateur portable, par exemple.\\
+ 
+<note>
+Ne laissez pas votre ordinateur seul avec une session non verrouillée, mais est-ce nécessaire de le rappeler ? :-)  \\
+</note>
+Il faut tenter de rendre le disque dur illisible pour toute personne non-autorisée.\\
+Une phrase de [[:partition_chiffree|chiffrement]] **"passphrase"** sera la seule clef pour y accéder. Il ne faut donc ni la perdre, ni la divulguer.
+==== Comment ? ====
+
+  * L'utilisation d'un conteneur chiffré [[wpfr>LUKS|LUKS]] en utilisant [[:cryptsetup|DM-crypt / cryptsetup]] assurera la sécurité. 
+  * L'utilisation de [[:LVM]] permettra l'[[:installation|installation]] de votre [[:Ubuntu]] (ou d'une autre distribution Linux comme Debian) dans cet espace sécurisé.
+Cela va chiffrer l'intégralité des données, mises à part celles contenues dans le /boot, en une seule fois, il ne faudra donc qu'une seule fois "montrer patte blanche". Sans la //passphrase//, Il ne sera pas possible d'accéder aux données utilisateur (/home), aux différents fichiers temporaires (/tmp , swap), ainsi que d'intervenir sur le système.\\
+
+<note>
+Le partitionnement automatique avec LVM sur partition chiffrée proposé lors d'une installation via un support //alternate// utilise la même méthode. C'est la méthode à privilégier.
+</note>
+
+
+===== Pré-requis =====
+  * Un ordinateur portable qui ne dispose pas d'un disque dur à chiffrement matériel ou ne l'utilisant pas. 
+Un système puissant sera un plus : le chiffrement logiciel consomme des ressources à chaque accès au disque.
+  * Avoir un média d'installation d'une iso [[:/installation_alternate#obtenir_une_iso_alternate|alternate]] ou d'une [[tutoriel:installer_ubuntu_par_internet|mini-iso prévu pour l'installation via internet]]. Cette iso prenant en charge dm-crypt et LVM.
+  * Du temps 
+L'effacement total des données est très longue (mais optionnelle).
+  * Une certaine maîtrise de l'OS, et de LVM?
+
+===== Booter sur l'alternate =====
+
+<note important>Sauf pour la  [[:variantes|variante Lubuntu]], l'**alternate CD** n'est plus disponible à partir des versions d'Ubuntu [[:trusty|Trusty 14.04]]. Les spécificités de l'Alternate CD sont maintenant reprises sur les images .iso Desktop d'Ubuntu.</note>
+
+<note important>L'outil de partitionnement de l'installateur sur les images .iso Desktop d'Ubuntu recentes ne permet pas d'utiliser LVM. Utilisez l'installeur d'une [[https://help.ubuntu.com/community/Installation/MinimalCD|mini .iso]] pour pouvoir suivre ce tutoriel</note>
+
+[[:installation_alternate#mode_par_defaut|Début de l'installation ]]
+
+<note>
+Les impressions écran ont été faite  à l'aide d'une machine virtuelle ayant démarré sur une iso alternate. En conséquence, l'utilisation de l'espace disque a été revu à la baisse.
+</note>
+===== Options de partitionnement =====
+Choisir le mode de [[:partitions|partitionnement]] manuel :
+{{ :image:dm-crypt_lvm_alternate_00.png?500 |}}
+====Un /boot ====
+2 Go pour un /boot en ext2.\\
+Séparer le /boot va simplifier le démarrage de l'ordinateur, aucune partie de Grub-PC n'étant chiffrée.\\
+Il faut penser à activer le flag "boot" sur cette partition, si grub est placé sur /dev/sda1 et non pas sur /dev/sda, pour le [[:grub|multiboot]] par exemple.
+{{ :image:dm-crypt_lvm_alternate_01.png?500 |}}
+====Une partition qui va contenir tout votre Linux ====
+Le [[:partitions#pourquoi_seulement_4_partitions_primaires|maximum]] de partitions primaire étant à 4, il est possible de ne pas utiliser de partition étendue, mais une seconde partition primaire. Néanmoins utiliser directement une partition logique dans partition étendue permet de s'assurer de ne pas tomber sur ce maximum de 4, si l'on souhaite ne pas chiffrer de cette manière tout le disque. Par exemple dans le cas d'un multiboot ou d'un espace non chiffré sur le disque.\\
+  * nous aurons donc "sda2 partition étendue" sur le reste de l'espace libre du disque dur.\\
+  * et sda5 partition logique, qui pourra, selon votre usage, utiliser l'intégralité de l'espace disponible sur sda2.
+Si vous souhaitez par la suite ajouter des partitions qui n'utiliseront pas ce système de [[http://fr.wikipedia.org/wiki/Cryptographie|cryptographie]], il faut au préalable créer la partition à chiffrer.
+{{ :image:dm-crypt_lvm_alternate_02.png?500 |}}
+
+==== Dm-crypt ====
+  * Chiffrer la partition sda5 à l'aide de l'outil de chiffrement :
+{{ :image:dm-crypt_lvm_alternate_03.png?500 |}} \\
+{{ :image:dm-crypt_lvm_alternate_04.png?500 |}}
+  * Plein d'options sont possibles, celles par défaut sont bien suffisantes. Les options étant triées des moins consommatrices en ressources aux plus sécurisées.
+{{ :image:dm-crypt_lvm_alternate_07.png?500 |}}
+  * Choisir une [[http://www.queen.clara.net/pgp/pass.html|bonne]] passphrase
+
+<note important> Si vous créer une passphrase sur un clavier azerty, il arrive qu'au boot sur certains ordinateurs, le clavier soit reconnu en qwerty.
+À vous de bien retrouver la phrase ou de choisir des touches communes à ces deux claviers lors de la création.</note>
+
+{{ :image:dm-crypt_lvm_alternate_05.png?500 |}}
+
+==== LVM ====
+  * Utiliser comme  volume Physique **PV** la partition chiffrée
+  * Faire un groupe de volumes ** VG ** dans le PV puis des volumes logiques ** LV ** dans ce VG
+  * Un LV-slash (20Go max)
+  * Un LV-swap (d'une [[:swap#taille_d_une_partition_de_swap|taille]] supérieur ou égale à la quantité de RAM)
+  * Un LV-home (le reste)
+{{ :image:dm-crypt_lvm_alternate_08.png?500 |}}
+==== Utilisation des LV ====
+  * Une ext3 sur LV-slash pour **/**
+  * Une ext3 sur LV-home pour **/home**
+  * Le Swap sur LV-swap
+==== Résultat ====
+{{ :image:dm-crypt_lvm_alternate_06.png?500 |}}
+\\
+{{ :image:dm-crypt_lvm.png?500 |}}
+
+===== Finir l'installation =====
+Mettre grub sur le secteur d'amorçage du disque
+{{ :image:dm-crypt_lvm_alternate_09.png?500 |}}
+
+==== Gestion des passphrases====
+=== Ajout d'une passphrase ===
+après le 1er reboot vous pourrez rajouter une passphrase qui se mettra dans le premier emplacement //(key slot)// disponible à l'aide de la commande:
+ <code>cryptsetup luksAddKey /dev/sda5</code>
+
+=== Lister les slots ===
+  cryptsetup luksDump /dev/sda5
+  
+=== Supprimer une passphrase d'un slot ===
+Dans cet exemple on supprime la clef présente dans le 2ème slot.
+  cryptsetup luksKillSlot /dev/sda5 2
+====  Entête LUKS ====
+Si l'entête (header) du conteneur LUKS est endommagé, il ne sera plus possible d’accéder aux données.
+=== Sauvegarde de l'entête ==
+Il est donc important de sauvegarder l'entête dans un endroit sur. 
+Le fichier contenant la sauvegarde de l’entête est nommé ici ''machine-header''
+  cryptsetup luksHeaderBackup --header-backup-file machine-header /dev/sda5
+
+=== Restauration de l'entête ===
+  cryptsetup luksHeaderRestore --header-backup-file machine-header /dev/sda5
+
+===== Deuxieme disque =====
+Pour ne pas avoir à taper une passe-phrase pour chaque disque, on va se débrouiller pour que le 2e disque se déchiffre tout seul. Bien sur uniquement si on a réussi à déchiffrer le 1er.
+
+
+==== Chiffrement manuel  ====
+On va chiffrer à l'aide d'une passe-phrase (là même que pour le disque 1) et formaté en ext4 le 2e disque.
+
+
+<code bash>
+cryptsetup luksFormat /dev/sdb1
+cryptsetup luksOpen /dev/sdb1 RAB
+mkfs.ext4 /dev/mapper/RAB
+cryptsetup luksClose RAB
+</code>
+
+==== Création du fichier clef ====
+Création de ''/root/keyfile'' rempli aléatoirement, et mise en place de droits plus restrictif.
+
+  dd if=/dev/urandom of=/root/keyfile bs=1024 count=4
+  chmod 400 /root/keyfile
+
+==== Ajout du fichier clef dans un slot ====
+Je le met dans le dernier slot.
+
+  cryptsetup luksAddKey /dev/sdb1  /root/keyfile --key-slot 7
+
+
+==== crypttab ====
+
+Ajout dans crypttab
+
+<file bash /etc/crypttab >
+#…
+sdb1_crypt UUID=eba3e3fa-bbbb-3333-cccc-7f4f601fbc4c /root/keyfile luks
+</file>
+==== fstab ====
+
+Ajout dans fstab
+<file bash /etc/fstab >
+#…
+UUID="13907d57-1111-2222-91f6-40e4b026fba2" /disque2    ext4    defaults        0       2
+</file>
+
+
+Et voilà :-P
+
+lors du boot sera demandée une passe-phrase pour déchiffrer le 1er disque.
+
+Le 2nd pourra alors accéder à son fichier clef ''keyfile'' et se déchiffrer automatiquement.
+
+===== Monter la partition manuellement =====
+Il vous faudra bien évidement booter sur un système prenant en charge dm-crypt et LVM.
+<note tip>
+Un liveCD/USB, tel [[http://www.sysresccd.org/SystemRescueCd_Homepage|System rescue]] ou [[http://partedmagic.com/doku.php|PartedMagic]], qui intègre tous les outils nécessaires pourra se révéler bien utile.
+</note>
+Après avoir démarré, il faut entrer les commandes :
+<code>cryptsetup luksOpen /dev/sdaX un_nom_pour_la_partition</code>
+Pour monter la partition chiffrée ;
+<code>vgscan
+vgchange -ay /dev/VG/...</code>
+(il n'y aura certainement que votre partition dans ce dossier, activée grâce à vgscan)
+OU
+<code>lvchange -ay /dev/mapper/sdaX_crypt</code>
+<code>lvs</code>
+Pour activer le lvm ;
+<code>mkdir <point_de_montage>
+mount /dev/VG/... /<pt_de_montage></code>
+Et vous devriez pouvoir y accéder !
+===== Conclusion =====
+Cette méthode permet de s'assurer un bon niveau de sécurité, même si rien n'est infaillible.
+
+Le chiffrement du seul /home avec [[:ecryptfs]] comme proposé dans une installation desktop standard ne permet pas d'assurer le même niveau de sécurité même si cela peut constituer une bonne alternative. De la même manière, chiffrer uniquement son /home avec un conteneur LUKS, est possible. Les performances (I/O système) ne seront pas trop dégradées, tout en ayant ses données sécurisées. Mais il faut garder en tête que pourrait transiter dans un espace temporaire ou en swap vos données en clair.
+
+
+=====Voir aussi=====
+  * **(fr)** [[wpfr>Chiffrement|Chiffrement]]
+  * **(en)** [[wp>Passphrase|Passphrase]]
+  * **(fr)** [[wpfr>Sécurité_des_données|Sécurité des données]]
+  * **(en)** [[https://gitlab.com/cryptsetup/cryptsetup|Cryptsetup]]
+  * **(en)** [[https://gitlab.com/cryptsetup/cryptsetup/wikis/DMCrypt|Dm-crypt]]
+  * **(en)** [[https://wiki.archlinux.org/index.php?title=Dm-crypt|Dm-crypt sur le Wiki Archlinux]]
+  * **(en)** [[http://tldp.org/HOWTO/LVM-HOWTO/|LVM howto]]
+  * **(fr)** [[http://www.bortzmeyer.org/cryptage-n-existe-pas.html|Le terme "cryptage" n'existe pas en français]]
+  * **(en)** [[https://help.ubuntu.com/community/EncryptedFilesystemHowto|EncryptedFilesystemHowto sur l'aide Ubuntu]] 
+
+----
+
+//Contributeurs principaux : [[:utilisateurs:Ool]]//

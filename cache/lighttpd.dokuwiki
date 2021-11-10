@@ -1,0 +1,215 @@
+
+{{tag>serveur réseau}}
+------
+
+{{ light_logo_170px.png}}
+
+====== Lighttpd : Un serveur web léger ======
+
+
+**Lighttpd** est un serveur web (//HTTP//) qui, de par sa légèreté, se veut rapide. Il supporte un grand nombre de fonctionnalités comparables à celles d'[[:apache2|Apache]] (comme les rewrite, fast-cgi, proxy, etc.) pour des performances aussi bonnes sinon meilleures dans les tests faits par Lighttpd.
+
+Par rapport à Apache, il ne supporte pas les fichiers htaccess ou encore htpasswd. Ces 2 problèmes sont contournables si vous avez accès à la configuration de votre serveur.
+
+Lighttpd se trouve dans le top 5 des serveurs les plus utilisés dans le monde. Cette page est là pour vous expliquer comment l'installer et comment l'utiliser de manière simple.
+
+===== Installation =====
+
+Il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>lighttpd|lighttpd]]**.
+
+===== Configuration =====
+Tous les fichiers de configuration se trouvent dans **/etc/lighttpd**.
+
+==== /etc/lighttpd ====
+Voici ce que vous pouvez trouver dans ce répertoire.
+  lighttpd.conf conf-available conf-enabled
+
+  * Le fichier **lighttpd.conf** est le fichier de configuration principal à partir duquel les directives principales sont chargées.
+  * **conf-available** est un dossier qui contient les fichiers de configuration des différents modules.
+  * **conf-enabled** est un dossier 
+
+=== Le fichier lighttpd.conf ===
+Le plus important est de configurer la directive suivante qui définit la racine de Lighttpd.
+<file>
+server.document-root       = "/votre/chemin/"
+</file>
+Quelle que soit la modification faite dans le fichier de configuration, il est possible de vérifier que la syntaxe est correcte avec la commande suivante:
+<code>lighttpd -t -f /etc/lighttpd/lighttpd.conf</code>
+
+**/etc/lighttpd/lighttpd.conf** pouvant, bien sûr, être remplacé par l'adresse de votre fichier de configuration.
+
+==Les modules==
+
+La première partie du fichier consiste en l'activation des différents modules du serveur. Pour activer un module, il suffit de décommenter sa ligne ou utiliser la commande **lighty-enable-mod** que nous verrons un peu plus loin.
+<file>
+server.modules              = (
+            "mod_access",
+            "mod_alias",
+...
+#           "mod_flv_streaming",
+#           "mod_evasive"
+)
+</file>
+Il est possible de retrouver une [[http://redmine.lighttpd.net/projects/lighttpd/wiki/Docs#Modules|documentation détaillée des différents modules]] sur le wiki officiel de Lighttpd: 
+
+Une documentation plus exhaustive sur les différentes directives de configuration sont disponibles [[http://redmine.lighttpd.net/projects/lighttpd/wiki/Docs:ConfigurationOptions|ici]]
+
+
+==== PHP ====
+
+après avoir installé [[:PHP]] , activer le module fastcgi en saisissant dans un [[:terminal]]:
+<code>sudo lighty-enable-mod fastcgi</code>
+  
+Depuis  Ubuntu 10.10, il faut activer le module fastcgi-php pour que cela fonctionne :
+<code>sudo lighty-enable-mod fastcgi-php</code>
+  
+Puis rechargez la configuration de lighttpd:
+<code>sudo service lighttpd force-reload</code>
+
+Enfin, tester que le serveur prend bien en compte PHP (nb: si vous avez changé le chemin de //server.document-root//, remplacez // /var/www/ // par le chemin que vous avez indiqué -par exemple /var/www/html):
+<code>
+sudo sh -c 'echo "<?PHP phpinfo(); ?>" > /var/www/test.php'
+sudo chown -R www-data:www-data /var/www/test.php
+</code>
+Ensuite avec votre [[:navigateur]] rendez-vous à l'adresse http://localhost/test.php 
+
+Lors du test ci-dessus si vous rencontrez une **erreur 403**, modifier le fichier **/etc/php/7.0/fpm/php.ini** pour décommenter ((retirer le # en début de ligne))
+<file>cgi.fix_pathinfo = 1</file>
+
+<note tip>Si ça ne marche pas , sous Ubuntu [[:16.04]] modifier le fichier **/etc/lighttpd/conf-available/15-fastcgi-php.conf** comme suit:
+<file># /usr/share/doc/lighttpd-doc/fastcgi.txt.gz
+# http://redmine.lighttpd.net/projects/lighttpd/wiki/Docs:ConfigurationOptions#mod_fastcgi-fastcgi
+
+## Start an FastCGI server for php (needs the php7.0-cgi package)
+fastcgi.server += ( ".php" =>
+        ((
+                "socket" => "/var/run/php/php7.0-fpm.sock",
+                "broken-scriptfilename" => "enable"
+        ))
+)
+</file>
+Si besoin effacer les liens symboliques **10-fastcgi.conf** et **15-fastcgi-php.conf** créés dans **/etc/lighttpd/conf-enabled/** et réactivez les modules avant de recharger la configuration comme expliqué plus avant.
+
+Les lignes sont à adapter. Par exemple, pour PHP version 7.2 vous remplacerez les termes "php7.0-fpm" par "php7.2-fpm" (après avoir installé php7.2-fpm), et le dossier utilisé sera ///etc/php/7.2//. 
+ </note>
+
+==== MySql ====
+FIXME Installez [[:Mysql]]
+
+Il suffit d'[[:tutoriel:comment_installer_un_paquet|installer les paquets]] suivants :
+**[[apt>mysql-client,mysql-server,php5-mysql]]** FIXME cf [[php]]
+Et éventuellement PHPMyAdmin :
+**[[apt>phpmyadmin|phpmyadmin]]**
+
+Lors de l'installation, vous serez tout d'abord invité à indiquer à MySql qu'il fonctionnera avec Lighttpd.
+Puis vous serez amenés à choisir un mot de passe pour l'accès root à phpmyadmin.
+
+Après l'installation de ces paquets, il faut saisir les commandes suivantes :
+<code>sudo lighty-enable-mod fastcgi userdir
+sudo /etc/init.d/mysql start
+sudo /etc/init.d/lighttpd restart
+</code>
+
+Si vous avez installé PHPMyAdmin, la base de données est alors accessible à l'adresse suivante : http://localhost/phpmyadmin
+
+
+==== Ruby ====
+
+<note warning>Cette procédure est obsolète, cependant, les fichiers de configuration peuvent servir.</note>
+
+Deux exemples de configuration pour Redmine, le premier avec fastcgi (qui ne fonctionne plus avec Redmine 2), le second avec thin (un second serveur). Prenez garde aux chemins utilisés dans ces exemples.
+
+<file># /etc/lighttpd/conf-available/redmine.conf
+# avec fastcgi, mod_fastcgi
+$HTTP["host"] =~ "hostname" {
+	server.document-root = "/usr/share/redmine/public/"
+	accesslog.filename   = "/var/log/lighttpd/redmine.access.log"
+	server.error-handler-404 = "/dispatch.fcgi"
+	server.indexfiles = ( "dispatch.fcgi" )
+	fastcgi.server += (
+		".fcgi" => (
+			"redmine" => (
+				"min-procs" => 1,
+				"max-procs" => 2,
+				"socket"    => "/tmp/redmine-default-fcgi.socket",
+				"bin-path"  => "/usr/share/redmine/public/dispatch.fcgi",
+				"bin-environment" => (
+					"RAILS_RELATIVE_URL_ROOT" => "",
+					"X_DEBIAN_SITEID" => "default"
+				),
+				"kill-signal" => 10 # this is because programs linked against libfcgi need USR1 kill-signal
+			)
+		)
+	)
+	alias.url += ( "/plugin_assets/" => "/var/cache/redmine/default/plugin_assets/" )
+}</file>
+
+<file># /etc/lighttpd/conf-available/redmine.conf
+# avec Thin, mod_proxy
+$HTTP["host"] =~ "hostname" {
+	server.document-root = "/usr/share/redmine/public/"
+	accesslog.filename   = "/var/log/lighttpd/redmine.access.log"
+	$HTTP["url"] !~ "^/(images|javascripts|stylesheets|themes|plugin_assets|favicon.ico|apple-touch-icon.png)|.*html$|.*txt$|.*xml$" {
+		proxy.balance = "fair"
+		proxy.server  = ("/" => (
+			( "host" => "127.0.0.1", "port" => 3000 ),
+			( "host" => "127.0.0.1", "port" => 3001 ),
+			( "host" => "127.0.0.1", "port" => 3002 ),
+			( "host" => "127.0.0.1", "port" => 3003 )
+		))
+	}
+	alias.url += ( "/plugin_assets/" => "/var/cache/redmine/default/plugin_assets/" )
+}
+
+# /etc/thin2.1/thin.yml
+---
+chdir: "/usr/share/redmine"
+environment: production
+address: 0.0.0.0
+port: 3000
+servers: 4
+timeout: 30
+log: /var/log/redmine/default/thin.log
+pid: /var/run/thin.pid
+max_conns: 1024
+max_persistent_conns: 512
+require: []
+wait: 30
+daemonize: true
+</file>
+==== SSL ====
+
+Pour utiliser un certificat SSL, il faut au préalable [[:tutoriel:comment_installer_un_paquet|installer les paquets]] suivants **[[apt>openssl,ssl-cert|openssl ssl-cert]]**
+
+Pour créer un certificat SSL auto-signé, il est possible d'utiliser la commande suivante :
+<code>sudo make-ssl-cert /usr/share/ssl-cert/ssleay.cnf /etc/ssl/private/localhost.pem</code>
+
+Une fois le certificat créé, il faut modifier la configuration du serveur pour qu'il accepte les connexions HTTPS sur le port 443.
+\\ Pour ce faire, il faut [[:tutoriel:comment_modifier_un_fichier|éditer le fichier]] **/etc/lighttpd/lighttpd.conf** avec les droits d'administration pour y ajouter les 3 lignes suivantes.
+<file>$SERVER["socket"] == ":443" {
+  ssl.engine = "enable"
+  ssl.pemfile = "/etc/ssl/private/localhost.pem" }</file>
+
+Dernière étape, le redémarrage du serveur.
+<code>sudo service lighttpd restart</code>
+
+Ensuite rendez vous sur https://localhost/
+\\ Étant donné que le certificat SSL est auto-signé, une alerte de sécurité sera générée par le navigateur.
+
+<note>En cas de problème, ajouter //ssl.use-sslv2 = "enable"// en dessous de //ssl.engine = "enable"//.
+[[https://bugs.launchpad.net/ubuntu/+source/lighttpd/+bug/645002|Bug Launchpad 645002]]</note>
+
+===== Désinstallation =====
+
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. La configuration de l'application sera conservée ou supprimée selon la méthode de désinstallation que vous choisirez.
+
+===== Voir aussi =====
+
+  * **(en)** [[http://www.lighttpd.net/|Site officiel du projet Lighttpd]]
+  * **(fr)** [[http://fr.wikipedia.org/wiki/Lighttpd|Lighttpd sur Wikipédia]]
+  * **(en)** [[http://www.ubuntugeek.com/lighttpd-webserver-setup-with-php5-and-mysql-support.html|Configurer PHP5 pour Lighttpd]]
+  * **(en)** [[https://www.howtoforge.com/tutorial/installing-lighttpd-with-php7-php-fpm-and-mysql-on-ubuntu-16.04-lts/|Source pour php]]
+
+----
+
+//Contributeurs : [[utilisateurs:kagou|Patrice Vetsel]], [[utilisateurs:alteo_gange|alteo_gange]], [[utilisateurs:luigifab|luigifab]].//

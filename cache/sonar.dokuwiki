@@ -1,0 +1,77 @@
+
+{{tag>Xenial programmation}}
+----
+ 
+====== SonarQube ======
+ 
+Sonar est une application open source dont le but est d'aider à contrôler la qualité d'un logiciel. Elle se base sur des contrôles statistiques du code source, et regarde notamment la validité des tests unitaires, la complexité du code, le pourcentage de lignes dupliquées, etc. Elle est notamment connue dans le monde de [[Java]] et s'intègre très bien avec [[Maven]] par le biais d'un [[http://mojo.codehaus.org/sonar-maven-plugin/|plugin]] dédié. Il existe également un [[http://docs.codehaus.org/display/SONAR/Jenkins+Plugin|plugin]] pour [[Jenkins]].
+ 
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Avoir installé [[Mysql]].
+  * Avoir installé [[:java|OpenJDK-8 JRE]]
+
+<note tip>Mysql n'est pas une obligation. De fait l'application est fournie avec une base de données derby embarquée, mais comme son utilisation n'est pas recommandée en production, nous ne nous attarderons pas dessus. Il y a aussi des alternatives à Mysql (MariaDB), dont [[oracle|Oracle]] et [[postgresql|PostgreSQL]], voir [[http://docs.codehaus.org/display/SONAR/Install+Sonar#InstallSonar-Server|ici]] pour la liste des possibilités détaillées. </note>
+
+ 
+===== Installation =====
+ 
+Pour installer ce logiciel, il suffit de télécharger la [[http://www.sonarsource.org/downloads/|dernière version]] et de [[:archivage#graphiquement|l'extraire]] dans le dossier choisi pour l'installation. Par exemple, nous supposerons que vous l'avez installé dans /opt/sonar/sonar-5.6.6/
+
+Suite à quoi il va falloir créer le lien permettant de lancer le logiciel depuis le dossier /usr/bin:
+    sudo ln -s /opt/sonar/sonar-5.6.6/bin/linux-x86-32/sonar.sh /usr/bin/sonar
+ 
+===== Configuration =====
+ 
+Tout d'abord, [[:tutoriel:comment_modifier_un_fichier|ouvrez le fichier]] **/opt/sonar/sonar-5.6.6/conf/sonar.properties** en modification puis repérez la section "Embedded database Derby", et commentez d'un # toutes les lignes de la section. Puis repérez la section correspondant à la base de données que vous souhaitez utiliser et décommentez les trois lignes qui y figurent. Si vous parcourez ce fichier, vous remarquerez que par défaut, l'application va s'attendre à avoir l'accès à une base de données nommée ''sonar'' disponible sur le port 3306, et accessible par l'utilisateur ''sonar'' ayant pour mot de passe ''sonar''. Vous pouvez bien sûr modifier ces valeurs, étant donné que c'est vous qui allez créer ces accès en base de données.
+
+Voici par exemple les manipulations à effectuer dans le cas le plus simple:
+<code>mysql -u root -p
+Enter password:
+mysql> CREATE DATABASE IF NOT EXISTS sonar CHARACTER SET utf8 COLLATE utf8_bin;
+mysql> CREATE USER 'sonar'@'%' IDENTIFIED BY 'sonar';
+mysql> GRANT ALL ON sonar.* TO 'sonar'@'%';
+mysql> quit;</code>
+Ceci suppose que vous connaissez le mot de passe super utilisateur de MySQL. 
+<note tip>Le joker '%' autorise des connexions à la base de données depuis n'importe quel ordinateur du réseau, ce qui est potentiellement dangereux. Si vous n'avez qu'un ordinateur dans votre réseau, mettez 'localhost' à la place. Sinon, configurez votre [[ufw|pare-feu]].</note>
+
+===== Configuration en tant que service =====
+[[:tutoriel:comment_modifier_un_fichier|Créez le fichier]] **/etc/init.d/sonar** et placez-y le contenu suivant :
+<file bash>#!/bin/sh
+/usr/bin/sonar $*</file>
+puis attribuez-lui les droits d'exécution :
+   sudo chmod 755 /etc/init.d/sonar
+et configurez-le en tant que service :
+   sudo update-rc.d sonar defaults 98 02
+
+
+===== Utilisation=====
+ 
+Si vous avez effectué l'étape de configuration en tant que service, démarrez sonar via la commande:
+   sudo /etc/init.d/sonar start
+Sinon utilisez
+   sudo sonar start
+Vous pouvez remplacer start par stop pour arrêter le service. L'option restart est également disponible. Une fois lancé, l'interface Web de configuration du serveur est disponible par défaut sur l'url ''http://localhost:9000/''
+
+Bien sûr, Sonar ne vous est pas d'une grande utilité en l'état. Si vous utilisez toutes les options par défaut, il vous reste encore à aller dans le répertoire où se trouve le pom de votre projet, et à taper ''mvn sonar:sonar''. Si par hasard vous avez personnalisé un petit peu l'installation, comme nous l'avons fait nous mêmes en choisissant par exemple d'utiliser MySQL à la place de Derby, il vous faudra encore modifier le fichier ''settings.xml'' de Maven, pour y ajouter un profile ''sonar'' personalisé. Vous pouvez vous inspirer de l'exemple fournit [[http://docs.codehaus.org/display/SONAR/Analyse+with+Maven|ici]].
+===== Désinstallation =====
+ 
+Pour supprimer cette application, il faut:
+  - Supprimer le répertoire d'installation
+  - Supprimer la base de données Sonar (commande ''drop database''), et l'utilisateur sonar (commande ''delete user''), voir la documentation de [[mysql]] pour plus d'informations
+  - Supprimer le lien créé pour sonar dans /usr/bin/
+  - Le cas échéant, déparamètrer sonar en tant que service via la commande
+
+   sudo update-rc.d sonar remove
+ 
+===== Voir aussi =====
+ 
+  * **(en)** [[http://www.sonarqube.org/|Site officiel de SonarQube]]
+  * **(en)** [[http://docs.codehaus.org/display/SONAR/Install+Sonar|Tutoriel officiel d'installation de Sonar]]
+  * **(fr)** [[http://linsolas.developpez.com/articles/java/qualite/sonar/?page=sommaire|Tutoriel francophone d'utilisation de Sonar]]
+
+----
+
+//Contributeurs principaux : [[utilisateurs:aldian]].//

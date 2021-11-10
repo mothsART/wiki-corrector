@@ -1,0 +1,89 @@
+
+{{tag>tutoriel personnalisation énergie}}
+----
+{{ :tutoriel:hibernation:hibernate_icone.png?70|}}
+====== Comment activer l'hibernation ======
+Le mode [[wpfr>Hibernation_(informatique)|hibernation]] (ou "Veille prolongée") n'est pas bien pris en charge avec certains matériels. C'est pourquoi il est désactivé par défaut dans Ubuntu.
+Ce tutoriel vous explique comment vérifier si votre matériel est compatible puis rendre l'hibernation disponible.
+
+<note help>Pour ceux qui ne le sauraient pas, le [[wpfr>Hibernation_(informatique)|mode hibernation]] (ou "Veille prolongée") permet de sauvegarder l'état des applications sur le disque dur (dans la [[:swap|partition swap]]) avant l'arrêt de l'ordinateur pour le restaurer tel quel au prochain démarrage et ainsi ne plus consommer d'énergie. \\
+Il faut savoir qu'un ordinateur en hibernation redémarre beaucoup plus vite qu'un ordinateur éteint (25 secondes contre 1 min 34 pour ma part).</note>
+
+=====Pré-requis=====
+  * Disposer des [[:sudo|droits d'administration]]
+  * Disposer d'une taille de la [[:swap|partition swap]] au moins égale à celle de la [[wpfr>RAM|mémoire vive (RAM)]]. (Sera le cas si vous n'avez pas modifié les attributs de cette partition lors de l'[[:tutoriel/installer_ubuntu_avec_le_live_cd|installation d'Ubuntu]])
+
+===== Vérifier que l'hibernation fonctionne =====
+Vérifier que la partition d'hibernation est de taille suffisante et est connue du fichier **/etc/initramfs-tools/conf.d/resume** et a bien été validée avec la commande <code>sudo update-initramfs -u -k $(uname -r)</code>
+Avant tout, il vous faut vérifier que votre machine supporte l'hibernation. Pour cela, laissez des applications ouvertes (cette page par exemple) puis, après avoir enregistré votre travail, exécutez dans un [[:terminal]] la [[:commande_shell|commande]] suivante: <code bash>sudo pm-hibernate</code>
+ou pour la version 21.04<code bash> systemctl hibernate</code>
+Votre ordinateur va s'éteindre. Si, au redémarrage, vous retrouvez votre environnement tel que vous l'aviez laissé, alors votre machine supporte l'hibernation.\\
+il peut arriver que votre machine plante à la sortie de l'hibernation. Si c'est le cas, votre machine ne supporte pas l'hibernation d'Ubuntu.
+
+Sur certaines versions (comme Ubuntu [[:artful]]), il faut au préalable [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>pm-utils|pm-utils]]**  [[https://askubuntu.com/questions/1240123/how-to-enable-the-hibernate-option-in-ubuntu-20-04|ainsi que les paquets]] **[[apt>hibernate|hibernate]]** **[[apt>uswsusp|uswsusp]]**..
+<note tip>Si les commandes ci-dessus ne fonctionnent pas, il est possible de passer par une trace
+<code bash> sudo hibernate -v3 </code></note>
+===== Activer définitivement l'hibernation =====
+C'est bon ? Tout fonctionne ? Super ! Nous allons faire en sorte que l'hibernation soit présente dans les menus. \\
+[[:tutoriel:comment_modifier_un_fichier|Créer le fichier]] **/etc/polkit-1/localauthority/50-local.d/com.ubuntu.enable-hibernate.pkla** avec les lignes suivantes : <file>[Réactive hiberner par défaut dans upower]
+Identity=unix-user:*
+Action=org.freedesktop.upower.hibernate
+ResultActive=yes
+
+[Réactive hiberner par défaut dans logind]
+Identity=unix-user:*
+Action=org.freedesktop.login1.hibernate;org.freedesktop.login1.handle-hibernate-key;org.freedesktop.login1;org.freedesktop.login1.hibernate-multiple-sessions;org.freedesktop.login1.hibernate-ignore-inhibit
+ResultActive=yes</file>
+  - Enregistrez le fichier et redémarrez l'ordinateur.
+
+====À partir d'Ubuntu bionic 18.04 pour un fichier swap====
+Lors d'une installation standard, un fichier de swap est créé. Il est capable de s'agrandir en cas de besoin. Cependant, ce n'est pas le cas lorsqu'une demande d'hibernation survient. Celle-ci peut être refusée avec un message de ce style:
+**Failed to put system into xxxxxxxxx via logind: Sleep verb not supported**. Quelques solutions:
+  *  Fermer des applications jusqu'à ce que la taille utilisée de la RAM devienne compatible avec la taille du fichier.
+  *  Créer un fichier de taille suffisante. [[https://doc.ubuntu-fr.org/swap#modifier_la_ou_leGRUB_CMDLINE_LINUX_DEFAULT="resume=UUID=fef39976-0beb-4511-9b7c-db63874ffd8f resume_offset=2304000" 
+  * s_partitions_d_echange|(Certainement supérieure à 2 Go)]]
+  *  Revenir à l'utilisation des partitions swap.
+
+Pour que l'hibernation fonctionne correctement il faut modifier le fichier [[tutoriel:grub2_parametrage_manuel|grub]] en y incorporant le décalage physique du début du premier extent du fichier de swap par rapport au début de la partition qui le contient. Pour cela entrez la commande suivante dans un [[:terminal]] :
+<code bash>sudo filefrag -v /swapfile</code> vous aurez le résultat suivant:
+<code>Filesystem type is: ef53
+File size of  is 2147483648 (524288 blocks of 4096 bytes)
+ ext:     logical_offset:        physical_offset: length:   expected: flags:
+   0:        0..   32767:      ..     67583:  32768:            
+   1:    32768..   63487:      67584..     98303:  30720:            
+   2:    63488..   96255:     100352..    133119:  32768:      98304:
+</code>
+Récupérez la première donnée sous ''physical_offset''.
+
+Voici une autre commande pour récupérer plus facilement le décalage du fichier
+<code bash>sudo swap-offset /swapfile
+resume offset = 67583</code>
+
+Puis récupérez l'uuid de la partition sur laquelle se trouve le fichier swap, la partition racine:
+<code>nano /etc/fstab</code> qui donne:
+<code># / was on /dev/mmcblk0p2 during installation
+UUID=7fc840ee-d962-45c7-b066-f2b23df4860c/               ext4    errors=remount-ro 0       1
+# /boot/efi was on /dev/mmcblk0p1 during installation
+UUID=354B-FFBC  /boot/efi       vfat    umask=0077      0       1
+/swapfile                                 none            swap    sw              0       0</code>
+Enfin modifiez votre fichier grub comme suit :
+
+<code> GRUB_CMDLINE_LINUX_DEFAULT="quiet splash resume=UUID=7fc840ee-d962-45c7-b066-f2b23df4860c" resume_offset=67583</code>
+
+ Le fichier de démarrage du grub doit être regénéré pour prise en compte avec la commande **update-grub**.
+
+
+//[[https://help.ubuntu.com/stable/ubuntu-help/power-hibernate.html|(en) Source]]//
+
+=====Utilisation=====
+Après avoir redémarré votre ordinateur :
+  * Une entrée supplémentaire "**Mettre en hibernation**" apparaîtra aux cotés de "Mettre en veille" et "Éteindre..." dans le le menu de l'indicateur système {{:application:gnome-control-center:gnome-control-panel_13.10_03.png?30|}}, \\ {{:tutoriel:hibernation:activer_hibernation_14_04_1.png?200|Menu système}}
+  * Une nouvelle option "**Hiberner**" vous sera proposée lors de l'appui sur le bouton Marche/arrêt de votre ordinateur.\\ {{:tutoriel:hibernation:activer_hibernation_14_04_2.png?400|Veille prolongée}}
+  * Pour les ordinateurs portables, en vous rendant dans les paramètres de [[:energie|gestion de l'énergie]], vous pouvez desormais configurer la mise en hibernation en cas de batterie faible .
+
+===== Voir aussi =====
+  * [[:veille_et_hibernation|Veille et Hibernation]]
+
+----
+
+//Contributeurs://

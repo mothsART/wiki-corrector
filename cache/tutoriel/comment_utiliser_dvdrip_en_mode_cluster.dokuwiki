@@ -1,0 +1,398 @@
+
+{{tag>tutoriel VÉTUSTE}}
+
+----
+====== Comment utiliser dvdrip/transcode en mode cluster ? ======
+
+**
+"Comment accélérer l'encodage d'une vidéo en utilisant plusieurs ordinateurs sous GNU/Linux"** 
+
+
+Ce tutoriel est destiné à un large public, c'est pourquoi je l'ai volontairement vraiment détaillé. J'apprécie quotidiennement ce mode cluster, et je souhaite le faire découvrir à un maximum de passionnés. Les utilisateurs plus expérimentés sous Linux/Ubuntu pourront sauter de nombreuses étapes, ou bien me corriger si des erreurs se sont glissées dans cette présentation. 
+
+ ===== Présentation de transcode et dvdrip =====
+
+**Transcode** est un outil très puissant permettant de manipuler les fichiers multimédia (vidéo / audio).\\
+Il peut, entre autres, vous permettre d'encoder vos DVD dans un format compressé pour vos sauvegardes personnelles. Son utilisation se fait en ligne de commande. 
+
+**Dvdrip** est une interface graphique de **Transcode** facilitant ainsi son utilisation.
+Il intègre le mode //cluster// ou "grappe" en français.
+
+==== Le mode cluster ====
+
+Le clustering est une technique permettant de combiner plusieurs ordinateurs lorsque de nombreux calculs sont à effectuer, chaque machine connectée s'appelle « nœud » ou node en anglais. Dans notre cas, nous allons créer un réseau local NFS / SSH (réseau local classique Linux) et laisser le démon cluster répartir le travail sur tous les ordinateurs de ce réseau. Le temps d'encodage sera donc plus faible. À ma connaissance il n'y a pas de limite du nombre de PC connectés.
+
+Voilà un aperçu de ce que l'on peut obtenir avec un réseau de 3 PC, les « nœuds » correspondant aux machines connectées. 
+
+{{applications:controledvdripcluster9qy.jpg}}
+
+Sur mon installation, l'encodage d'un film me prenait 4h avec mon ordinateur le plus récent. Maintenant en ajoutant mes deux autres PC cela ne prend que 2h20 environ. Ça vaut le coup de s'y mettre. La configuration de mes PC figure sur le schéma un peu plus bas.
+
+
+
+
+===== Matériel =====
+
+Vous pouvez utiliser des ordinateurs de puissance différente, même les vieilles machines qui traînent dans un coin de votre grenier. Tout le travail effectué par celles-ci, sera toujours ça de moins à faire par vos bêtes de course. Il est quand même préférable d'avoir un réseau homogène, constitué de PC de puissance égale, nous verrons plus tard [[#10._trucs_et_astuces|pourquoi]].
+  
+  * Une carte réseau Fast Ethernet 10/100 Mbps reconnue et fonctionnelle sur chaque ordinateur.
+  * Un routeur ou un switch.
+  * Le tout relié par des câbles Ethernet droits RJ45
+
+
+===== Pré-requis =====
+
+  * Chaque ordinateur du réseau doit avoir une distribution Linux installée, de préférence la distribution Ubuntu Breezy ou Dapper. 
+  * Votre réseau doit être correctement configuré pour que vos PC puissent communiquer librement. 
+  * Je ne prends pas en compte la présence d'un firewall, n'oubliez pas de régler le/les vôtres pour cette utilisation.
+
+
+
+===== Fonctionnement du mode cluster en réseau local =====
+
+Voici un schéma qui représente globalement ce que nous souhaitons réaliser. Pour me faciliter la tâche je me suis basé sur mon propre réseau local, à savoir un réseau de 3 PC derrière un routeur et j'ai remplacé les noms de machines par **PC1** **PC2** et **PC3** et les noms d'utilisateurs par **tux1** **tux2** et **tux3** selon la machine.
+
+**PC1** sera le PC principal qui servira de serveur et de lieu de stockage, c'est sur ce PC qu'il y aura le plus gros du travail à réaliser. Concernant **PC2** et **PC3**, la configuration est assez rapide, à vous de rajouter autant de machines que vous pouvez, les réglages seront toujours les mêmes (**PC4**, **PC5**...).
+
+{{applications:schemadvdripcluster4aq.png}}
+
+Note: Ce schéma reste valable pour toute version supérieure d'Ubuntu.
+
+===== Installation des applications et serveurs =====
+==== Sur PC1 ====
+ Installer les paquets
+
+[[apt://nfs-kernel-server,nfs-common,ssh,imagemagick,ogmtools,xvid4conf,mjpegtools,transcode,dvdrip,mplayer-skins,mplayer-fonts,libdvdcss2,subtitleripper,libxvidcore4]]
+
+==== Sur PC2, PC3... ====
+
+Les applications à installer sont moins nombreuses.
+
+ 
+[[apt://ssh,openssh-server,openssh-client,nfs-common,transcode,libdvdcss2,libxvidcore4,ogmtools]]
+
+
+
+===== Création des dossiers =====
+
+Je rappelle que pour une question de clarté, j'ai choisi "tux" comme nom d'utilisateur suivi du numéro du PC auquel il appartient, tux1 pour pc1... à vous d'adapter selon vos noms d'utilisateurs.
+
+Sur chaque PC, nous allons créer le dossier "Divx" situé dans /home/tux(1,2,3...)/
+
+
+
+
+===== Configuration du serveur NFS sur PC1 =====
+
+Tous les fichiers à encoder seront stockés "réellement" dans /home/tux1/Divx.\\
+Il est donc primordial que **PC2** et **PC3** aient le droit d'écrire dans ce dossier en utilisant le partage de fichier NFS.
+
+  * Il faut spécifier à **PC1**, quels PC (adresse IP de **PC2** et **PC3**) sont autorisés à communiquer avec lui :
+<code>gksudo gedit /etc/hosts.allow</code>
+et insérer les lignes suivantes dans le fichier texte :\\
+<code>portmap:192.168.2.3 192.168.2.4
+lockd:192.168.2.3 192.168.2.4
+mountd:192.168.2.3 192.168.2.4
+rquotad:192.168.2.3 192.168.2.4
+statd:192.168.2.3 192.168.2.4</code>
+Enregistrez et fermez.\\
+ 
+  * Nous allons autoriser **PC2** et **PC3** à avoir accés au dossier /home/tux1/Divx, toujours sur **PC1**\\
+<code>gksudo gedit /etc/exports</code>
+et insérer la ligne suivante dans le fichier texte :\\
+<code>/home/tux1/Divx 192.168.2.3(rw,sync) 192.168.2.4(rw,sync)</code>
+Enregistrez et fermez.\\
+
+  * Maintenant que notre configuration est opérationnelle, on redémarre le serveur NFS
+<code>sudo /etc/init.d/nfs-kernel-server restart</code>
+Voilà pour la configuration du serveur NFS sur **PC1**.\\ 
+
+En cas de souci, je vous renvoie sur [[:nfs|ce lien du Wiki]].\\
+
+
+
+
+
+===== 6. Configuration du serveur SSH sur PC1 =====
+
+=== Le chef d'orchestre ===
+
+Le duo SSH / demon cluster peut être considéré comme le chef d'orchestre de toute cette organisation. Il va permettre de faire circuler l'information et de distribuer les différentes tâches.
+Grâce à SSH vous pouvez prendre le contrôle de la machine **PC2** tout en restant sur **PC1**.
+
+=== Un mot de passe bien gênant ===
+
+Bien sûr, ce système fort pratique pour toutes manipulations à distance, nécessite l'entrée du mot de passe de l'utilisateur du PC distant. C'est ce qui nous gêne dans notre cas. 
+
+Lors d'un encodage en mode cluster, le démon cluster interroge toutes les machines (noeuds) disponibles et répartit le travail sur chacun. Seulement il faut entrer le mot de passe à chaque nouvelle connexion et nouvelle portion de travail créée. Cela devient vite infernal voire impossible à gérer. 
+
+C'est pourquoi nous allons automatiser cette tâche afin de ne plus avoir à donner aucun mot de passe, le démon cluster pourra travailler sans être bloqué.
+
+
+
+=== Automatisons la tâche pour les mots de passe ===
+
+Tout se fait de **PC1** :
+<code>ssh-keygen -t dsa</code>
+à la phrase\\ 
+"Enter file in which to save the key (/home/tux1/.ssh/id_dsa)" faites juste Entrée\\
+et à la phrase\\
+"Enter passphrase (empty for no passphrase):" entrer le mot de passe ou passphrase de votre choix (5 caractères minimum).\\
+
+puis\\
+
+<code>ssh-copy-id -i ~/.ssh/id_dsa.pub tux3@192.168.2.3</code>
+mot de passe utilisateur tux3
+
+<code>ssh-copy-id -i ~/.ssh/id_dsa.pub tux2@192.168.2.4</code>
+mot de passe utilisateur tux2
+
+ainsi de suite pour toutes les machines connectées....
+
+=== Et pour finir ===
+<code>ssh-add</code>
+et entrer le mot de passe ou passphrase donné un peu plus haut.\\
+
+=== Attention === 
+Si vous devez redémarrer **PC1**, vous devrez retaper après chaque redémarrage
+<code>ssh-add</code>
+et le mot de passe ou passphrase, c'est tout.\\
+
+On arrive à la fin de la configuration de SSH.\\ 
+Normalement aucun mot de passe ne sera demandé lors de l'utilisation du mode cluster.
+
+
+
+
+
+
+===== 7. Montage automatique des fichiers (fstab) sur PC2 et PC3 =====
+
+Tout à l'heure, nous avons configuré le serveur NFS sur **PC1** pour partager son répertoire /home/tux1/Divx\\ (rappelez-vous le gksudo gedit /etc/exports), et bien maintenant nous allons donc monter (virtuellement) ce répertoire dans **PC2** et **PC3**.
+
+=== Faites cette manipulation sur toutes vos machines connectées (PC2, PC3, PC4...)===
+
+Exemple à effectuer sur la machine **PC2** :
+
+<code>gksudo gedit /etc/fstab</code>
+et insérer la ligne suivante :\\
+<code>192.168.2.2:/home/tux1/Divx /home/tux2/Divx nfs rw 0 0</code>
+Enregistez et fermez.
+
+<code>gksudo gedit /etc/hosts.allow</code>
+<code>portmap:192.168.2.2 192.168.2.3
+lockd:192.168.2.2 192.168.2.3
+mountd:192.168.2.2 192.168.2.3
+rquotad:192.168.2.2 192.168.2.3
+statd:192.168.2.2 192.168.2.3</code>
+Enregistrez et fermez.\\
+
+Pour que le montage soit pris en compte tout de suite :
+<code>sudo mount -a</code>
+Faites un essai en créant un fichier dans /home/tux2/Divx\\
+Normalement il devrait apparaître dans /home/tux1/Divx\\
+
+Et ainsi de suite pour toutes les machines connectées.\\
+
+
+
+
+
+===== 8. dvdrip =====
+
+Si tout s'est bien déroulé, nous n'avons plus à intervenir sur **PC2**, **PC3**...\\ 
+Tout se passe maintenant sur **PC1**. Allez courage, le plus intéressant arrive.
+
+==== Configuration générale ====
+
+Selon la version utilisée de **dvdrip**, nous pouvons trouver le bouton //Grappe// ou //Cluster//, c'est la même chose. 
+
+Lancer **dvdrip** puis //Edition --> préférences//
+
+La configuration concernant le lecteur de DVD doit être correcte.
+Pour la suite cela doit ressembler à ça :
+
+{{applications:dvdrippreferences5tr.jpg}}
+
+
+Toujours dans les préférences, à "Options de la grappe" ou "Options du cluster" selon votre version :
+
+{{applications:dvdripclusteroption4be.jpg}}
+
+==== Configuration du cluster et ajouts des noeuds (pc1, pc2 et pc3) ====
+
+Il est temps d'ajouter enfin toutes les machines de votre réseau, que l'on va à présent appeler "noeuds".\\
+Grappe --> panneau de contrôle --> ajouter un noeud
+
+D'abord on ajoute le noeud du PC principal **PC1** :\\
+
+{{applications:ajouternoeudtux19pv.jpg}}
+
+Un petit "test", et vous devriez voir ceci :
+
+{{applications:messagedvdvripclustertux16bl.jpg}}
+
+On ajoute ensuite tous les autres noeuds un par un, "ajouter un noeud" toujours, mais cette fois avec ce genre de configuration, un exemple avec **PC2** :
+
+{{applications:ajouternoeudtux20sq.jpg}}
+
+Un autre "test", et on obtient un seul "not ok" :
+
+{{applications:messagedvdvripclustertux27gt.jpg}}
+
+C'est normal, cool.
+Ajouter au fur et à mesure toutes les machines de votre réseau, en prenant comme exemple **PC2**.
+
+Votre panneau de contrôle doit maintenant contenir tous vos noeuds/machines disponibles et ils sont pour le moment arrêtés. 
+
+Faites "démarrer le noeud" pour chacun d'eux. 
+**PC1** est le plus rapide à se connecter, pour les deux autres la connexion met une dizaine de secondes, jusqu'à se mettre en position "idle", c'est à dire prêt à travailler.
+
+
+
+
+
+===== 9. Premier essai =====
+
+Insérer un DVD, je vous conseille de juste lire le début de ce DVD dans votre lecteur multimédia afin de déverrouiller la sécurité (grâce à //libdvdcss2//). Une fois que le DVD passe bien:\\
+
+=== Nouveau projet ===
+dvdrip --> Fichier --> nouveau projet\\
+Pour l'exemple je l'ai appelé "22"
+
+{{applications:nouveauprojetdvdripcluster9va.jpg}}
+
+=== Lecture de la table ===
+dvdrip --> Extraction --> lire la table des matières du DVD\\
+Les différents plages du DVD apparaissent comme ceci:\\
+
+{{applications:extractiondvdripcluster3xh.jpg}}
+
+=== Choisissez la plage qui vous convient ===
+Utilisez "visualiser les titres ou chapitres sélectionnés" pour être sûr de sélectionner la bonne plage.\\ 
+Pour cet essai, prenez plutôt une plage de courte durée 5 à 10 minutes, de façon à faire la procédure en entier en peu de temps.
+
+=== Extraire les titres ===
+Prévoyez au moins 7 Go de libre (film complet) sur le disque dur de **PC1**\\ 
+Quand vous avez sélectionné votre plage\\ 
+--> faites "extraire les titres ou chapitres sélectionnés"\\
+L'extraction commence.\\
+
+=== Petite vérification ===
+Pendant l'extraction, profitez-en pour regarder sur **PC2** et **PC3** dans leur /home/tux(2et3)/Divx respectif.\\
+Le fichier "22" devrait être présent.
+
+=== Note ===
+Il faut garder à l'esprit que les répertoires /home/tux2/Divx et /home/tux3/Divx ne sont rien d'autre qu'un accès direct à /home/tux1/Divx. Rien n'est écrit sur le disque dur de **PC2** et **PC3**. Mais toute mauvaise manipulation dans le fichier "Divx" que l'on soit sur **PC2**, **PC3**... aura des répercussions sur toute la procédure.
+
+En revanche, et c'est là que cette technique est appréciable, si une machine tombe en panne ou se bloque pour diverses raisons, à part **PC1** évidemment, il n'y aura aucun problème. Le démon cluster attribuera la tâche en cours de la machine fautive à une autre machine, c'est un système très souple et très stable. Vous pourrez à tout moment arrêter n'importe quel noeud, même **PC1**.
+
+=== L'extraction doit être terminée ===
+
+Je ne rentre pas dans les détails d'encodage proprement dit : redimensionnement, sous-titres... chacun ses goûts.\\ 
+Juste pour information, le trio : //conteneur avi --> xvid4 mode pass 2 --> Sons AC3// fonctionne parfaitement en mode cluster.\\ En revanche, j'ai rencontré des problèmes lors de l'encodage du son en MP3 et Ogg\\ 
+J'attends des retours là dessus.\\
+
+Le mode cluster ne permet pas la prévisualisation d'un échantillon. Pour cela vous utiliserez uniquement **PC1**.
+
+Lorsque vous avez suivi les précédentes étapes, et que vos paramètres sont bons :
+
+Encoder --> "ajouter à la grappe" en bas à droite, cette fenêtre apparaît: 
+
+{{applications:dvdripclusterproprietes5cc.jpg}}
+
+Ici je vous conseille de mettre //Oui// pour la suppression des fichiers **avi** temporaires, en revanche //Non// pour les fichiers **Vob**, car si votre encodage ne vous convient pas, vous pourrez le reprendre sans problème. Validez.
+
+Vérifier que vos noeuds sont démarrés et faites "Programmer ce projet" ou "Schedule Project".
+Normalement tous vos noeuds doivent se mettre au travail, comme ceci:
+
+{{applications:controledvdripcluster9qy.jpg}}
+
+Elle est pas belle la vie!!!
+
+
+
+
+===== 10. Trucs et astuces =====
+
+=== Si votre réseau est composé d'ordinateurs de puissance inégale ===
+
+Comme je l'ai annoncé dans la section [[#materiel|matériel]], tout ordinateur même le vieux coucou peut être utile dans ce genre de configuration, car tout calcul effectué par celui-ci ne sera pas à faire par vos bêtes de course.\\ 
+Comme c'est un système très souple, le petit PC peut commencer une tâche tranquillement, mais il n'est pas obligé de la finir, vous pouvez sans problème le "stopper", un autre PC prendra le relais.
+
+C'est pourquoi, je vous conseille de surveiller la fin de l'encodage, car il se peut (c'est très fréquent) que vos PC puissants aient fini toutes leurs tâches et soient en position d'attente, pendant que votre petit PC poussif peine à finir son travail.\\
+
+Le mode cluster perd tout son sens car vous allez peut-être attendre des heures.\\
+== Pour corriger ce souci ==
+
+Stoppez le noeud du PC poussif, puis les autres, en ne laissant que celui de la machine la plus puissante, c'est celui-ci qui prendra le relais et qui finira le travail beaucoup plus rapidement.
+
+== Pour corriger ce souci lorsque vous avez lancé plusieurs projets ==
+
+Dans le même cas de figure, plutôt que d'être en position d'attente, les PC puissants sont déjà passés au projet suivant, laissant seul le petit PC finir le travail.
+
+Dans ce cas stoppez "tous les noeuds" --> sélectionnez le projet à finir (en haut du panneau de contrôle) et redémarrez le PC le plus puissant en premier, il finira le travail. Puis redémarrez tous les autres noeuds qui se remettront au boulot sur les autres projets.
+
+
+
+
+
+===== 11. Dépannage =====
+
+== Si vous constatez que les noeuds distants se mettent en position "running" mais qu'il n'y a aucune activité ==
+
+<code>ssh-add</code>
+et ré-entrer le mot de passe :\\
+
+Redémarrez portmap\\
+<code>sudo /etc/init.d/portmap restart</code>
+Vérifiez que le montage du dossier "Divx" sur les PC distants fonctionne bien.
+Assurez-vous qu'un firewall ne bloque pas l'accès.
+
+Si toujours rien lire la suite...\\
+
+== "Can't start local Démon..." ==
+Si le démon refuse de démarrer\\
+
+Redémarrez dvdrip\\
+Redémarrez portmap\\
+<code>sudo /etc/init.d/portmap restart</code>
+
+Si toujours rien\\
+<code>dvdrip-master 2</code>
+Le message vous donne des informations sur les noeuds, les projets en cours.... Si vous avez le message suivant:\\
+"Changement de fichier du projet" '/home/tux1/.dvdrip-master/projects/00000......22(exemple).rip'\\
+
+Allez dans :
+/home/tux1/.dvdrip-master/projects/
+Et supprimez le projet en question.
+
+Puis //dvdrip --> Grappe --> panneau de contrôle//.
+
+
+
+
+
+===== 12. Contact =====
+Mails: <julian_duhamel@yahoo.fr> \\
+Pour toutes remarques sur ce tutoriel:\\
+http://forum.ubuntu-fr.org/viewtopic.php?pid=43136#p43136
+
+
+
+
+
+===== 13. Liens et sources =====
+
+Site Officiel de dvdrip: http://www.exit1.org/dvdrip/index.cipp\\
+Site Officiel francophone Ubuntu: http://www.ubuntu-fr.org/\\
+Forum francophone Ubuntu: http://forum.ubuntu-fr.org/\\
+Le site Funix: http://www.funix.org/fr/linux/conversion.htm\\
+Pour tout savoir sur SSH: http://doc.ubuntu-fr.org/ssh\\
+
+
+
+
+
+-----
+//Contributeurs :// Rédigé par [[http://forum.ubuntu-fr.org/profile.php?id=683|Julian]]

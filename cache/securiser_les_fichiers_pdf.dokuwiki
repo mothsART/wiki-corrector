@@ -1,0 +1,80 @@
+
+Sécuriser les fichiers pdf de façon extrême et sans mot de passe !
+
+<code>
+#!/bin/bash
+# Sécuriser les fichiers pdf
+
+# Nom du programme : securisepdf
+# securisepdf doit être copier dans /usr/local/sbin
+# et vous devez le rendre exécutable en faisant ceci :
+# sudo chmod +x /usr/local/sbin/securisepdf
+
+MessageDAide(){
+reset
+echo -e '\tUTILISATION DU SCRIPT'
+echo -e "\r"
+echo 'Ne mettez pas d'\''extension'
+echo -e "\r"
+echo 'securisepdf Nom_Du_Fichier_Source Nom_Du_Fichier_Cible'
+echo -e "\r"
+}
+
+# Vérification de l'existence de pdftk
+if [ -z "`which pdftk`" ]; then
+echo 'Veuillez installer pdftk !'
+echo 'Tapez votre MOT DE PASSE'
+sudo apt-get -y pdftk
+fi
+
+# Si un des fichiers comporte une extension pdf
+# Appel du Message D'Aide et mettre fin au script
+if [ "`echo $1|cut -f2 -d.`" = "pdf" -o "`echo $2|cut -f2 -d.`" = "pdf" ]; then
+MessageDAide
+exit
+fi
+
+# Si le fichier pdf n'existe pas le créer
+if [ ! -e "$1.pdf" -a  -e "$1.odt" ]; then
+odt2pdf $1.odt
+fi
+
+
+if [ -z "$1" -o -z "$2" ]; then
+MessageDAide
+exit
+fi
+
+if [ "$1" = "$2" ]; then
+MessageDAide
+echo 'LES NOMS DE FICHIERS SOURCE ET CIBLE DOIVENT ÊTRE DIFFÉRENT'
+echo -e "\r"
+exit
+fi
+# rm /tmp/*fichiers_pdf_extraits.pdf
+
+# Extraction des pages du fichier pdf source 
+pdftk $1.pdf burst output /tmp/%03d_fichiers_pdf_extraits.pdf
+
+# Listage des fichiers extraits
+NomDesFichiersPDFSansExtension=`ls /tmp/*???_fichiers_pdf_extraits.pdf|cut -f1 -d.`
+
+# Conversion des fichiers extraits pdf en png
+for Boucle in $NomDesFichiersPDFSansExtension; do convert -size 3508x2480 -density 300 $Boucle.pdf $Boucle.png; done
+
+# Listage des fichiers png générés 
+NomDesFichiersPNGSansExtension=`ls /tmp/*???_fichiers_pdf_extraits.png|cut -f1 -d.`
+
+# Conversion des fichiers png générés en pdf  
+for Boucle in $NomDesFichiersPNGSansExtension; do convert $Boucle.png $Boucle.pdf; done
+
+# Listage des fichiers générés
+NomDesFichiersPDFAvecExtension=`ls /tmp/*???_fichiers_pdf_extraits.pdf`
+NomDesFichiersPNGAvecExtension=`ls /tmp/*???_fichiers_pdf_extraits.png`
+
+pdftk $NomDesFichiersPDFAvecExtension cat output $2.pdf
+
+# Destruction des fichiers png et pdf générés 
+rm $NomDesFichiersPNGAvecExtension $NomDesFichiersPDFAvecExtension
+
+exit 0;</code>

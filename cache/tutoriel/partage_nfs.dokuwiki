@@ -1,0 +1,183 @@
+
+{{tag>tutoriel réseau nfs}}
+
+----
+
+====== Exemple de partage avec NFS  ==
+
+
+===== Introduction =====
+
+Cette page est un exemple de réseau entre 3 ordinateurs pour permettre l'échange et le partage de fichiers avec le minimum de contraintes.
+En particulier :
+  - Chaque ordinateur dispose d'un espace accessible aux autres sans contraintes liées aux droits d'accès.
+  - Le montage des répertoires est automatique.
+ 
+Le tutoriel reste bien-sûr adaptable (nombre d'ordinateurs, adresses IP, etc.)
+
+
+===== Schéma de principe =====
+
+Dans le schéma ci-dessous on représente trois ordinateurs appartenant à un même réseau local (celui de Paul, Lucette et Jean).
+  * Chacun d'eux partage (exporte) le répertoire /home/agora,
+  * Chacun d'eux récupère (importe) les partages mis à disposition par les autres ordinateurs dans /media.
+
+
+
+{{  :tutoriel:partage_familial_hardy_01.jpg?320x544  }}
+
+Les lignes en pointillés figurent le montage des répertoires "agora" sur les systèmes de fichiers des différents clients.
+
+==== Connaître les adresses IP locales de Serveur et de Client ====
+
+<note>
+Dans le terminal lancer « ifconfig », l'adresse est à la ligne « ''inet adr:'' », paragraphe « ''eth'' » si vous êtes connecté en ethernet, « ''wlan'' » pour une connexion Wi-Fi.
+</note>
+
+Pour la suite de cet exemple, on considèrera que Paul, Lucette et Jean ont les adresses locales suivantes :
+  * Paul : **192.168.1.10**
+  * Jean : **192.168.1.11**
+  * Lucette : **192.168.1.12**
+
+
+
+===== Données sur la configuration  =====
+
+==== Ordinateur 1  ====
+
+Utilisateur principal **//Paul//** UID=1000 group "users"  espace partagé **''/home/agora''**.
+Point de montage des dossiers partagés des autres ordinateurs :
+  * /media/chez_Lucette
+  * /media/chez_Jean
+Adresse IP : ''192.168.1.10''
+
+==== Ordinateur2  ====
+
+Utilisateur principal **//Jean//** UID=1000 group "users"  espace partagé **''/home/agora''**.
+Point de montage des dossiers partagés des autres ordinateurs :
+  * /media/chez_Lucette
+  * /media/chez_Paul
+Adresse IP : ''192.168.1.11''
+
+==== Ordinateur 3  ====
+
+Utilisateur principal **//Lucette//** UID=1000 group "users"  espace partagé **''/home/agora''**.
+Point de montage des dossiers partagés des autres ordinateurs :
+  * /media/chez_Paul
+  * /media/chez_Jean
+Adresse IP : ''192.168.1.12''
+
+===== Installation des paquets et configuration =====
+
+
+Sur chacun des ordinateurs [[:tutoriel:comment_installer_un_paquet|installer les paquets]] suivants : **[[apt://nfs-common|nfs-common]]** et** [[apt://nfs-kernel-server|nfs-kernel-server]]**.
+
+
+
+==== Création des répertoires partagés ====
+
+La procédure est identique sur chacun des ordinateurs. 
+
+<note help>Les commandes indiquées dans les boîtes grises sont à entrer dans un [[:terminal]]. (menu : Applications ⇒ Accessoires ⇒ Terminal)</note>
+
+<code>
+sudo mkdir /home/agora
+sudo chown Paul:users /home/agora
+</code>
+
+Une vérification par 
+<code>ls -ld /home/agora</code>
+donne comme **réponse** pour Paul :
+<file>drwxr-xr-x 2 Paul users 4096 aaaa-mm-jj /home/agora</file>
+
+
+==== Création des points de montage et commandes de montage ====
+
+=== Pour l'ordinateur de Jean ===
+<code>
+sudo mkdir /media/chez_Lucette
+sudo mkdir /media/chez_Paul
+</code>
+Puis pour assurer le montage automatique, [[:tutoriel:comment_editer_un_fichier|ajouter]] les lignes suivantes dans **/etc/fstab** :
+<file>
+192.168.1.10:/home/agora /media/chez_Paul nfs defaults user _netdev bg
+192.168.1.12:/home/agora /media/chez_Lucette nfs defaults user _netdev bg
+</file>
+
+=== Pour l'ordinateur de Lucette ===
+<code>
+sudo mkdir /media/chez_Jean
+sudo mkdir /media/chez_Paul
+</code>
+Puis pour assurer le montage automatique, [[:tutoriel:comment_editer_un_fichier|ajouter]] les lignes suivantes dans **/etc/fstab** :
+<file>
+192.168.1.11:/home/agora /media/chez_Jean defaults user _netdev bg
+192.168.1.10:/home/agora /media/chez_Paul defaults user _netdev bg
+</file>
+
+=== Pour l'ordinateur de Paul ===
+<code>
+sudo mkdir /media/chez_Lucette
+sudo mkdir /media/chez_Jean
+</code>
+Puis pour assurer le montage automatique, [[:tutoriel:comment_editer_un_fichier|ajouter]] les lignes suivantes dans **/etc/fstab** :
+<file>
+192.168.1.11:/home/agora /media/chez_Jean nfs defaults user _netdev bg
+192.168.1.12:/home/agora /media/chez_Lucette defaults user _netdev bg
+</file>
+
+
+==== Préparation de l'exportation et commande ====
+
+=== Pour l'ordinateur de Paul ===
+[[:tutoriel:comment_editer_un_fichier|Ajouter]] la ligne suivante dans **/etc/exports**
+<file>/home/agora 192.168.1.11(rw,all_squash,anonuid=1000,anongid=100,sync) 192.168.1.12(rw,all_squash,anonuid=1000,anongid=100,sync)</file>
+et relancer le serveur NFS par :
+<code>sudo /etc/init.d/nfs-kernel-server restart</code>
+
+=== Pour l'ordinateur de Jean ===
+[[:tutoriel:comment_editer_un_fichier|Ajouter]] la ligne suivante dans **/etc/exports**
+<file>/home/agora 192.168.1.10(rw,all_squash,anonuid=1000,anongid=100,sync) 192.168.1.12(rw,all_squash,anonuid=1000,anongid=100,sync)</file>
+et relancer le serveur NFS par :
+<code>sudo /etc/init.d/nfs-kernel-server restart</code>
+
+=== Pour l'ordinateur de Lucette ===
+[[:tutoriel:comment_editer_un_fichier|Ajouter]] la ligne suivante dans **/etc/exports**
+<file>/home/agora 192.168.1.11(rw,all_squash,anonuid=1000,anongid=100,sync) 192.168.1.10(rw,all_squash,anonuid=1000,anongid=100,sync)</file>
+et relancer le serveur NFS par :
+<code>sudo /etc/init.d/nfs-kernel-server restart</code>
+
+
+==== Gestion des autorisations ====
+
+=== Pour tous les ordinateurs ===
+
+L'objectif de cette étape est de sécuriser l'installation. À ce stade, n'importe quel ordinateur du réseau local est susceptible d'accéder aux partages NFS que nous avons mis en place. Nous allons à présent en restreindre l'accès.
+
+[[:tutoriel:comment_editer_un_fichier|Editer le fichier]] **/etc/hosts.allow** et y ajouter les lignes suivantes :
+<file>
+portmap: 192.168.1.10 192.168.1.11 192.168.1.12
+lockd: 192.168.1.10 192.168.1.11 192.168.1.12
+mountd: 192.168.1.10 192.168.1.11 192.168.1.12
+rquotad: 192.168.1.10 192.168.1.11 192.168.1.12
+statd: 192.168.1.10 192.168.1.11 192.168.1.12
+</file>
+
+[[:tutoriel:comment_editer_un_fichier|Editer le fichier]] **/etc/hosts.deny** et y ajouter les lignes suivantes :
+<file>
+portmap: ALL
+nfsd: ALL
+mountd: ALL
+</file>
+
+===== Finalisation =====
+
+Redémarrer tous les ordinateurs.
+Si le montage n'a pas eu lieu, lancer la commande de montage suivante (adresse à adapter) dans un terminal.
+<code>sudo mount -t nfs -o rw 192.168.1.13:/home/agora /media/chez_shimako</code>
+
+
+Bon partage et amusez-vous bien ! 
+
+----
+// Contributeur : José Fournier //

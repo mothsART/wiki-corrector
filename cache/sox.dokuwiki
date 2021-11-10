@@ -1,0 +1,135 @@
+
+{{tag>Focal Bionic audio}}
+----
+
+======SoX =====
+SoX est un logiciel de traitement de son en **ligne de commande**. Il consiste en une suite d'outils permettant par exemple de changer le format, de filtrer, de rajouter des fondus, d'analyser un fichier, etc.
+
+===== Pré-requis =====
+  * Avoir activé l'accès aux [[:depots#universe_et_multiverse|dépôts Universe]] 
+
+===== Installation =====
+Il vous suffit, pour cela, d'[[:tutoriel:comment_installer_un_paquet|installer]] le paquet **[[apt>sox|sox]]**.
+
+Afin de profiter pleinement des possibilités de SoX (comme la manipulation du mP3 ou de l'ogg ;-)), il est recommandé d'installer aussi le paquet **[[apt>libsox-fmt-all|libsox-fmt-all]]**. 
+
+===== Les différents outils ====
+  * [[#play]] : pour lire les fichiers musicaux
+  * [[#sox1|sox]]: pour manipuler les fichiers musicaux
+  * [[#rec]]: pour enregistrer des sons
+
+==== play ====
+**Play** lit les fichiers musicaux. Par exemple :
+  * pour lire tous les fichiers mp3 d'un répertoire à la suite :<code>play *.mp3</code>
+  * pour lire un fichier "2 fois plus fort" :<code>play fichier.mp3 vol 2</code>
+
+==== sox ====
+**Sox** permet la manipulation des fichiers. Par exemple :
+  * pour créer un ogg à partir d'un mp3 :<code>sox fichier.mp3 fichier.ogg</code>
+  * pour concaténer plusieurs fichiers en un seul :<code>sox fichier1.ogg fichier2.ogg fichier_final.ogg</code>
+  * pour augmenter de 10db <code>sox entree.wav sortie.wav vol 10db</code>
+  * pour augmenter les basses tout en évitant la saturation :<code>sox entree.ogg sortie.ogg vol -6dB bass +6</code>
+  * pour imprimer une analyse du fichier son (amplitude, volume...):<code>sox entree.ogg -n stat </code>
+  * pour imprimer une analyse du fichier son (dB, channel..) <code>sox entree.ogg -n stats</code> 
+  * pour convertir un fichier stéreo en "fake"-surround  ([[http://jeanbruenn.info/2011/10/22/stereo-to-fake-surround/|Source]])<code>
+#!/bin/bash
+
+###
+# stereo 2 surround
+###
+
+inFile="$1";
+outFile="$2";
+debug="$3";
+
+# todo ...
+#if [ ! -z sox ]; then
+#echo "sox"
+#  run=0;
+#fi
+
+#if [ ! -x multimux ]; then
+#echo "multimux"
+#  run=0;
+#fi
+
+#if [ ! -x soxi ]; then
+#echo "soxi"
+#  run=0;
+#fi
+
+#if [ ! -x normalize ]; then
+#echo "normalize"
+#  run=0;
+#fi
+
+# default parameter
+soxParm="";
+normParm="-q";
+
+# debug parameter
+if [ $debug -eq 1 ]; then
+  soxParm="-V -S";
+  normParm="-v";
+fi
+
+if [ $run -eq 0 ]; then
+  echo "Error: Requirenment missing: normalize multimux, sox or soxi";
+else
+  echo " Preparing Source";
+  normalize $normParm $inFile;
+  rate=$(soxi $inFile | grep "Sample Rate" | awk '{ print $4; }');
+  # if rate is 44100, we'll most likely have stuff from an audio-cd,
+  # which we want to deemph at least i assume so
+  if [ $rate -eq 44100 ]; then
+    echo " + Source is 44.1kHz, De-Emphasing & Resampling...";
+    sox $soxParm -c 2 $inFile source.wav deemph rate -v -a 48000
+  else
+    sox $soxParm -c 2 $inFile source.wav rate -v -a 48000
+  fi
+  # create combined channel
+  sox $soxParm -c 2 source.wav -c 1 combined.wav mixer 0.5,0.5
+  normalize $normParm combined.wav
+  # create pre- left and right channels
+  sox $soxParm -c 2 source.wav -c 1 sleft.wav mixer -l
+  sox $soxParm -c 2 source.wav -c 1 sright.wav mixer -r
+  sox $soxParm -M -c 1 -v -1 sright.wav -c 1 combined.wav -c 1 right.wav
+  normalize $normParm right.wav
+  sox $soxParm -M -c 1 -v -1 sleft.wav -c 1 combined.wav -c 1 left.wav
+  normalize $normParm left.wav
+  # frequency games
+  sox $soxParm -c 1 left.wav -c 1 ls.wav sinc 100-6000 reverb
+  sox $soxParm -c 1 right.wav -c 1 rs.wav sinc 100-6000 reverb
+  sox $soxParm -c 1 combined.wav -c 1 c.wav sinc 80-12000
+  sox $soxParm -c 1 combined.wav -c 1 lfe.wav sinc 20-200
+  sox $soxParm -c 1 left.wav -c 1 lf.wav sinc 80-20000
+  sox $soxParm -c 1 right.wav -c 1 rf.wav sinc 80-20000
+  # normalize it in batch-mode
+  normalize $normParm -b ls.wav rs.wav c.wav lfe.wav lf.wav rf.wav
+  # let's mux it
+  multimux -d 0,0,15,15,0,0 lf.wav rf.wav ls.wav rs.wav c.wav lfe.wav > $outFile
+  # cleanup
+  rm left.wav right.wav combined.wav source.wav sleft.wav sright.wav
+fi
+</code>
+==== rec ====
+**Rec** permet d'enregistrer des sons.\\
+Pour enregistrer l'entrée micro par défaut en un fichier audio au format ogg :
+<code>rec -d test.ogg</code>
+Le fichier test.ogg est alors créé dans le répertoire courant. 
+
+<code>rec -d ~/Desktop/ma_voix.wav</code>
+Le fichier ma_voix.wav est créé sur le bureau.
+
+Plus d'informations sur **rec** et ses nombreuses options avec son manuel : 
+<code>rec --help</code>
+
+Un script pour faciliter l'utilisation de rec est disponible dans [[http://forum.ubuntu-fr.org/viewtopic.php?id=253255|ce sujet du forum]].
+
+===== Liens =====
+  * [[http://sox.sourceforge.net/|site officiel (en)]]
+  * [[http://billposer.org/Linguistics/Computation/SoxTutorial.html|quelques exemples et explications (en)]]
+
+----
+ //Contributeurs : [[:utilisateurs:ZondeR]] , [[:utilisateurs:Yannou90]]// 
+ 

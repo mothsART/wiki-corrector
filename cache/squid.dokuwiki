@@ -1,0 +1,225 @@
+
+{{tag>réseau proxy sécurité}}
+----
+
+
+====== Squid : serveur mandataire (proxy) ======
+
+{{ http://upload.wikimedia.org/wikipedia/fr/b/b7/Squid-cache_logo.jpg|Logo Squid}}
+Squid est un serveur mandataire, en anglais un proxy, entièrement libre et très performant. Squid est capable de gérer les protocoles FTP, HTTP, HTTPS et Gopher. Il est généralement utilisé dans certaines entreprises et universités pour des fonctions de filtrage d'URL ou en tant que tampon. Les pages Internet sont stockées localement ce qui évite d'aller les recharger plusieurs fois et permet d'économiser la bande passante Internet
+
+===== Installation =====
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>squid]]**
+
+===== Configuration =====
+
+Par défaut Squid est configuré et fonctionnel. Cependant, on peut apporter quelques modifications afin de l'optimiser ou mieux l'adapter à certains environnements.
+
+Le fichier de configuration de Squid est ''/etc/squid/squid.conf''.
+Pour toute configuration, [[:tutoriel:comment_editer_un_fichier|éditez donc ce fichier]].
+
+<note important>
+  * Penser à effectuer une sauvegarde de ce fichier avant toute modification : ''sudo cp /etc/squid/squid.conf /etc/squid/squid.conf.bak''. Effectuer l'opération inverse pour restaurer le fichier.
+  * Après toute modification du ''squid.conf'', redémarrer Squid :
+
+</note>
+
+Pour l'activer après une fausse manipulation :
+
+  sudo service squid start
+
+Pour l'arrêter :
+
+  sudo service squid stop
+
+<note>Pour le reconfigurer (à la place de stop et start ou restart qui prend du temps):
+ sudo squid -k reconfigure. "service squid reload"  est aussi une autre solution pour recharger la configuration.</note>
+
+Voici quelques modifications utiles :
+
+==== Autoriser les utilisateurs à utiliser le serveur mandataire ====
+
+Rechercher la ligne commencant par "acl localhost src", et rajouter, après cette ligne, la ligne suivante : 
+  acl allowedips src X.Y.Z.T/N
+(où X.Y.Z.T/N représente le sous-réseau des IPs autorisées à accéder au serveur mandataire, par exemple : 192.168.0.1/255.255.255.0 pour un réseau local allant des IPs 192.168.0.1 à 192.168.0.254)
+
+Rechercher ensuite la ligne "http_access allow localhost" et rajouter, après cette ligne, la ligne suivante : 
+  http_access allow allowedips
+  
+==== Indiquer le nom de la machine ====
+
+dans la partie **''TAG: visible_hostname''**, indiquer le nom de la machine comme suit :
+
+  visible_hostname 
+==== Ne pas inclure l'adresse IP dans les requêtes HTTP ====
+
+Pour ne pas inclure l'adresse IP ou le nom du système dans les requêtes HTTP, dans la partie **''TAG: forwarded_for''**, décommenter et modifier la ligne comme suit :
+
+  forwarded_for off
+
+
+==== Messages d'erreur en français ====
+
+Dans la partie **''TAG: error_directory''**, décommenter et modifier la ligne comme suit :
+
+  error_directory /usr/share/squid/errors/French
+
+
+
+==== Droits de l'utilisateur de Squid ====
+
+L'utilisateur //proxy// de Squid doit appartenir au groupe //root// pour bénéficier des droits nécessaires sur les fichiers de journalisation de Squid, afin de rendre l'authentification fonctionnelle :
+
+Changer le propriétaire des fichiers de journalisation de Squid :
+
+  sudo chown -R proxy:root /var/log/squid
+
+  sudo chown -R proxy:root /var/run/samba/winbindd_privileged
+
+Changer le groupe du tampon de Squid :
+
+[[:tutoriel:comment_editer_un_fichier|Éditer le fichier]] /etc/squid/squid.conf,
+
+Dans la partie **''TAG: cache_effective_group''**, décommenter la ligne et y mettre le groupe //root// :
+
+  cache_effective_group root
+
+Redémarrer Squid :
+
+  sudo /etc/init.d/squid restart
+
+==== Modification de la mise en tampon de Squid ====
+
+=== Mise en tampon de page web ===
+
+Par défaut, le tampon de Squid est activé, ce qui permet d'accélérer le chargement de certaines pages.
+La taille par défaut est de 100 Mo (situé dans /var/spool/squid).
+
+Pour changer sa taille, modifiez le fichier /etc/squid/squid.conf
+Trouvez la ligne:
+<code># cache_dir ufs /var/spool/squid 100 16 256</code>
+
+Et décommentez-la. Vous pouvez changer la valeur 100 par ce que vous voulez (par exemple 200 pour 200 Mo) :
+cache_dir ufs /var/spool/squid 200 16 256
+
+Taille maximum de mémoire vive utilisée pour stocker le tampon :
+<code>cache_mem 16 MB</code>
+
+# Taille maximum des objets stockés dans le tampon :
+<code>maximum_object_size 15 MB</code>
+
+=== Tampon DNS ===
+
+<note>Par defaut, Squid est configuré pour garder 6 heures le tampon DNS dont il a pu résoudre le nom et 5 minutes celui dont il n'a pas pu résoudre le nom DNS.</note>
+
+Modification du temps de tampon pour la résolution de nom "positive"; ex :
+<code>positive_dns_ttl 8 hours</code>
+
+Modification du temps de tampon pour la résolution de nom "négative"; ex :
+<code>negative_dns_ttl 4 minutes</code>
+
+
+==== Rendre Squid transparent ====
+
+Pour que Squid fonctionne comme un serveur mandataire transparent, il faut ajouter à la fin du port de Squid :
+<code>
+http_port 3128 transparent
+</code>
+
+Puis exécuter la commande suivante pour indiquer à **iptables** qu'il doit rediriger les requêtes provenant du port 80 sur celui de Squid, le 3128 :
+<note important>
+Pensez à bien modifier l'interface réseau **eth0** par celle que vous utilisez !
+
+L'option **-s 192.168.0.0/24** est facultative si vous souhaitez que tous vos réseaux passent par le proxy, mais si vous voulez l'utiliser pensez à changer l'adresse par la vôtre !
+</note>
+<code>
+sudo iptables -t nat -A PREROUTING -i eth0 -s 192.168.0.0/24 -p tcp --dport 80 -j REDIRECT --to-port 3128
+</code>
+
+Si vous utilisez squid sur votre propre PC, il faut configurer iptables pour laisser passer les requêtes de squid (qui tourne sous l'utilisateur proxy) et rediriger les autres requêtes vers le port 3128.
+<code>
+sudo iptables -t nat -A OUTPUT --match owner --uid-owner proxy -p tcp --dport 80 -j ACCEPT
+sudo iptables -t nat -A OUTPUT -p tcp --dport 80 -j REDIRECT --to-ports 3128
+</code>
+
+Relancer Squid avec la nouvelle configuration :
+<code>
+sudo squid -k reconfigure
+</code>
+==== Bloquer les sites dans un ficher  ====
+Ajouter ces lignes, dans le fichier: /etc/squid/squid.conf
+<code>
+acl liste_url dstdomain "/etc/squid/liste-sites.txt"
+http_access deny liste_url
+</code>
+
+Créer le fichier: "/etc/squid/liste-sites.txt"
+<code>
+.youtube.com
+.facebook.com
+</code>
+===== Webmin (administration via une interface web de Squid) =====
+
+[[:Webmin]] est un outil d'administration web pour votre serveur ou machine Linux. Il permet de gérer le système, administrer les serveurs installés, etc.
+
+==== Installation ====
+
+Webmin n'étant pas dans les dépôts, il faut télécharger le fichier « .deb » d'installation de Webmin depuis leur site :
+
+http://sourceforge.net/projects/webadmin/files/webmin/
+
+Puis [[:tutoriel:comment_installer_un_paquet#paquet_.deb_telecharge|installer]] le paquet téléchargé.
+
+==== Connexion ====
+
+Pour administrer sa machine depuis Webmin, ouvrir un navigateur **qui ne passe pas par ce serveur mandataire** et y saisir l'adresse :
+
+  https://nom_machine:10000/
+
+(''nom_machine'' doit être remplacé par l'IP ou le hostname de la machine)
+
+Vous pouvez vous y connecter avec vos identifiants/mots de passe habituels.
+
+==== Administration de Squid ====
+
+  * Pour administrer Squid, dérouler le menu //servers// puis //Squid Proxy Server//. Pour plus d'informations sur le module d'administration de Squid, regardez directement la [[http://doxfer.webmin.com/Webmin/Squid_Proxy_Server|doc du site de Webmin]] (en).
+
+  * Un analyseur de journaux d'événements pour Squid est disponible dans les dépôts.
+
+Pour l'installer, il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>lightsquid]]**.
+
+
+  * Webalizer : //Servers -> Webalizer Logfile Analysis//.
+
+Webalizer nécessite un dossier, à indiquer dans Webmin, dans lequel il enregistrera les rapports générés. Créez donc un dossier ''webalizer'' dans le dossier personnel :
+
+  mkdir ~/webalizer
+
+===== Désinstallation =====
+
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. La configuration de l'application sera conservée ou supprimée selon la méthode de désinstallation que vous choisirez.
+
+===== Applications associées =====
+
+Beaucoup de logiciels sont complémentaires à Squid, et permettent de nouvelles fonctionnalités comme le filtrage de contenu, le blacklisting ...
+==== DansGuardian ====
+
+Reportez-vous à la page [[dansguardian|Contrôle parental avec DansGuardian]]\\
+Filtrage de contenu web voir [[http://e2guardian.org/]], (explications : [[https://numsys.eu/0sys_commentaires.php?com=53|ici]])
+==== Prostat ====
+Outil de statistiques pour Squid
+[[http://hany.sk/~hany/software/prostat/index_body.html]]
+
+
+===== Liens =====
+
+  * [[http://www.squid-cache.org|Site officiel de Squid]] [en]
+  * [[:tutoriel:comment_mettre_en_place_un_proxy_squid_avec_authentification_active_directory|Squid avec authentification depuis Active Directory]] [fr]
+  * [[:tutoriel:comment_mettre_en_place_un_proxy_squid_avec_authentification_ncsa|Squid avec authentification de base]] [fr]
+  * [[http://www.opendoc.net/solutions/comment-realiser-solution-filtrage-contenus-squid-squiguard-havp-clamav?s[]=squid|Comment réaliser une solution de filtrage de contenu avec Squid, Squiguard, Havp et ClamAV ?]] [fr] >>aucune doc sur site distant<<
+===== Voir aussi =====
+
+  * **(fr)** [[http://www.it-connect.fr/tutoriels/unix-linux/squid/|Plusieurs tutoriels sur l'installation et la configuration de SQUID]] sur IT-Connect
+
+----
+//Contributeurs : [[utilisateurs:v0n]], [[utilisateurs:k20]], yakusa77// 

@@ -1,0 +1,210 @@
+
+{{tag>messagerie courriel postfix MTA serveur}}
+
+====== Comment configurer sa distribution de courriels systèmes MTA avec Postfix ? ======
+Pour comprendre comment configurer un serveur de messagerie MTA lire d'abord [[:comment_configurer_un_serveur_de_messagerie_mta|Configurer un serveur de messagerie MTA sous Ubuntu]]
+
+Ici nous allons étudier le serveur de messageries **Postfix** porté par IBM qui est le serveur par défaut d'Ubuntu. Il est le successeur de Sendmail avec pour but d'en résoudre les problèmes de sécurité, et d'offrir une administration beaucoup plus souple et modulaire que ce dernier.
+<note important>D'autres serveurs de messagerie MTA existent comme : [[:exim4-satellite|Exim]], [[:ssmtp|ssmtp]], [[:msmtp|msmtp]] avec le [[:tutoriel:comment envoyer un mail par smtp en ligne de commande|tutoriel]], Qmail, [[http://www.xmailserver.org/|XMail]], [[https://chezmanu.eu.org/opensmtpd_dovecot.htm|OpenSMTPD]], Lotus Notes, Exchange, etc.</note>
+
+===== Le serveur de messagerie =====
+**Postfix** est ce que l'on appelle en anglais un **MTA** (Mail Transfer Agent). Le MTA, le Centre de Distribution des Courriels, est un serveur de messagerie qui :
+  * //Expédie//, à partir de la boite aux lettres de dépôts des courriels, les messages en tant que client vers un autre centre de distribution des messages MTA. C'est l'expédition des courriels.
+  * //Reçoit les messages d'un autre centre de distribution// de messages MTA, en tant que serveur. C'est la réception des courriels.
+  * //Trie les courriels reçus// pour les distribuer à une boite aux lettres utilisateur ou pour les expédier vers un autre centre de distribution des messages MTA. C'est la distribution des courriels.
+
+Tout ceci se fait au travers du protocole **SMTP** (Simple Mail Transfer Protocol) pour la distribution des courriels et leurs transports vers les serveurs messagerie de distribution de courriels MTA destinataires.
+<note tip>Les termes Mail Server, Mail Exchanger, Mail Relay et MX Hosts peuvent aussi faire référence à un serveur MTA</note>
+
+===== Configuration de Postfix =====
+Les fichiers de configuration du serveur de messageries se trouvent dans ///etc/postfix//.
+<note important>Les fichiers les plus utilisés pour configurer le serveur sont **main.cf** et **master.cf**, attention ils appartiennent au compte **root**.</note>
+
+**Un minimum de paramètres doivent être configurés dans main.cf pour que la messagerie fonctionne.**
+
+==== Qui est gestionnaire de la messagerie ? ====
+Mais avant toute configuration de **main.cf**, pour avoir un suivi du fonctionnement de la distribution des courriels, il est préférable de définir un utilisateur en gestion des incidents de messagerie.
+
+Dans **Postfix**, pour cela il faut éditer le fichier **/etc/aliases** (''kate /etc/aliases'') pour relayer, par mail à l'utilisateur gestionnaire, la supervision du fonctionnement du serveur de messagerie.
+
+Modifiez alors les variables de ce fichier comme ci-dessous :
+  * Pour ne relayer que la supervision de la messagerie : 
+<file>postmasteur: votre_compte_linux # pour relayer par l'utilisateur votre_compte_linux, avec la messagerie, la supervision de la messagerie.</file>
+  * Si l'administrateur du serveur est le même que celui de la messagerie :
+<file>postmasteur: root # pour relayer par l'utilisateur root, avec la messagerie, la supervision de la messagerie
+root: votre_compte_linux # pour relayer la supervision du serveur, avec la messagerie, au gestionnaire du serveur.</file>
+
+Passer la commande **postalias** pour valider les modifications dans **Postfix** :
+<code bash>sudo postalias /etc/aliases</code>
+
+=== Quels incidents rapporter au superviseur de la messagerie et comment ? ===
+Le nombre des messages qui vont vous être envoyés par **Postfix** peut vite devenir du //SPAM//. Il est peut-être pertinent de ne pas recevoir tous les types d'informations. C'est la variable **notify_classes** dans **main.cf** qui nous permet de filtrer tout cela.
+Les valeurs possibles sont :
+  * **bounce** : Informe le gestionnaire du courriel non livré.
+  * **2bounce** : Informe le gestionnaire de la non livraison de l'avis de non livraison d'un courriel.
+  * **delay**: Informe le gestionnaire des courriels retardés.
+  * **policy**: Informe sur les courriers rejetés pour cause de SPAM (restrictions UCE).
+  * **protocol** : Informe le gestionnaire des erreurs de protocole SMTP.
+  * **ressource** : Informe le gestionnaire des erreurs de distributions pour des raisons de non disponibilités de ressources pour la distribution des courriels.
+  * **software** : Informe le gestionnaire des erreurs de distributions pour des raisons logicielles.
+Pour un utilisateur novice il faut éditer **/etc/postfix/main.cf** (''kate /etc/postfix/main.cf'').
+
+Modifiez/Ajouter la variable **notify_class** comme ci-dessous :
+<file>notify_classes = ressource, software # Valeurs par défaut de Postfix</file>
+
+=== Comment consulter les incidents ? ===
+Voir **l'état** du serveur **Postfix** :
+<code bash>systemctl status postfix.service</code>
+
+Voir **les logs** de **Postfix** :
+<code bash>journalctl -u postfix -f</code>
+<note tip>Pour quitter journalctl tapez ctrl+c . [[https://www.binsp.net/?post/journald-la-gestion-des-journaux|Pour plus d'infos]]</note>
+et
+<code bash>cat /var/log/mail.log</code>
+<code bash>cat /var/log/mail.err</code>
+
+Voir les messages en **file d'attente** :
+<code bash>mailq</code>
+ou
+<code bash>postqueue -p</code>
+ou
+<code bash>qshape # montre une vue du contenu de la file d’attente de Postfix sous forme de tableau</code>
+ou
+<code bash>qshape active #pour ceux actif en file d'attente</code>
+ou
+<code bash>qshape deferred #pour les mails de la file d’attente retardée</code>
+
+=== Comment supprimer les messages bloqués dans la file d'attente ? ===
+<code bash>sudo postsuper -d ALL deferred # pour vider la file retardée</code>
+<code bash>sudo postsuper -d ALL # pour vider toutes les files</code>
+
+==== Où se trouve la boite aux lettres des courriels des utilisateurs du système Linux  ? ====
+Si vous ne voulez pas relever votre courrier à la poste (vos colis chez votre livreur), votre facteur, votre livreur de colis, doit savoir où trouver la boite aux lettres personnelle à l'adresse de livraison de votre domicile. Afin de leur permettre de délivrer les lettres ou les colis qui vous sont adressés en votre absence. C'est pour cela que les boites aux lettres des particuliers sont normalisées.
+
+Dans **Postfix**, c'est la variable **home_mailbox** qui définit pour votre serveur de messagerie où se trouve la boite aux lettres des utilisateurs.
+
+Exemple :
+<file>home_mailbox = Mailbox/ # Les boites aux lettres des utilisateurs se trouvent dans /home/«utilisateur»/Mailbox/ et sont au format Maildir.
+home_mailbox = .local/share/local-mail/inbox/ # Les boites aux lettres des utilisateurs se trouvent dans /home/«utilisateur»/.local/share/local-mail/inbox/ 
+home_mailbox = .local/share/akonadi_maildir_ressource_0/inbox/ # La boite aux lettres des utilisateurs kmail</file>
+<note tip> Pour avoir une boite aux lettres au format **Mailbox** (tout dans un fichier) il faut une syntaxe du genre **répertoire/chemin/fichier_boite_aux_lettres** . Pour le format **Maildir** (avec des répertoires) il faudra l'écrire comme un répertoire **répertoire/chemin/répertoire_boite_aux_lettres/** .</note>
+
+==== Quel nom de centre de distribution de messages afficher pour nos courriels utilisateurs sortant ? ====
+Une adresse mail **utilisateur@fournisseur_messagerie.fr** se compose invariablement de trois éléments :
+  - **Le nom du destinataire** (le compte utilisateur, un nom, etc.). Ici c'est «utilisateur».
+  - **@ comme séparateur** (entre le destinataire et le domaine serveur SMTP de messagerie).
+  - **Le nom de domaine du serveur SMTP**, centre de distribution des messages. Ici c'est «fournisseur_messagerie.fr».
+
+Donc si l'on fait un rapprochement avec le courrier écrit, le nom du destinataire est identique au nom du destinataire d'un courrier postal. Et la machine serveur SMTP, le centre de distribution des messages, c'est votre adresse postale complète du lieu d'habitation ou géographique d'entreprise/d'établissement.
+
+La variable **myorigin** est alors utilisée par **Postfix** pour spécifier le nom de votre serveur de courriels comme centre de distribution des messages.
+
+Exemples : 
+<file>myorigin = $myhostname	# envoie le courriel comme «utilisateur@valeur_de_myhostname»
+myorigin = $mydomain	# envoie le courriel comme «utilisateur@valeur_de_mydomain» (a privilégier pour respecter le principe d'adresse de centre de distribution des messages)
+myorigin = fm.perso	# envoie le courriel comme «utilisateur@fm.perso»</file>
+
+<note important>Sous Ubuntu la définition de la variable **myorigin** se fait dans le fichier **/etc/mailname**.</note>
+
+<note tip>Vous pouvez voir la valeur des variables de **Postfix** avec la commande **postconf nom_de_mavariable_postfix**. Exemple : ''postconf myhostname''</note>
+La variable **myhostname** peut être spécifiée dans le cas où celle-ci ne renvoie pas la bonne valeur. Pour voir le nom de machine tapez la commande «''hostname''».
+
+La variable **mydomain** peut aussi être spécifiée pour le nom de domaine (dans le cas où **Postfix** renvoie ''localdomain'' avec cette variable par exemple). Pour voir le nom de domaine système tapez la commande «''hostname -d''».
+
+Exemple :
+<file>myhostname = mon_nom_de_serveur		# fixe le nom du serveur à «mon_nom_de_serveur»
+mydomain = mon_domaine_machine.perso	# fixe le nom de domaine à «mon_domaine_machine.perso»
+myorigin = $mydomain			# envoie le courriel comme «utilisateur@mon_domaine_machine.perso»</file>
+
+==== Quelles adresses de centre de distributions de courriels SMTP à l'arrivée autoriser ? ====
+Des courriers/colis vous sont proposés à l'arrivée à votre centre de distribution pour réception.  Ici il est question d'accepter ou non les messages/colis à la livraison pour distribution en fonction de l'adresse indiqué. Pour la messagerie cela se traduit par quelles adresses de messages SMTP vont être autorisés pour un trie local.
+
+C'est le paramètre **mydestination** qui indique les adresses de messages à l'arrivée pour lesquels on peut accepter le courriel comme adresse locale de centre de distribution. Attention pour éviter des boucles dans la distribution des messages, vous devez énumérer tous les noms d'hôtes de la machine en incluant **$myhostname** et **localhost.$mydomain**
+
+Exemples :
+<file>mydestination = $myhostname localhost locahost.$mydomain # valeurs par défaut de Postfix pour un service local (adresses courriels distribués pour votre messagerie client : nom_utilisateur@nom_machine, nom_utilisateur@localhost, nom_utilisateur@localhost.nom_du_domaine)
+mydestination = $myhostname localhost locahost.$mydomain $mydomain # par exemple pour distribuer en plus des messages pour les utilisateurs locaux avec le nom de domaine messagerie : nom_utilisateur@mon_domaine_messagerie
+mydestination = $myhostname localhost locahost.$mydomain mon_fm.fr # avec mon fournisseur de messagerie en local.</file>
+<note tip>Exemple d'envoi d'un message en ligne de commande : ''echo "mon message" | mutt -s "Sujet du courriel" utilisateur''</note>
+
+==== Sur quels réseaux de transport sont distribués les messages ? ====
+Par quels réseaux de transports les courriers/colis sont-ils distribués ? Par la route, par le train, par l'avion, etc. Ici il s'agit de définir quels moyens de transports sont utilisés pour la distribution des messages.
+
+Par défaut **Postfix** relaie les messages des clients de messagerie SMTP non distribués sur tout les réseaux de transports de la machine. Les réseaux autorisés sont spécifié par les variables **mynetworks** et **mynetworks_style**
+
+La variable **mynetwork_style** peut prendre la valeur :
+  * **host** pour que la circulation des messages ne se face que localement au serveur de mail.
+  * **subnet** pour une circulation sur les interfaces réseaux définit et actives du serveur de mail.
+  * **class** pour distribuer sur une plage réseaux de transports TCP/IP (Genre plage IP de classe A, B ou C).
+Exemples :
+<file>mynetworks_style = subnet			# Autorise tous les sous-réseaux raccordés.
+mynetworks_style = host				# Seul la machine locale est autorisée, c'est sécurisé contre le spam.
+mynetworks = 127.0.0.0/8			# Seul la machine locale est autorisée, c'est sécurisé contre le spam.
+mynetworks = 127.0.0.0/8 168.100.100.0/32</file>
+
+==== À quels centres d'arrivées des courriers expédier les messages qui n'ont pas de distribution locale ? ====
+Lorsque on vous délivre des courriers ou des colis à votre centre d'arrivées et de trie postal, certains vous sont destinés pour une distribution locale, et d'autres n'ont aucun destinataire. Vous pouvez décider vers quels autres centres d'arrivées des courriers expédier ces courriers.
+
+**Postfix** relaie tous les messages qui ne lui sont pas destinés et les distribue vers les destinations autorisées. C'est la variable **relay_domains** qui définit ces relaies.
+Exemples :
+<file>relay_domains = $mydestination			# Distribution suivant les destinations autorisées. Par défaut dans Postfix.
+relay_domains = 				# Ne relaie aucun courrier provenant de réseaux non autorisés. C'est la version sécurisé.
+relay_domains = mon_domaine_machine.perso	# Relaie le courrier vers mon_domaine_machine.perso et ses sous-domaine.mon_domaine_machine.perso</file>
+
+==== Quelle méthode de distribution des courriels sur internet ? ====
+Vous avez des courriers au départ dans votre centre de trie avec des adresses qui ne sont pas pour votre centre de traitement d'arrivées. Ces adresses n'ont pas une distribution locale à l'arrivée possible. Donc pour votre trie vous devez expédier ces courriers vers un (d')autre(s) centre(s) de traitements au départ qui peux les expédier.
+
+C'est la variable **relayhost** qui est à paramétrer pour tout cela.
+Exemples :
+<file>relayhost = 						# Livraison directe dans internet. Par défaut dans Postfix.
+relayhost = mon_domaine_machine.perso			# Livraison via la messagerie de mon domaine (centre de traitements)
+relayhost = [messages.mon_domaine_machine.perso]	# Livraison via la passerelle messages.mon_domaine_machine.perso (centre de trie)
+relayhost = [smtp.fai.fr]:465 				# Livraison via la passerelle du fournisseur d'accès smtp.fai.fr suivant le port sécurisé 465 (crypté en SSL)</file>
+
+Les **[]** permettent d'éviter d'avoir les correspondances IP DNS des **MX** des noms de domaines de messageries. Ce sont les ports de ces adresses IP qui sont filtrés par les pare-feux.
+<note tip>Les MX ce sont les adresses DNS des serveurs de messageries (centres de traitements des courriels).</note>
+
+==== Comment sécuriser le SMTP ====
+=== Bloquer le port SMTP standard ===
+Pour modifier le port d'Émission de votre serveur, dans /etc/postfix/main.cf, modifier RELAYHOST comme ceci:
+''relayhost = [serveursmtp]:port'' 
+( EX : ''relayhost = [smtp.orange-business.com]:587'')
+
+Il est également possible d'utiliser le port 587 en lieu et place du port 25, pour cela, éditer le fichier /etc/postfix/master.cf et ajouter 
+
+  587     inet    n       -       y       -       -       smtpd
+        -o smtpd_proxy_ehlo=no
+        -o content_filter=dksign:[127.0.0.1]:12028
+
+juste en dessous de votre ligne smtp
+
+  smtp      inet  n       -       -       -       -       smtpd
+        -o smtpd_proxy_ehlo=no
+        -o content_filter=dksign:[127.0.0.1]:12028
+
+=== Crypter les connections au serveur SMTP ===
+
+Pour crypter les connections au serveur SMTP on peut utiliser un tunnel SSH, c'est le protocole SMTPS, ou mieux le protocole TLS qui fait la même chose mais corrige des failles de sécurité des anciennes versions de SSH.
+
+=== Authentifier de façon sécurisée les connections au serveur SMTP ===
+
+Postfix doit être utilisé avec SASL, cela va assurer l'authentification SMTP (pour éviter que des spammeurs utilisent votre serveur pour envoyer du spam), ainsi qu'un chiffrement via SSL/TLS.
+
+==== Filtrer les courriels indésirables ====
+[[https://guide.ubuntu-fr.org/server/mail-filtering.html|Pour configurer un système de filtrages/marquages dans le MTA Postfix]]
+===== Installer et configurer Postfix =====
+  * [[:installer_postfix_en_local_pour_un_poste_de_travail|Installer Postfix en local pour un poste de travail]]
+  * [[:installer_postfix_avec_le_serveur_de_messagerie_sur_internet|Installer Postfix pour l'envoie des courriels vers un serveur de messagerie du réseau local ou d'internet]]
+  * [[Postfix en serveur local avec un serveur de messagerie relaie sur internet|Postfix en serveur local avec distribution des courriels vers un serveur de messagerie relaie]]
+  * [[:postfix|Postfix comme serveur de messagerie Internet]]
+
+===== Autres articles =====
+général:
+  * [[:postfix]] - Configuration de Postfix.
+  * [[postfix_systeme_satellite|Configurer Postfix en site satellite]] - Renvoyer les courriels du système vers un serveur SMTP, par exemple pour recevoir les logs par courriel.
+  * [[:tutoriel:Comment soumettre un problème Postfix sur le forum]] ? - Les informations à transmettre lorsque vous soumettez un problème Postfix sur le forum.
+  * [[wpfr>Lutte_anti-spam|filtrage du spam]] -  - Installer et configurer un filtre antipourriel, [[http://spamassassin.apache.org/|Spamassassin]]
+
+Avancé :
+  * [[:Postfix + MySQL + TLS + SASL]] - Configurer Postfix avec le support de MySQL pour une utilisation multi-domaine/multi-utilisateurs.
+

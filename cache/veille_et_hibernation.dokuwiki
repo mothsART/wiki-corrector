@@ -1,0 +1,408 @@
+
+{{tag>matériel système énergie}}
+
+----
+
+====== Mise en veille / Hibernation ======
+
+La mise en veille et l'hibernation sont deux alternatives à l'arrêt de l'ordinateur.
+
+  * __La mise en veille__ permet d'économiser de l'énergie tout en gardant les applications ouvertes. Le réveil est très rapide. Il s'agit de ce que l'on appelle « suspend to ram » : toutes les informations de travail restent dans la mémoire vive et votre système d'exploitation se met en mode d'économie d'énergie((Mode dans lequel les composants électroniques se mettent dans un état de consommation minimum pour préserver les données, sans être en attente d'écriture/lecture)). Par conséquent, une partie infime de la charge batterie est utilisée.
+  * __L'hibernation__ permet de sauvegarder l'état des applications sur le disque dur et ne consomme ensuite plus d'énergie. Le terme associé est « suspend to disk » et correspond à écrire toutes les données présentes dans la mémoire vive sur le disque dur avant d'arrêter complètement l'ordinateur. Au redémarrage, l'opération inverse est effectuée : on lit depuis le disque dur pour repeupler cette dernière. Cependant, cette opération est bien plus longue du fait de la lecture/écriture depuis le disque dur. Son avantage est qu'il n'y a absolument aucune consommation d'énergie en mode hibernation, une fois l'opération effectuée. Ce processus est connu sous Windows sous le nom de « veille prolongée »
+
+===== La Veille =====
+==== Mettre en veille ====
+Vous pouvez rapidement mettre l'ordinateur en veille via cette commande : <code>systemctl suspend</code>
+<note tip>La plupart des claviers contiennent une touche «zz» (pour mettre en veille) que l'on peut utiliser avec la touche Fn. D'autres claviers contiennent un croissant de lune pour veiller.</note>
+C'est la manière la plus simple de mettre en veille votre pc en moins d'une demi-seconde !
+
+Selon les [[environnements]], il existe un menu vous permettant de gérer l'arrêt, le redémarrage et **la veille** de votre ordinateur.
+
+<note tip>Pour l'environnement [[GNOME]] il y a la possibilité de changer l'effet du bouton marche/arrêt dans les [[gnome-control-center|Paramètres système]] dans la section **Énergie**</note>
+ 
+==== Supprimer le mot de passe lors de la sortie du mode veille/hibernation ====
+Cette section propose uniquement des méthodes pour l'[[environnements|environnement]] [[GNOME]].
+
+Sur Ubuntu 18.04 ou ultérieur, aller dans [[gnome-control-center|Paramètres système]] puis dans «Confidentialité» et « Verrouillage de l’écran ». Décochez la case « Verrouiller l’écran lors de la mise en veille » ou avec la commande :
+  gsettings set org.gnome.desktop.lockdown disable-lock-screen 'true'
+
+<note>**Pour Ubuntu 16.04 avec [[Unity]]** :?: \\ 
+En mode graphique, ouvrir les Paramètres systèmes puis cliquer sur l’icône "Luminosité et verrouillage". Mettre "Verrouiller" sur "0" et décocher la partie intitulée « Demander mon mot de passe lors de la sortie de veille ».</note>
+
+==== Exécuter un script / une commande en sortie du mode veille ====
+Avec [[systemd]], mettre un [[:permissions#chmod_pour_changer_les_droits|fichier exécutable]] dans :\\ 
+  - ''/lib/systemd/system-sleep'' Cette méthode est confirmée
+  - ''/etc/apm/resume.d'' (à tester, vérifier, FIXME)
+
+Le fichier exécutable peut être réalisé en n'importe quel langage.
+
+=====Hibernation=====
+Par défaut sous Ubuntu, pour des raisons de compatibilité matérielle l'hibernation est désactivée, vous pouvez l'activer en suivant ce [[:tutoriel:activer_hibernation|tutoriel]].
+
+==== Hiberner au bout de x secondes après une mise en veille ====
+
+ - La solution la plus simple est d'utiliser la commande pm-suspend-hybrid du [[paquet]] pm-utils. Cependant, les outils de gestions de batterie tel gnome-power-manager ne gèrent pas cette commande nativement et le fonctionnement est aléatoire suivant le portable. L'avantage de cette solution est que les données sont sauvegardées si vous êtes à court de batterie pendant la phase de veille,  contrairement au script ci-dessous.
+
+- Une autre façon est d'utiliser votre outil de [[energie|gestion d’énergie]] pour mettre en veille et d'utiliser le [[tutoriel:script_shell]] ci dessous en parallèle. Ce script utilise la fonction rtcwake ( qui permet de réveiller l'ordinateur au bout de x secondes ) et les outils fournis dans le [[paquet]] pm-utils.  
+
+[[:tutoriel:comment_modifier_un_fichier|Ajouter le fichier]]  /etc/pm/sleepd/0000rtchibernate, ce fichier va être lu par la commande pm-suspend appelé par les outils de gestion de batterie pour la mise en veille et le réveil.
+
+Puis copier le script ci-dessous (modifier la variable autohibernate suivant vos besoins):
+
+<file bash>
+#!/bin/bash
+curtime=$(date +%s)
+
+# Éditer la variable autohibernate ci-dessous pour indiquer le nombre de seconde avant hibernation
+autohibernate=900  # ici 900 secondes avant hibernation 
+
+echo "$curtime $1" >>/tmp/autohibernate.log
+
+# Mise en veille
+if [ "$1" = "suspend" ] 
+then
+    #enregistrement de l'heure actuelle et ajout d'un compte à rebours avant hibernation
+    echo "$curtime" >/var/run/pm-utils/locks/rtchibernate.lock
+    rtcwake -m no -s $autohibernate
+fi
+# Sortie de veille
+if [ "$1" = "resume" ]
+then
+    sustime=$(cat /var/run/pm-utils/locks/rtchibernate.lock)
+    rm /var/run/pm-utils/locks/rtchibernate.lock
+    
+    # Sortie de veille grace au compte à rebours?
+    if [ $(($curtime - $sustime)) -ge $autohibernate ]
+    then
+        # Alors hiberner
+        rm /var/run/pm-utils/locks/pm-suspend.lock
+        /usr/sbin/pm-hibernate
+    else
+        # Sinon effacer le compte à rebours
+        rtcwake -m no -s 1
+    fi
+fi
+</file>
+
+puis le rendre [[:permissions|exécutable]]
+
+<code>
+sudo chmod +x /etc/pm/sleep.d/0000rtchibernate
+</code>
+
+À chaque fois qu'une mise en veille est effectuée ( manuellement ou à l'aide de logiciel ), l’ordinateur va se réveiller automatiquement au bout de 15 minutes ( en fonction de la variable autohibernate ) et, s'il n'y a eu aucune activité utilisateur, hiberner.
+
+<note warning>
+Si le niveau de la  batterie devient critique pendant la veille, vous allez perdre les données non sauvegardées.
+</note>
+
+[[http://askubuntu.com/questions/12383/how-to-go-automatically-from-suspend-into-hibernate|Source du script]]
+
+==== Empêcher l'hibernation ====
+Sur certains ordinateurs, l'hibernation peut poser problème : plantage à la mise en hibernation, au redémarrage … C'est notamment le cas sur les machines qui n'ont que très peu ou pas de [[swap]] .
+
+Pour remédier à cela, il est possible d'empêcher l'hibernation.
+
+Pour ce faire, ouvrir un [[terminal]] et saisir la commandes suivantes :
+<code>sudo nano /etc/pm/sleep.d/000_no-hibernation</code>
+Dans le nouveau fichier ainsi créé, saisir le code suivant :
+<file bash>#!/bin/sh
+# Empêcher l'hibernation
+. "$PM_FUNCTIONS"
+[ "$1" = "hibernate" ] && inhibit || true</file>
+Enregistrer par Ctrl X puis O.
+
+Pour empêcher la mise en veille //et// l'hibernation, utiliser [[https://launchpadlibrarian.net/58100042/00_avoid_suspend|ce code]] dans le fichier.((Source de toute cette partie : http://askubuntu.com/questions/28328/how-can-i-disable-hibernate-completely-in-kubuntu))
+
+===== Problèmes connus =====
+
+Si votre PC ne s'éteint pas (quel que soit le type de commande) et qu'il est équipé d'une carte graphique de type NVIDIA, alors il est possible qu'installer le driver NVIDIA approprié (via la "Configuration du système" et "Gérer les périphériques") résolve cette difficulté.
+Expérimenté avec succès sur Kubuntu Bionic Beta 1, Laptop PC MSI GL72-6QF-813XFR, compte Ubuntu jpn2605.
+
+<note important>Afin de compléter cette section avec des informations utiles et précises, merci de renseigner votre matériel et votre pseudo (forum et/ou wiki) afin qu'on puisse vous contacter en cas de problème similaire, ou d'ambiguïté dans les informations.</note>
+<note important>Avant toute chose, au moins pour l'hibernation, si vous rencontrez un problème réessayez après avoir débranché tous les périphériques extérieurs de votre ordinateur (souris USB, jack, clé USB, imprimante, modem (Sagem Fast 800 non compatible)...).
+Ça ne règle pas les problèmes mais permet de savoir si ça en crée !</note>
+
+==== Problèmes de mise en veille ====
+
+=== Mise en veille qui ne met pas en veille ===
+
+Il a été reporté un bogue de mise en veille qui ne met pas en veille: lors du lancement de la mise en veille, le son et le wifi s'éteignent, l'écran devient noir, mais les ventilateurs ne s'arrêtent pas, et le pc, au final, ne se met pas effectivement en veille. La seule solution est un redémarrage après arrêt complet ([[http://forum.ubuntu-fr.org/viewtopic.php?pid=3527684]]|[[http://forum.ubuntu-fr.org/viewtopic.php?id=403764]]. 
+
+La solution pour remédier à ce problème est la désactivation du kernel mode setting (KMS): pour cela, il faut mettre l'option ''nomodeset'' au démarrage. Éditer
+''/etc/default/grub''
+et ajouter nomodeset à la ligne GRUB_CMDLINE_LINUX, puis
+'' sudo update-grub''
+
+Note 2 : Si après modification ça ne redémarre plus et plus d’invite de session (gnome) alors  au (multiboot) Grub, placez-vous sur la ligne de l'Ubuntu qui plante et tapez la touche "e" (mode édition du grub). 
+Retirez le nomodeset puis ctrl+x (pour sauver).
+Démarrez, si ça démarre ouvrez une console et éditez le fichier grub pour remettre la ligne comme avant:''GRUB_CMDLINE_LINUX=""   '' et faites un ''sudo update-grub'' pour enregistrer la modification.
+
+=== Mise en veille qui met veille puis se réveille automatiquement au bout d'un petit laps de temps ===
+Parfois, un périphérique envoi des signaux de reveil sans qu'on le souhaite. Il arrive parfois que cela vienne des ports USB ou du de l'écran des ordinateurs portables (le LID en anglais).
+
+La solution serait la résolution de ces bugs dans les drivers ou le noyaux...
+
+En solution de contournement, on peut désactivé le réveil de ces périphériques. Une fois désactivé, le réveil se fera avec les autres solutions de réveil (au pire le bouton marche / arrêt). La solution détaillée est expliquée [[https://joshtronic.com/2017/03/13/getting-suspend-in-linux-working-on-a-macbook-pro/|ici]] (en Anglais).
+
+Le principe :
+== Lister ce qui peut sortir de veille.  avec :==
+  cat /proc/acpi/wakeup
+
+C'est tout ce qui est marqué ***enabled**. Pour les causes les plus rependues :
+  * XHC1 = Les ports USB
+  * LID0 = l'écran des ordinateurs portables
+
+== Faire des essais en désactivant les périphériques jusqu'à trouver le bon. Il faut replacer LID0 par le périphérique a désactiver==
+  sudo su
+  echo LID0 > /proc/acpi/wakeup
+  
+== Tester en déclenchant la veille==
+  systemctl suspend
+
+Si le système reste en veille, vous avez trouvé le périphérique qui pose problème. La configuration sera réinitialisée au prochain redémarrage de la machine
+
+== Désactiver le périphérique problématique à chaque démarrage. Pour cela, il faut ajouter la commande qui a marché au fichier /etc/rc.local en mode administrateur==
+
+Une autre solution est celle-ci : [[https://askubuntu.com/questions/73365/shutdown-suspend-hibernate-not-working-correctly|article en anglais]] qui propose une solution qui semble marcher pour beaucoup de configuration (c'est très simple, un script à copier dans un nouveau fichier dont le chemin est indiqué, une ligne de commande, un redémarrage et c'est tout).
+
+=== Mise en veille qui ne met pas en veille (3) ===
+Virtualbox 4.1 peut aussi poser des problèmes de mise en veille. Détails ici : http://forum.ubuntu-fr.org/viewtopic.php?pid=6022561
+
+=== Mise en veille qui ne met pas en veille (4) ===
+Dans le cas de cartes graphiques nvidia optimus, pensez à installer [[:bumblebee]]
+
+=== Mise en veille qui ne met pas en veille (5) ===
+Installer "systemd" (s'il n'est pas déjà installé) puis créer un script exécutable ".suspend" (par exemple) avec le code: "systemctl suspend;".
+Pour finir, dans l'économiseur d'énergie valider "démarrer un script" "après" xx min en sélectionnant le script précédemment créé.
+Ça ne résout pas le problème de base, mais ça permet d'avoir la veille qui fonctionne.
+
+=== Impossible de sortir d'une mise en veille sur RAM ===
+
+Voici différentes causes possibles du non retour :
+  * ([[utilisateurs:Id2ndR]]) Votre BIOS n'est pas réglé sur le bon mode : il faut utiliser le mode [[http://fr.wikipedia.org/wiki/ACPI#Global_states.C2.A0.2F.C2.A0Sleep_states_.28.C3.A9tats_du_syst.C3.A8me_et_sommeil.29|ACPI]] S3 pour la mise en veille. Certains BIOS utilisent S1 comme réglage par défaut. Plus de détails [[http://blogs.msdn.com/omars/archive/2004/05/11/129553.aspx|ici]] (en anglais).
+
+=== L'écran reste noir (carte graphique intel)  === 
+S'il vous est impossible des sortir d'une mise en veille avec une carte intel, (voir la page [[:matériel]] pour savoir si c'est le cas) suivez les instructions suivantes :
+  * Installez le paquet **[[apt>dkms]]**,
+  * Puis téléchargez le paquet **oem-audio-hda-daily-dkms** conforme à votre version d'Ubuntu sur cette [[https://code.launchpad.net/~ubuntu-audio-dev/+archive/alsa-daily/+packages|page]]. 
+  * Redémarrez votre ordinateur. 
+La mise en veille devrait fonctionner correctement.
+
+=== L'écran reste noir (carte graphique AGP nvidia)  === 
+Dans la Section "Device" du fichier /etc/X11/xorg.conf __il est impératif de rajouter ces lignes__ en mode administrateur:
+<file>
+Option      "NvAGP" "1"
+Option	    "NoLogo" "true"
+</file>
+
+=== L'ordinateur s'allume mais l'écran reste éteint ===
+
+En attendant une éventuelle correction, utilisez ''pm-suspend'' du paquet [[apt://pm-utils]]. Selon votre matériel, il est parfois nécessaire d'utiliser une des options listées dans les manpages pour que tout fonctionne correctement.
+
+=== L'ordinateur s'allume mais l'écran affiche des lignes et couleurs aléatoires, comme si la résolution n'était pas supportée ===
+
+Sans connaître d'explication logique, ceci peut être résolu en allant dans "Système>Préférences>Apparence>Effets visuels" et en choisissant Aucun.
+
+Vérifiez sur le site du constructeur de votre carte graphique si celle-ci n'est uniquement prévue que pour un bios Legacy. 
+Si c'est le cas, une ré-installation de votre système en Legacy enlèveras tout problèmes de couleurs en sortie de veille. 
+
+=== L'ordinateur s'allume et semble travailler mais l'écran affiche une suite de couleurs unies et il est impossible de reprendre la main  ===
+
+Dans ce cas-là, seul une réinitialisation complète permet de reprendre la main. 
+Il semble que ce problème apparaisse sur les premières générations de processeurs Intel Pentium disposant de l'HyperThreading. Essayez de désactiver cette fonction dans le bios. 
+
+=== L'ordinateur s'allume mais gèle (carte graphique Nvidia) ===
+
+Chez moi le problème est résolu en utilisant le pilote propriétaire Nvidia plutôt que le pilote libre Nouveau (dommage...).
+
+=== L'ordinateur s'allume mais gèle (carte graphique AMD) ===
+
+Il existe une incompatibilité entre le pilote de carte graphique propriétaires fglrx et compiz.\\ 
+Si vous utilisez le pilote fglrx, la solution proposé [[https://github.com/dabrahams/fglrx-support|ici]] peut vous aidez:
+Il s'agit de fglrx-support proposé par Dave Abrahams.\\ 
+Soit, télécharger l'[[https://codeload.github.com/dabrahams/fglrx-support/zip/master|archive]] et l'extraire (avec les privilèges administrateur) à la racine de votre partition système.
+
+Enfin, redémarrer votre système et testez de nouveau la mise en veille.
+
+== Clavier PS2 ne fonctionne plus normalement au réveil ==
+
+Ce problème a été constaté sur toutes les versions d'Ubuntu au moins jusqu'à Ubuntu 14.04, avec carte mère K8N-E Deluxe Asus, ainsi que plusieurs autres cartes mère Asus, mais peut-être sur d'autres marques aussi.
+Quand le PC se réveille d'une mise en veille, le clavier fonctionne très partiellement, le pavé numérique, les touches de fonction, les touches spéciales, les flèches ne fonctionnent plus ou ont d'autres effets.
+
+Pour résoudre ce problème il faut forcer [[:GRUB]] le chargeur de démarrage à réinitialiser le clavier à la sortie de veille comme ceci :
+
+  * [[:tutoriel:comment_modifier_un_fichier|Modifiez le fichier]] [[:grub]].
+  * Trouver cette ligne dans le fichier <file>GRUB_CMDLINE_LINUX_DEFAULT="quiet splash" </file>
+  * Modifier la comme ceci : <file>GRUB_CMDLINE_LINUX_DEFAULT="quiet splash atkbd.reset" </file>
+  * Sauver les changements.
+  * Mettre à jour Grub avec la commande <code>sudo update-grub</code>
+  * redémarrer le PC comme normal, et la prochaine mise en veille devrait se passer normalement. (Si le clavier a des problèmes dés le démarrage après les modifications, essayez avec la modification suivante : GRUB_CMDLINE_LINUX_DEFAULT="quiet splash atkbd.reset i8042.nomux")
+
+==== Problème d'hibernation ====
+
+=== Impossible de commencer l'hibernation ===
+
+([[utilisateurs:Id2ndR]]) **L'hibernation n'a pas commencé** : Vérifiez que les processus ont bien voulu s'arrêter. Vous ne devez pas avoir de tâches qui refusent de geler (//tasks refusing to freeze// en anglais) après la commande suivante :
+<code>
+dmesg | grep "Stopping user space processes timed out after 20 seconds"
+</code>
+
+=== Écran noir au démarrage après une hibernation ===
+
+Lors d'un écran noir au démarrage après une hibernation vous pouvez avoir envie d'arrêter l'hibernation.
+Il est possible d'arrêter simplement l'hibernation en formatant la partition SWAP (qui est peut être endommagée).
+Il suffit de démarrer en **Live CD** et de **formater la partition SWAP** de Linux avec GParted et de **redémarrer**.
+
+=== Il n'y a plus de son au réveil : ===
+
+En [[:sudo|mode administrateur]], éditez le fichier **/etc/default/acpi-support** et remplacez
+<file>HIBERNATE_MODE=shutdown</file> par <file>HIBERNATE_MODE=platform</file>
+
+=== OpenVPN ne redémarre pas : ===
+FIXME 'L'UTILITÉ DE CE QUI SUIT EST À CONFIRMER'
+
+En [[:sudo|mode administrateur]], éditez le fichier **/etc/default/acpi-support** et ajoutez à la liste STOP_SERVICES le service [[OpenVPN]].
+<file>STOP_SERVICES="openvpn "</file>
+
+=== L'écran reste noir (carte graphique AGP nvidia) ===
+
+Dans la Section "Device" du fichier /etc/X11/xorg.conf __il est impératif de rajouter ces lignes__ :
+<file>
+Option      "NvAGP" "1"
+Option	    "NoLogo" "true"
+</file>
+
+FIXME 'L'UTILITÉ DE CE QUI SUIT EST À CONFIRMER'
+
+Commencez par **vérifier que les pilotes de la carte vidéo sont bien installés** (tentez le pilote propriétaire non libre). Si ça ne marche toujours pas :
+
+Il faut supprimer le chargement du pilote via agp (dans ce cas):
+
+   lsmod | grep agp
+
+retourne un truc du style  :
+
+<code>via_agp               9628  1
+
+agpgart                34888  2 nvidia,via_agp</code>
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/modprobe.d/blacklist** et rajoutez a la fin :
+<file>
+blacklist via_agp
+</file>
+
+=== Ubuntu démarre sans restaurer l'environnement, ou l'ordinateur reste allumé alors qu'il devrait hiberner (extinction brutale de l'ordinateur obligatoire) ===
+
+**Vérifiez que votre partition de swap est correctement détectée :** allez voir [[uuid_et_label#uuid_swap_et_hibernation]] pour régler ce problème.
+
+**Vérifiez que la taille de votre partition swap est suffisante : ** la même taille que la RAM est a priori suffisante pour l'hibernation, même si certains préconisent par prudence 2 fois plus de swap que de RAM (ex : pour 1Go de RAM, partition swap d'au moins 2 Go ; pour 4Go de RAM, 8Go de swap est inutile et 4 Go suffisent)
+
+=== Utiliser une méthode alternative ===
+  * Si l'hibernation ne fonctionne toujours pas, vous pouvez essayer [[uswsusp]] ou [[tuxonice]].
+  *  //[[:flasher le bios|Mettre à jour le BIOS de la carte mère]]// FIXME (aucune source citée où cela fonctionne)
+  * En dernier recours, installer un noyau plus récent (pour un utilisateur averti). Voir cette page [[:ltsenablementstack]].
+
+==== La connexion réseau ne se réactive pas en sortie de veille ou d'hibernation ====
+Pour afficher le nom du driver [[wifi]] (connexion sans fil) :
+<code bash>lspci -k -nn | grep -F Network -A3 | sed -e '/.*in use/!d' -e 's/.*Kernel driver in use: \(.*\)/\1/'</code>
+Pour afficher le nom du driver Ethernet (connexion filaire) :
+<code bash>lspci -k -nn | grep -F Ethernet -A3 | sed -e '/.*in use/!d' -e 's/.*Kernel driver in use: \(.*\)/\1/'</code>
+
+=== Perte d'Ethernet ===
+Avec l'information du nom du module réaliser la méthode décrite dans [[https://askubuntu.com/questions/1029250/ubuntu-18-04-ethernet-disconnected-after-suspend#answers|Ubuntu 18.04 - Ethernet disconnected after suspend]] (fonctionne aussi sur 20.04).
+
+=== Perte du Wifi ===
+
+<note help>**Merci de vérifier le bon fonctionnement de l'astuce suivante
+et de signaler vos réussites et échecs à [[http://forum.ubuntu-fr.org/profile.php?id=198416|f.x0]]** [[wifi#la_connexion_reseau_ne_se_reactive_pas_en_sortie_de_veille_ou_d_hibernation|voir l'ancienne façon de résoudre la perte du wifi (doc ubuntu).]]</note>
+
+Une solution consiste à créer le fichier suivant:
+  - Ouvrez un [[:terminal]] et exécutez la commande suivante : <code>sudo nano /lib/systemd/system/retablir_wifi_apres_veille.service</code> Entrez votre mot de passe.
+  - Collez le contenu suivant: <file>​[Unit]
+Description=Local system resume actions
+After=suspend.target                                                            
+                                                                                
+[Service]                                                                       
+Type=oneshot
+ExecStart=/sbin/rmmod r8712u ; /sbin/modprobe r8712u
+
+[Install]
+WantedBy=suspend.target
+</file>​ 
+**En remplaçant r8712u par le nom du pilote concerné** en se référant à la méthode indiquée ci-dessus pour le trouver. Faites Ctrl+X pour sauvegarder puis répondre O pour enregistrer les changements.
+  -Lancer enfin les 2 commandes suivantes afin que le système prenne en compte le fichier et démarre le service: <code>sudo systemctl enable retablir_wifi_apres_veille
+sudo systemctl start retablir_wifi_apres_veille</code>
+
+<note tip>Si le réseau est actif mais que la liste des réseaux disponibles est vide, vous pouvez essayer [[https://forum.ubuntu-fr.org/viewtopic.php?pid=21759277#p21759277|ceci]]</note>
+
+===== Matériel testé =====
+
+==== Carte mère / Portable ====
+
+<note help>À classer par jeux de puces en essayant de regrouper les modèles utilisant le même jeux de puce.</note>
+(CM= carte mère, P=Portable)
+| Marque | Modèle ^ CM ou P ^ Jeux de puces ^ Veille ^ Hibernation ^ Utilisateur(s) ^
+^ Acer ^ Veriton 2800 | CM | Intel 945G + ICH7| Oui (Attention: le bios doit être flashé en version R01-E0: [[http://global-download.acer.com/GDFiles/BIOS/BIOS/BIOS_Acer_R01.E0_A_A.zip?acerid=634024128214301666&Step1=Desktop&Step2=Veriton&Step3=Veriton%202800&OS=X01&LC=en&BC=Acer&SC=EMEA_27|lien]]) | Non testé | [[utilisateurs:Ttipi]] |
+^ Acer ^ TravelMate 5742Z | P | Intel Pentium P6200 | Oui  | Oui | [[utilisateurs:koko2]] |
+^ Gigabyte ^ GA-MA790XT-UD4P | CM | AMD 790X | Oui | Oui (des avertissements, mais le réveil semble Ok) | [[utilisateurs:okonkole]] |
+^ Lenovo ^ Edge 525 | P | AMD A8-3500M APU with Radeon(tm) HD Graphics | Non | Non Testé | [[utilisateurs:Cyrilco]] |
+^ MSI ^ MS-7357 | CM | Intel G31 | Oui (Choisir S3 dans le BIOS) | Oui | [[utilisateurs:Id2ndR]] |
+^ MSI ^ K8N Neo4-f | CM | nForce4 | Oui  | Oui | [[utilisateurs:jewome_62]] |
+^ Toshiba ^ Satellite (U200) | P | Intel G945 | Oui (mais [[https://bugs.launchpad.net/bugs/137477|bogue]]) | Oui | [[utilisateurs:Id2ndR]] |
+^ Lenovo^ 3000 Y310 | P | Intel GMA X3100 | Oui (mais TouchPad HS au retour)| Oui | |
+^ HP ^ Pavilion dv5053ea | P | ATI Radeon Xpress 200M | Oui | Oui (voir la conf [[http://ubuntuforums.org/showthread.php?p=2016799|là, pas de scripts]]) | [[utilisateurs:juju_theseaman]] |
+^ Dell ^ XPS M1710 | P | Intel core2 T7400  | Oui | Oui (mais ne s’éteint pas seul) | [[utilisateurs:jef]] |
+^ Sony ^ VAIO PCG-7G1M (ou VGN-FS415M) | P | Intel i915PM/GM + ICH6-M | Oui | Oui (Unity 13.10) en réactivant le script d'hibernation| [[utilisateurs:89paladins]] |
+^ Sony ^ VAIO FZ11E | P | Intel 965 PM  | Oui (Nécessite l'option NvAGP et de taper son mot de passe sur un écran blanc...) | Pas encore testé | [[utilisateurs:bistory]] |
+^ Sony ^ VAIO VPC EA1S1E | P |  Intel Core i3 (M 330) +  M92 (Mobility Radeon HD 4500 Series)  | Oui  | Pas testé (ubuntu 10.04 lucid) | [[utilisateurs:fnx]] |
+^ Lenovo ^ Yoga 2 Pro | P | Intel Core i7-4510U  | Oui  | Oui (avec [[tuxonice]] installé) | [[utilisateurs:john-paul]] |
+^ Lenovo ^ 3000C200 8922AZG | P | Intel 945GM  | Non | Non (ou avec gros pb au réveil) | [[utilisateurs:chourave]] |
+^ Lenovo ^ R61 (8933-AL2) | P | Intel 965  | Oui (Pb NetworkManager aléatoire : plus de réseau, redémarrage obligatoire dans ce cas) | Oui (Avec paramétrage uuid swap, swap=ram)  | [[utilisateurs:Endymion]] |
+^ Lenovo ^ 3000 N100(0768-FKG) | P | Intel 945GM  | Oui | Oui  | [[utilisateurs:justin-brandon]] |
+^ MSI ^ Wind U100-015 | ? | Intel GMA 945 | Oui | Oui | anonymux |
+^ MSI ^ MS-6178 | CM | Intel i810 | Oui | Oui | Johan |
+^ MSI ^ MS-6120 | CM | Intel i440BX | Non | Oui (nécessite la dernière version du bios disponible - la 2.0 - et de passer au noyau l'option acpi=force ; idem pour activer l'extinction du PC) | Johan |
+^ Asus ^ X5DIJ | CM | Mobile Intel® 45 Express Chipset  | Oui | Oui | [[utilisateurs:aurel88]] |
+^ Asus ^ P2L97-DS | CM | Intel i440LX | Non | Oui (nécessite la dernière version du bios disponible - la beta 1010.004 fonctionne bien - et de passer au noyau l'option acpi=force ; idem pour activer l'extinction du PC) | Johan |
+^ Asus ^ P5N-E SLI | CM | NVIDIA nForce 650i SLI| Non | Non | [[utilisateurs:t0m-s]] |
+^ Asus ^ T-Série | CM | Nvidia GeForce 8200| Oui, mais pas deux fois de suite ! | Oui | [[utilisateurs:Jeanmarc05]] |
+^ Asus ^ U53J Série (ASUS U53JC-XX181X ) | P | NVIDIA GeForce 310M (Mobile Intel HM55 Express) (Intel Core i5-480M) | Oui * | Oui (*) voir http://thecodecentral.com/2011/01/18/fix-ubuntu-10-10-suspendhibernate-not-working-bug | mobuxon |
+^ Asus ^ X53U Series | P | AMD E-350 APU with Radeon(tm) HD Graphics (dual-core) | Oui | Oui | [[utilisateurs:MinecraftBreizh]] |
+^ Asus ^ N55SF | P | Intel core i7-2670QM nVidia GeForce GT555M | Oui | Oui | [[utilisateurs:nibbler869]] |
+^ Asus ^  P4P800-MX | CM | Intel P4 | Oui | Pas testé | [[utilisateurs:Nolk]] |
+^ Abit ^ KT7A | CM | VIA KT133A | Oui | Oui | Johan |
+^ Hp ^ a247 | CM | Nforce4 | Oui | Oui | [[utilisateurs:aj94tj]] |
+^ Foxconn ^ /865G7MF-SH | CM | Intel pentium 4 LGA775  | Oui *| Oui voir http://forum.ubuntu-fr.org/viewtopic.php?pid=3561362#p3561362 | [[utilisateurs:mferrato]] |
+^ Dell ^ Vostro 1320 | P | Mobile Intel® 45 Express Chipset | Non | Non | [[utilisateurs:ateni]] |
+^ Fujitsu/Siemens ^ Amilo M7405 | P | Pentium M - video i855GM | Oui (avant Karmic ou à partir du noyau 3.3 | Oui mais ne marche plus depuis Precise | [[utilisateurs:Bybeu]] |
+
+==== Carte graphique ====
+
+<note help>À classer par marque et jeux de puces en essayant de regrouper les modèles utilisant le même jeux de puces.</note>
+
+| Marque | Jeux de puces (Modèle) ^ Mobile ^ module ^ Veille ^ Hibernation ^ Utilisateur(s) ^
+^ ATI ^ R420 (Radeon X800 VE) | non | [[:catalyst|fglrx]] | Oui | Oui | [[utilisateurs:Id2ndR]] |
+^ ATI ^ RC410 [Radeon Xpress 200] | non | [[:catalyst|fglrx]] | - | [[http://forum.ubuntu-fr.org/viewtopic.php?id=158884|non]] (gutsy)| [[utilisateurs:marc31]] |
+^ ATI ^ M92 (Mobility Radeon HD 4500 Series) | oui | [[:catalyst|fglrx]] | Oui | non installation par défaut (lucid)| [[utilisateurs:fnx]] |
+^ Intel ^ G31 (X3100) | non | intel | Oui | Oui | [[utilisateurs:Id2ndR]] |
+^ Intel ^ G945 | oui | intel | Oui | Oui | [[utilisateurs:Id2ndR]] |
+^ Intel ^ GMA500 | oui | [[poulsbo|psb]] | [[http://doc2.ubuntu-fr.org/acer_aspire_one_751#probleme_de_veillehibernation|non]] (jaunty) | [[http://doc2.ubuntu-fr.org/acer_aspire_one_751#probleme_de_veillehibernation|non]] (jaunty) | [[utilisateurs:Escé]] |
+^ Nvidia ^ NV43 (GeForce 6400) | oui | [[nvidia-304]] | Oui | Oui (Unity 13.10) | [[utilisateurs:Id2ndR]] |
+^ Nvidia ^ NV43 (GeForce 6600 GT) | non | [[nvidia|nvidia-glx]] | Oui | Oui | [[utilisateurs:Id2ndR]] |
+^ Nvidia ^ G72 (GeForce 7300 SE) | non | [[nvidia|nvidia-glx]] | - | Oui | [[utilisateurs:marc31]] |
+^ Intel ^ GMA945 | oui | Intel | oui | oui | anonymux |
+^ Intel ^ GMA X4500MHD | oui | Intel | non | non | [[utilisateurs:ateni]] |
+
+==== Carte réseau ====
+
+<note help>À classer par module.</note>
+
+| Marque | Jeux de puces (Modèle) ^ module ^ Veille ^ Hibernation ^ Utilisateur(s) ^
+^ Intel ^ ipw2200 | ipw2200 | Oui | Oui (Unity 13.10) en désactivant le module wifi suivant la méthode "La connexion réseau ne se réactive pas en sortie de veille ou d'hibernation--> Autre possibilité" | [[utilisateurs:89paladins]] |
+^ Intel ^ ipw3945 abg | ipw3945 | Oui | Oui | [[utilisateurs:Id2ndR]] |
+^ Marvell ^ 88E8056 PCI-E Gigabit | sky2 | Oui | Oui | [[utilisateurs:Id2ndR]] |
+
+----
+
+//Contributeurs : [[utilisateurs:Id2ndR]], [[utilisateurs:didrocks]], [[utilisateurs:sfley]], [[utilisateurs:f.x0]], [[utilisateurs:amiralgaby]]//

@@ -1,0 +1,178 @@
+
+{{tag>Xenial matériel sécurité}}
+
+----
+
+====== Installer et configurer un UPS APC avec Ubuntu ======
+
+
+===== Introduction =====
+
+La mise en place d'un UPS (Uninterruptible Power Supply) ne se limite pas uniquement à connecter l'alimentation des serveurs sur ce dernier. Il faut également suivre l'état de l'UPS (pour effectuer des tests, connaître l'état de la batterie,...). Si l'état est insatisfaisant (batterie presque vide, plus de courant secteur,...), il faut prendre des mesures.
+
+Ces mesures peuvent être de différentes sortes suivant la criticité des serveurs connectés sur cet UPS et suivant les ressources humaines et matérielles disponibles pour assurer la continuité du service.
+
+Quelques exemples :
+
+  * Lorsque le courant secteur est coupé brutalement, l'UPS prend le relais en ce qui concerne l'alimentation électrique. Mais la durée de la batterie joue... Si vous avez un groupe diesel, la machine qui surveille l'UPS doit provoquer la mise en route de ce groupe électrogène.
+
+  * Lorsque le courant secteur est coupé brutalement, on peut également imaginer qu'un opérateur soit dépêché sur place (email, [[:nagios|SMS]],...) pour diagnostiquer le problème et prendre les mesures qui s'imposent.
+
+  * Lorsque la batterie est presque vide, on peut imposer un arrêt propre du serveur.
+
+Ce document passera en revue les points suivants pour le pilotage d'un UPS APC (American Power Conversion) :
+  * Installation de l'UPS et connexion avec le serveur.
+  * Installation du pilote de l'UPS.
+  * Configuration du pilote.
+
+
+===== Prérequis =====
+
+Les opérations décrites dans cet article ont été testées sur un UPS **APC Smart UPS 2200** en rack connecté en **USB** avec un serveur **HP Proliant DL380**.
+
+Les opérations suivantes ont été effectuées sur le serveur :
+  * Installation d'Ubuntu en mode //server//.
+  * Mise à jour complète des paquets (//apt-get update, apt-get upgrade//).
+
+Je suppose que l'UPS est dans le rack et est fonctionnel.
+
+===== Installation =====
+
+==== Connexion de l'UPS au serveur ====
+
+La connexion avec le serveur s'établit à l'aide d'un câble **USB - RJ45** fourni avec l'UPS.
+  * Allumez l'UPS.
+  * Connectez d'abord le côté RJ45 dans l'UPS (à l'arrière) dans la fiche notée ''USB''.
+  * Connectez ensuite le côté USB dans un port libre USB de votre serveur.
+
+Dans une console, introduisez la commande suivante :
+   sudo lsusb
+
+Vous devriez obtenir une ligne similaire à celle-ci :
+   Bus 001 Device 002: ID 051d:0002 American Power Conversion Back-UPS Pro 500/1000/1500
+
+Si vous avez bien cette ligne (ou une ligne similaire dépendant de votre matériel), l'UPS est bien connecté à votre serveur. Dans le cas contraire, vérifiez les câbles et référez vous au manuel de l'utilisateur de l'UPS.
+
+
+==== Installation du pilote de l'UPS ====
+
+ [[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>apcupsd]]**. Le pilote de l'UPS est maintenant installé. Il ne reste plus qu'à le configurer.
+===== Configuration =====
+
+Dans une configuration standard (c'est-à-dire un UPS pour un serveur), il vous suffit de vérifier (et corriger au besoin) trois paramètres du fichier de configuration. Le fichier de configuration se trouve dans ''/etc/apcupsd/apcupsd.conf''. Vous pouvez l'éditer de la manière suivante :
+    sudo vi /etc/apcupsd/apcupsd.conf
+
+Les trois paramètres clés qui nous intéressent sont :
+  * ''UPSTYPE'' : le type de l'UPS (SmartUPS, BackUPS,...)
+  * ''UPSCABLE'' : le type de câble connectant l'UPS au serveur (USB, RS232,...)
+  * ''DEVICE'' : le nom du //device// utilisé pour se connecté à l'UPS.
+
+Dans notre cas (un APC Smart UPS 2200 connecté en USB), le fichier de configuration doit posséder les informations suivantes :
+<file>UPSTYPE usb
+UPSCABLE usb
+DEVICE </file>
+
+//Remarque : // Dans notre cas, notez que lorsqu'on utilise une connexion USB, il faut laisser le mot clé ''DEVICE'' à blanc (rien comme paramètre).
+
+// D'autres modes de configuration sont décrits dans le fichier de configuration. //
+
+Avant de continuer, vous devez signaler au démon que la configuration est effectuée. Pour cela, éditer avec vi le fichier ''/etc/default/apcupsd'' :
+   sudo vi /etc/default/apcupsd
+
+Et changer la valeur du paramètre ''ISCONFIGURED'' de la manière suivante :
+<file>ISCONFIGURED=yes</file>
+
+Une fois la configuration basique effectuée, vous pouvez tester si le démon ''apcupsd'' fonctionne.
+   sudo /etc/init.d/apcupsd start
+
+Vous devriez avoir une ligne ressemblant à ceci :
+   Starting APC UPS power management: apcupsd.
+
+Vérifiez ensuite dans les log du système pour voir si le démon est bien lancé :
+   tail /var/log/syslog
+
+Vous devriez trouver une ligne comme celle-ci :
+   Jan 26 10:59:32 nodearch2 apcupsd[15003]: apcupsd 3.10.17 (18 March 2005) debian startup succeeded
+   Jan 26 10:59:34 nodearch2 apcupsd[15003]: NIS server startup succeeded
+
+On peut maintenant passer à la phase d'utilisation.
+
+===== Utilisation =====
+
+Pour obtenir le status complet de l'UPS, il nous suffit d'introduire la commande suivante :
+<code>
+apcaccess status 
+# Anciennement : /etc/init.d/apcupsd status 
+</code>
+
+Et vous obtiendrez toutes les informations concernant l'UPS (voici ce que mon matériel retourne comme informations) :
+<code>
+APC      : 001,038,0930
+DATE     : Thu Jan 26 11:04:36 CET 2006
+HOSTNAME : nodearch2
+RELEASE  : 3.10.17
+VERSION  : 3.10.17 (18 March 2005) debian
+UPSNAME  : nodearch2
+CABLE    : USB Cable
+MODEL    : Smart-UPS 2200 RM
+UPSMODE  : Stand Alone
+STARTTIME: Thu Jan 26 10:59:31 CET 2006
+STATUS   : ONLINE
+LINEV    : 224.6 Volts
+LOADPCT  :  13.0 Percent Load Capacity
+BCHARGE  : 100.0 Percent
+TIMELEFT :  74.0 Minutes
+MBATTCHG : 5 Percent
+MINTIMEL : 3 Minutes
+MAXTIME  : 0 Seconds
+OUTPUTV  : 224.6 Volts
+DWAKE    : -01 Seconds
+DSHUTD   : 090 Seconds
+LOTRANS  : 208.0 Volts
+HITRANS  : 253.0 Volts
+ITEMP    : 27.0 C Internal
+ALARMDEL : Always
+BATTV    : 55.4 Volts
+LINEFREQ : 50.0 Hz
+NUMXFERS : 0
+TONBATT  : 0 seconds
+CUMONBATT: 0 seconds
+XOFFBATT : N/A
+SELFTEST : NO
+STATFLAG : 0x02000008 Status Flag
+SERIALNO : JS0543013779
+BATTDATE : 2005-10-19 
+NOMBATTV :  48.0
+FIRMWARE : 65.6.I USB FW:2.4
+APCMODEL : Smart-UPS 2200 RM
+END APC  : Thu Jan 26 11:04:37 CET 2006
+</code>
+
+Voici les informations d'état les plus intéressantes :
+   * ''STATUS : ONLINE'' indique l'état de la ligne secteur. ''ONLINE'' signifie que l'on fonctionne sur le secteur. ''ONBATT'' signifie que l'on fonctionne sur batterie et ''CHARGING'' indique que la batterie se recharge.
+   * ''LOADPCT : 13.0 Percent Load Capacity'' indique le pourcentage de charge de l'UPS. Dans ce cas, l'UPS nous indique qu'il est à ''13%'' de sa charge. Lorsqu'on ajoute des serveurs, cette charge augmente (et, fatalement, l'autonomie des batteries diminuera).
+   * ''BCHARGE : 100.0 Percent'' indique l'état de charge de la batterie.
+   * ''TIMELEFT : 74.0 Minutes'' indique une estimation du temps restant en considérant la charge de l'UPS et l'état de la batterie.
+   * ''BATTDATE : 2005-10-19'' indique la date de mise en place de la batterie (en général, on conseille de remplacer les batteries tous les 3 ans).
+   * ''ITEMP : 27.0 C Internal'' indique la température interne de l'UPS. (N'oubliez pas que la température a une grande influence sur les capacités de la batterie)
+
+Voici les éléments à connaître (et à modifier suivant vos besoins) :
+   * ''MBATTCHG : 5 Percent'' : si la batterie descend sous ce seuil, le démon ''apcupsd'' demande l'arrêt du système.
+   * ''MINTIMEL : 3 Minutes'' : si l'estimation de temps restant descend sous ce seuil, le démon ''apcupsd'' demande l'arrêt du système.
+   * ''MAXTIME : 0 Seconds'' : si le système passe cette durée sur la batterie, le démon ''apcupsd'' demande l'arrêt du système. Une valeur de ''0'' désactive la fonctionnalité. // Remarque : // Cette fonctionnalité est intéressante si vous n'avez pas de groupe électrogène. Les serveurs le moins critiques peuvent être éteint après 5 minutes sur batterie pour conserver de l'énergie afin que les serveurs critiques tiennent le plus longtemps possible sans courant secteur.
+   * ''DWAKE : -01 Seconds'' : lorsque l'UPS est sans courant (secteur ou batterie) et que le courant secteur revient, l'UPS attendra cette valeur avant de provoquer l'allumage des serveurs.
+   * ''DSHUTD : 090 Seconds'' : délais de "grâce" entre le moment où le démon ''apcupsd'' demande l'arrêt et l'arrêt effectif.
+
+Pour modifier ces éléments, vous devez modifier le fichier de configuration ''/etc/apcupsd/apcupsd.conf'' et ensuite lancer ''sudo /sbin/apctest --configure'' après avoir tué le démon ''apcupsd'' via la commande ''sudo /etc/init.d/apcupsd stop''. (merci à ReWinD pour l'info). Ne pas oublier de relancer le démon par la commande ''sudo /etc/init.d/apcupsd start''  .
+
+===== Bug connu =====
+  * Lors d'une mise à jour de Ubuntu, le loopback local se commente. Donc le ré-ajouter dans le cas d'une connection usb au UPS. Donc, "sudo nano /etc/network/interfaces" et ajouter "auto lo" et "iface lo inet loopback"
+===== Note(s) =====
+
+  * Le [[http://www.apcupsd.com/|site officiel d'apcupsd]]
+       * Sur ce site, vous trouverez la version PDF du guide de l'utilisateur d'apcupsd.
+  * Le  [[http://www.apc.com/|site officiel d'APC]].
+
+----
+
+// Contributeur : [[utilisateurs:ostaquet]] //

@@ -1,0 +1,67 @@
+
+{{tag> BROUILLON}}
+
+----
+
+====== Configurer un montage automatique à la demande d'un répertoire distant via SSH ======
+
+Le but de ce tutoriel est de paramétrer le montage automatique (dans le sens ou il n'est pas nécessaire d'entrer un mot de passe) à la demande (dans le sens ou le dossier n'est monté que si l'utilisateur le demande via nautilus ou dans un terminal) d'un dossier distant via une connection SSH
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+  * Avoir un accès SSH à une machine distante
+  * Avoir parametrer SSH avec une [[:ssh#authentification_par_un_systeme_de_cles_publiqueprivee|]]
+  * Avoir installé et configuré [[:fuse#installation_de_fuse|FUSE]] et [[:SSHFS#installation|SSHFS]]
+
+===== Parametrage =====
+
+Afin de pouvoir monter le répertoire distant à la demande, il faut le paramétrer dans FSTAB\\ 
+Il faut éditer le fichier **/etc/fstab** et y ajouter une ligne qui aura la syntaxe suivante:
+
+<code>$USER@$SERVER:$DIR $MOUNT_DIR fuse.sshfs  $OPTIONS	0	0</code>
+
+avec les variables suivantes à modifier selon votre configuration:\\ 
+$USER= le nom d'utilisateur pour la connection SSH\\ 
+$SERVER= l'adresse du server soit un nom de domaine soit une ip\\ 
+$DIR=le chemin du dossier distant à monter\\ 
+$MOUNT_DIR=le point de montage local\\ 
+$OPTION=les options à passer lors du montage, nous allons voir quelles options parametrer un peu plus loin\\ 
+
+<note>Il existe une autre syntaxe pour le paramétrage d'un montage SSHFS dans FSTAB, vous le retrouverez sûrement dans la doc, il est tout aussi juste mais lorsque l'on utilise cette syntaxe le démontage via nautilus ne fonctionne pas correctement, c'est pourquoi on préfèrera la syntaxe ci-dessus à celle-ci
+<code>sshfs#$USER@$SERVER:$DIR $MOUNT_DIR     fuse     OPTIONS     0     0</code>
+</note>
+
+Les options que nous allons ajouter sont les suivantes, il faudra choisir entre //user// et //users// selon le besoin, parametrer le PORT et le chemin vers la clef d'authentification
+
+  * **noauto** \\ Ne pas monter automatiquement la partition au démarrage du système, elle ne pourra pas non plus être montée automatiquement avec la commande //mount -a// \\ il est nécessaire de la montée explicitement 
+  * **noatime** \\ Ne pas mettre jour les horodatages d'accès à chaque accès (améliore la rapidité). 
+  * **_netdev**\\  Le système de fichier réside sur un périphérique nécessitant des accès réseau (pour éviter que le système essaye de monter ces systèmes de fichiers avant d'avoir activé le réseau). 
+  * **users**\\  Permettre à tous les utilisateurs de monter et démonter le système de fichiers. Cette option implique les options noexec, nosuid, et nodev (sauf s'il y a une surcharge par une option ultérieure, comme sur la ligne users,exec,dev,suid). 
+  * **user**\\ Autoriser les utilisateurs ordinaires à monter le système de fichiers. Le nom de l'utilisateur est noté dans mtab pour qu'il puisse le démonter ensuite. Ceci entraîne l'utilisation des options noexec, nosuid, et nodev (à moins qu'elles ne soient explicitement surchargées, comme dans une ligne d'option user,exec,dev,suid).
+  * **port=PORT **\\ port sur lequel doit se faire la connection ssh, si elle se fait sur le port standard, soit le port 22, alors ce paramètre n'est pas necessaire.
+  * **compression=yes** \\ utiliser la compression (limite l'utilisation réseau, sollicite plus de processeur)
+  * **idmap=TYPE**\\ user/group ID mapping, les types possibles sont : \\ none > (default) pas de mapping\\ user > traduit uniquement l'UID de l'utilisateur connecté\\ file > traduit les UIDs/GIDs en se basant sur les UIDs/GIDs stocké dans un fichiers
+  * **reconnect **\\ reconnect to server
+  * **allow_other **\\ permettre l'accès aux autres utilisateurs, notamment root
+  * **xsystemd.automount **\\ pour les distribution utilisant systemd ce qui semble être le cas pour Ubuntu à partir de 15.04
+  * **IdentityFile=$PATH_TO_ID**\\  pour indiquer ou se situe la cle d'authentification SSH et permettre à ROOT (ou les autres utilisateur selon les paramétrages de user/users) de l'utiliser sans avoir a en creer une spécifiquement pour ROOT
+
+Ainsi si l'on souhaite monter, par exemple le dossier /home/user1_distant/ du serveur monserveur.org accessibe sur le port 1234 dans le point de montage local /mnt/dossier_distant avec une cle d'authentification dans /home/user1_local/.ssh/id_rsa pour que seul l'utilisateur qui monte le dossier puisse y acceder (option //user//), alors le paramétrage de FSTAB devrais ressembler à ceci:
+
+<code>user1_distant@monserver.org:/home/user1_distant/    /mnt/dossier_distant/     fuse.sshfs   noauto,noatime,_netdev,user,port=1234,idmap=user,reconnect,allow_other,x-systemd.automount,IdentityFile=/home/user1_local/.ssh/id_rsa	0	0</code>
+
+Afin que l'option //allow_other// soit acceptée par FUSE, il faut décommenter la ligne dans **/etc/fuse.conf**
+<code>user_allow_other</code>
+
+Afin que l'utilisateur puisse utiliser fuse sans être root alors il faut l'ajouter au groupe fuse (permet de lire le fichier de conf /etc/fuse.conf lors du montage)
+<code>sudo adduser $USER fuse</code>
+
+===== Utilisation =====
+
+Voila nous pouvons maintenant très facilement monter et démonter automatiquement sans requête de mot de passe, et à la demande le dossier distant.\\ 
+Soit via nautilus\\ 
+Soit en ligne de commade via les commandes //mount// et //umount// passés en tant qu'utilisateur
+
+

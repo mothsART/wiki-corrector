@@ -1,0 +1,371 @@
+
+{{tag>Xenial système disque_dur}}
+
+----------
+====== SMARTMONTOOLS ======
+
+Smartmontools est un paquet regroupant un ensemble d'outils basés sur la "technologie" __SMART__. Cette technologie est un protocole qui permet de suivre et contrôler l'état des disques durs **entiers**.
+Les données SMART ignorent les partitions et le partitionnement.
+
+Le protocole SMART est reconnu et implémenté sur la plupart des disques durs depuis la fin des années 1990.
+
+<note tip>L'intérêt principal de ces outils et de la technologie SMART est de **déceler des signes précurseurs de vieillissement et de pannes** des disques durs avant qu'ils ne soient définitivement en panne.
+
+En configurant correctement le daemon **smartd** (fichier __/etc/smartd.conf__, il est possible d'être prévenu automatiquement si des problèmes sont détectés.
+
+//Étonnament, le paquet __smartmontools__ n'est pas installé par défaut et fait l'objet de relativement peu de publicité.//
+</note> 
+
+===== Installation =====
+==== Pour une instance opérationnelle ====
+Commencez par [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>smartmontools]]** et éventuellement **[[apt>smart-notifier]]**.<note warning>Le service de notification utilise l'une de ces deux messageries : mailx ou mailutils. Il est nécessaire d'en installer une pour profiter de l'alerte.</note>
+
+Si vous souhaitez utiliser une interface graphique pour smartmontools, [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>gsmartcontrol]]**.\\
+Le site officiel est ici : [[http://gsmartcontrol.sourceforge.net/home/index.php|GSmartControl]].
+On trouvera des copies d'écran ici : [[http://gsmartcontrol.sourceforge.net/home/index.php/Screenshots|Copies d'écran]].
+
+==== Pour une installation en mode dépannage sur une clé USB non-persistante ====
+Au lieu de cliquer sur les liens ci-dessus, utilisez la commande suivante pour n'installer que les paquets nécessaires : <code>sudo apt-get install --no-install-recommends smartmontools </code>
+
+
+
+
+
+=====  Utilisation =====
+
+<note important>Il est inutile de tester un SSD car les secteurs testés sont virtuels. Cela ne ferait que l'user de façon prématurée !</note>
+Dans les exemples suivants, on va considérer le disque dur nommé // /dev/sdX //, qu'il faudra remplacer par le nom du disque que vous voulez tester, par exemple // /dev/hda //, // /dev/sdc // (( la liste des noms de disques durs de votre système peut s'obtenir par : 
+  sudo fdisk -l 
+)) ou // /dev/sg1 // ((les périphériques du type // /dev/sg# // permettent d'atteindre les disques qui composent un volume géré par un contrôleur RAID hardware. Dans un tel cas, les périphériques du type // /dev/sdX // ne sont pas utilisables car à ce niveau l'OS ne voit que le volume géré par le contrôleur RAID (un disque logique sans information SMART) et non des disques qui le composent (disques physiques avec information SMART). Par exemple, pour obtenir les informations SMART sur un disque SATA faisant partie d'un volume RAID 5 géré par un contrôleur Adaptec :
+  sudo smartctl -a -d sat /dev/sg1
+Référence : [[http://www.cyberciti.biz/faq/linux-checking-sas-sata-disks-behind-adaptec-raid-controllers/]]
+))
+
+  * Pour activer SMART sur un disque, taper la commande suivante (nécessaire une seule fois seulement pour chaque disque, mais peut être répétée sans danger) :
+
+   sudo smartctl --smart=on --offlineauto=on --saveauto=on /dev/sdX
+
+
+  * Pour obtenir quelques infos disponibles par SMART sur le disque :
+
+   sudo smartctl -H -i /dev/sdX
+
+  * Pour obtenir toutes les infos disponibles par SMART sur le disque :
+
+   sudo smartctl -s on -a /dev/sdX
+
+
+
+Au moins deux types de tests sont possibles, les courts (~1 min) et les longs (~10 min à 90 min)((Une estimation de la durée prise par ces tests est visible dans la sortie de :
+   sudo smartctl -a /dev/sdX
+)).
+
+  * Pour lancer l'exécution des tests :
+
+  sudo smartctl -t short /dev/sdX
+  sudo smartctl -t long  /dev/sdX
+
+
+  * Pour accéder ensuite au résultats/statistiques de ces tests :
+
+
+  sudo smartctl -l selftest /dev/sdX
+
+ou en plus bref (retourne un message seulement si le disque retourne un indicateur SMART "failing" ou si des autotests ont enregistré des erreurs) :
+  
+  sudo smartctl -q errorsonly -H -l selftest /dev/sdX
+  
+
+
+  * Pour relancer un test long  qui s'est arrêté  suite à une erreur sur le LBA **N**-1 :
+
+     sudo smartctl  -t select,N-max /dev/sdX
+ 
+
+
+  * Pour suivre l'exécution de cette relance :
+    <code bash>sudo smartctl -a /dev/sdX | grep left</code>
+    
+Cela permet de visualiser le LBA début et le LBA fin de l'intervalle de 65536 secteurs en cours de test. __Ne pas se fier au pourcentage indiqué__.
+
+  * Exécution d'un test long sur un disque de grande capacité.
+
+Le test long peut durer des heures. S'il y a un arrêt pour une cause externe, le LBA en cours de traitement peut ne pas être mémorisé. Une solution consiste à lancer  un test sur les 500 premiers Gio ( ou le premier Tio) du disque avec cette commande :
+   sudo smartctl  -t select,0-999999999  /dev/sdX 
+   ou
+   sudo smartctl  -t select,0-1999999999  /dev/sdX    ### pour 1 Tio
+   ou
+   sudo smartctl  -t select,0-499999999  /dev/sdX     ### pour 250 Gio
+
+Lorsque ce test est terminé, on fait un test de la suite  quand on le désire avec cette commande qu'il faudra répéter autant de fois que nécessaire après s'être assuré que la précédente s'est correctement terminée et que la fin du disque n'a pas été atteinte. Sinon cela repart depuis le début du disque jusqu'à la fin !
+    sudo smartctl  -t select,next /dev/sdX  
+   
+
+     
+
+
+  
+
+
+===== Informations sur l'état actuel d'un disque =====
+
+**Dans les exemples suivants, on va considérer le disque dur nommé /dev/sdX qu'il faudra remplacer par le nom du disque que vous voulez tester** ; par exemple /dev/hda, /dev/sdc.
+
+La connaissance de l'état actuel d'un disque peut être importante pour comprendre une erreur de lecture-écriture.
+Cette information est souvent demandée dans le forum. 
+
+<note warning>Comme les données SMART ignorent les partitions et le partitionnement, il est **absurde** (sauf cas de RAID, voir note) de mettre un nombre après /dev/sdX. C'est même **nuisible** quand le disque est branché en USB, cf. cet exemple [[https://forum.ubuntu-fr.org/viewtopic.php?pid=21841415#p21841415]].</note>
+
+
+Pour connaître les lettres des disques connectés, utilisez la commande suivante :
+<code bash>lsblk -d | egrep -v "NAME|loop|sr0"</code>
+
+
+==== Cas d'un disque interne  ====
+=== Cas d'un disque non NVMe ===
+La commande est :
+<code bash>sudo smartctl -s on -a /dev/sdX</code>Rappel : Mettre un chiffre après la lettre **X** est (sauf montage en RAID, voir note) **nuisible**.
+=== Cas d'un disque NVMe ===
+Le retour de la commande précédente peut identifier que le disque est un [[https://fr.wikipedia.org/wiki/NVM_Express|NVMe]]
+
+Un suivi plus spécifique est alors possible en installant le logiciel dédié à ce type de matériel.
+<code bash>sudo apt install nvme-cli </code>
+Puis donner le retour de quelques commandes :
+<code bash>sudo nvme error-log /dev/nvmeXXX
+sudo nvme smart-log /dev/nvmeXXX
+sudo nvme sanitize-log /dev/nvmeXXX</code>
+<note warning>Inutile de mettre le numéro de partition (P1 ou P2  ou...)</note>
+
+Voir un cas [[https://forum.ubuntu-fr.org/viewtopic.php?pid=22434910#p22434910|concret]]
+
+
+
+==== Cas des boîtiers et autres adaptateurs USB ====
+
+La commande ci-dessus peut nécessiter un complément si le disque est connecté en usb.\\ 
+Rappel : Mettre un chiffre après la lettre **X** est (sauf montage en RAID, voir note) **nuisible**.
+ 
+a) Ce complément est en général fourni par 
+<code>sudo smartctl --scan</code>
+qui va retourner quelque chose comme
+<code>
+/dev/sdb -d sat # /dev/sdb [SAT], ATA device
+</code>
+(même pour de l'usb) ou bien comme
+<code>
+/dev/sdb -d usbsunplus # /dev/sdb [USB Sunplus], ATA device
+</code>
+On récupère alors **-d usbsunplus** et **sdb**, et on obtient le retour complet grâce à
+<code>sudo smartctl -s on -a -d usbsunplus /dev/sdb</code>\\ \\ 
+b) Si ça ne marche pas, c'est dans le retour de
+<code>sudo smartctl -s on -a /dev/sdX</code>
+en remplaçant X par la lettre trouvée juste avant, qu'il faut chercher la ligne contenant
+<code>Unknown USB bridge [0x</code>
+De cette ligne, on copie **0xyyyy:0xzzzz**, sans les crochets et on va le chercher dans la page
+https://www.smartmontools.org/wiki/Supported_USB-Devices qui référence :\\ 
+ - La plupart des adaptateurs supportés et donne l'option "-d" opérationnelle de chacun,\\ 
+ - La plupart des adaptateurs non supportés.
+
+Sur cette page-là on va donc récupérer la bonne option **-d machin-truc**, et 
+<code>sudo smartctl -s on -a -d machin-truc /dev/sdX</code>
+en remplaçant X par la lettre trouvée juste avant, ce qui fournira le rapport smartctl complet.
+
+
+Exceptionnellement, il peut arriver que ni a) ni b) ne suffise.
+
+\\ c) Dans ce cas, certaines des commandes suivantes peuvent être essayées, toujours en remplaçant "X" par la bonne lettre, vérifiée juste avant. Il faut faire les cinq commandes, ne vous arrêtez pas à la première surtout si elle n'a renvoyé que quelques lignes :
+<code bash>sudo smartctl -s on -d ata  -a /dev/sdX
+sudo smartctl -s on -d sat  -a /dev/sdX
+sudo smartctl -s on -d scsi -a /dev/sdX
+sudo smartctl -s on -d auto -T verypermissive -a /dev/sdX
+sudo smartctl -s on -d test -T verypermissive -a /dev/sdX</code>
+
+
+==== Cas du pilote UAS ====
+
+Si aucune commande précédente ne fonctionne avec un adaptateur USB, il peut être nécessaire de désactiver le support de [[wpfr>USB_Attached_SCSI|UAS(P)]]((USB Attached SCSI)).
+=== Test avec déchargement du module ===
+
+  - Brancher l'adaptateur
+  - Relever les identifiants USB vendeur:produit pour l'adaptateur :
+    * lister les périphériques USB utilisant le pilote UAS <code>lsusb -t | grep uas</code>
+    * noter la valeur de Port et Dev, puis afficher ce périphérique USB avec XXX //''valeur de Port''// et YYY //''valeur de Dev''// <code>lsusb -s XXX:YYY</code>
+    * noter la valeur après ID sous le format <id vendeur>:<id produit>
+  - Démonter toutes les partitions de tous les disques externes connectés : <code>sudo umount -v /dev/sdX*</code>
+  - Décharger le module **uas** : <code>sudo modprobe -r uas</code>
+  - Décharger le module **usb-storage** : <code>sudo modprobe -r usb-storage</code>
+  - Recharger le module **usb-storage** __sans le support uas pour l'adaptateur__ en remplaçant //<id vendeur>// et //<id produit>// par les valeurs relevée précédemment : <code>sudo modprobe usb-storage quirks=<id vendeur>:<id produit>:u</code> 
+  - Si les partitions du disque ne sont pas montées automatiquement, débrancher l'adaptateur USB et le rebrancher **connecté avec le disque dur**
+  - Réessayer les commandes ''smartctl''
+
+=== Exemple concret ===
+
+Exemple avec un adaptateur de marque U-Green avec le chipset VIA qui se charge en /dev/sdc.
+
+  * Tester la commande initiale : <code>sudo smartctl -s on -d sat  -a /dev/sdc</code>
+
+> smartctl 6.5 2016-01-24 r4214 [x86_64-linux-4.4.0-71-generic] (local build)
+> Copyright (C) 2002-16, Bruce Allen, Christian Franke, www.smartmontools.org
+> 
+> **Read Device Identity failed: scsi error unsupported field in scsi command**
+> 
+> A mandatory SMART command failed: exiting. To continue, add one or more '-T permissive' options.
+
+  * Recherche du périphérique USB utilisant le pilote UAS : <code>lsusb -t | grep uas</code>
+
+>      |%%__%% Port **3**: Dev **35**, If 0, Class=Mass Storage, Driver=**uas**, 480M
+
+  * Relever la valeur après Port (ici 3) et Dev (ici 35), et rechercher les identifiants USB pour ce périphérique <code>lsusb -s 3:35</code>
+
+> Bus 003 Device 035: ID **2109:0711** VIA Labs, Inc.
+
+  * Dans l'exemple, noter pour la suite <id vendeur>=2109 et <id produit>=0711
+  * Démonter les partitions du disque : <code> sudo umount -v /dev/sdc*</code>
+
+> umount: /dev/sdc: not mounted
+> umount: /media/ubuntu/Linux (/dev/sdc1) unmounted
+
+  * Décharger les différents modules :(Les commandes sont sans retour.) <code>sudo modprobe -r uas
+sudo modprobe -r usb-storage</code>
+  * Recharger le module usb-storage sans le support UAS pour l'adaptateur ( La commande est sans retour.) : <code>sudo modprobe usb-storage quirks=2109:0711:u</code>
+  * Les partitions du disque sont remontées automatiquement, sinon débrancher et rebrancher l'adaptateur avec le disque connecté
+  * Vérifier que le pilote n'est plus **uas** mais **usb-storage**((le numéro de //Device// change à chaque reconnexion))<code>lsusb -t | grep usb-storage</code>
+
+>     |%%__%% Port 3: Dev 36, If 0, Class=Mass Storage, Driver=**usb-storage**, 480M
+
+  * Relancer la commande smartctl et constater qu'il n'y a plus d'erreur : <code bash>sudo smartctl -s on -d sat  -a /dev/sdc
+
+> smartctl 6.5 2016-01-24 r4214 [x86_64-linux-4.4.0-71-generic] (local build)
+> Copyright (C) 2002-16, Bruce Allen, Christian Franke, www.smartmontools.org
+> 
+> === START OF INFORMATION SECTION ===
+> Model Family:     Western Digital Caviar Blue Serial ATA
+> Device Model:     WDC WD1600AAJS-75M0A0
+> [...]
+</code>
+=== Blacklister le module UAS ===
+
+Si le test précédent est concluant, il est possible de rendre le changement permanent.
+
+  * [[:tutoriel:comment_modifier_un_fichier|Créer le fichier]] ''/etc/modprobe.d/ignore-uas.conf'' **avec les droits d'administration**.
+  * Ajouter la ligne suivante en remplaçant //<id vendeur>// et //<id produit>// par les valeurs relevée précédemment :<file - /etc/modprobe.d/ignore-uas.conf>options usb-storage quirks=<id vendeur>:<id produit>:u</file>
+  * Sauvegarder le fichier
+  * Redémarrer l'ordinateur
+  * Brancher l'adaptateur directement
+
+=== Test plus facile ===
+Afin de savoir si le module UAS est responsable du problème, il est possible d'interdire son utilisation pour tous les disques externes en fabriquant un fichier 
+<code bash> sudo touch /etc/modprobe.d/blacklist-usb.conf
+sudo echo  "blacklist uas"  /etc/modprobe.d/blacklist-usb.conf</code>
+Puis on reboote et on vérifie que le problème est résolu.
+On supprime alors le fichier puis on part à la recherche du id vendeur et du id produit. Si ceux-ci ne sont pas obtenus, la seule solution est de refabriquer le fichier! https://bugs.launchpad.net/ubuntu/+source/linux/+bug/828471/comments/13
+
+===== Notification automatique d'un problème =====
+
+Grâce au service (daemon) **smartd** il est possible de faire une analyse régulière et ainsi suivre sur le long terme l'état des disques durs et de votre matériel. 
+
+Il est aussi possible de paramétrer des alertes automatiques (envoi de mail, messages utilisateur par wall, syslog…) en cas de détections d'erreurs ou de signes de vieillissement.
+**smartd** est inclus dans le paquet //smartmontools//.
+
+Le fichier de configuration est __/etc/smartd.conf__ ; par défaut, il est configuré pour scanner tous les disques. Une configuration de ce fichier est donc nécessaire pour obtenir des alertes pertinentes.
+
+
+==== Mettre en place le paramètrage du daemon smartd====
+<note important>** Par défaut, le demon smart n'est pas activé dans les versions anciennes. Il est indispensable de le faire manuellement.**</note>
+
+[[tutoriel:comment_modifier_un_fichier|Éditez le fichier]] __/etc/default/smartmontools__ et décommentez __start_smartd=yes__  si présent.
+
+Si nécessaire, décommentez  __#smartd_opts="--interval=1800"__ en mettant la fréquence de surveillance souhaitée.
+ 
+Démarrez ou relancez ensuite le service en tapant dans un [[terminal]]:
+
+- avec __systemctl__ :
+<code bash>systemctl restart smartd
+systemctl status  smartd </code>
+- à l'ancienne :
+<code bash>  sudo /etc/init.d/smartmontools start  </code>
+
+
+
+=== Pour tester que smartd  fonctionne ===
+
+Le but de smartd est de surveiller les disques et de prévenir l'utilisateur **par messagerie** des nouvelles anomalies survenues depuis peu de temps. Le paramétrage standard est de 30 minutes.
+  
+Pour vérifier que les futurs messages d'anomalies seront expédiés, il suffit de lancer ces commandes :
+<code bash>echo "DEVICESCAN -a -m root -M test" > /tmp/FIC  && sudo smartd -n -q onecheck -c /tmp/FIC </code>
+  
+Pour expédier les messages à un autre destinataire, il faut d'abord vérifier qu'il peut recevoir les messages. Il faut faire ces commandes en remplaçant l'adresse mail :
+<code bash> echo "DEVICESCAN -a -m destinataire@exemple.com -M test" > /tmp/FIC  && sudo smartd -n -q onecheck -c /tmp/FIC</code>
+Il  faut alors modifier le fichier /etc/smartd.conf pour ajouter cette adresse juste avant l'adresse root. Exemple de codification de la ligne d'activation de la surveillance :
+<code>DEVICESCAN -a -r 9! -d  removable -n standby -m destinataire@exemple.com,root  -M exec /usr/share/smartmontools/smartd-runner</code>
+Il faut ensuite relancer l'application pour que le changement de paramétrage soit pris en compte.
+
+
+À signaler aussi le paquet [[apt://smart-notifier|smart-notifier]] qui vous préviendra de tout problème imminent. 
+L'action de ce programme est de se mettre à l'écoute des messages de tests et  d'ouvrir une fenêtre d'avertissement s'il détecte un problème.
+
+<note tip>Pour que **smart-notifier** lance ces messages d'alertes, il faut que smartd soit actif, paramétré, et que la session en cours ait été redémarrée.
+</note>
+
+ 
+Si vous voyez une alerte SMART, il y a de fortes chances pour que votre disque soit en train de flancher. Dans votre intérêt, faites immédiatement une copie de vos fichiers ailleurs (clé USB, disque dur externe, gravure sur CD/DVD...).
+=== Pour tester que smart-notifier fonctionne ===
+<code bash> sudo sh -c 'echo test de message | smart-notifier --notify' </code>
+
+Ce qui affichera :
+
+{{::smart-notifier_15.10.png?800|smart-notifier sous Ubuntu 15.10}}
+
+===== Traduire l'alerte =====
+Lorsque vous installez smart-notifier sur un autre ordinateur que le vôtre, il serait dommage qu'elle soit ignorée parce que l'utilisateur ne parle pas anglais…
+
+Trouver le nom du fichier contenant les messages d'avertissement :
+<code bash> ls -ls  /usr/share/smart-notifier/smart_notifier </code>
+==== Première possibilité ====
+Sauvegarder l'original en cas de boulette en tapant dans [[terminal]] : 
+<code>
+sudo cp /usr/share/smart-notifier/smart_notifier/smart-notifier.glade /usr/share/smart-notifier/smart_notifier/smart-notifier.glade.old
+</code>
+puis avec les [[:sudo|droits d'administration]], [[tutoriel:comment_modifier_un_fichier|éditez le fichier]]  **/usr/share/smart-notifier/smart_notifier/smart-notifier.glade**
+et modifiez les lignes indiquées ci-dessous :
+  * __Titre de la fenêtre__, //ligne 31//:<file><property name="title" context="True" translatable="True">Alerte disque dur</property></file>
+  * __Titre du message__, //ligne 56//:<file>
+<property name="label" context="True" translatable="True">&lt;big&gt;&lt;b&gt;Alerte, disque dur défaillant !&lt;/b&gt;&lt;/big&gt;</property>
+</file>
+  * __ Corps du message__, //ligne 69//: <file>
+<property name="label" context="True" translatable="True">S.M.A.R.T. surveille en permanence les disques durs et donne l'alerte en cas de variation importante dans les normales relevées. 60 % des pannes de disques durs sont mécaniques, S.M.A.R.T. peut en détecter 30 %. Cette alerte n'est pas à prendre à la légère et peut annoncer une panne imminente. Veuillez planifier rapidement vos sauvegardes et le remplacement de vos disques durs.</property>
+</file>
+  * __Message de smartd__, //ligne 92//:<file>
+<property name="label" context="True" translatable="True">Message original de smartd :</property>
+</file>
+==== Seconde possibilité ====
+Faire la même action  en utilisant les commandes suivantes :
+<code bash>sudo cp /usr/share/smart-notifier/smart_notifier/smart-notifier.xml /usr/share/smart-notifier/smart_notifier/smart-notifier.xml.old
+
+sudo sed -i -e "s/gt;Hard Disk Health Warning/gt;Alerte, disque dur défaillant !/" /usr/share/smart-notifier/smart_notifier/smart-notifier.xml 
+sudo sed -i -e "s/Hard Disk Health Warning/Alerte disque dur/" /usr/share/smart-notifier/smart_notifier/smart-notifier.xml 
+sudo sed -i -e "s/The hard disk health status has changed. This could mean that hard drive failure is imminent. It is always a good idea to have up to date backups./S.M.A.R.T. surveille en permanence les disques durs et donne l'alerte en cas de variation importante dans les normales relevées. 60 \% des pannes de disques durs sont mécaniques, S.M.A.R.T. peut en détecter 30 \%. Cette alerte n'est pas à prendre à la légère et peut annoncer une panne imminente. Veuillez planifier rapidement vos sauvegardes et le remplacement de vos disques durs./" /usr/share/smart-notifier/smart_notifier/smart-notifier.xml </code>
+
+
+
+=====Interprétation des résultats =====
+L'interprétation des résultats demande de l'expérience ; postez-les dans le forum.
+=====Voir aussi ====
+
+  * [[probleme_de_disque|Problème de disque ou partition]]
+  * [[http://smartmontools.sourceforge.net|Site officiel Smartmontools]]
+  * [[http://smartlinux.sourceforge.net/smart/attributes.php|Index des SMART Attributes]]
+  * [[http://www.lea-linux.org/documentations/index.php/Hardware-hard_plus-smart|Tuto sur le système smart]] : tutoriel de Lea-linux
+  * [[wpfr>Self-Monitoring%2C_Analysis_and_Reporting_Technology|Wikipédia : SMART]] (en français et très succinct).
+  * [[wp>S.M.A.R.T.]] (en anglais mais beaucoup moins abrégé).
+  * [[http://valaurea.free.fr/documents/sig11_smart.html|Tout savoir de ses disques durs avec smartmontools (sig-11.org)]]
+  * [[https://www.smartmontools.org/browser/trunk/www/badblockhowto.xml|Bad block HOWTO for smartmontools]] : pour aller plus loin lorsqu'une erreur est détectée.
+  * **Vidéo :** [[https://www.youtube.com/watch?v=1e3N1wqhpSA|Secteurs Morts - Diagnostic et Réparation]]
+  * **Vidéo :** [[https://www.youtube.com/watch?v=VtFQ0AXSAFc|Comprendre les attributs SMART - Diagnostic HDD]]
+  * Quelques explications des normales SMART sont disponibles dans Wikipédia, ainsi que dans ce lien : [[http://www.deltasight.fr/monitoring-serieux-de-disques-durs-avec-smartmontools/]]
+  * [[https://lite.framacalc.org/9kg8-ddattributes|Listes des attributs smart de quelques modèles de SSD]]
+ 
+
+----
+
+//Contributeurs : [[utilisateurs:didrocks ]], [[utilisateurs:fnx]], [[utilisateurs:.amalric.]] pour la traduction, [[utilisateurs:furious-therapy]] : DEB pour Jaunty.//

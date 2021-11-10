@@ -1,0 +1,253 @@
+
+script pour aider à la résolution de problème d'imprimante ou de scanner  amis qui utilise yad
+il manque plein de retour chariot !!!!!! 
+
+#!/bin/bash
+
+version="version 2020-03-08" #utilisation de yad 
+
+titre=" BASH A UTILISER EN CAS DE PROBLEME D'IMPRIMANTE OU DE SCANNER"
+
+echo $titre
+
+num=`date +%Y-%m-%d:%H-%M-%S`
+
+fich="ImpScan-$num.txt"
+
+echo "" >$fich                   #vide le fichier par précaution
+
+sep1="[code]"
+
+sep2="[/code]"
+
+function l-c {                   # c'est ce qui lance la commande
+    echo $sep1                    >> "$fich"
+    echo $1                       >> "$fich"
+    eval "$1"                     >> "$fich"
+    echo $sep2                    >> "$fich"
+    echo                          >> "$fich"
+   }
+
+function resultat {
+
+echo "fichier enregistré le $num" >> $fich
+
+echo "
+
+           Vous pouvez récupérer le fichier 
+      $fich
+           pour le transmettre au forum 
+           tel quel (par copier-coller)
+           car les balises sont incluses
+           méthode : quand le fichier est ouvert
+            Ctrl A   puis Ctrl C 
+            et dans un post du forum Ctrl V "
+   }
+
+function imprimante {
+    cmd="dpkg -l | grep cups"                   ; l-c "$cmd" 
+    cmd="lpstat -t"                             ; l-c "$cmd" 
+    cmd="/usr/sbin/lpinfo -v"                   ; l-c "$cmd" 
+    cmd="cat /var/log/cups/error_log"           ; l-c "$cmd" 
+    cmd="dpkg -l | grep -v ^ii"                 ; l-c "$cmd" 
+    }
+
+function scanner {
+    cmd="echo SCANNER"                          ; l-c "$cmd"
+    cmd="dpkg -l | grep sane"                   ; l-c "$cmd"
+    cmd="sudo sane-find-scanner -q"             ; l-c "$cmd"
+    cmd="scanimage -L"                          ; l-c "$cmd" 
+    cmd="ls /etc/sane.d/ "                      ; l-c "$cmd"
+    cmd="cat /etc/sane.d/dll.conf"              ; l-c "$cmd"
+    cmd="ls  /lib/udev/rules.d | grep libsane"  ; l-c "$cmd"
+    }
+
+function information {
+    cmd="cat /etc/lsb-release"                  ; l-c "$cmd"
+    cmd="uname -i"                              ; l-c "$cmd"
+    cmd="groups"                                ; l-c "$cmd"
+    cmd="lsusb"                                 ; l-c "$cmd"
+  }
+
+function ImpScan { # reçoit deux paramètres : $1 Imp et $2 Scan
+                   # $1 NON!BROTHER!EPSON!CANON!HP!SAMSUNG!Autre
+                   # $2 NON!OUI
+     case "$1" in
+            "NON"     )     :                                                   ;;
+            "BROTHER" )     cmd="echo 'IMPRIMANTE BROTHER'"    ; l-c "$cmd"
+                            cmd="dpkg -l | grep -i brother"    ; l-c "$cmd"     ;;
+            "EPSON"   )     cmd="echo 'IMPRIMANTE EPSON'"      ; l-c "$cmd"
+                            cmd="dpkg -l | grep -i epson"      ; l-c "$cmd" 	;;
+            "CANON"   )     cmd="echo 'IMPRIMANTE CANON'"      ; l-c "$cmd"
+                            cmd="dpkg -l | grep -i cnijfilter" ; l-c "$cmd"
+                            cmd="dpkg -l | grep -i cndrvcups"  ; l-c "$cmd"     ;;
+            "HP"      )     cmd="echo 'IMPRIMANTE HP'"         ; l-c "$cmd"
+                            cmd="dpkg -l | grep -i hplip"      ; l-c "$cmd"      
+                            cmd="hp-check"                     ; l-c "$cmd"     ;;
+            "SAMSUNG" )     cmd="echo 'IMPRIMANTE Samsung'"    ; l-c "$cmd"
+                            cmd="dpkg -l | grep suld"          ; l-c "$cmd"
+                            cmd="find /etc/apt -name '*.list' /
+                            -exec bash -c 'echo -e \"\n\$1\n\"; nl -ba \"\$1\"' _ '{}' \;"
+                            l-c "$cmd"                                          ;;
+            "Autre"   )     cmd="echo 'IMPRIMANTE Autre'"      ; l-c "$cmd"     ;;
+     esac
+     case "$1" in
+           "NON" ) :          ;;
+           *     ) imprimante ;;
+     esac
+     case "$2" in
+            "NON"     )     if [[ "$1" = "NON" ]] ; then rm $fich ; fi       ;;
+            "OUI"     )     scanner ;;
+     esac     
+     }
+
+function choix {
+ # en 2ème ligne il faut lire tiret tiret texte="$0 et non 1.- texte="$0
+
+ res=$(yad   --title="$titre" --center \
+        --text="$0
+                IMPRIMANTE : Si l'Imprimante est concernée ou non ,  choisissez sa marque si oui
+                SCANNER    : Indiquez s'il est concerné (oui/non) (si oui le mot de passe administrateur sera demandé) 
+
+                et si vous voulez visualiser le fichier résultat laissez l'option visualisation sur OUI
+                ce qui permettra de transmettre plus facilement  le résultat sur le forum
+                                                      "                             \
+        --form                                                                      \
+        --field="Imprimante:CB"        'NON!BROTHER!EPSON!CANON!HP!SAMSUNG!Autre'   \
+        --field="Scanner:CB"           'NON!OUI'                                    \
+        --field="Visualisation du résultat :CB"   'OUI!NON'                         \
+        --button="gtk-close:1"                                                      \
+        --button="gtk-ok:0"                                                         \     
+        )
+  [[ $? -eq 1 ]] && exit 0  # sort si on clic sur fermer
+   imp=$(awk -F'|' '{print $1}' <<< $res)
+  scan=$(awk -F'|' '{print $2}' <<< $res)
+  visu=$(awk -F'|' '{print $3}' <<< $res)
+}
+
+choix
+
+information
+
+ImpScan "$imp" "$scan"
+
+if [[ -e "$fich" ]] 
+  then
+    resultat
+    case $visu in
+	    "OUI"   )	xdg-open "./$fich" 	;;
+	    "NON"	)	exit 63       	;;
+	esac
+fi
+
+
+
+
+Script pour aider à la résolution de problème d'imprimante ou de scanner
+<code bash help_impscan.sh>
+#!/bin/bash
+
+echo " BASH A UTILISER EN CAS DE PROBLEME D'IMPRIMANTE OU DE SCANNER"
+num=`date +%Y-%m-%d:%H-%M-%S`
+fich="ImpScan-$num.txt"
+echo "" >$fich
+sep="========================================================================================"
+
+function l-c {                   # c'est ce qui lance la commande
+echo $sep                    >> "$fich"
+echo $1                      >> "$fich"
+eval "$1"                    >> "$fich"
+echo $sep                    >> "$fich"
+}
+
+function resultat {
+echo "fichier enregistré le $num" >> $fich
+echo "
+      Vous pouvez récupérer le fichier 
+      $fich
+      pour le transmettre au forum"
+}
+   
+function choixImp {
+echo ""
+titre="\!\!\!\! CHOIX IMPRIMANTE Réponses possibles  : (E ou C ou B ou H ou S ou N)"
+texte="ce programme va renseigner un fichier en fonction de votre imprimante ....
+répondez
+          E  si vous avez une EPSON
+          C  si vous avez une CANON
+          B  si vous avez une BROTHER
+          H  si vous avez une HP
+          S  si vous avez une SAMSUNG
+          A  pour une autre
+                "
+rep=`zenity --entry --title "$titre" --text "$texte" --width "800"`
+case $rep in
+          [eE]  )      cmd="echo 'IMPRIMANTE EPSON'"      ; l-c "$cmd"
+                       cmd="dpkg -l | grep -i epson"      ; l-c "$cmd"     ;;
+
+         [cC]  )      cmd="echo 'IMPRIMANTE CANON'"      ; l-c "$cmd"
+                        cmd="dpkg -l | grep -i cnijfilter" ; l-c "$cmd"
+                        cmd="dpkg -l | grep -i cndrvcups"  ; l-c "$cmd"     ;;
+
+            [bB] )       cmd="echo 'IMPRIMANTE BROTHER'"    ; l-c "$cmd"
+                        cmd="dpkg -l | grep -i brother"    ; l-c "$cmd"     ;;
+
+            [hH] )       cmd="echo 'IMPRIMANTE HP'"         ; l-c "$cmd"
+                        cmd="dpkg -l | grep -i hplip"      ; l-c "$cmd"     
+                        cmd="hp-check"                     ; l-c "$cmd"     ;;
+
+            [sS] )       cmd="echo 'IMPRIMANTE Samsung"     ; l-c "$cmd"
+                        cmd="dpkg -l | grep suld"          ; l-c "$cmd"
+                        echo $sep                                                                            >> "$fich"     
+                        find /etc/apt -name '*.list' -exec bash -c 'echo -e "\n$1\n"; nl -ba "$1"' _ '{}' \; >> "$fich"
+                        echo $sep                                                                            >> "$fich"    ;;
+            [aA] )                                                          ;;
+
+            *     )         echo "utilisez seulement ECBHSA S.V.P."             ;;
+        esac   
+        }
+
+function imprimante {
+    choixImp
+    cmd="dpkg -l | grep cups"                   ; l-c "$cmd" 
+    cmd="lpstat -t"                             ; l-c "$cmd" 
+    cmd="/usr/sbin/lpinfo -v"                   ; l-c "$cmd" 
+    cmd="cat /var/log/cups/error_log"           ; l-c "$cmd" 
+    cmd="dpkg -l | grep -v ^ii"                 ; l-c "$cmd"
+}
+
+function scanner {
+    cmd="echo SCANNER"                          ; l-c "$cmd"
+    cmd="dpkg -l | grep sane"                   ; l-c "$cmd"
+    cmd="sudo sane-find-scanner -q"             ; l-c "$cmd"
+    cmd="scanimage -L"                          ; l-c "$cmd" 
+    cmd="ls /etc/sane.d/ "                      ; l-c "$cmd"
+    cmd="cat /etc/sane.d/dll.conf"              ; l-c "$cmd"
+    cmd="ls  /lib/udev/rules.d | grep libsane"  ; l-c "$cmd"
+}
+
+function ImpScan {
+    while [[ $rep != [?([iI])?(sS)?(nN)] ]]
+    do
+        titre="\!\!\!\! Réponses possibles  : (I ou S ou IS ou N)"
+        texte="ce programme va générer un fichier ....
+               répondez
+                        I  si vous avez un problème d' imprimante
+                        S  si vous avez un problème de scanner
+                        IS si vous avez un problème d'imprimante et de scanner
+                        N  pour arrêter
+               remarque il peut y avoir demande de mot de passe administrateur "
+        rep=`zenity --entry --title "$titre" --text "$texte" --width "800"`
+        case $rep in
+            [iI]     )  imprimante           ;   resultat    ; exit 64  ;;
+            [sS]     )  scanner              ;   resultat    ; exit 65  ;;
+            [iI][sS] )  imprimante ; scanner ;   resultat    ; exit 66  ;;
+            [nN]     )  exit 63  ;;
+            *        )  echo "utilisez seulement iIsSnN S.V.P."         ;;
+        esac   
+    done
+}
+cmd="cat /etc/lsb-release && uname -i && groups && lsusb"                   ; l-c "$cmd"
+ImpScan
+
+</code>

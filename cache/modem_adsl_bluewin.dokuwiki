@@ -1,0 +1,101 @@
+
+{{tag>matériel réseau modem}}
+----
+
+  Versions (Hoary ?) Breezy (Ubuntu et Kubuntu?)
+
+Rédigé par [[:utilisateurs:Calimarno]] (traduit et adapté librement de [[http://www.linux-usb.com/SpeedTouch/ubuntu/|The Linux Kernel SpeedTouch Driver And Ubuntu]])
+Remerciements: [[:utilisateurs:SuperDindon]] pour les liens.
+
+====== Bluewin ADSL (ou ADSL via PPPoE) ======
+
+**/!\ REMARQUES IMPORTANTES :**
+Cette page avait été créée afin d'utiliser un modem **Alcatel Speedtouch USB** pour se connecter via une connexion **Bluewin ADSL** (en Suisse) alors que le paquet **speedtouch-ng** ne supportait pas le PPPoE via ATM.
+[[utilisateurs:SuperDindon]] a ajouté ce support à son paquet et vous pouvez l'utiliser (testé sur breezy).
+Je vous renvoie donc à la page [[:modem_adsl_alcatel_speedtouch_330_ng|speedtouch-ng]] de cette documentation, puisque celle que vous êtes en train de lire est caduque.
+
+Pour ceux qui auraient un modem **USB Netopia Cayman**, aucun support n'est prévu. Il faut contacter bluewin au 0800 80 80 40 qui voudra bien vous envoyer un routeur ethernet en échange de 48.- CHF et de la prolongation de l'abonnement pour une année.
+
+===== Pourquoi cette page ? =====
+
+Si vous disposez d'une connexion **Bluewin ADSL** avec un modem **Alcatel SpeedTouch USB** (la "raie verte"), vous n'arriverez malheureusement pas à vous connecter directement après l'installation d'Ubuntu.
+
+Le tutoriel de [[:utilisateurs:SuperDindon]] concernant les modems Speedtouch par l'installation du paquet //speedtouch-ng// fonctionne uniquement pour les fournisseurs d'accès Internet (FAI) utilisant le protocole PPPoA.
+
+**Bluewin utilisant PPPoE, il vous faut configurer manuellement votre connexion. J'essaie de décrire assez simplement les différentes étapes qui m'ont permis de me connecter à l'Internet avec Bluewin ADSL.**
+
+//Note : cette méthode s'adresse également  aux utilisateurs diposant d'une connexion ADSL avec un FAI utilisant PPPoE. Vous trouverez un tableau des différents FAI et des protocoles utilisés dans la [[http://www.linux-usb.org/SpeedTouch/faq/index.html#q12|FAQ du site Linux-usb.org]]. //
+
+===== Prérequis =====
+
+Vous devez télécharger les fichiers suivants, que vous placerez dans votre répertoire personnel.
+
+  * Le **[[http://n.ethz.ch/student/praplana/download/KQD6_3.012|firmware]]**
+  * Le paquet **[[apt://libatm1]]**
+  * Le paquet **[[apt://br2648ctl]]**
+  * Différents scripts : [[http://n.ethz.ch/student/praplana/download/firmware-extractor|firmware-extractor]], [[http://n.ethz.ch/student/praplana/download/speedtch|speedtch]], [[http://n.ethz.ch/student/praplana/download/dial|dial]]
+ 
+
+
+===== 0. Précaution =====
+
+Si vous ne possédez pas de connexion réseau configurée à l'installation d'Ubuntu, vous pouvez passez directement à la prochaine étape.
+
+En revanche, si vous avez une connexion Ethernet configurée par défaut, il vous faut éditer le fichier// /etc/network/interfaces//, y commenter les lignes commençant par "gateway" et "dns" ainsi qu'effacer le fichier// /etc/resolv.conf //.
+Vous pouvez le faire en tapant en console :
+  sudo sed -i 's@gateway@# gateway@g' /etc/network/interfaces &&
+  sudo sed -i 's@dns@# dns@g' /etc/network/interfaces &&
+  sudo rm -f /etc/resolv.conf
+
+===== 1. Installation =====
+
+==== 1.1 Installation de libatm ====
+
+Depuis votre répertoire personnel :
+  sudo dpkg -i libatm*
+
+
+==== 1.2 Installation de br2684ctl ====
+
+  sudo dpkg -i br2684*
+
+
+==== 1.3 Installation du firmware ====
+
+Exécutez la commande suivante dans une console :
+  chmod +x firmware-extractor &&
+  ./firmware-extractor KQD6_3.012
+Si tout s'est bien déroulé, vous devriez avoir un ficher //speedtch-1.bin// et un fichier //speedtch-2.bin// dans votre répertoire personnel.
+Copiez-les dans le répertoire des firmwares à l'aide de cette commande :
+  sudo cp speedtch* /lib/hotplug/firmware
+
+===== 2. Configuration =====
+
+Créez un fichier contenant votre nom d'utilisateur et votre mot de passe avec la commande suivante :
+  echo "'username@bluewin.ch' * 'motdepasse'" > secrets
+où vous remplacerez //username// par votre nom d'utilisateur et //motdepasse// par votre mot de passe.
+Copiez-le dans// /etc/ppp// à l'aide de la commande suivante :
+  sudo install -m 600 secrets /etc/ppp/chap-secrets &&
+  sudo install -m 600 secrets /etc/ppp/pap-secrets
+
+Editez le script speedtch à l'aide de la commande :
+  gedit speedtch
+et remplacez //username@isp// par votre nom d'utilisateur de la forme xxxx@bluewin.ch
+
+Copiez-le ensuite dans// /etc/ppp/peers// avec :
+  sudo install -m 600 speedtch /etc/ppp/peers
+
+Editez le script //dial//, cherchez et remplacez //VP.VC// par //8.35// (VPI.VCI pour Bluewin).
+
+
+===== 3. Connexion =====
+
+Copiez le script //dial// dans ///etc/init.d// avec:
+  sudo install -m 744 dial /etc/init.d
+Faites un lien symbolique depuis /etc/rc2.d afin que la connexion s'établisse au démarrage:
+  ln -s ../init.d/dial /etc/rc2.d/S95dial
+  ln -s ppp/resolv.conf /etc/resolv.conf
+
+Après avoir redémarré,
+  sudo reboot
+vous devriez être connecté.

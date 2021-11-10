@@ -1,0 +1,152 @@
+
+{{tag>dépôts }}
+----
+====== Gestion des trousseaux de clés : régler l'erreur « GPG "NO_PUBKEY" » ======
+
+===== Méthode générale =====
+
+Lorsque vous ajoutez des [[:ppa|dépôts ppa]] à votre distribution afin de bénéficier de version supérieure de certains logiciels, vous vous trouvez sûrement souvent confronté à un message d'erreur du genre :
+<file>W: GPG error: http://ppa.launchpad.net xenial Release: The following signatures couldn't be verified because the public key is not available: NO_PUBKEY votre_n°_de_clé</file>
+
+Pour pallier ce problème il vous suffit de saisir dans un [[:terminal]] la [[:commande_shell|commande]] suivante :
+
+<code bash>sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com votre_n°_de_clé</code>
+ou bien :
+<code bash>sudo apt-get install add-apt-key && sudo add-apt-key votre_n°_de_clé</code>
+
+===== Port HKP filtré par un firewall ====
+Si le port hkp (11371/tcp) est filtré par un firewall (par exemple au travail), passer en http :
+<code>sudo add-apt-key -k hkp://keyserver.ubuntu.com:80 votre_n°_de_clé</code>
+
+Il est également possible de le faire directement dans le fichier idoine, en remplaçant le port par défaut 11371 par 80 en [[:tutoriel:comment_modifier_un_fichier|modifiant]] avec les [[:sudo|droits d'administration]] la ligne correspondante dans le fichier **/etc/default/add-apt-key** 
+<file>KEYSERVER=hkp://keyserver.ubuntu.com:80</file>
+puis de relancer la commande de la maniere suivante :
+<code>sudo add-apt-key votre_n°_de_cle</code>
+
+Il est également possible de saisir:
+<code>wget -O- "http://keyserver.ubuntu.com/pks/lookup?op=get&search=0xvotre_n°_de_clé" | sudo apt-key add -</code>
+
+<note help>Si ça ne marche pas utilisez les deux lignes suivantes en remplaçant votre_n°_de_clé par le n° indiqué dans le message d'erreur
+<code>gpg --keyserver keyserver.ubuntu.com --recv-keys  votre_n°_de_clé
+gpg -a --export votre_n°_de_clé | sudo apt-key add -</code>
+</note>
+
+Plus simplement, vous pouvez aussi vous créer un petit script que vous appellerez pour ajouter vos clés:\\
+dans votre terminal, tapez :
+<code>
+touch apt-gpg-key && xdg-open apt-gpg-key
+</code>
+
+puis, dans l’éditeur de texte, copiez le code suivant :
+<file>
+#!/bin/bash
+
+gpg --keyserver keyserver.ubuntu.com --recv-keys $1
+gpg --armor --export $1 | sudo apt-key add -
+</file>
+
+Enregistrez le fichier puis de nouveau dans votre terminal, rendez-le [[:droits|exécutable]] en faisant :
+<code>
+chmod +x apt-gpg-key
+</code>
+Enfin, lancez le programme en tapant :
+<code>
+sudo ./apt-gpg-key votre_n°_de_clé
+</code>
+
+===== gpg: AVERTISSEMENT: le propriétaire du répertoire contenant est peu sûr =====
+
+Si vous obtenez une erreur du type :
+<code>
+gpg: AVERTISSEMENT: le propriétaire du répertoire contenant est peu
+sûr pour le fichier de configuration `/home/votre-nom-utilisateur/.gnupg/gpg.conf'
+gpg: les appels aux programmes externes sont désactivés car les permissions
+du fichier d'options sont trop peu sûres
+gpg: erreur de communication avec le serveur de clés: erreur générale
+gpg: la réception depuis le serveur de clés a échoué: erreur générale
+gpg: AVERTISSEMENT: le propriétaire du répertoire contenant est peu
+sûr pour le fichier de configuration `/home/votre-nom-utilisateur/.gnupg/gpg.conf'
+OK
+</code>
+
+Exécutez simplement :
+<code>
+sudo chown root:root .gnupg/
+sudo chown -R root:root .gnupg/
+</code>
+
+===== gpg: le délai d'attente du serveur de clés a expiré =====
+Si vous obtenez une erreur du type :
+<file>
+gpg: le délai d'attente du serveur de clés a expiré
+gpg: la réception depuis le serveur de clés a échoué: erreur du serveur de clés
+</file>
+  - Vérifiez d'abord que vous avez internet, par exemple tentez <code bash>ping www.google.com</code> et vous verrez bien si vous obtenez une réponse ou non.
+  - Si vous avez Internet, tentez un ping sur le serveur de clés : <code bash>ping keyserver.ubuntu.com</code>En fonction de la réponse, vous y verrez plus clair. Si le serveur ne répond pas, c'est qu'il n'est pas en ligne pour maintenance, donc réessayez plus tard.\\ Si par contre vous avez un message du type: <code bash>ping: sendmsg: Operation not permitted </code> Le problème vient très probablement de votre [[:pare-feu]]. \\  * Configurez-le pour autoriser les requêtes [[:apt]]. Ou : \\  * désactivez-le le temps de l'ajout de la clé. 
+  - Si vous ne le pouvez pas, par exemple si vous êtes sur un Hotspot... faites comme l'indique [[:ppa#erreur_du_serveur_de_cles|la section « Erreur de serveur de clés »]].
+
+===== Pour un PPA du site launchpad.net =====
+
+Une fois un [[:dépôts|dépôt]] [[:PPA]] ajouté, il peut arriver qu'il faille l'authentifier. 
+
+<note>
+Pour la suite des explications et une meilleure compréhension, il sera pris en exemple le dépôt PPA **ppa:nilarimogard/webupd8**(([[https://launchpad.net/~nilarimogard/+archive/webupd8]])).
+
+Celui-ci contient notamment un logiciel très utile appelé **launchpad-getkeys**. \\ Une fois installé et lancé en ligne de commandes :
+  *  il récupère tout seul toutes les clés d'authentification possibles, évitant du coup toutes les manipulations décrites plus haut.
+  *  Il répare donc les erreurs de type « missing GPG » de façon très simple. 
+
+FIXME contient d'autres logiciels, dont **[[yad_yet_another_dialog|Yad (Yet Another Dialog)]]**, [[xclip|XClip]] et [[ppa#PPA-Purge : désinstaller un paquet automatiquement et proprement|PPA-Purge : désinstaller un paquet automatiquement et proprement]] qui sont **des dépendances de Launchpad-getkeys**.
+</note>
+Pour le faire de de façon graphique, procéder comme suit:
+  * Sur la page web de l'archive, donc pour l' exemple [[https://launchpad.net/~nilarimogard/+archive/webupd8|dépôt de launchpad-getkeys]], cliquer sur //Technical details about this PPA//.
+  * Un espace de texte est déroulé, cliquer sur le code inscrit sous //Signing key//. 
+  * Dans la nouvelle page, faire un clic droit sur l'[[wpfr>hyperlien]] pour pouvoir //Enregistrer la cible du lien sous...//. Choisir une destination.
+  * Dans la fenêtre [[:tutoriel:comment_modifier_sources_maj#avec_une_interface_graphique|Sources de logiciels]] prévue à cette effet, choisir l'onglet //Authentification// puis cliquer sur //Importer la clé...//.
+  * Rechercher et sélectionner le fichier qui vient d'être enregistré (le nom par défaut est 'lookup'). Fermer la fenêtre des sources de logiciels. 
+Les captures d'écrans associées à cette manipulation peuvent être trouvées sur : \\ **(en)** [[http://askubuntu.com/questions/13065/how-do-i-fix-the-gpg-error-no-pubkey-without-terminal#13088|« How do I fix the GPG error “NO_PUBKEY”? »]] —{ « Comment corriger une erreur GPG "AUCUNE CLÉ PUBLIQUE" » } ; source : forum AskUbuntu.com ; auteur : Agmenor ; 13 novembre 2010.
+
+**One Lign installer.**
+<note tip>sudo add-apt-repository ppa:webupd8team/y-ppa-manager && sudo apt update
+sudo apt install launchpad-getkeys && sudo launchpad-getkeys</note>
+
+
+===== Si malgré tout le problème persiste =====
+
+Commencez par forcer les mises à jour sans authentification, pour être sûr de tout avoir.
+<code bash>sudo apt update && sudo apt-get -yf --allow-unauthenticated upgrade </code>
+
+sauvegardez vos clés .gpg actuelles, au cas où !
+
+Faites un dossier où mettre ça en attendant :
+
+<code bash> mkdir ~/gpg-backups </code>
+
+Virez tout /etc/apt/trusted.gpg.d/ et /etc/apt/trusted.gpg dans le dossier précédemment créé :
+
+<code bash>sudo mv /etc/apt/trusted.gpg.d/*.* ~/gpg-backups/
+sudo mv /etc/apt/trusted.gpg ~/gpg-backups/ </code>
+
+Installez le gestionnaire / réparateur de PPA [[yppamanager|y-ppa-manager]] :
+<code bash> sudo add-apt-repository ppa:webupd8team/y-ppa-manager && sudo apt update && sudo apt install -y y-ppa-manager</code>
+
+Vous pouvez le lancer en ligne de commande pour voir ses sorties :
+<code bash>y-ppa-manager</code>
+ou simplement par son lanceur graphique normal.
+
+Dans [[yppamanager|Y-ppa-manager]], cliquez sur à "Advanced". Des options pour réparer les problèmes de clés manquantes ou de BADSIG vous y sont proposées. Commencez par recharger les clés. En cas de besoin, jetez un œil aux autres choix, ils peuvent être utiles. 
+Soyez patient lors de la sélection d'une option, attendez pour le solliciter de nouveau : il travaille en fond et vous avertira d'une notification une fois sa tâche terminée (si lancé en ligne de commande, vous pouvez contrôler son fonctionnement dans la fenêtre de terminal).
+
+=====Exporter ses clés de ppa=====
+Il peut être souhaitable d'exporter ses clés de ppa pour une utilisation sur un ordinateur hors-ligne par exemple, pour cela utiliser la commande :
+<code>sudo apt-key exportall >nom-de-votre-clé-unifiée.asc</code>
+Cette commande créera un fichier avec contenant toutes les clés utilisées dans le système.
+=====Obtenir une clé pour un usage local (sans internet)=====
+Pour obtenir un fichier gpg utilisable sans internet, rendez-vous sur [[https://keyserver.ubuntu.com/|le serveur de clé Ubuntu]], dans le champs "Search string", entrez **0xnuméro-de-votre-clé**, le numéro de votre clé correspond à l'erreur apt que vous avez rencontrée lorsque vous avez recharger la liste des paquets. Cliquez sur le lien après **pub** copiez le contenu de la page dans un fichier en lui donnnannt le nom de votre choix avec l'extension ''gpg''.
+Une fois cela fait, entrez la clé manuellement avec la commande :
+<code>sudo apt-key add /chemin/vers/votre/clé/votre-clé.gpg</code>
+Ou encore plus simplement avec la commande :
+<code>wget -O- "http://keyserver.ubuntu.com/pks/lookup?op=get&search=0xvotre_n°_de_clé" >votre-clé.gpg</code>
+
+----
+Contributeurs : [[utilisateurs:Daëavelwyn]], [[utilisateurs:Mysteroid]], [[utilisateurs:BeAvEr]] (petit toilettage de la documentation), [[utilisateurs:Agmenor]] (partie PPA), [[utilisateur:Jau]].

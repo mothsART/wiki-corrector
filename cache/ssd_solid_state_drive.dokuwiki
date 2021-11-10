@@ -1,0 +1,672 @@
+
+{{tag>matériel optimisation}}
+----
+
+<note tip>En l'an 2020, on installe le logiciel ubuntu dans une **seule** partition du SSD sans se compliquer la vie. Si on a la chance de disposer d'un disque disque dur, on l'utilise pour y mettre ses données personnelles en utilisant une technique de [[http://mezigoo.free.fr/ps/ps-com/data.html|redirection]]. </note>====== Présentation des disques SSD ======
+
+**//Si vous souhaitez seulement savoir si votre système est configuré pour les disques durs SSD, rendez-vous directement sur [[#la_commande_trimactivation_et_utilisation|cette section de page]].//**
+
+Les **[[wpfr>Solid-state_drive|disques électroniques]]** sont constitués de mémoire flash, ils sont plus rapides et plus résistants aux chocs que leurs équivalents à plateaux (les HDD), mais leurs cycles d'écriture sont limités.
+
+Afin d'allonger leur durée de vie, vous pouvez utiliser au mieux Ubuntu pour l'usage d'un disque électronique.
+===== Présentation des disques électroniques =====
+
+Les disques durs traditionnels sont constitués de plateaux magnétiques et d'une tête de lecture mobile alors que les disques électroniques sont équipés de mémoire Flash. L'appellation « disque électronique » ou « disque SSD » est d'ailleurs un abus de langage puisqu'il n'y a pas de disque.
+
+<note importante>
+Note au rédacteur : si c'est un abus de langage pourquoi l'utiliser pour cette page de la documentation ? Le terme disque électronique n'est pas courant, il serait mieux de le remplacer par SSD ?
+</note>
+
+Les avantages de cette technique sont :
+  * absence d'usure mécanique car aucune pièce n'est en mouvement, et donc un silence total et une faible fragilité mécanique ;
+  * absence d'effets de la fragmentation, étant donné qu'il n'y a plus besoin de déplacer de tête de lecture ;
+  * des débits largement meilleurs :
+    * pour les disques durs, 220 Mo/s maximum en lecture et écriture ;
+    * pour les disques électroniques Sata3, jusqu'à 504 Mo/s en lecture et écriture pour le matériel grand public, fin 2014 ;
+  * temps d'accès nettement inférieurs à ceux des disques durs :
+    * de 5 à 15 ms pour des disques durs ;
+    * 0,1 ms en général pour les disques électroniques ;
+  * consommation légèrement plus faible que les disques durs (tend à se resserrer de plus en plus).
+
+Néanmoins, les disques électroniques n'ont pas que des avantages, et on peut leur reprocher :
+  * des capacités de stockage plus faibles que celles des disques durs ;
+  * un prix largement plus élevé que les disques durs, même si on est passé à moins d'1 €/Go (contre 5 ¢/Go pour les disques durs) ;
+  * une technologie qui a moins fait ses preuves par rapports aux disques durs qui sont massivement produits et utilisés depuis les années 80 (nombre de disques OCZ notamment ont eu de gros problèmes de fiabilité à long terme non liés à l'usure) ;
+  * une durée de vie limitée par le nombre de cycles lecture/écriture auxquels sont soumises les puces mémoire.\\ **C'est ce problème que nous allons réduire au maximum en utilisant au mieux Ubuntu.**
+
+**certains indiquent cependant que 
+"un SSD, ce n'est pas plus « fragile » qu'un disque mécanique. Certaines études tendraient même à montrer l'inverse." **
+
+==== Vocabulaire de la technique des disques électroniques ====
+
+=== Ramasse-miettes ("Garbage collector") ===
+
+Ce mécanisme permet de réorganiser les données sur le disque, pour permettre de conserver de bonnes performances après des écritures aléatoires. \\
+La plupart des disques l'intègrent aujourd'hui.
+
+=== Égalisation de l'usure ("Wear levelling") ===
+
+C'est un procédé utilisé par les contrôleurs de disques SSD. Elle consiste à répartir l'usure des puces mémoires en écrivant le moins souvent possible dans les même cellules, et en profitant ainsi au maximum du nombre de cycles de lecture-écriture de chacune des cellules. De ce fait, avec un bon algorithme d'égalisation de l'usure, on arrive à faire en sorte qu'un disque électronique ait une durée de vie de l'ordre de plusieurs années.
+
+→ [[wpfr>Wear_levelling|Plus d'informations sur Wikipédia]]
+
+La commande TRIM que nous verrons plus tard, permet d'augmenter la quantité de cellules considérés comme vides par le disque électronique et donc d'améliorer cette opération. Si la prise en charge de la commande TRIM est active : plus le disque électronique contient d'espace vide, plus l'usure sera gérée de manière optimale.
+
+=== Alignement des partitions ===
+
+L'alignement des partitions consiste à faire coïncider le début des partitions avec les blocs physiques du disque. Peu important sur un disque dur (sauf les 4K), il améliore les performances et la durée de vie sur les disques électroniques.\\
+
+→ § [[#Aligner les partitions]]
+
+Cette opération est maintenant faite automatiquement à l'installation d'Ubuntu si vous choisissez de refaire la table des partitions.
+
+=== La commande TRIM ===
+
+Les disques électroniques écrivent par blocs de 4 Kio, mais effacent par blocs de 128 ou 512 Kio, ce qui impose alors de nombreuses lectures ou de nombreux déplacements pour effacer des blocs, et donc une baisse énorme des performances du disque.
+La commande TRIM tend à réduire, voire à supprimer, cette baisse de performance grâce au travail en commun du système d'exploitation et du disque électronique.
+  * Tous les disques actuels le prennent en charge.
+  * Presque tous les SSD SATA le prennent en charge, même les plus anciens.
+  * Linux le prend en charge totalement à partir du noyau 2.6.33 avec ext4, Btrfs, FAT, GFS2, XFS, etc.
+  * Pour les autres cas (ext3, noyau antérieur au 2.6.33), il faudra le faire manuellement (seul Ubuntu 10.04 LTS est encore maintenue pour les serveurs (plus pour les ordinateurs de bureau) et correspond à ce cas).
+
+===== La commande TRIM : activation et utilisation =====
+
+<note importante>
+La commande TRIM à la volée est **activées-trim-ssd-drives**
+</note>
+
+**Contrairement à ce qui est souvent dit, tous les SSD sont "TRIMé" par défaut à partir de 14.04 LTS.**
+Seul quelques rares SSD ont été blacklistés à cause de bugs de firmware les concernant (On peut souvent lire que seuls les Intel et Samsung ont le TRIM à la volée actif par défaut, ce qui n'était le cas que pour une version de développement d'Ubuntu 14.04, la restriction a été retirée après des tests supplémentaires dans la version finale).
+
+Vous pouvez vérifier la prise en charge de la commande TRIM par votre SSD par la commande suivante où vous remplacez **/dev/sda** par l'identifiant de votre disque :
+
+<code bash>sudo hdparm -I /dev/sda | grep TRIM</code>
+
+Une sortie vide indique que la commande TRIM n'est **PAS** prise en charge par votre disque électronique.
+Sinon, une ligne doit clairement indiquer la prise en charge de la commande TRIM.
+
+Exemple en cas de succès :
+<file>
+	   *	Data Set Management TRIM supported (limit unknown)
+</file>
+==== La commande TRIM à la volée du côté kernel ====
+
+Notez encore une fois que **depuis Ubuntu 14.04 LTS, la commande TRIM est activée par défaut**((Source : http://www.leaseweblabs.com/2013/12/ubuntu-14-04-lts-supports-trim-ssd-drives/)). L'usage de la méthode décrite ici n'est pas recommandée actuellement par Ubuntu.
+
+Il suffit d'ajouter l'option ''discard'' dans les lignes correspondant aux partitions Ext4 sur le disque électronique dans le fichier /etc/fstab :
+<code bash>gksu gedit /etc/fstab</code>
+Et :
+<file>
+# /dev/sda1
+UUID=f0d9c48e-00c4-4225-ab21-1c5a42194bc8 /               ext4    noatime,errors=remount-ro 0       1
+</file>
+devient :
+<file>
+# /dev/sda1
+UUID=f0d9c48e-00c4-4225-ab21-1c5a42194bc8 /               ext4    noatime,discard,errors=remount-ro 0       1
+</file>
+Dès le prochain démarrage, la commande TRIM sera activée de façon entièrement transparente.
+
+<note tip>
+Il semble qu'une meilleure méthode, plus véloce lors d'effacement de nombreux petits fichiers, soit de lancer un script une fois par jour pour la commande TRIM (fstrim+tâche cron). Voir l'article [[http://www.webupd8.org/2013/01/enable-trim-on-ssd-solid-state-drives.html|Enable TRIM On SSD (Solid-State Drives) In Ubuntu For Better Performance - Web UPD8]] (en anglais).
+
+Justification : Si le disque électronique est constamment réécrit, il peut rapidement venir à bout de blocs vierges et donc les performances reviendront au même à ce qu'elles seraient si la commande TRIM n'était pas exécutée avec la méthode du script ...  \\ FIXME : C'est pourtant la méthode qui semble actuellement implémentée et conseillée par ubuntu et d'autres distributions (modulo le fait que le cron est hebdomadaire).
+</note>
+
+==== Activer le TRIM avec fstrim ====
+ 
+Il n'est pas recommandé le montage des fichiers systèmes avec l'option "**discard**", car cela se traduira probablement par une baisse des performances en utilisation normale. Cependant, vous pouvez utiliser TRIM en exécutant la commande **fstrim** occasionnellement ou de créer votre propre tâche cron qui exécute fstrim via un calendrier.
+
+Pour activer le TRIM de votre SSD sur Ubuntu, il suffit d'ouvrir un terminal et exécutez la commande suivante :
+
+<code bash>sudo fstrim -v / </code>
+
+Vous pouvez exécuter la commande ci-dessus de temps en temps pour éviter la dégradation des performances sur les SSD.
+
+**Combien de fois vous devez l’exécuter ?**
+
+Cela dépend de combien de fois des fichiers sont supprimés à partir de votre SSD. Vous verrez une erreur si vous essayez d'exécuter la commande avec un lecteur qui ne prend pas en charge TRIM.
+
+Si vous souhaitez exécuter TRIM régulièrement, vous pouvez simplement créer une tâche cron qui exécute la commande fstrim pour vous.
+Voilà comment faire une tâche cron qui le fera automatiquement
+d'abord, exécutez la commande suivante pour ouvrir l'éditeur de texte de [[nano|nano]] avec les permissions root:
+
+<code bash>sudo nano /etc/cron.daily/fstrim </code>
+
+Saisir ou copier et coller le code suivant dans le fichier :
+<file>
+#!/bin/sh
+fstrim / 
+</file>
+
+Enregistrez le fichier en appuyant sur **Ctrl + O** et appuyez sur **Entrée** pour confirmer. Appuyez sur **Ctrl + X** pour fermer nano après avoir sauvegardé le fichier.
+
+Dernièrement, exécutez la commande suivante pour rendre le script exécutable :
+
+<code bash>sudo chmod +x /etc/cron.daily/fstrim </code>
+
+Ubuntu va maintenant lancer **fstrim** via un calendrier, comme il le fait pour d'autres tâches de maintenance du système.
+
+[[http://www.howtogeek.com/176978/ubuntu-doesnt-trim-ssds-by-default-why-not-and-how-to-enable-it-yourself/|Source originale de cette procédure]]
+
+==== La commande TRIM manuelle ====
+
+Cette méthode n'est nécessaire que dans le cas d'une partition principale Ext3 **ou** d'un noyau inférieur à 2.6.33.
+Il est conseillé d'exécuter la commande TRIM manuellement environ une fois par mois pour une utilisation normale du disque électronique.
+On ne peut pas lancer la commande TRIM manuellement sur une partition utilisée. Il faudra donc amorcer le système d'une clef USB autonome ou d'un disque dur externe.
+
+Nous allons utiliser le script **wiper.sh** qui est fourni avec le paquet **hdparm**. Il faut la version 9.28 ou une plus récente de hdparm. On peut vérifier la version dans un terminal :
+
+<code bash>hdparm -V</code>
+
+<note tip>
+Il est fortement conseillé d'utiliser les sources les plus récentes de hdparm (pour moins de risques d'incompatibilité…) ; ce qui implique de télécharger et de recompiler les sources du paquet hdparm. Vous serez guidés :
+  * Téléchargez la [[http://sourceforge.net/projects/hdparm/files/latest/download|dernière version de hdparm]]
+  * Décompressez l'archive et copiez le dossier à la racine de la clef USB autonome
+  * Amorcez le système de la clé USB en mode autonome, sans installer Ubuntu.
+  * Ouvrez un terminal
+  * Allez dans le dossier contenant hdparm (normalement, ''/cdrom/hdparm-9.xx'')en lançant : ''cd /cdrom/hdparm-9.*''
+  * Lancez, l'une après l'autre, les commandes : <code bash>
+make 
+sudo make install
+</code>
+</note>
+
+  * Allez dans le dossier ''wiper'' :  <code bash>cd wiper''</code>
+  * Exécuter une simulation de la commande TRIM sur votre partition : <code bash>sudo bash wiper.sh /dev/sda1</code>
+  * Si la simulation se passe bien, vous pouvez lancer réellement la commande TRIM en lançant : <code bash>sudo bash wiper.sh --commit /dev/sda1</code>
+
+Si tout se passe bien, vous devriez pouvoir réamorcer le système de votre disque électronique. \\ 
+Il faut malheureusement recompiler et réinstaller hdparm à chaque démarrage sur la clef USB (à moins d'avoir une clef USB en mode persistant).
+
+→ [[:hdparm|Plus d'informations sur l'utilisation de « hdparm »]]
+
+==== La commande TRIM d'un volume NTFS ====
+
+Grâce au même script ''wiper.sh'' que précédemment, nous pouvons exécuter la commande TRIM sur une partition NTFS. C'est très utile dans le cas d'un double amorçage GNU-Linux/Windows (XP ou Vista) qui ne prennent pas en charge la commande TRIM.
+Il faut que le volume NTFS ne soit pas en cours d'utilisation (il doit être démonté).
+
+Le script ''wiper.sh'' se trouve normalement dans une archive, dans le dossier /usr/share/doc/hdparm/wiper/. Nous allons donc lancer :
+
+<code bash>
+cd /usr/share/doc/hdparm/wiper/
+sudo gzip -d wiper.sh.gz
+sudo fdisk -l # Pour repérer votre partition NTFS
+sudo umount /dev/sdxx # Remplacez /dev/sdxx par l'identifiant de votre partition NTFS, pour la démonter
+sudo bash wiper.sh /dev/sdxx # Simulation de la commande TRIM
+</code>
+
+Si tout se passe bien pendant la simulation, vous pouvez exécuter réellement la commande TRIM :
+
+<code bash>sudo wiper.sh /dev/sdxx --commit</code>
+
+<note tip>
+Message si la partition NTFS n'a pas été démontée :
+         ## "This is where we finally discover whether the filesystem actually
+         ## supports --fallocate or not.  Some folks will be disappointed here."
+</note>
+
+===== Choix du système de fichier =====
+
+Le choix du système de fichiers pour un disque électronique est problématique. En effet, comme on l'a dit précédemment, on cherche à éviter au maximum les écritures inutiles sur un disque électronique pour en préserver au maximum la durée de vie.
+Par la même occasion, les systèmes de fichiers modernes sont tous //journalisés//, c'est-à-dire qu'ils stockent de nombreuses informations sur les accès aux fichiers, ce qui génère de nombreuses écritures mais garantit également dans une certaine mesure la sécurité des données en cas de plantage du système. On se trouve donc devant un conflit d'intérêt.
+
+Le [[BTRFS]] est certes le meilleur système de fichiers, mais étant encore « en développement », il est à proscrire pour les non avertis (malgré tout sa stabilité/fiabilité est devenue tout à fait potable à partir de Ubuntu 13.04).
+
+Il faut malgré tout préciser que les disques électroniques ont été conçus pour être utilisés sur des systèmes d'exploitations modernes, utilisant tous des systèmes de fichiers journalisés, comme NTFS sous Windows, HFS+ sous Mac OS X, et Ext4 sous GNU-Linux.
+On peut donc clairement modérer les répercussions négatives de ces systèmes de fichiers sur l'usure d'un disque électronique.
+
+==== Utilisation d'un système de fichiers journalisé ====
+
+Le principal intérêt des systèmes de fichiers journalisés est de garantir une bien plus grande sécurité des données en cas de plantage du système ou d'extinction brutale de la machine. La journalisation entrant en conflit avec la durée de vie des disques électroniques, il est difficile de faire un choix.
+
+Néanmoins, ce qui ressort des discussions sur la toile et des déclarations des fabricants autant que des sites spécialisés est que l'égalisation de l'usure permet de s'affranchir de ce problème, en gérant directement au niveau du contrôleur (un petit processeur en interne dans le disque électronique) l'usure des puces mémoire. L'utilisation des systèmes de fichiers Ext4 ou ReiserFS ne devrait donc poser aucun problème sur les disques électroniques assez récents (à partir de 2016 ???), qui incorporent une bonne gestion de l'égalisation de l'usure.
+
+Pour finir, on soulignera que seul Ext4 et [[BTRFS]] prennent en charge la commande TRIM à la volée pour les disques électroniques qui le permettent (voir le paragraphe sur la commande TRIM).
+Sur les disques électroniques actuels, la prise en charge de la commande TRIM a une conséquence bien plus bénéfique sur leur durée de vie que l’absence de journalisation.
+
+==== Utilisation d'un système de fichier non journalisé ====
+
+Désactiver la journalisation permet de ne pas générer d'écritures en dehors de l'écriture brute de données. Sans journal, un système de fichiers n'est plus capable de savoir quand des données ont été interrompues en pleine écriture. Le tout peut créer des défections en cas de coupure de courant, etc.
+
+Le journal est une petite partie du système de fichier écrite à chaque changement du système de fichier. Ce journal est situé invariablement au même endroit du disque dur. Cette dernière caractéristique fait que l'on peut être préoccupé par l'usure de cette partie du disque électronique si votre disque électronique a une mauvaise gestion de l'égalisation de l'usure.
+
+Si vous le voulez vous pouvez donc désactiver la journalisation de Ext4.
+
+  * Pour savoir si une partition Ext4 est journalisée, il faut regarder si le drapeau **has_journal** est présent avec la commande suivante en remplaçant **sda1** par l'identifiant de votre partition (sda2, hdb1, ...) : <code bash>
+sudo tune2fs -l /dev/sda1 | grep feature
+Filesystem features:      has_journal ext_attr resize_inode dir_index filetype extent flex_bg sparse_super large_file huge_file uninit_bg dir_nlink extra_isize</code> 
+  * Pour passer d'une partition journalisée à une partition non journalisée, il suffit de désactiver la journalisation, puis lancer l'utilitaire de vérification du système de fichier Ext4 qui se chargera de supprimer le journal: <code bash>
+sudo tune2fs -O^has_journal /dev/sda1
+sudo e2fsck -f -v -C0 /dev/sda1
+</code>
+
+(Si votre partition est une partition système, le procédé devra être fait à partir d'un cédérom ou d'une clef USB autonome par exemple. Au cours de la manipulation en live il faut démonter le disque concerné).
+===== Minimiser l'usage du disque électronique =====
+==== Placer les dossiers à contenu volatile sur un disque mécanique ====
+Les systèmes POSIX ont l'intérêt d'identifier clairement **/var** comme le dossier système dont les fichiers sont modifiés le plus fréquemment.
+Ainsi, si l'on monte **/var** et **/home** sur les partitions d'un disque mécanique, l'usure du SSD sur lequel est monté la racine du système est grandement réduite. Par ailleurs, si le disque mécanique ne contient que **/var** et **/home**, il peut tourner à faible vitesse (< 6000 tours/minute) pour réduire la consommation, le bruit et l'usure mécanique.
+==== Placer les fichiers temporaires en mémoire vive ====
+
+Le système utilise un certain nombre de fichiers temporaires, qu'il n'est pas nécessaire de conserver d'un démarrage à l'autre. Il est ainsi possible de les placer dans la mémoire vive (qui est vidée à l'arrêt de l'ordinateur) au lieu de les avoir sur le disque électronique.
+
+=== Pour « /tmp » ===
+
+Pour mettre les fichiers temporaires en mémoire vive, [[:tutoriel:comment_modifier_un_fichier|ouvrez le ficher]] **/etc/fstab** avec les droits d'administration et ajoutez-y la ligne suivante (ici, pour une taille maximale de 1 Gio) :
+<file fstab>
+tmpfs      /tmp            tmpfs        defaults,size=1g           0    0
+</file>
+
+=== Mettre « /var/log/ » en mémoire vive  ===
+
+Sous GNU-Linux, il y a une quantité impressionnante de fichiers **logs** (journaux d'activité) générés par le système, les démons, des processus divers et des applications.
+
+Tous ces fichiers n'ont aucune incidence sur le système ou les applications -- ce ne sont que des rapports d'activité de processus internes -- et de surcroît ils n'ont pas d'intérêt particulier pour l'utilisateur lambda.
+
+**On peut monter ce dossier en mémoire vive au démarrage.**
+  * Avantage : diminution considérable d'écritures inutiles faites en continu sur le disque électronique
+  * Inconvénient : tous les journaux seront perdus à chaque redémarrage (plus d'historique)
+
+Il suffit d'effectuer (presque) la même chose que pour ''/tmp'', en ajoutant dans /etc/fstab la ligne :
+
+<file>
+tmpfs /var/log tmpfs defaults,nosuid,nodev,noatime,mode=0755,size=5% 0 0
+</file>
+
+Après un redémarrage, tous ces fichiers de journalisation seront écrits dans un dossier temporaire en mémoire vive et perdus à l'arrêt du système.
+
+<note tip>
+À noter : les journaux de la session __en cours__ seront toujours disponibles ainsi que la commande terminal **dmesg** et l'application « [[:gnome-system-log|Visionneur de journaux système]] ».
+</note>
+<note importante>
+Vu l'utilité **considérable**, en dépannage, des logs des sessions __précédentes__, mettre /var/log en mémoire vive est un choix très **contestable**, sinon aberrant.\\ À chacun de choisir entre **léger** gain de rapidité et **fiabilité**.\\ \\ Nota : on peut aussi mettre /var/log sur le __disque classique__ (ou, à défaut car c'est un peu moins rapide et moins durable, sur une __carte mémoire__).
+</note>
+
+=== Cache des mises à jour et paquets téléchargés ===
+<note warning>Ceci peut bloquer les mises à jour du système si vous êtes sous la 18.04 et ultérieur</note>
+Même technique que précédemment, mais il est toutefois conseillé d'être équipé d'un minimum de 6 Gio de mémoire vive pour cette opération.
+
+<file fstab>tmpfs    /var/cache/apt/archives    tmpfs    defaults,size=4g    0    0</file>
+
+Avant le prochain redémarrage, il faut également vider le cache d'apt, via cette commande :
+
+<code bash>sudo apt-get clean</code>
+
+Cette opération a cependant un défaut : en cas d'impossibilité pour votre machine, d'accéder à l'Internet, vous ne pourrez pas installer les paquets qui seraient restés dans le cache lors d'un redémarrage.
+Par contre, sachant que tous les fichiers sont téléchargés en mémoire vive, votre système pourra installer des logiciels et se mettre à jour bien plus vite, tant par le débit en lecture de la mémoire vive, que le fait de soulager le disque électronique en lecture, permettant ainsi un débit optimal en écriture.
+Enfin évidemment, vu la fréquence d'apparitions de mises à jour, autant économiser la durée de vie du disque électronique au maximum.
+
+=== Autres dossiers système ===
+
+  * Les dossiers /var/run et /var/lock sont maintenant des liens pointant vers /run lui-même monté en tmpfs par le système au démarrage, les mettre dans le fstab est donc redondant.
+  * Le passage de /var/log en tmpfs **pose des problèmes** avec apache, qui a besoin que le dossier /var/log/apache2 soit créé avant de démarrer. Pour une solution à ce problème voir : [[http://weits.blogspot.fr/2012/03/laptop-ssd-tmpfs-and-apache.html|cette page]]
+  * Apparemment, même constat avec Samba que Apache
+  * Apparemment, même constat avec mysql que Apache
+  * /var/tmp ne doit **absolument pas** se trouver dans tmpfs, comme il est indiqué [[http://ubuntuone.com/6KWd2jN40GRqdVkVpQFOv0|ici]]
+
+Vous pouvez ajouter autant de dossiers que vous souhaitez en mémoire vive. Contrairement à Windows et ses disques virtuels réclamant immédiatement la mémoire allouée sur la mémoire vive, ici son utilisation est dynamique : ne sera donc consommé que ce qui est utilisé par les dossiers mis en mémoire vive.
+
+=== Le cache personnel ===
+
+<note warning>
+Attention, la procédure suivante est susceptible de casser votre session **Unity**. Unity n'a pas l'air d'apprécier qu'on lui ôte le dossier /home/nom-d'utilisateur/.cache.
+</note>
+
+Même technique que pour ci-dessus, il suffit de remplacer le chemin /tmp par /home/nomd'utilisateur/.cache, ce qui donne :
+
+<file fstab>tmpfs    /home/nomd'utilisateur/.cache    tmpfs    defaults,size=1g    0    0</file>
+
+Vu les temps d'accès des disques électroniques, il est inutile de conserver les caches d'applications indéfiniment.
+
+<note warning>
+La procédure ci-dessus supprime aussi le cache de [[:Shotwell]], obligeant celui-ci à reconstruire toute la base de vignettes de prévisualisation à chaque démarrage.
+</note>
+
+Avant l'opération, pensez à supprimer le contenu du dossier « .cache » de votre dossier personnel.
+
+=== Modifier le cache de Firefox ===
+
+Pour que Firefox place son cache dans « /tmp » (qui est en mémoire vive) :
+  * allez à la page ''about:config'' dans Firefox ;
+  * clic-droit → //Créez une nouvelle chaîne de caractères//, que vous nommerez ''browser.cache.disk.parent_directory'' et entrez dans la case ''/tmp''.
+
+Autre option : désactiver le cache de Firefox.
+
+
+=== Interdire la compression des fichiers de trace ===
+Si le repertoire **/var** continue d'être stocké dans le SSD, il peut être intéressant d'interdire la compression des vieux fichiers de trace ou leur conservation en durée exagérée voir pour cela la page [[logrotate#la_compression|logrotate]].
+
+==== La partition d'échange (SWAP) ====
+
+Il est possible de ne pas créer de partition d'échange durant l'installation d'Ubuntu en définissant les partitions manuellement (avancé). Cela permet de forcer l'utilisation de la mémoire vive et d'économiser l'espace qu'aurait pris cette partition sur le disque dur !
+Mais cette opération est hautement déconseillée !
+
+La partition d'échange sert en effet aussi pour bénéficier de l'hibernation (mise en veille prolongée) et aussi permet de soulager la mémoire vive en cas de pénurie, sans ça l'ordinateur figerait purement et simplement pendant un certain nombre de secondes et finira par fermer aléatoirement un programme pour permettre de continuer à utiliser l'ordinateur dans de bonnes conditions.
+
+Pour ne pas utiliser la partition d'échange, il existe deux méthodes :
+  * Activer [[zRAM]], qui est un module du noyau qui compresse la mémoire vive au lieu de la déplacer dans la partition d'échange en cas de manque de mémoire vive. La partition d'échange ne servant que si la mémoire vive est entièrement compressée (pour ce faire il suffit d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>zram-config]]**).
+  * Diminuer au minimum la priorité de la partition d'échange [[:swap#regler_le_declenchement_du_swap|Swap]]. Ce faisant celle-ci ne sera utilisée qu'en dernier recours. Ce qui va fortement réduire les performances si la mémoire vive arrive quasi à saturation (la mémoire vive n'aura plus la place de contenir un cache permettant d'accélérer diverses opérations). Je vous conseille donc d'utiliser zRam ! FIXME
+
+Si vous souhaitez tout de même utiliser la seconde méthode, [[tutoriel:comment_modifier_un_fichier|ouvrez le ficher]] **/etc/sysctl.conf** (avec les droits d'administration) et ajoutez à la fin :
+
+<file>
+vm.swappiness=5
+</file>
+
+Vous pouvez changer « 0 » par « 1 » qui indique d'utiliser la partition d'échange que lorsqu'il ne reste que 1 % de disponible en mémoire vive, « 2 » quand il reste 2 %, etc.
+
+==== Diminuer la fréquence d'écriture des partitions ====
+
+Utilisez l'option ''noatime'' pour éviter d'écrire sur le disque la date du dernier accès en lecture lorsqu'il n'y a pas d'écriture.
+
+**De nos jours ubuntu utilise par défaut l'option relatime qui est une variante de noatime, vous n'avez donc rien à faire si vous utilisez Ubuntu 12.04 LTS ou une version plus récente.**
+
+en 20.04 ,dans fstab une partition sans l'option  ...time
+<file>/etc/fstab
+# / was on /dev/sde3 during installation
+UUID=525a0522-f476-4670-bc78-063abbf871c5/     ext4    errors=remount-ro 0  1 </file>
+est montée avec relatime
+<file>mount
+/dev/sde3 on / type ext4 (rw,relatime,errors=remount-ro)</file>
+
+
+<note>''nodiratime'' est superflu, car ''noatime'' est un sur-ensemble de ''nodiratime'' (qui est alors sous-entendu), voir [[http://blog.endpoint.com/2010/02/on-linux-noatime-includes-nodiratime.html|la source]].</note>
+
+En [[tutoriel:comment_modifier_un_fichier|modifiant]] ''/etc/fstab'' avec les droits d'administration, vous pouvez ajouter l'option ''noatime'' dans les lignes correspondant à de l'Ext4 sur un disque électronique. Par exemple :
+<file>
+UUID=57480a3f-e7db-4a5e-9fca-7df45f5a7d9d  /               ext4    noatime,errors=remount-ro 0       1
+</file>
+
+==== Gagner de l'espace disque ====
+
+  * [[:deplacer_repertoire_usr|Déplacer son dossier usr (UNIX System Resources)]]
+  * [[:tutoriel:deplacer_home|Déplacer son dossier home]]
+
+==== Eviter d'écrire en double exemplaire les traces du fonctionnement du logiciel ====
+Depuis quelques années, le logiciel écrit ses traces de fonctionnement de façon  standard dans le répertoires **/var/log/journal.** Pour raison de compatibilité avec le passé, il duplique dans les fichiers **/var/log/syslog** et **/var/log/kern**.
+Cependant il faut savoir tourner la page. Surtout qu'il  fournit un  [[systemd|outil de consultation]]  dans le nouveau mode et  pas dans l'ancienne méthode. 
+[[https://unix.stackexchange.com/questions/506423/how-to-keep-kern-log-out-of-syslog|voir l'explication]]
+<code bash>head -13 /etc/rsyslog.d/50-default.conf
+#  Default rules for rsyslog.
+#
+#			For more information see rsyslog.conf(5) and /etc/rsyslog.conf
+
+#
+# First some standard log files.  Log by facility.
+#
+auth,authpriv.*			/var/log/auth.log
+#######*.*;auth,authpriv.none		-/var/log/syslog
+#cron.*				/var/log/cron.log
+#daemon.*			-/var/log/daemon.log
+#######kern.*				-/var/log/kern.log
+#lpr.*				-/var/log/lpr.log </code>
+Il est possible de faire la modification en lignes de commandes
+<code bash>sudo cp -v  /etc/rsyslog.d/50-default.conf /etc/rsyslog.d/50-default.conf.REF
+sudo sed -i 's/*.*;auth,authpriv.none/###########   *.*;auth,authpriv.none/' /etc/rsyslog.d/50-default.conf
+sudo sed -i 's/kern./###########   kern./' /etc/rsyslog.d/50-default.conf</code>
+
+
+
+
+
+===== Aligner les partitions =====
+
+→ Voir le [[#vocabulaire_de_la_technologie_ssd|vocabulaire de la technique des disques électroniques]] juste au-dessus !
+
+==== Votre disque électronique est-il aligné ? ====
+
+Par défaut, à l'installation, Ubuntu **aligne les partitions automatiquement** (y compris en partitionnement manuel).
+
+Si vous voulez en être sûr, tapez la commande ci-dessous :
+
+<code bash>sudo fdisk -lu /dev/sda</code>
+
+Vous obtiendrez alors une réponse comme ceci :
+
+<file>
+Disque /dev/sda: ---- Go, -------------- octets
+--- têtes, -- secteurs/piste, ------ cylindres, total ------- secteurs
+Unités = secteurs de 1 * 512 = 512 octets
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Identifiant de disque : ----------
+
+Périphérique Amorce  Début        Fin      Blocs     Id  Système
+/dev/sda1            XXXX        YYYY       ZZZZ     83  Linux
+</file>
+
+Vous pouvez alors vérifier que le début de chaque partition ("XXXX") est un multiple de 2048 (secteurs). Comme un secteur fait 512 octets, et que 2048 × 512 = 1 Mio, votre disque électronique est aligné =)
+A partir de 2018 (et surement avant aussi), fdisk fait cette vérification pour vous. Si le disque n'est pas aligné, vous verrez le message suivant : "La partition X ne démarre pas sur une limite de secteur physique."
+
+<note>FIXME Pour que tout le monde comprenne, expliquer d'ou vient le chiffre 2048 (secteurs). Expliquer aussi si chaque début de partition doit être un multiple de 2048 ou un multiple de 1 Mio</note>
+
+<note important>
+Cela est vrai sur un disque dur vierge mais n'a pas l'air de fonctionner si on installe Ubuntu à la suite de Windows sur le disque. Si des partitions sont déjà présentes, il faut supprimer et recréer toutes les partitions pour qu'elles soient alignées.
+
+(Car Ubuntu ne peut pas réaligner les partitions que Windows aurait pu créer non alignées par erreur… À voir si Windows continue de mal aligner les partitions après Windows XP. Windows 7 a une bonne prise en charge des disques électroniques, ça ne devrait plus être le cas.) FIXME
+</note>
+
+<note>FIXME Selon les fabricants de disques SSD, comme par exemple [[http://kb-fr.sandisk.com/app/answers/detail/a_id/9508/~/recommandations-de-performance-ssd|Sandisk]], les partitions peuvent se contenter d'un alignement sur les pages de 4Ko, soit tous les 8 secteurs. Il n'est pas indispensable d'aligner les partitions sur les blocs de 1Mo, sauf, bien-sûr, pour la première.</note>
+
+Si vous souhaitez aller plus loin, vous pouvez [[#Minimiser l'usage du disque électronique SSD|utiliser au mieux Ubuntu pour votre disque électronique]].
+
+==== Formatage manuel du disque électronique (utilisation avancée) ====
+
+**Cette partie est inutile si vous utilisez une version encore maintenue par Ubuntu, l'alignement se fait automatiquement avec n'importe quelle méthode « normale » de partitionnement.**
+
+<note warning>Attention cette méthode vient du forum [[http://forum.hardware.fr/hfr/OSAlternatifs/Hardware-2/recensement-optimisation-conseils-sujet_69473_1.htm|hardware.fr]] (un grand merci à eux) et a initialement été conçue pour Arch. La méthode de partitionnement est susceptible de varier sous Ubuntu. Ne suivez cette méthode que si vous êtes sûr de vous et que si vous savez résoudre des problèmes pouvant survenir au cours d'un formatage !</note>
+
+<note warning> La procédure d'origine était faite pour un OCZ-Vertex avec une taille de bloc de 128 Kio, ce qui n'est plus le cas sur les disques électroniques récents (> 2010). Par conséquent, la documentation a été réécrite pour une taille de bloc de 1024 Kio qui permet de garantir un alignement avec tous ses sous-multiples (512, 256, 128, etc.). Vous perdez 1 Mio sur l'ensemble du disque ce qui est négligeable et cela assure une compatibilité et un alignement parfait avec tous les disques électroniques. Le fichier de calcul a également été mis à jour en conséquence.</note>
+
+
+=== Découper son disque électronique - Méthode avec la table de partitions classique ===
+
+Cette méthode semble donner de bons résultats.
+
+Pour Ubuntu, il faut amorcer un système d'un cédérom ou d'une clef USB autonome. Une fois connecté, en console, on se servira de ''parted''. On se retrouve donc sur l'invite de parted, première vérification : la version du disque électronique :
+
+<file>
+(parted) print
+Model: ATA INTEL SSDSA2M040 (scsi)
+Disk /dev/sda: 40,0GB
+Sector size (logical/physical): 512B/512B
+</file>
+
+Ici, mettre à jour le micrologiciel si besoin est pour profiter de toutes les évolutions techniques de votre disque électronique.
+Vous trouverez la documentation nécessaire sur le site du fabricant.
+La taille d'un bloc, étant d'un multiple de 1024 Kio, et un secteur représentant 512 octets, on en déduit que chaque bloc est composé de 2048 secteurs (1024 Kio ÷ 512 octets). On va donc aligner les partitions en comptant le nombre de secteurs, de manière que chaque début de partition tombe sur un multiple de 2048, soit un début de bloc. D'autre part, afin de tenir compte du premier secteur réservé par le MBR, on va volontairement décaler la première partition jusqu'au premier secteur multiple de 2048. Cela ne gâche qu'un seul Mio et permet de rester aligné quoi qu'il arrive.
+
+
+<note help>
+Si  parted vous répond :
+>Error: /dev/sda: unrecognised disk label
+C'est que vous n'avez pas de table de partition, alors tapez :
+<code>(parted) /dev/sda mklabel msdos</code>
+puis recommencez.
+</note>
+
+Commençons par déterminer quel est le dernier secteur du disque électronique, en changeant d'abord l'unité utilisée pour afficher les informations de ce dernier (l'unité devient le secteur) :
+
+<code>
+(parted) unit s
+(parted) print free
+Number  Start  End        Size       Type  File system  Flags
+        63s    78165359s  78165297s        Free Space
+</code>
+
+À l'aide d'un petit tableau dans une feuille Calc (que vous pouvez télécharger [[http://www.mediafire.com/?b0yjtzzkty8mv51|ici]]), on calcule, à partir de la taille souhaitée des partitions, le secteur de début et de fin de chacune des partitions en suivant la règle suivante :
+Taille de la partition en secteurs = taille de la partition en Mo * 1024 * 1024 / 512.
+Une partition est donc définie par son secteur de début et son secteur de fin, ce dernier étant le secteur de début + la taille de la partition en secteur - 1 (on retranche 1 pour tenir compte du secteur du début). La partition suivante commence au secteur suivant qui sera forcément, grâce à la méthode de calcul, un multiple de 2048.
+Donc, on déduit le tableau suivant :
+
+^ Partition  ^ Point de montage  ^  Début ^  Taille (Mio) ^  Fin ^
+| /dev/sda1  | /  |  2048 |  8400 |  17205247 |
+| /dev/sda2  | swap  |  17205248 |  256 |  17729535 |
+| /dev/sda3  | /home  |  17729536 |  29500 |  78145535 |
+
+Alors, dans parted, il devient très simple de créer ses partitions à partir des infos calculées :
+
+<code bash>
+(parted) mkpart primary 2048 17205247
+(parted) mkpart primary 17205248 17729535
+(parted) mkpart primary 17729536 78145535
+</code>
+
+
+On peut vérifier le résultat une fois les partitions créées :
+
+<code bash>
+(parted) print
+Number  Start           End             Size            Type     File System    Flags
+ 1      2048s           17205247s       17203199s       primary
+ 2      17205248s       17729535s         524287s       primary
+ 3      17729536s       78145535s       60415999s       primary
+</code>
+
+
+Si on affiche à nouveau les informations avec l'octet comme unité, on peut vérifier la taille des partitions de manière plus parlante :
+
+<code bash>
+(parted) unit MB                 //ou unit GB
+(parted) print
+Number  Start           End             Size            Type     File System    Flags
+1       1,05MB          xxxxMB          xxxxMB          primary
+2       xxxxMB          xxxxMB          xxxxMB          primary
+3       xxxxMB          xxxxMB          xxxxMB          primary
+</code>
+
+
+Il ne reste plus qu'à placer le drapeau //"boot"// sur la première partition pour s'assurer du bon fonctionnement du //gestionnaire d'amorçage// et du chargement du futur SE :
+
+<code bash>
+(parted) set
+1
+boot
+on
+</code>
+
+Vérification du résultat :
+
+<code bash>
+Number  Start           End             Size            Type    File System     Flags
+1       0,00GB          8,40GB          8,40GB          primary                 boot
+</code>
+
+
+Il faut maintenant créer les systèmes de fichiers. Ici, on passera par Ext4, que l'on montera ensuite avec l'option noatime pour ne pas provoquer d'écriture lors d'une simple lecture. Là encore, on se sert des options de formatage du système de fichiers Ext4 pour aligner la partition. Il faut aligner la partition avec des blocs logiques de 4 Ko (4096 o), et un "stride" respectant l'alignement des blocs physiques du disque électronique. Les blocs logiques font 4 Ko, on sait que les blocs physiques font 128 Ko, on aura donc un "stride" de 32 (128 Ko / 4 Ko). Cette histoire de "stride" n'est pas claire, mais l'utilisation de ces deux valeurs permet visiblement de tout aligner correctement. On crée donc les systèmes de fichiers ext4 sur les partitions adéquats :
+
+<code bash>
+mkfs.ext4 -b 4096 -E stride=32 /dev/sda1
+mkfs.ext4 -b 4096 -E stride=32 /dev/sda3
+mkfs.ext4 -b 4096 -E stride=32 /dev/sda4
+</code>
+
+
+Si vous souhaitez utiliser ReiserFS, il est possible de formater vos partitions en forçant  la taille des blocs logiques, mais pas le "stride". Ne sachant pas quelle est l'influence de ce paramètre, je ne sais pas si cela va réellement dégrader les performances ou pas, mais a priori, cela reste négligeable voire inexistant :
+
+  mkreiserfs -b 4096 /dev/sda1
+
+<note>Si quelqu'un sait comment forcer ces paramètres sur la partition d'échange, qu'il complète cette section !</note>
+
+Même si, en fin de compte, on ne monte pas forcément cette partition (ou alors on en minimise l'accès), Ubuntu impose d'avoir une partition d'échange au moment de l'installation, donc autant que cette dernière soit également alignée. Ensuite, lors de l'installation, on définit les point de montage, mais on ne les formate pas. Ils le sont déjà, et un nouveau formatage ne réutiliserait pas forcément les valeurs de bloc et de "stride" que l'on a utilisées, ruinant alors l'alignement. 
+
+=== Découper son disque électronique - Méthode avec la table de partitions GPT ===
+
+Avec cette méthode, on ne change que la façon de compter les partitions, mais pas celle de compter les blocs. Ainsi, on gardera les mêmes partitions que dans la méthode précédente, avec les mêmes secteurs de début et de fin, mais on utilise une autre façon de créer les partitions.
+
+<note warning>Il est donc conseillé donc de lire la méthode précédente avant de vous lancer dans celle-ci qui en reprend les grands principes.</note>
+
+Le problème de la méthode précédente est qu'elle se limite à 4 partitions, puisque les tables de partitions standards se limitent à 4 partitions primaires. Une autre solution consisterait à ne créer qu'une partition étendue sur l'intégralité du disque dur, et de tailler ses lecteurs logiques dedans. Néanmoins, il existe une autre façon de créer ses partitions : utiliser une table de partition de type GPT. Avec ce type de table, qu'on pourrait qualifier de "moderne", la nuance entre partition principale et étendue n'existe plus, toutes les partitions étant du même type (primaire), et il n'y a plus de limite au nombre de partitions que l'on peut créer sur un disque.
+
+<note important>
+Ce qu'il faut savoir avant de se jeter sur cette méthode, qui semble mettre tout le monde d'accord de prime abord :
+  * les partitions référencées dans une table GPT sont accessibles sous Windows comme sous GNU-Linux, mais a priori, seul ce dernier saura s'amorcer avec GPT via GRUB. Du coup, pas de double amorçage Windows/GNU-Linux avec cette méthode. **(FAUX, si Windows est installé en mode UEFI, la prise en charge GPT fonctionne sans problème. Windows n'est simplement pas capable d'amorcer une version non UEFI sur une partition GPT)**
+  * les partitions référencées dans une table GPT portent forcément une étiquette, ainsi il est préférable de savoir ce que l'on va mettre sur ses partitions avant de se lancer dans le partitionnement afin de donner aux partitions des étiquettes cohérentes.
+  * la création d'une table GPT efface l'intégralité <del>du disque</del> de la table des partitions. Donc, on utilise cette méthode lorsqu'on a un disque neuf ou après une sauvegarde de toutes ses données, car la création manuelle des entrées de la table des partitions est un exercice périlleux et réservé aux utilisateurs avertis.
+</note> 
+
+Ceci mis au clair, on peut découper le disque, toujours avec Parted. Pour cela, une fois Parted lancé, on commence par créer la table GPT (c'est à ce moment que toutes les partitions antérieures et les données qu'elles contenaient deviendront inaccessibles) :
+
+<code bash>
+(parted) mklabel
+Nouveau type d'étiquette de disque ? gpt
+</code>
+
+On change l'unité de parted pour le secteur :
+
+<code bash>
+(parted) unit s
+(parted) print free
+Number    Start     End           Size          Type   File        System Flags
+          0s        50069679s     250069680s           Free Space
+</code>
+
+Ensuite, on crée les partitions en utilisant les secteurs trouvés par les calculs de la méthode précédente, en donnant à chaque partition l'étiquette qui correspond au type de données qu'elles vont recevoir :
+
+<code bash>
+(parted) mkpart linux_root 256 17203455
+(parted) mkpart linux_swap 17203456 17727743
+(parted) mkpart linux_home 17727744 27967743
+(parted) mkpart linux_datas 27967744 250069679
+</code>
+
+
+Les partitions créées, on reprendra la méthode précédente pour la création des systèmes de fichier, les règles sur la taille de bloc et de "stride" pour les volumes Ext4 semblant toujours d'actualité avec ce type de partitionnement.
+
+===== Conseils d'améliorations spécifiques à certains disques électroniques =====
+
+==== Planification des entrées/sorties ====
+
+**Cette opération n'est plus utile sur les disques électroniques relativement récents, seuls les tous premiers nécessitent cette modification.**
+
+<note important>[[http://libre-ouvert.toile-libre.org/?article72/ssd-crucial-m4-64-go-linux-trim-ext4-noatime#cfq|Cette amélioration n'est plus nécessaire avec la mise à jour de l'ordonnanceur "cfq"]]</note>
+
+Ce mécanisme de réarrangement des IOCTL a pour objet d'améliorer les commandes E/S vers le disque dur ATA/SATA en prenant en compte la nature du disque dur en question et certaines contraintes en découlant. \\
+Il y a trois différentes options : ''cfq'', ''noop'' et ''deadline''. \\
+Vous pouvez vérifier quel ordonnanceur d'E/S est utilisé par votre système dans un terminal comme ceci :
+<code bash>cat /sys/block/sda/queue/scheduler</code>
+Vous obtenez quelque chose comme cela :
+<file>
+noop deadline [cfq]
+</file>
+où l'ordonnanceur présentement utilisé est indiqué entre des crochets.
+
+La meilleure option pour les disques électroniques est ''deadline''.\\
+Si cela n'est pas le cas, on peut spécifier de charger le noyau Linux avec cette option "deadline" lors du démarrage. 
+
+Il faut [[:tutoriel:comment_modifier_un_fichier|modifier le fichier]] ''/etc/default/grub'' et ajouter ''elevator=deadline'' à la ligne d'options :
+<code bash>
+GRUB_CMDLINE_LINUX_DEFAULT="elevator=deadline quiet splash"
+</code>
+
+puis mettre à jour : <code bash>sudo update-grub</code>
+
+→ [[http://www.ab9il.net/linux/solid-state-drives1.html|Source]]
+
+Afin d' améliorer les performances des systèmes comportant a la fois des disques SSD et des disques mécaniques il est possible grâce à UDEV de définir automatiquement le scheduleur à utiliser en fonction du type de disque (a plateaux ou SSD) avec la méthode suivante  :
+editer ou creer le fichier avec les droits super-utilisateur : /etc/udev/rules.d/60-schedulers.rules
+<code bash>gksu gedit /etc/udev/rules.d/60-schedulers.rules</code>
+
+puis ajoutez y le code suivant :
+<file># set deadline scheduler for non-rotating disks
+ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="0", ATTR{queue/scheduler}="deadline"
+ 
+# set cfq scheduler for rotating disks
+ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="1", ATTR{queue/scheduler}="cfq"</file>
+
+→ [[https://wiki.deimos.fr/Optimiser_les_performances_des_disques_dur_sur_Linux#Alignement_des_partitions|Source]]
+==== Désactiver complètement l'archivage ====
+
+Sur certains disques électroniques (comme le Corsair<Crucial plutôt> V4) il se peut que vous ayez des ralentissements lors d'une mise à jour (ou apt-get), pour y remédier, il suffit d'ajouter l'option <code>data=writeback</code> dans /etc/fstab. Il faut exécuter le code suivant pour le désactiver tout d'abord : <code>sudo tune2fs -o journal_data_writeback /dev/sda1</code> en remplaçant **sda1** par l'identifiant de votre partition (sda2, hdb1, ...) :
+
+==== Désactiver "ureadhead" ====
+
+"Ureadhead" est destiné à améliorer les performances de démarrage sur les disques durs traditionnels en organisant l'ordre de lecture sur le disque. Malheureusement sur certains disques électroniques très vieux, il réduit aujourd'hui les performances car les programmes ne démarrent pas pendant le chargement "ureadhead" alors que les performances du disque électronique permettent un accès direct au données bien plus efficace lors de l'exécution des programmes. Le ticket de la bogue [[https://bugs.launchpad.net/bugs/577763|LP #577763]] à ce sujet est ouvert.
+
+Un contournement pour désactiver "ureadhead" est de désactiver le lancement du démon correspondant dans le script d'amorçage upstart :
+  * Ouvrir le fichier /etc/init/ureadahead.conf avec les droits super-utilisateur
+  * Commenter la ligne ''exec /sbin/ureadahead --daemon'' en ajoutant un dièse (#) tout au début
+
+----
+
+//Contributeurs principaux : Kortex@HFR et Albator du [[http://forum.hardware.fr/hfr/OSAlternatifs/Hardware-2/recensement-optimisation-conseils-sujet_69473_1.htm|forum.hardware.fr]], un grand merci à eux.//

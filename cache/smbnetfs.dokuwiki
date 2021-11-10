@@ -1,0 +1,360 @@
+
+{{tag>Xenial administration réseau samba Windows}}
+
+----
+
+====== SMBNetFS ======
+
+Tout comme //SMB For Fuse// ([[:fusesmb|fusesmb]]), **SMBNetFS** sert à monter sur son système de fichier le voisinage réseau [[:samba|samba]] (réseau Microsoft), de son petit nom abrégé SMB.
+
+L'avantage est de manipuler les données distantes avec n'importe quel gestionnaire de fichier (Nautilus, Konqueror, ROX, Thunar ou même la ligne de commande), ce qui est bien plus pratique que les commandes smbclient et smbmount, ou que de se restreindre aux logiciels utilisant GnomeVFS (comme Nautilus ou [[gigolo|Gigolo]]).
+
+Les anciens utilisateurs de Windows, nouveau utilisateurs de Linux, ne se sentent donc pas perdus.
+
+
+===== Installation =====
+
+Tout d'abord, il vous faudra [[:fuse#installation_de_fuse|installer et configurer FUSE]], dont dépend //SMBNetFS//.
+
+//SMBNetFS// est dans les dépôts. Il vous suffira donc d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>smbnetfs]]** avec ses dépendances.
+
+
+===== Utilisation =====
+
+<note important>En utilisant vous exposez votre système à des problèmes de sécurité. N'utilisez ces commandes qu'en connaissance de cause.</note>
+
+=== Direct ===
+Cette méthode va créer un dossier Network dans votre **Dossier personnel**, dans lequel vous aurez accès à vos partages réseau.
+C'est très simple, il suffit de mettre « smbnetfs » suivi du point de montage : <code>mkdir .smb
+mkdir -p Network
+sudo cp /etc/smbnetfs.conf .smb/
+sudo cp /etc/samba/smb.conf .smb/
+smbnetfs Network</code>
+
+A partir de maintenant, vous pouvez voir le voisinage réseau de la forme « DOMAINES/MACHINES/PARTAGES » dans le dossier **Network**.
+
+Il est aussi possible d'accéder aux partages d'une machine protégée par mot de passe qui n'est pas présente dans le fichier de configuration, avec un simple "cd" :
+  cd Network/domaine:utilisateur:mot_de_passe@machine
+
+Pour démonter le point de montage :
+
+  fusermount -u Network
+
+=== Automatisé ===
+
+Rajouter simplement la commande « ''smbnetfs Network'' » dans le [[:tutoriel:application_demarrage|gestionnaire de démarrage de session]].
+
+L'avantage de //SMBNetFS// par rapport à //SMB For Fuse// est qu'il se rafraîchit périodiquement :
+  * Toutes les 5 minutes (paramétrable), il rafraîchit l'arborescence du voisinage réseau.
+  * Toutes les 5 minutes (paramétrable aussi), il relit son fichier de configuration pour se mettre à jour (ex : changement / rajout d'authentification sur une machine).
+
+En cas de soucis avec le voisinage réseau, voici un petit script qui permet de forcer le rafraîchissement :
+<file bash>
+#! /bin/sh 
+
+isfuse=$(cat /etc/mtab | grep smbnetfs)
+
+if [ -n "$isfuse" ]; then
+{
+	fusermount -u Network
+}
+fi
+
+smbnetfs Network
+
+exit 0
+</file>
+
+Bien entendu, "Network" est à remplacer systématiquement par le nom du point de montage...
+
+==== Configuration avancée ====
+
+Il est possible de configurer plus finement //SMBNetFS//, notamment pour les droits utilisateurs.
+Pour cela, il faut créer le répertoire et le fichier « ~/.smb/smbnetfs.conf » dans votre Home.
+
+Voici un fichier de base, commentée en anglais, mais qui se comprend bien :
+<file>
+#################################
+#                               #
+#  SMBNETFS sample config file  #
+#                               #
+#################################
+
+#---------------------------------------------------------------------
+# SMBNetFs debug level. Most of people should not use debug level
+# greater then 6.
+# Possible values: 0 <= smbnetfs_debug <= 10
+#
+# Default: 0
+#---------------------------------------------------------------------
+#smbnetfs_debug		10
+
+#---------------------------------------------------------------------
+# File to store SMBNETFS debug messages
+#
+# Default: print to stderr
+#---------------------------------------------------------------------
+#log_file		"smbnetfs.log"
+
+#---------------------------------------------------------------------
+# Child process inactivity timeout. Child process will be finished
+# after timeout expiration.
+# Possible values: listen_timeout >= 30
+#
+# Default: 300
+#---------------------------------------------------------------------
+#listen_timeout		300
+
+#---------------------------------------------------------------------
+# Samba debug level (man smb.conf for details)
+# Possible values: 0 <= smb_debug_level <= 10
+#
+# Default: 0
+#---------------------------------------------------------------------
+#smb_debug_level	10
+
+#---------------------------------------------------------------------
+# Local charset
+#
+# Default: autodetected
+#---------------------------------------------------------------------
+#local_charset		"koi8-r"
+
+#---------------------------------------------------------------------
+# Charset used by samba
+#
+# Default: utf-8
+#---------------------------------------------------------------------
+#samba_charset		"utf-8"
+
+#---------------------------------------------------------------------
+# Number of retries before reporting error.
+# Possible values: max_retry_count > 0
+#
+# Default: 3
+#---------------------------------------------------------------------
+#max_retry_count	3
+
+#---------------------------------------------------------------------
+# Maximum number of password queries to prevent infinite loop.
+# Possible values: max_passwd_query_count >= 3
+#
+# Default: 10
+#---------------------------------------------------------------------
+#max_passwd_query_count	10
+
+#---------------------------------------------------------------------
+# Child process reply timeout. Child process will be assumed dead
+# (and killed) if timeout expired.
+# Possible values: reply_timeout >= 10
+#
+# Default: 30
+#---------------------------------------------------------------------
+#reply_timeout		30
+
+#---------------------------------------------------------------------
+# The maximum size of read/write block in Kb. This option can not be
+# changed after SMBNetFS start.
+# WARNING: libsmbclient <= 3.0 does not support block_size >= 64Kb.
+#
+# Default: 48Kb (libsmbclient-3.0), 128Kb (libsmbclient-3.2 or above)
+#---------------------------------------------------------------------
+#max_rw_block_size	128
+
+#---------------------------------------------------------------------
+# The maximun number of samba context (forked processes). Reduse it if
+# smbnetfs eat a lot of memory
+#
+# Default: 15
+#---------------------------------------------------------------------
+#max_ctx_count		15
+
+#---------------------------------------------------------------------
+# time_step is a sleep interval between checking for scheduled events.
+# Increase it if smbnetfs eat to much cpu without loading.
+#
+# Default: 10 sec
+#---------------------------------------------------------------------
+#time_step		10
+
+#---------------------------------------------------------------------
+# The time between scanning samba network tree for changes
+# 
+# Default: 300 sec
+#---------------------------------------------------------------------
+#smb_tree_scan_period	300
+
+#---------------------------------------------------------------------
+# The time to live of founded computer/workgroup in a network tree
+#
+# Default: 900 sec
+#---------------------------------------------------------------------
+#smb_tree_elements_ttl	900
+
+#---------------------------------------------------------------------
+# An interval between configuration update (rereading of config files)
+#
+# Default: 300 sec
+#---------------------------------------------------------------------
+#config_update_period	300
+
+#---------------------------------------------------------------------
+# If smb_query_browsers disabled, then smbnetfs will show only static
+# host/group/link.
+# Possible value: true, false, yes, no
+#
+# Default: true
+#---------------------------------------------------------------------
+#smb_query_browsers	"true"
+
+#---------------------------------------------------------------------
+# This option define the free space size reported by SMBNetFS. This is
+# mostly required for Nautilus (Gnome project), as it check the amount
+# of free space before any write attempt.
+# WARNING!!! Actual free space size is equal to free_space_size * 4Kb
+#
+# Default: 0
+#---------------------------------------------------------------------
+#free_space_size	0
+
+#---------------------------------------------------------------------
+# If quiet_flag enabled, then chown/chgroup will return succcess, else
+# chmod/chown will always fail.
+# Possible value: true, false, yes, no
+#
+# Default: true
+#---------------------------------------------------------------------
+#quiet_flag		"true"
+
+#---------------------------------------------------------------------
+# If show_$_shares disabled, then smbnetfs will not show shares with $
+# at the end.
+# Possible value: true, false, yes, no
+#
+# Default: false
+#---------------------------------------------------------------------
+#show_$_shares		"false"
+
+#---------------------------------------------------------------------
+# If show_hidden_hosts enabled, then smbnetfs will show all scanned
+# host in a network tree.
+# at the end.
+# Possible value: true, false, yes, no
+#
+# Default: false
+#---------------------------------------------------------------------
+#show_hidden_hosts	"false"
+
+#---------------------------------------------------------------------
+# konqueror search for '.directory' subdir in any directory and its
+# subdirectories. This slow a groups/shares listing. The value below
+# specify the number of path component checked for ".directory". Use
+# the value of -1 to check all path component.
+#
+# Set kde_workaround_depth to 3 or above if you browse SMBNetFs with
+# konqueror. Other people can use 0 value.
+# Possible value: -1, 0, 1, 2, ...
+#
+# Default: "3"
+#---------------------------------------------------------------------
+#kde_workaround_depth	"3"
+
+#---------------------------------------------------------------------
+# Set auth information for samba network resource. If share name is 
+# omited then the auth data applied to all computer "computer" shares.
+# Omit "computer/share" to specify default auth patameters.
+# 
+# PS: You can use "cd mountpoint/domain:user:password@computer" 
+# command to enter to remote computer as domain/workgroup 
+# "domain_or_workgroup" user "user" with password "password".
+#
+# Syntax:
+#	auth [computer[/share]] [domain_or_workgroup/]user password
+#	auth [workgroup]        [domain_or_workgroup/]user password
+#
+# Default:
+#	auth "user_login_name" ""
+#
+#---------------------------------------------------------------------
+#auth			"guest" ""
+
+# read auth data from ~/.smb/smbnetfs.auth
+include			"smbnetfs.auth"
+
+#---------------------------------------------------------------------
+# This section describe a static host/group/link.
+#
+#  host   computer_name		[parent_group=group_name] [visible=true|false]
+#  group  group_name
+#  link   link_name		link_contents
+#  link   group/link_name	[link_contents]
+#---------------------------------------------------------------------
+
+# read host/group/link from ~/.smb/smbnetfs.host
+#include			"smbnetfs.host"
+</file>
+
+Le fichier doit etre accessible seulement par le propriétaire.
+Pour corriger les permissions, exécutez :
+
+  chmod 600 ~/.smb/smbnetfs.conf
+
+S'il y a besoin de s'authentifier sur une ou plusieurs machine, il suffit de créer une ligne "auth" pour chaque machine ; ou, comme il est suggéré dans l'exemple, de créer un fichier "smbnetfs.auth" et d'y mettre toutes ses lignes "auth".
+
+<note>
+FIXME Expliquer comment utiliser un fichier "smbnetfs.host"
+</note>
+
+===== Annexes =====
+
+==== Pare-feu ====
+
+<note important>
+  * Il est fortement recommandé de mettre les IP des machines du voisinage réseau en whitelist dans le pare-feu (ex : Firestarter) : en effet, la réponse des autres machines à une connexion Samba se fait sur un port qui est bloqué par défaut et empêche donc l'exploration du voisinage réseau de toute machine qui n'est pas whitelistée.
+  * Voici le script de "reload" modifié pour passer de l'un à l'autre ([[:fusesmb|fusesmb]] et SMBNetFS) selon son envie :
+<file bash>
+#! /bin/sh
+
+# flag à 0 pour smbnetfs
+# flag à 1 pour fusesmb
+flag_fusesmb="0"
+
+isfuse=$(cat /etc/mtab | grep fusesmb; cat /etc/mtab | grep smbnetfs)
+
+if [ -n "$isfuse" ]; then
+{
+	fusermount -u Network
+}
+fi
+
+
+if [ "$flag_fusesmb" = "1" ]; then
+	rm fusesmb.cache
+
+	fusesmb Network
+else
+        smbnetfs Network
+fi
+
+exit 0
+</file>
+</note>
+
+==== Lenteurs nautilus ====
+
+Nautilus chercher certains dossiers lorsque l'on parcours le point de montage, et les groupes réseaux. Ce qui cause un lenteur non négligeable.
+Pour corriger cela, rajouter les lignes suivantes dans ~/.smb/smbnetfs.conf
+<file>stat_workaround_name    ".hidden"
+stat_workaround_name    ".Trash"
+stat_workaround_name    ".Trash-1000"
+</file>
+===== Liens et références =====
+
+  * [[gigolo|Gigolo]], une interface graphique pour tous points de montage à travers GIO/GVfs au lieu de Fuse.
+  * [[http://smbnetfs.sourceforge.net//|Site officiel de SMBNetFS]]
+  * [[fusesmb//|SMB For Fuse]], la page qui a servi de modèle et d'inspiration pour celle-ci.
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?pid=2670353|Commentaires et discussion ici]].
+
+----
+
+//Contributeurs : The_Fallen [[http://forum.ubuntu-fr.org/profile.php?id=121238|+]].//

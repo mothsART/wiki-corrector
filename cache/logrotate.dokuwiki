@@ -1,0 +1,142 @@
+
+{{tag>Xenial Bionic Focal journal log système}}
+-----
+====== Logrotate ======
+
+
+Logrotate permet de limiter la taille des fichiers journaux présents dans /var/log.
+
+Pour chaque fichier journal, logrotate réalise 2 opérations simultanées :
+  * la **rotation** : il archive le fichier journal sous un autre nom et supprime la plus ancienne archive
+  * la **compression** : il compresse éventuellement le fichier journal avant de l'archiver
+
+La compression diminue :
+  * l'espace disque utilisé
+mais **augmente** :
+  * la **quantité de données lues et écrites sur le disque** : **usure du disque**
+  * la **consommation d'énergie**
+
+<note important>Depuis le version **16.04**, les différents éléments du système sont lancés par **[[systemd|systemd]]** et c'est aussi lui qui tient à jour son propre système de journalisation nommé The Journal, enregistré dans le répertoire /var/log/journal/. Ainsi la gestion de ces journaux ne dépend pas de logrotate. Voir la page [[systemd|systemd]] pour plus d'informations.</note>
+
+
+===== Installation=====
+
+logrotate est normalement installé par défaut sur votre système, s'il ne l'est pas, [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>logrotate]]**.
+
+=====Utilisation=====
+Pour vérifier que Logrotate a été installé correctement, on execute cette commande dans un terminal
+
+<code>logrotate</code>
+
+Vu que l'utilitaire Logrotate est basé sur des fichiers de configuration, la commande ci-dessus ne provoquera aucune rotation de fichier et se contentera de vous montrer un bref aperçu des usages et des options disponibles.
+=====Configuration=====
+
+Les configurations et les options par défaut de l'utilitaire Logrotate sont disponibles dans le fichier **/etc/logrotate.conf**.
+
+
+Quelques-uns des réglages importants à configurer sont : rotation-interval, log-file-size, rotation-count et compression.
+
+Les informations spécifiques à la journalisation de certaines applications (surchargeant les paramètres par défaut) sont conservées dans le répertoire **/etc/logrotate.d/**.
+
+Ne pas hésiter à consulter certains exemples afin de comprendre un peu mieux ce concept
+
+====Exemple ====
+
+Voici un exemple de configuration spécifique pour l'application DPKG (Le gestionnaire de paquets de Debian), stocké dans le fichier **/etc/logrotate.d/dpkg**. Une des entrées de ce fichier pourrait se présenter comme suit:
+
+<file>/var/log/dpkg.log {
+	monthly
+	rotate 12
+	compress
+	delaycompress
+	missingok
+	notifempty
+	create 644 root root
+}</file>
+
+
+Que l'on peut traduire comme suit :
+
+  * pour dpkg, Logrotate surveille le fichier /var/log/dpkg.log et génère une rotation une fois par mois - c'est l' "intervalle de rotation".\\
+  * 'rotate 12' signifie qu'à chaque intervalle, on conserve 12 mois de journalisation.\\
+  * Les fichiers de logs peuvent être compressés au format gzip en spécifiant 'compress' et, 'delaycompress' retarde le processus de compression jusqu'à la prochaine rotation. 'delaycompress' ne fonctionnera que si l'option 'compress' est clairement spécifiée.\\
+  * 'missingok' permet au processus de ne pas s'arrêter à chaque erreur et de poursuivre avec le fichier de log suivant.\\
+  * 'notifempty' empêche la rotation de s'effectuer si le fichier de log est vide.\\
+  * 'create <mode> <owner> <group>' créé un fichier vide avec les propriétés spécifiées, après la rotation des logs.
+
+Bien qu'absent de l'exemple ci-dessus, 'size' est également un paramètre important si vous souhaitez contrôler la taille des logs accumulés par le système. (note personnelle : sur un serveur web de faible capacité par exemple, type VPS entrée de gamme, c'est *incontournable* !)
+
+Par exemple, pour limiter ce poids à 100MB, on ajouterait:
+
+<file>size 100M</file>
+
+Notez que, si 'size' et 'rotation' sont spécifiés ensemble, 'size' prend la priorité. Donc si votre fichier de configuration contient les paramètres suivants:
+
+<file>monthly
+size 100M</file>
+
+alors, la rotation se fera dès lors que votre fichier de logs atteint les 100M et ce, sans attendre la prochaine rotation mensuelle.
+====Tâche Cron ====
+
+Vous pouvez aussi gérer la rotation des logs avec une tâche cron, pour éviter la configuration à la main et traiter ça de manière automatique. En créant une entrée dans /etc/cron.daily/logrotate , la rotation des logs sera alors effectuée tous les jours.
+
+
+==== Statut et Vérification ====
+
+Pour s'assurer qu'un fichier de logs effectue correctement ses rotations ou, pour vérifier la date et l'heure de sa dernière rotation, consulter le fichier /var/lib/logrotate/status .
+C'est un fichier aisément lisible, qui contient le nom du fichier de logs et la date à laquelle il a subi sa dernière rotation.
+
+<code>cat /var/lib/logrotate/status</code> 
+
+
+Quelques entrées de ce fichier, pour exemple:
+
+"/var/log/lpr.log" 2013-4-11\\
+"/var/log/dpkg.log" 2013-4-11\\
+"/var/log/pm-suspend.log" 2013-4-11\\
+"/var/log/syslog" 2013-4-11\\
+"/var/log/mail.info" 2013-4-11\\
+"/var/log/daemon.log" 2013-4-11\\
+"/var/log/apport.log" 2013-4-11\\
+don't forget to check your host before editing anything
+
+
+==== La rotation ====
+Si l'on regarde le fichier syslog, on voit qu'il a d'autres fichiers similaires avec une extension ajoutée :
+<code>~ls -l /var/log/syslog*
+-rw-r----- 1 syslog adm 45432 2011-09-24 10:12 /var/log/syslog
+-rw-r----- 1 syslog adm 44442 2011-09-21 19:45 /var/log/syslog.1
+-rw-r----- 1 syslog adm 31536 2011-09-19 21:04 /var/log/syslog.2.gz
+-rw-r----- 1 syslog adm 72503 2011-09-18 15:45 /var/log/syslog.3.gz
+-rw-r----- 1 syslog adm 21218 2011-09-17 09:45 /var/log/syslog.4.gz
+-rw-r----- 1 syslog adm 10859 2011-09-16 18:28 /var/log/syslog.5.gz
+-rw-r----- 1 syslog adm 74381 2011-09-07 23:15 /var/log/syslog.6.gz
+~$</code>
+Le fichier sans extension est le fichier en cours d'utilisation. Les archives sont numérotés de la plus récente à la plus ancienne (extensions "1", "2", "3", ...).
+
+Lors d'une nouvelle rotation, le fichier le plus ancien est supprimé puis chaque archive a un numéro d'extension qui est incrémenté. Le fichier courant qui vient d'être archivé reçoit alors l'extension "1". Un nouveau fichier journal est créé pour permettre à l'application correspondante de continuer à enregistrer ses informations.
+
+En définissant le nombre maximum d'archives ainsi que la fréquence de rotation (journalière, hebdomadaire, mensuelle, ...), on limite la taille occupée par un journal.
+
+==== La compression ====
+La compression permet de réduire la taille des archives qui subissent une rotation.
+
+Cependant la compression n'est pas forcément un avantage compte tenu de la baisse du coût de stockage.
+
+En effet, la compression des archives réalise plus d'échange avec le support de stockage et utilise plus de processeur et de mémoire. Cela entraine **une augmentation de l'usure du disque et de la consommation d'énergie** globale.
+
+Pour réduire l'espace utilisé par le stockage des journaux, vous pouvez réduire le nombre d'archives (numéro maximum) et augmenter la fréquence de rotation.
+
+La compression peut être paramétrée globalement dans le fichier /etc/logrotate.conf.
+
+Un paramétrage pour chaque application peut être redéfinit dans les fichiers présents dans le répertoire /etc/logrotate.d.
+
+Avec l'option "**nocompress**", logrotate renomme simplement le fichier en 'nom_de_fichier_journal.log.1', avec très peu d'échange disque puisque seul le nom du fichier est changé dans le système de fichier, le contenu reste inchangé.
+
+Avec les options "**compress**", logrotate lit le contenu du fichier à compresser (lecture du disque), le compresse (utilisation du processeur), puis écrit tout le contenu compressé (écriture sur le disque) dans un nouveau fichier du type 'nom_de_fichier_journal.log.1.gz'.
+
+Les options "**delaycompress**" et "**nodelaycompress**" sont similaires respectivement aux options "**compress**" et "**nocompress**" à la différence que la compression ne s'opère qu'à partir de la deuxième rotation d'un fichier journal (lors du passage du numéro "1" à "2").
+===== Forcer la rotation. =====
+Il peut arriver qu'un gros journal soit en cours de fabrication.
+Afin de le libérer proprement, il est possible de forcer la rotation.
+ <code bash> sudo logrotate -f /etc/logrotate.conf </code>

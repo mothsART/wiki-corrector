@@ -1,0 +1,190 @@
+
+====== Comment partitionner son disque pour pouvoir installer GRUB ======
+
+Le choix du paquet [[:grub-pc|GRUB]] à installer pour amorcer Ubuntu et les autres OS installés est dépendant du matériel et du type de partitionnement du disque dur.
+
+<note tip>Dans l'ensemble de cette page, GRUB fait référence à [[:grub-pc|GRUB version 2]], c'est à dire grub-pc ou grub-efi, et jamais à [[:grub legacy]].</note>
+
+Au niveau du matériel, pour les PC modernes, il existe deux modes de démarrage : le [[wpfr>Basic_Input_Output_System|BIOS]] et l'[[wpfr>UEFI]], et deux principaux types d'[[:architecture matérielle]] : la famille des [[wpfr>x86|x86 32 bits]] aussi nommée i386 ou IA-32, et les x86 64 bits aussi nommée [[wpfr>AMD64]] ou EMT64. Les architectures plus ancienne comme le [[wpfr>PowerPC]], ou plus récente comme l'[[wpfr>ARM]] ne sont pas évoquée ici.
+
+Pour ce qui est du partitionnement, qu'il soit sur le disque dur ou un autre suport (clé USB, carte SD), les deux principaux sont le type Intel qui utilise un [[wpfr>MBR]] pour l'amorçage et le type [[wpfr>GPT]]((GUID Partition Table)) qui offre plusieurs possibilités.
+
+L'ensemble de ces technologies pouvant être rencontrées indifféremment, cette page a pour but de vous guider dans vos paramétrages pour installer ou dépanner GRUB selon votre configuration matérielle.
+
+<note important>Cette page s'adresse à un public averti qui souhaite comprendre le fonctionnement de GRUB et corriger les erreurs de version éventuelles. Une bonne connaissance de la ligne de commande, et du gestionnaire de paquet est recommandée.</note>
+
+===== Détection =====
+
+  * **mode de démarrage**
+
+Voir la page [[:UEFI]] pour la modification du mode de démarrage et savoir dans quel mode est démarré Ubuntu.
+
+A noter que Ubuntu 32 bits comme Ubuntu 64 bits peuvent démarré en mode UEFI même si ils n'ont pas été installé dans ce mode initialement.
+
+  * **table de partition**
+
+Voir la page [[:GPT]].
+
+===== Compatibilité =====
+
+Le tableau ci-dessous indique quel paquet GRUB doit être installé pour permettre l'amorçage en fonction de votre configuration :
+
+^ mode de démarrage ^ paquet GRUB ^ table de partition ^ commentaire ||
+| BIOS/Legacy | [[apt>grub-pc]] | Intel / MBR | Cas standard sur les configurations "anciennes". ||
+| ::: | ::: | GPT | Nécessite une partition BIOS-boot. ||
+| UEFI | [[apt>grub-efi]] | Intel / MBR | Le mode UEFI requiert une partition EFI (ou ESP(([[wp>EFI System partition]]))) de type vfat.\\ S'il n'est pas possible de créer une partition primaire supplémentaire, il est préférable de changer le mode de démarrage pour BIOS/Legacy. ||
+| ::: | ::: | GPT | [[#Démarrage UEFI et Ubuntu 32 bits|Ubuntu 32 bits]] | **Attention :** si votre PC est de type **x86-64** et que vous avez installé **Ubuntu 32 bits**, vous devez installer __explicitement__ le paquet [[apt>grub-efi-amd64]]((ou [[apt>grub-efi-amd64-signed]])) (voir [[#Changer de version de GRUB]]) |
+| ::: | ::: | ::: | **SecureBoot** | Pour la prise en charge de **SecureBoot**, il faut aussi installer le paquet [[apt>shim]] et il est parfois nécessaire d'installer en plus les paquets signés par Microsoft : [[apt>shim-signed]] et/ou [[apt>grub-efi-amd64-signed]] |
+
+==== Changer de version de GRUB ====
+
+<note>Pour modifier la version de GRUB d'une installation qui ne démarre plus, il peut être nécessaire de faire un [[:chroot]] depuis un Live CD/USB.</note>
+
+<note tip>Il est possible d'utiliser [[:Boot-Repair]] pour corriger automatiquement la plupart des erreurs de version.</note>
+
+Plusieurs version de GRUB ne peuvent pas cohabiter sur une même installation, donc si vous devez passer de ''grub-pc'' à ''grub-efi'' ou vice versa, il faut absolument désinstaller tout les paquets se rapportant à GRUB avant d'installer la version ciblée.
+
+  * Désinstaller récursivement de tous les paquets GRUB depuis un terminal :<code>sudo apt-get remove grub*</code>
+  * Installer le paquet GRUB correspondant à votre configuration (voir tableau [[#Compatibilité]])
+  * Lancer la (re)configuration de GRUB, via un terminal et vérifier qu'il n'y a pas d'erreur :<code>sudo update-grub</code>
+  * Redémarrer le système, constater le résultat :-)
+
+==== Démarrage UEFI et Ubuntu 32 bits ====
+
+ FIXME trop d'info, pas clair, pas au bon endroit : faire un section Problème de boot : version GRUB installé incompatible
+D'abord présenter le fonctionnement de GRUB sur BIOS/UEFI et MBR/EFI
+
+Le live CD/USB d'Ubuntu 32 bits ne permet pas le démarrage en mode UEFI, mais il est possible de démarrer en mode BIOS/Legacy : la plupart des PC font ça automatiquement.
+Ainsi vous avez installé Ubuntu 32 bits et que votre système ne démarre plus après avoir retiré le CD ou la clé USB, vous êtes certainement en mode de démarrage UEFI par défaut et GRUB n'a pas été correctement installé.
+
+Si votre disque dur a une table de partition Intel / MBR : Il suffit de modifier le réglage du BIOS/UEFI pour démarrer en mode Legacy. Lors de l'installation, Ubuntu a déjà dû installer grub-pc, sinon réinstaller-le via un chroot
+
+Si votre disque dur a une table de partition GPT :
+  * Si le disque dur a déjà une parition EFI : Il est nécessaire de redémarrer sur le Live CD/USB d'Ubuntu, de réaliser un [[:chroot]] sur l'installation existante d'Ubuntu sur le disque dur et de procéder au [[Changer de version de GRUB|changement de version de GRUB]] pour installer explicitement le paquet [[apt>grub-efi-amd64]]. En effet, lors de l'installation, Ubuntu a dû installer une version inadaptée de GRUB : soit grub-pc soit grub-efi-ia32
+  * Si le disque dur n'a pas de partition EFI : Il est nécessaire de créer une partition EFI si vous restez en mode de démarrage UEFI, ou de créer un partition bios_boot et de changer le mode de démarrage sur BIOS/Legacy : Ces opétations sont risquées et déconseillée aux débutants. Une réinstallation de Ubuntu depuis la version 64 bits est parfois plus simple.
+
+===== Installation de GRUB =====
+
+GRUB est constitué de 2 parties :
+  * le **chargeur d'amorçage**((boot loader)) :\\ Il est appelé par le programme de démarrage du système (ie BIOS ou UEFI), c'est cette partie dont l'emplacement et le contenu diffère selon le mode de démarrage et/ou de partitionnement. Il a en charge de trouver l'OS manager et de le lancer. Lorsque ce dernier n'a pas été trouvé, l'invite "**GRUB Rescue>**" est lancée.
+
+  * le **gestionnaire de boot**((boot manager / OS manager)) :\\ Il est chargé d'afficher le choix de l'OS à lancer (Ubuntu, Windows, etc). Cette partie de GRUB est générée dans /boot/grub ( /boot pouvant être sur la partition racine du système ou une partition dédiée). La configuration est identique pour toutes les versions de GRUB((voir paquet **''grub-common''**)), et est basée sur le fichier ''/etc/default/grub'' et les scripts situés dans ''/etc/grub.d''.
+
+==== Mode BIOS/Legacy ====
+
+Dans cette configuration, le chargeur d'amorçage est placé dans un espace de 512 octet qui peut-être :
+  * le MBR d'un disque dur avec partitionnement Intel ;
+  * une partition de 1 Mo avec le flag BIOS-boot situé au début du disque pour un partitionnement GPT.
+
+Le paquet [[apt>grub-pc]] doit être installé.
+
+=== Table de partition Intel/MBR  ===
+
+Schéma du disque :
+^ Début du disque | MBR((Master Boot Record)) | Partition primaire 1 | Partition primaire 2 | Partition primaire 3 |  Partition étendue  ||^ Fin du disque |
+^ ::: | ::: | ::: | ::: | ::: | Partition logique 1 | ... | Partition logique N | ::: |
+^ Device |  /dev/sda  |  /dev/sda1  |  /dev/sda2  |  /dev/sda3  |  /dev/sda5  |  ...  |  /dev/sda(4+N)  | |
+
+<note help>**Il est possible de créer jusqu'à 4 partitions primaires ou étendues maximum.**\\ En pratique, le nombre maximum de partition logique dans une partition étendue étant rarement limitant, on créera jusqu'à 3 partitions primaires (souvent en début de disque) et une seule partition étendue (le plus souvent en fin de disque).</note>
+
+Exemple de partitionnement en présence de Windows :
+
+^ Emplacement du disque |^ Device ^ Point de montage ^ format ^ flag ^ commentaire |
+| MBR || sda | - | voir la page dédiée [[:MBR]] | - | Contient la table des partitions primaires et étendues (jusqu'à 4 maximum) et le chargeur d'amorce GRUB.\\ Pas de système de fichier, ne peut pas être monté |
+| primaire 1 || sda1 | - | ntfs | - | Windows Loader |
+| primaire 2 || sda2 | ''/windows''\\ ou ''/mnt/windows''\\ ou ''/media/windows'' | ntfs | //msftdata// | Windows OS |
+| étendue 1 || sda3 | - | - | extended | Contient la table des partitions logiques |
+|  | logique 1 | sda5 | ''/'' (racine) | ext4 | logical | Racine du système. Contient également /boot |
+| ::: | logique 2 | sda6 | none | swap | logical | Partition utilisée pour la swap |
+| ::: | logique 3 | sda7 | ''/home'' | ext4 | logical | Contient les données utilisateurs |
+
+Dans cette configuration, la réinstallation de GRUB se fera avec la commande ci-dessous :
+<code>sudo grub-install /dev/sda</code>
+
+=== Table de partition GPT  ===
+
+Schéma du disque :
+^ Début du disque | Table GPT 1 | Protection MBR (inutilisé) | Partition BIOS boot (1Mo) | Partition 2 | Partition 3 | ... | Partition N  | Table GPT 2  ^ Fin du disque |
+^ Device |  -  |  /dev/sda  |  /dev/sda1  |  /dev/sda2  |  /dev/sda3  |  ...  |  /dev/sdaN  |  -  |   |
+
+<note tip>Windows XP ne supporte les tables de partitions GPT et Windows 7/8 ne peut pas être installé dans cette configuration Legacy+GPT.</note>
+
+Exemple de partitionnement "classique" :
+
+^ Emplacement du disque ^ Device ^ Point de montage ^ format ^ flag ^ commentaire |
+| Table GPT 1 | - | - | //GPT// | - | Inaccessible par fdisk. Utiliser l'outil gdisk. |
+| MBR | //sda// | - | - | - | Espace du disque réservé pour empêcher tout écrasement avec les outils ne gérant que le partitionnement Intel/MBR  |
+| partition 1 | sda1 | - | non formaté (RAW) | bios_grub | Contient le chargeur d'amorce GRUB |
+| partition 2 | sda2 | ''/'' (racine) | ext4 | - | Racine du système. Contient également /boot |
+| partition 3 | sda3 | none | swap | - | Partition utilisée pour la swap |
+| partition 4 | sda4 | ''/home'' | ext4 | - | Contient les données utilisateurs |
+| Table GPT 2 | - | - | //GPT// | - | Copie de sauvegarde de la table GPT 1. (optionnel) |
+
+Dans cette configuration, la réinstallation de GRUB se fera avec la commande ci-dessous :
+<code>sudo grub-install /dev/sda1</code>
+
+==== Mode UEFI ====
+
+Dans ce mode, une partition EFI est obligatoire pour installer le chargeur d'amorce GRUB.
+\\ Le programme ''bootx64.efi'' situé le dossier ''EFI/Boot'' de la partition EFI gère la liste des chargeurs de démarrage (GRUB/Ubuntu, Windows, etc).
+\\ Ce dernier doit appeler le programme ''grubx64.efi'' situés dans EFI/ubuntu par défaut pour lancer GRUB.
+ (ou en premier lieu  pour les systèmes avec option SecureBoot activée).
+\\ Pour les systèmes avec option SecureBoot activée, c'est le programme ''shimx64.efi'' qui est d'abord appelé (chainloader). Ce dernier appelant ensuite ''grubx64.efi''.
+
+<note warning>La partition EFI peut-être vue comme une partition FAT32 avec des erreurs. Il ne faut surtout pas tenter de réparer cette partition au risque de supprimer les programmes d'amorce et de bloquer le démarrage de manière permanente !</note>
+
+Le paquet [[apt>grub-efi]] doit être installé, ainsi que le paquet [[apt>grub-efi-amd64]] (le plus courant) ou [[apt>grub-efi-ia32]] (pour serveur Itanium) selon votre architecture matérielle.
+
+=== Table de partition Intel/MBR  ===
+
+Schéma du disque :
+^ Début du disque | MBR((Master Boot Record)) | Partition EFI | Partition primaire 2 | Partition primaire 3 |  Partition étendue  ||^ Fin du disque |
+^ ::: | ::: | ::: | ::: | ::: | Partition logique 1 | ... | Partition logique N | ::: |
+^ Device |  /dev/sda  |  /dev/sda1  |  /dev/sda2  |  /dev/sda3  |  /dev/sda5  |  ...  |  /dev/sda(4+N)  | |
+
+
+Exemple de partitionnement en présence de Windows :
+
+^ Emplacement du disque |^ Device ^ Point de montage ^ format ^ flag ^ commentaire |
+| MBR || sda | - | voir la page dédiée [[:MBR]] | - | Contient la table des partitions primaires et étendues (jusqu'à 4 maximum).\\ Pas de système de fichier, ne peut pas être monté |
+| partition EFI (primaire) || sda1 | /boot/efi | vfat (reconnue FAT32 à l'installation) | boot | Contient le chargeur d'amorce GRUB, ... ainsi que celui de Windows. |
+| primaire 2 || sda2 | ''/windows''\\ ou ''/mnt/windows''\\ ou ''/media/windows'' | ntfs | //msftdata// | Windows OS |
+| étendue 1 || sda3 | - | - | extended | Contient la table des partitions logiques |
+|  | logique 1 | sda5 | ''/'' (racine) | ext4 | logical | Racine du système. Contient également /boot |
+| ::: | logique 2 | sda6 | none | swap | logical | Partition utilisée pour la swap |
+| ::: | logique 3 | sda7 | ''/home'' | ext4 | logical | Contient les données utilisateurs |
+
+
+Dans cette configuration, la réinstallation de GRUB se fera avec la commande ci-dessous : 
+<code>sudo grub-install --efi-directory=/boot/efi --no-uefi-secure-boot --target=x86_64-efi /dev/sda</code>
+ou pour SecureBoot :
+<code>sudo grub-install --efi-directory=/boot/efi --uefi-secure-boot --target=x86_64-efi /dev/sda</code>
+
+Remplacer ''%%--target=x86_64-efi%%'' par ''%%--target=i386-efi%%'' si votre architecture est IA32 (serveur Itanium).
+
+<note tip>Si vous utilisez la version 32 bits d'Ubuntu sur un PC compatible AMD64, il **faut** supprimer le paquet **''grub-efi-ia32''** puis installer manuellement le paquet **[[apt>grub-efi-amd64]]** et utiliser l'option ''%%--target=x86_64-efi%%''.</note>
+
+=== Table de partition GPT  ===
+
+Schéma du disque :
+^ Début du disque | Table GPT 1 | Protection MBR (inutilisé) | Partition EFI | Partition 2 | Partition 3 | ... | Partition N  | Table GPT 2  ^ Fin du disque |
+^ Device |  -  |  /dev/sda  |  /dev/sda1  |  /dev/sda2  |  /dev/sda3  |  ...  |  /dev/sdaN  |  -  |   |
+
+Exemple de partitionnement en présence de Windows :
+
+^ Emplacement du disque ^ Device ^ Point de montage ^ format ^ flag ^ commentaire |
+| Table GPT 1 | - | - | //GPT// | - | Inaccessible par fdisk. Utiliser l'outil gdisk.  |
+| fake MBR | //sda// | - | - | - | Espace du disque réservé pour empêcher tout écrasement avec les outils ne gérant que le partitionnement Intel/MBR |
+| partition EFI | sda1 | /boot/efi | vfat (reconnue EFI à l'installation) | boot | Contient le chargeur d'amorce GRUB, ... ainsi que celui de Windows. |
+| partition 2 | sda2 | ''/windows''\\ ou ''/mnt/windows''\\ ou ''/media/windows'' | ntfs | //msftdata// | Windows OS |
+| partition 3 | sda5 | ''/'' (racine) | ext4 | - | Racine du système. Contient également /boot |
+| partition 4 | sda6 | none | swap | - | Partition utilisée pour la swap |
+| partition 5 | sda7 | ''/home'' | ext4 | - | Contient les données utilisateurs |
+| Table GPT 2 | - | - | //GPT// | - | Copie de sauvegarde de la table GPT 1. (optionnel) |
+
+Dans cette configuration, la réinstallation de GRUB se fera avec la commande ci-dessous : 
+<code>sudo grub-install --efi-directory=/boot/efi --no-uefi-secure-boot --target=x86_64-efi /dev/sda</code>
+ou pour SecureBoot :
+<code>sudo grub-install --efi-directory=/boot/efi --uefi-secure-boot --target=x86_64-efi /dev/sda</code>
+
+Remplacer ''%%--target=x86_64-efi%%'' par ''%%--target=i386-efi%%'' si votre architecture est IA32 (serveur Itanium).

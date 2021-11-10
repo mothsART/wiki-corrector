@@ -1,0 +1,526 @@
+
+{{tag>matériel usb tnt Carte_TV}}
+----
+
+======Carte TV : Pinnacle PCTV Hybrid Pro Stick : installation de la télécommande ======
+
+
+Après avoir installé votre carte pctv hybrid pro stick, il est temps de configurer la télécommande.
+
+Il y a plusieurs types de télécommande pour cette carte.\\
+La configuration suivante est pour la télécommande noire toute plate, mais cela doit être identique pour les autres types de télécommande.
+
+
+Par défaut, la télécommande ne fonctionne pas très bien: il n'y a que le son qui fonctionne.
+
+Nous allons configurer d'autres touches (pas toutes, malheureusement) pour [[Kaffeine]]. Nous pourrons faire:
+
+  * Fonctionner le son (touches **+**, **-** et **mute**) 
+  * Fermer **Kaffeine**
+  * Chaîne suivante et Chaîne Précédente
+  * Plein écran
+  * Stopper l'image de **Kaffeine**
+
+Nous allons pour cela utiliser **lineak.**
+
+
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>lineakd]]**.
+
+
+===== Configuration =====
+
+[[:tutoriel:comment_modifier_un_fichier|Éditez le fichier]] **/etc/lineakkb.def** avec les droits administrateur et rajoutez ceci au début du fichier:
+
+<file>#### Pinnacle PCTV USB Stick Remote ####
+[PCTV]
+brandname = "Pinnacle"
+modelname = "PCTV USB Stick Remote Control"
+ [KEYS]
+  Mute              = 160
+  Lancer            = 110
+  Eteindre          = 222
+  Chaine_Precedente = 152
+  Stop              = 232
+  Plein_Ecran       = 177
+  Chaine_Suivante   = 233
+  VolumeUp          = 176
+  VolumeDown        = 174
+ [END KEYS]
+[END PCTV]
+  
+#### END Pinnacle PCTV USB Stick Remote ####</file>
+
+Nous allons maintenant rechercher le type de la télécommande en tapant la commande suivante dans un [[terminal]] :
+
+  lineakd -l
+
+Si tout va bien, nous devrions voir la télécommande dans la liste sous le nom de PCTV
+
+  PCTV           Pinnacle PCTV USB Stick Remote Control
+
+Créons un fichier de configuration pour cette télécommande:
+
+  lineakd -c PCTV
+
+Ce nouveau fichier est enregistré dans **~/.lineak/lineakd.conf**.
+
+Maintenant, éditons ce fichier et mettons ces paramètres:
+
+<file>
+# LinEAK - Linux support for Easy Access and Internet Keyboards
+#  Copyright (c) 2001,2002, 2003  Sheldon Lee Wen <leewsb@hotmail.com> (Current Maintainer)
+#  	and Mark Smulders <Mark@PIRnet.nl>
+#  http://lineak.sourceforge.net
+#
+# lineakd configuration file
+#
+# example key configuration:
+# 	play	= "xmms --play-pause"
+# 	eject	= EAK_EJECT
+#
+# Lineakd supports the following modifier keys:
+#    control alt shift mod2 mod3 mod4 mod5
+   
+CdromDevice = /dev/cdrom
+Display_align = center
+Display_color = 0aff00
+Display_font = -adobe-helvetica-bold-r-normal-*-*-240-*-*-p-*-*-*
+Display_hoffset = 0
+Display_plugin = xosd
+Display_pos = bottom
+Display_soffset = 1
+Display_timeout = 3
+isplay_voffset = 50
+KeyboardType = PCTV
+MixerDevice = /dev/mixer
+Screensaver = 
+conffilename = /home/nico/.lineak/lineakd.conf
+deffilename = /etc/lineakkb.def
+keystate_capslock = 
+keystate_numlock = 
+keystate_scrolllock = 
+userdeffile = /home/nico/.lineak/lineakkb.def
+  
+Mute = "KMIX_MUTE"
+VolumeDown = "KMIX_VOLDOWN"
+VolumeUp = "KMIX_VOLUP"
+Chaine_Precedente = "dcop kaffeine KaffeineIface previous"
+Chaine_Suivante = "dcop kaffeine KaffeineIface next"
+Lancer = "dcop kaffeine KaffeineIface play"
+Eteindre = "dcop kaffeine KaffeineIface quit"
+Plein_Ecran = "dcop kaffeine KaffeineIface fullscreen"
+Stop = "dcop kaffeine KaffeineIface stop"
+</file>
+
+
+
+Voila, c'est presque fini...
+
+Nous allons rajouter Lineak au démarrage:
+
+**Pour Ubuntu/Gnome:** Allez dans Menu, Systèmes, Préférences, Sessions, Onglet "Programme au démarrage" et ajouter:
+  lineakd &
+
+**Pour Kubuntu/KDE:** faites ceci dans un terminal:  
+
+  ln -s /usr/bin/lineakd /home/marcus/.kde/Autostart/
+
+Une fois votre ordinateur redémarré, lancez Kaffeine, et votre télécommande doit fonctionner ;-).
+
+Il faut savoir que l'utilisation du plein écran se fait avec la touche enregistrement car la touche plein écran est inactive.
+Les touches suivante et précédente sont les touches de retour et d'avance rapide.
+
+
+**Pour information:**
+Les touches de 0 à 9 ne sont pas configurables car elles correspondent à des caractères du clavier (é,è,à, etc...), et si nous les configurons, les caractères ne fonctionneront plus avec le clavier... Du moins, je n'y suis pas arrivé.
+Les autres touches sont inactives. J'ai essayé de les faire reconnaître avec **xev** et en fouillant dans les logs, mais rien...
+Il est certainement possible de configurer totalement les touches, mais je n'ai pas les connaissances pour.
+
+
+===== Via lirc =====
+
+L'installation via lirc est plus compliquée, il faut en particulier patcher les sources des pilotes em2880 mais il a l'avantage que tous les boutons marchent..
+
+====Patch des pilotes ====
+
+
+Il faut d'abord aller dans le dossier des pilotes (au besoin, les re-télécharger) :
+
+<code>
+hg clone http://linuxtv.org/hg/v4l-dvb
+cd v4l-dvb
+</code>
+
+Il nous faut ensuite créer le patch :
+<code>gedit telecommande.patch</code>
+Puis le remplir avec le code ci-dessous :
+<file>
+diff -Naur v4l-org/linux/drivers/media/common/ir-keymaps.c v4l-mod/linux/drivers/media/common/ir-keymaps.c
+--- v4l-org/linux/drivers/media/common/ir-keymaps.c	2007-11-03 12:57:32.179519367 +0100
++++ v4l-mod/linux/drivers/media/common/ir-keymaps.c	2007-11-03 13:51:46.864993322 +0100
+@@ -2053,6 +2053,41 @@
+ };
+ EXPORT_SYMBOL_GPL(ir_codes_pinnacle2);
+ 
++IR_KEYTAB_TYPE ir_codes_pinnacle3[IR_KEYTAB_SIZE] = {
++	/* Keys 0 to 9 */
++	[ 0x27 ] = KEY_0,
++	[ 0x0f ] = KEY_1,
++	[ 0x15 ] = KEY_2,
++	[ 0x10 ] = KEY_3,
++	[ 0x18 ] = KEY_4,
++	[ 0x1b ] = KEY_5,
++	[ 0x1e ] = KEY_6,
++	[ 0x11 ] = KEY_7,
++	[ 0x21 ] = KEY_8,
++	[ 0x12 ] = KEY_9,
++
++	[ 0x39 ] = KEY_POWER,
++
++	[ 0x03 ] = KEY_VOLUMEUP,
++	[ 0x09 ] = KEY_VOLUMEDOWN,
++	[ 0x06 ] = KEY_CHANNELUP,
++	[ 0x0c ] = KEY_CHANNELDOWN,
++	[ 0x3f ] = KEY_INFO,
++
++	[ 0x00 ] = KEY_MUTE,
++
++	//[ 0x06 ] = KEY_PLAY,
++	[ 0x2d ] = KEY_REWIND,
++	[ 0x33 ] = KEY_FORWARD,
++	[ 0x30 ] = KEY_PAUSE,
++	[ 0x3c ] = KEY_STOP,
++	[ 0x36 ] = KEY_RECORD,
++	[ 0x24 ] = KEY_ZOOM, /* fullscreen */
++	[ 0x2a ] = KEY_M,
++
++};
++EXPORT_SYMBOL_GPL(ir_codes_pinnacle3);
++
+ /* for the Geniatech X800 remote: */
+ IR_KEYTAB_TYPE ir_codes_geniatech_x800[IR_KEYTAB_SIZE] = {
+ 	[ 0x00 ] = KEY_0,
+diff -Naur v4l-org/linux/drivers/media/video/em28xx/em28xx-cards.c v4l-mod/linux/drivers/media/video/em28xx/em28xx-cards.c
+--- v4l-org/linux/drivers/media/video/em28xx/em28xx-cards.c	2007-11-03 12:57:32.679547862 +0100
++++ v4l-mod/linux/drivers/media/video/em28xx/em28xx-cards.c	2007-11-03 13:51:47.365021817 +0100
+@@ -2112,7 +2112,7 @@
+ 				em28xx_write_regs(dev, 0x08, "\xfe", 1);
+ 				mdelay(70);
+ 				em28xx_write_regs(dev, R0F_XCLK_REG, "\x22", 1); /* switch em2880 rc protocol */
+-				em2880_ir_attach(dev,ir_codes_pinnacle2,ARRAY_SIZE(ir_codes_pinnacle2), em2880_get_key_pinnacle);
++				em2880_ir_attach(dev,ir_codes_pinnacle3,ARRAY_SIZE(ir_codes_pinnacle3), em2880_get_key_pinnacle);
+ 				break;
+ 			}
+ 		case EM2870_BOARD_TERRATEC_XS_MT2060:
+diff -Naur v4l-org/linux/drivers/media/video/em28xx/em28xx-input.c v4l-mod/linux/drivers/media/video/em28xx/em28xx-input.c
+--- v4l-org/linux/drivers/media/video/em28xx/em28xx-input.c	2007-11-03 12:57:32.679547862 +0100
++++ v4l-mod/linux/drivers/media/video/em28xx/em28xx-input.c	2007-11-03 13:51:47.365021817 +0100
+@@ -92,10 +92,12 @@
+ 	dev->ir_em2880->sequence[2]=buf[0]&1;
+ 	*ir_key=buf[2];
+ 	if((dev->ir_em2880->sequence[0]==1&&dev->ir_em2880->sequence[1]==0&&dev->ir_em2880->sequence[2]==1)||
+-	   (dev->ir_em2880->sequence[0]==0&&dev->ir_em2880->sequence[1]==1&&dev->ir_em2880->sequence[2]==0))
++	   (dev->ir_em2880->sequence[0]==0&&dev->ir_em2880->sequence[1]==1&&dev->ir_em2880->sequence[2]==0)) {
++        //printk("em28xx-ir : Key pressed : %02x\n", *ir_key) ; 
+ 		return 1;
+-	else
++    } else {
+ 		return 0;
++    }
+ }
+ 
+ static void em2880_ir_key_poll(struct em28xx *dev){
+diff -Naur v4l-org/linux/include/media/ir-common.h v4l-mod/linux/include/media/ir-common.h
+--- v4l-org/linux/include/media/ir-common.h	2007-11-03 12:57:32.679547862 +0100
++++ v4l-mod/linux/include/media/ir-common.h	2007-11-03 13:51:47.865050312 +0100
+@@ -141,6 +141,7 @@
+ extern IR_KEYTAB_TYPE ir_codes_encore_enltv[IR_KEYTAB_SIZE];
+ extern IR_KEYTAB_TYPE ir_codes_tt_1500[IR_KEYTAB_SIZE];
+ extern IR_KEYTAB_TYPE ir_codes_pinnacle2[IR_KEYTAB_SIZE];
++extern IR_KEYTAB_TYPE ir_codes_pinnacle3[IR_KEYTAB_SIZE];
+ extern IR_KEYTAB_TYPE ir_codes_em_pinnacle_usb[IR_KEYTAB_SIZE];
+ extern IR_KEYTAB_TYPE ir_codes_em_terratec2[IR_KEYTAB_SIZE];
+ extern IR_KEYTAB_TYPE ir_codes_em_pinnacle2_usb[IR_KEYTAB_SIZE];
+</file>
+
+On a plus qu'à patcher et recompiler les modules :
+
+<code>
+patch -p1 < telecommande.patch
+make
+make install
+</code>
+
+
+==== Installation et configuration de lirc ====
+
+On doit d'abord trouver quel /dev/input/eventX correspond à la télécommande:
+<code>sudo cat /proc/bus/input/devices</code>
+
+Vous devriez voir un paragraphe qui ressemble à ça : 
+<code>I: Bus=0003 Vendor=0000 Product=0000 Version=0000
+N: Name="em2880/em2870 remote control"
+P: Phys=USB
+S: Sysfs=/class/input/input8
+U: Uniq=
+H: Handlers=kbd event8
+B: EV=100003
+B: KEY=c0000 100040 0 0 0 0 0 180 80000001 9e0000 0 40000 ffd
+</code>
+
+Ici, c'est donc le fichier /dev/input/event8 qui correspond à ma télécommande.
+
+Ensuite, on doit installer et paramétrer lirc
+<code>sudo apt-get install lirc lirc-x</code>
+Si vous avez déjà installé lirc, vous devez le reconfigurer (en root : sudo) via :
+<code>sudo dpkg-reconfigure lirc</code>
+
+Lors de l’installation, l'installateur demande un modèle de télécommande, sélectionnez **Linux input layer (/dev/input/eventX)** puis ensuite mettre **None** à la deuxième question et enfin **/dev/input/eventX**, où X représente le numéro de l'event déterminé précédemment.
+
+
+Cette méthode n'est pas valable lorsque le périphérique IR est amovible. Le numéro X de l'event dépend de l'ordre d'introduction des périphériques, il peu changer. Depuis la version 2.6 du noyaux, UDEV crée un lien symbolique avec un nom constant qui pointe vers le bon eventX. Le lien se trouve dans les sous dossiers de **/dev/input/**.
+Par exemple pour le récepteur Pinnacle DVB-T 72e ce sera **/dev/inpu/by-path/pci-0000:00:1d.7-event-ir**.
+Pour être sûr que le lien pointe viens vers l'event précédant, dans un terminal faites:<code>ls -l /dev/input/by-path/pci-0000:00:1d.7-event-ir</code> 
+<file>
+lrwxrwxrwx 1 root root 9 2009-12-01 11:39 pci-0000:00:1d.7-event-ir -> ../event9
+</file>
+C'est bien celui là, il ne reste plus qu'à le choisir à la troisième étape de configuration.
+
+Enfin, on règle les codes de la télécommande : 
+<code>sudo gedit /etc/lirc/lircd.conf</code>
+<file>
+begin remote
+    name linux-input-layer
+    bits 32
+    begin codes
+        1                    0x10002
+        2                    0x10003
+        3                    0x10004
+        4                    0x10005
+        5                    0x10006
+        6                    0x10007
+        7                    0x10008
+        8                    0x10009
+        9                    0x1000a
+        0                    0x1000b
+        mute                 0x10071
+        vol-down             0x10072
+        vol-up               0x10073
+        power                0x10074
+        pause                0x10077
+        forward              0x1009f
+        rewind               0x100a8
+        info                 0x10166
+        zoom                 0x10174
+        chan-up              0x10192
+        chan-down            0x10193
+        m                    0x10032
+        record               0x100a7
+        stop                 0x10080
+    end codes
+end remote
+</file>
+
+====Paramétrage de lirc ====
+
+Il ne reste plus qu'a créer un fichier ~/.lircrc (cf : [[:tutoriel:lircrc]]);
+En voici un d'exemple qui ne convient que pour Kaffeine : 
+<file>
+begin
+        prog = irexec
+        button = play
+        config = dcop kaffeine KaffeineIface playDvb
+end
+
+begin
+        prog = irexec
+        button = pause
+        config = dcop kaffeine KaffeineIface pause
+end
+
+begin
+        prog = irxevent
+        button = record
+        config = Key r kaffeine
+        config = Key space CurrentWindow
+end
+
+begin
+        prog = irexec
+        button = info
+        config = dcop kaffeine KaffeineIface dvbOSD
+end
+
+begin
+        prog = irexec
+        button = stop
+        config = dcop kaffeine KaffeineIface stop
+end
+
+begin
+        prog = irexec
+        button = forward
+        config = dcop kaffeine KaffeineIface posPlus
+end
+
+begin
+        prog = irexec
+        button = rewind
+        config = dcop kaffeine KaffeineIface posMinus
+end
+
+begin
+        prog = irexec
+        button = chan-up
+        config = dcop kaffeine KaffeineIface next
+end
+
+begin
+        prog = irexec
+        button = chan-down
+        config = dcop kaffeine KaffeineIface previous
+end
+
+begin
+        prog = irexec
+        button = power
+        config = dcop kaffeine KaffeineIface quit
+end
+
+begin
+        prog = irexec
+        button = vol-up
+        config = dcop kaffeine KaffeineIface volUp
+end
+
+begin
+        prog = irexec
+        button = mute
+        config = dcop kaffeine KaffeineIface mute
+end
+
+begin
+        prog = irexec
+        button = vol-down
+        config = dcop kaffeine KaffeineIface volDown
+end
+
+begin
+        prog = irexec
+        button = zoom
+        config = dcop kaffeine KaffeineIface fullscreen
+end
+
+begin
+        prog = irexec
+        button = up
+        config = dcop kaffeine KaffeineIface zoomIn
+end
+
+begin
+        prog = irexec
+        button = down
+        config = dcop kaffeine KaffeineIface zoomOut
+end
+
+begin
+        prog = irexec
+        button = 1
+        config = dcop kaffeine KaffeineIface setNumber 1
+    repeat = 0
+end
+
+begin
+        prog = irexec
+        button = 2
+        config = dcop kaffeine KaffeineIface setNumber 2
+    repeat = 0
+end
+
+begin
+        prog = irexec
+        button = 3
+        config = dcop kaffeine KaffeineIface setNumber 3
+    repeat = 0
+end
+
+begin
+        prog = irexec
+        button = 4
+        config = dcop kaffeine KaffeineIface setNumber 4
+    repeat = 0
+end
+
+begin
+        prog = irexec
+        button = 5
+        config = dcop kaffeine KaffeineIface setNumber 5
+    repeat = 0
+end
+
+begin
+        prog = irexec
+        button = 6
+        config = dcop kaffeine KaffeineIface setNumber 6
+    repeat = 0
+end
+
+begin
+        prog = irexec
+        button = 7
+        config = dcop kaffeine KaffeineIface setNumber 7
+    repeat = 0
+end
+
+begin
+        prog = irexec
+        button = 8
+        config = dcop kaffeine KaffeineIface setNumber 8
+    repeat = 0
+end
+
+begin
+        prog = irexec
+        button = 9
+        config = dcop kaffeine KaffeineIface setNumber 9
+    repeat = 0
+end
+
+begin
+        prog = irexec
+        button = 0
+        config = dcop kaffeine KaffeineIface setNumber 0
+    repeat = 0
+end
+</file>
+
+Pour finir, il faut ajouter au démarrage :
+
+  * **Sous Gnome :** Système-Préférences-Sessions-Programmes au démarrage : irxevent puis irexec
+
+  * - **Sous kde :**
+<code>
+kate ~/.kde/Autostart/irexec
+#!/bin/bash
+irexec
+</code>
+<code>
+kate ~/.kde/Autostart/irxevent
+#!/bin/bash
+irxevent
+</code>
+<code>
+chmod u+x ~/.kde/Autostart/irexec ~/.kde/Autostart/irxevent
+</code>
+
+===== Voir aussi =====
+
+  * **(en)** [[http://lineak.sourceforge.net/|Site de lineak]]
+
+----
+
+//Contributeurs principaux : [[utilisateurs:nico4731|Nico4731]], Xouillet//.
+
+// Basé sur « [[http://www.marcushellberg.com/pages/projects/digital-tv-in-linux.php|Digital TV in Linux]] » par Marcus Hellberg.//

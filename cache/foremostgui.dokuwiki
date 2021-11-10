@@ -1,0 +1,92 @@
+
+{{tag>Xenial récupérer système}}
+
+-------
+====== ForemostGUI ======
+
+
+**ForemostGUI** est une interface graphique pour le logiciel de récupération de données [[:Foremost]].
+
+
+===== Installation =====
+==== Pré-requis ====
+
+Commencez par [[:tutoriel:comment_installer_un_paquet|installer les paquet]] **[[apt>foremost]]**, ainsi que **[[apt>zenity|zenity]]** (qui est utilisé par le script pour produire une interface).
+
+==== Création du script ====
+
+ Enregistrez le script qui suit dans un fichier texte dans votre **Dossier Personnel** avec le nom ''foremostgui.sh'':
+<code bash>
+#!/bin/bash
+
+function _foremost() {
+#On crée le formulaire en stockant les valeurs de sortie dans $cfgpass :/
+parts=`df -Th | grep -e "^/dev/*" | tr "\n" "|"`
+cfg=`zenity --forms \
+        --title="ForemostGUI" \
+        --text="Configurer votre récupération de données" \
+        --width="800" \
+        --add-list="Partitions :" \
+        --column-values="Partitions :" \
+        --list-values="${parts%?}" \
+        --add-entry="Extentions :" \
+        --add-entry="Destination :
+(default:$PWD/output)" \
+        --separator="@"`
+
+#Si on clique sur le bouton Annuler
+if [ "$?" -eq 1 ]; then
+    #On quitte le script
+    exit
+fi
+#Sinon on continue
+addr=`echo "$cfg" | cut -d " " -f1` #Addresse absolue de la partitions sélection
+ext=`echo "$cfg" | cut -d "@" -f2` #extentions des fichiers à récupérer
+outdir=`echo "$cfg" | cut -d "@" -f3` #dossier de sortie
+if [ "$ext" != "" ]; then
+    ext="$ext"
+else
+    ext="all"
+fi
+if [ "$outdir" != "" ]; then
+    outdir="-o $outdir"
+fi
+
+#on lance foremost
+gksudo -m "L'execution de Foremost nécessite les privilèges administrateur" "foremost -w -q -Q -t '$ext' -i '$addr' $outdir" &
+pid=$!
+zenity --progress --pulsate --auto-close --text="Récupération en cours..." --title="ForemostGUI"
+if [ "$?" -eq 1 ]; then
+    gksudo -m "La fermeture de Foremost nécessite les privilèges administrateur" "killall foremost"
+else
+    zenity --question --title="ForemostGUI" --text="La récupération est terminé.\nVos fichiers sont récupérable ici:\n\"$PWD/output\" avec les privilèges administrateur"
+fi
+_foremost
+}
+
+_foremost
+</code>
+
+Enfin, rendez le [[:tutoriel:script_shell#executer_un_script|exécutable]].
+
+===== Utilisation =====
+
+Ouvrez un [[:terminal]] et entrez la commande:
+<code>./foremostgui.sh</code>
+Sélectionnez la partition à analyser et si vous le souhaitez les types de fichiers à restaurer:
+
+{{:applications:foremostgui_trusty.png?350}}
+
+
+Appuyez sur 'Lancez la récupération' on vous demandera alors dans une fenêtre le [[:sudo|mot de passe administrateur]].
+
+Analyse en cours...
+
+À la fin de la restauration le navigateur de fichier [[:nautilus|Nautilus]] démarre en [[:root|mode administrateur]] dans le dossier de restauration.
+
+===== Désinstallation =====
+Il suffit de supprimer le script que vous avez enregistré dans votre **Dossier Personnel**, et éventuellement [[:tutoriel:comment_supprimer_un_paquet|supprimer le paquet]] **foremost**.
+
+----
+
+**Contributeurs principaux :** //[[:utilisateurs:ckdevelop|CKDevelop]], [[:utilisateurs:l_africain|L'Africain]]//

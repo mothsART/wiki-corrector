@@ -1,0 +1,439 @@
+
+{{tag>kernel système programmation tutoriel}}
+
+====== Compiler son noyau ======
+
+===== Introduction =====
+**NOTE : Ce tutoriel traite de noyau ou de //kernel// mais c'est la même chose**
+
+**NOTE : J'imagine que vous savez quelles commandes sont à lancer en tant que root**
+
+{{:tutoriel:tux-large-trans.png?110 |Linux}}Le noyau est tout simplement le programme qui gère les interactions entre le matériel et les autres programmes. C'est lui qui ((entre autres)) amorce le système d'exploitation.
+
+Une chose que beaucoup de personnes ne comprennent pas est que le noyau est un programme comme les autres, vous pouvez parfaitement avoir plusieurs noyaux et utiliser celui de votre choix. **Il est même recommandé d'avoir toujours un noyau fonctionnel sur sa machine que l'on pourra utiliser si le noyau par défaut n'est pas fiable**.
+
+Pourquoi compiler son noyau ?
+Les noyaux fournis par défaut dans votre distribution GNU/Linux sont des noyaux capables de tourner sur un maximum de machines et de matériels. Ils sont donc souvent plus lourds, mais la différence de rapidité est en général assez faible. En fait les vraies raisons de compiler son propre noyau sont les suivantes :
+
+  - Comprendre comment fonctionne le noyau Linux.
+  - Faire fonctionner un matériel qui n'est pas pris en charge par votre noyau actuel.
+  - Appliquer un correctif((ISO/IEC 2382-7:2000 recommande « retouche »)).
+  - Vous voulez utiliser une distribution qui oblige de compiler votre noyau ((comme Gentoo))
+  - Vous voulez passer le temps.:-\
+
+La compilation du noyau est longue et demande beaucoup d'attention sous peine de ne plus pouvoir démarrer sa machine. Si vous n'avez pas le temps de lire beaucoup de documentation et si vous n'êtes pas prêt à galérer sérieusement, alors inutile de vous fatiguer pour rien ((je vous aurai prévenu)) .
+
+
+<note tip>Pour ceux qui débutent voir d'abord cette page **plus générale et plus simple** [[:tutoriel/comment_compiler_un_kernel_de_kernel.org|comment_compiler_un_kernel_de_kernel.org]]
+
+Et en particulier le paragraphe [[:tutoriel/comment_compiler_un_kernel_de_kernel.org#methode_simple_de_compilation_pour_appliquer_uniquement_un_patch|Methode_simple_de_compilation]]
+</note>
+
+===== Quelles sources utiliser =====
+
+En fait, la plupart des distributions ((toutes ?)) modifient leurs noyaux. Et ce pour des raisons de sécurité ou tout simplement pour un fonctionnement optimal. Il est **très** conseillé d'utiliser les sources de votre distribution. [[http://kernel.org|Les sources officielles de Linux]] sont appelées //vanilla// ((c.-à-d. version de base, cf. [[http://www.catb.orgsdsd.
+
+===== Installer les sources et les outils pour la compilation =====
+
+Passons à l'installation des sources : \\
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>linux-source]]**
+
+<note>linux-source est un métapaquetage((paquet qui est un lien vers un ou plusieurs paquets)) qui pointe vers la dernière version du noyau</note>
+Il vous faudra aussi installer les outils de compilation : \\
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>debconf-utils,dpkg-dev,debhelper,build-essential,kernel-package,libncurses5-dev|debconf-utils dpkg-dev debhelper build-essential kernel-package libncurses5-dev]]**
+
+===== Partir d'une configuration minimale =====
+
+==== Quelques préliminaires ====
+Les développeurs du noyau déconseillent de compiler le noyau en tant que root, mais cet avis est très partagé. Faites comme bon vous semble, si vous voulez compiler en utilisateur je vous conseille de vous rajouter au groupe src :
+<code bash>usermod -aG src login ## Où //login// est votre nom d'utilisateur
+ou
+sudo adduser login src  ## Où //login// est votre nom d'utilisateur</code>
+
+Par défaut, les sources sont dans /usr/src, sous Debian et Ubuntu il vous faut extraire le contenu de l'archive :
+<code bash>cd /usr/src
+tar xvjf linux-source-2.6.VERSION.tar.bz2
+</code>
+<note important>Les sources ne sont pas archivées dans les derniers noyaux</note>
+Je vous conseille de faire un lien symbolique intitulé //linux// vers le noyau((à modifier suivant la version de votre noyau)) (c'est bien et ça m'aidera pour la suite) :
+<code bash>cd /usr/src
+ln -sfn linux-source-2.6.VERSION linux ## sous Debian, Ubuntu
+</code>
+
+Ensuite allez dans ce fameux dossier :<code bash>cd /usr/src/linux</code>
+
+Toutes les modifications que nous allons faire seront dans le fichier .config (qui n'existe pas par défaut). Ce fichier contient (ou contiendra) des choses dans ce genre :
+<code># CONFIG_SECURITY_FILE_CAPABILITIES is not set
+# CONFIG_SECURITY_ROOTPLUG is not set
+CONFIG_CRYPTO=y
+CONFIG_CRYPTO_ALGAPI=m
+CONFIG_CRYPTO_BLKCIPHER=m
+CONFIG_CRYPTO_MANAGER=m</code>
+
+Il est évident que ce n'est pas pratique de modifier ce fichier à la main, ce serait long et très dangereux car certaines options **dépendent** d'autres options. C'est pourquoi nous allons utiliser l'interface (en console) qui permet de le modifier facilement.
+
+**NOTE : il existe aussi des interfaces graphiques mais je ne vais pas les aborder ici et puis vous n'utilisez peut-être pas de serveur graphique**
+
+Pour lancer cette interface en console c'est simple :
+<code bash>make menuconfig</code>
+
+Et vous vous retrouvez devant quelque chose comme ceci :
+
+{{:tutoriel:menuconfig.png |make menuconfig}}
+—————————————————————————————————————————————
+
+La navigation dans cette interface est simple :
+  * Flèches haut/bas pour monter/descendre
+  * Entrée pour entrer dans les sous-menus
+  * Échappement deux fois pour sortir d'un sous-menu
+  * h pour demander l'aide d'une option
+  * Oblique "/" pour rechercher une option
+  * Espace pour sélectionner une option
+
+==== Choix des options ====
+
+Toute l'astuce consiste à chercher les options qui correspondent à votre matériel et à les activer avec espace. Cette tâche est assez fastidieuse si on part de zéro((et je vous déconseille de le faire)).
+
+Ainsi si vous voulez partir avec une config qui devrait marcher je vous conseille deux choses :
+
+**Soit vous copiez un .config fonctionnel que vous optimiserez ensuite** : Si vous avez déjà un noyau fonctionnel, son .config devrait être dans le dossier /boot. Pour le copier (par exemple) :
+<code bash>cp /boot/config-2.6.XX /usr/src/linux/.config</code>
+Ensuite, vu que ce n'est sûrement pas la même version, il faut voir s'il y a eu des modifications dans la configuration :
+<code bash>make oldconfig</code>
+À chaque fois que les options seront différentes, on vous demandera de spécifier les nouvelles options.
+
+Je déconseille cette méthode pour deux raisons :
+  * make oldconfig est difficile à faire proprement
+  * Le travail à faire pour optimiser ensuite sera très dur si la config du noyau précédent est pleine d'options inutiles
+
+Cette méthode est à utiliser seulement si vous êtes certain de votre .config.
+
+**La 2<sup>ème</sup> méthode consiste à construire un noyau minimum puis à remplir les options dont vous aurez besoin**. C'est celle que je vous conseille((sauf si vous avez un matériel vraiment exotique)).
+Cette commande va construire un .config minimum qui est fourni par les responsables du noyau :
+
+<code bash>make defconfig</code>
+
+==== En dur ou en modules ? ====
+
+Les options que vous choisirez dans le noyau seront compilées soit en dur soit en modules.
+  * En dur, l'option sera incluse dans le noyau. Ce qui se traduit par une étoile '*' à côté de l'option
+  * En modules l'option sera optionnelle((sans blague ?)) et représentée par un M à côté de l'option, c'est-à-dire que vous pourrez choisir de l'activer ou non.
+
+Concrètement, ça veut dire que tout ce qui est nécessaire au démarrage de l'ordinateur **doit** être compilé en dur. Et le reste en dur ou en modules.
+
+Donc **doit** être compilé en dur :
+  * Le système de fichier (ext3, reiserfs par exemple) des partitions utilisées
+  * Le support pour les disques (SATA ou IDE) de ces partitions
+
+Et voilà, vous pouvez passer à la configuration proprement dite.
+
+===== La configuration du noyau =====
+
+{{:tutoriel:linus-9719.jpg?90 |Que Linus soit avec vous !}} Ok, allons-y, prenez une pause, un café, un deuxième café et une sieste. C'est la partie clef de votre noyau donc restez vigilants et tout se passera bien. On lance la commande magique et on y va : <code>make menuconfig</code>
+
+Je vous rassure, on ne touchera qu'à quelques options dans le menu, je n'aborderai en général que les options vitales pour le système((Celles qui permettent de démarrer)).
+
+<note important>**NOTE : certaines options changent d'endroit suivant la version du noyau. Si mes indications ne sont pas bonnes, cherchez avec /**</note>
+
+==== Deux trois petites options à activer ====
+
+Il faut activer quelques options pour pouvoir travailler sereinement :
+L'option **Prompt for development and/or incomplete code/drivers** doit être activée pour pouvoir avoir accès à certaines options. Si ce n'est pas le cas, des options seraient introuvables dans les menus.
+
+Cette option est ici :
+<code>General setup --->
+      [*] Prompt for development and/or incomplete code/drivers</code>
+
+Sur certains noyaux elle est ici :
+<code>Code maturity level options  --->
+      [*] Prompt for development and/or incomplete code/drivers</code>
+
+La prochaine option à vérifier est  **Processor family**
+Elle se trouve ici :
+<code>Processor type and features  --->
+      Processor family ---></code>
+
+Il faut donner le type de processeur que l'on a.
+Pour le savoir :
+<code>grep -i "model name" /proc/cpuinfo
+## Chez moi ça donne :
+model name	: Genuine Intel(R) CPU           T1350  @ 1.86GHz</code>
+Ensuite faites des recherches sur le processeurs et trouvez la famille de processeur correspondante.
+
+Une autre option à vérifier : **Subarchitecture Type** :
+Elle se trouve ici :
+<code>Processor type and features  --->
+      Subarchitecture Type ---></code>
+Si vous ne savez pas quoi mettre et que vous avez un PC "normal" vous pouvez mettre [[http://fr.wikipedia.org/wiki/Compatible_PC|PC-compatible]]
+
+Si vous utilisez des cartes PCMCIA je vous conseille d'activer quelques options ici (en dur ou en module) :
+<code>Bus options (PCI, PCMCIA, EISA, MCA, ISA)  --->
+      PCCARD (PCMCIA/CardBus) support  ---></code>
+
+==== La section NETWORKING ====
+Cette section est utile si vous utilisez des périphériques Wi-Fi, Bluetooth, ou infrarouges. Je vous laisse activer (en dur ou en module) ce dont vous avez besoin.
+
+Si vous n'utilisez pas IPV6 vous pouvez le désactiver ici :
+<code>Networking  --->
+    Networking options  --->
+        < >   The IPv6 protocol</code>
+
+==== La section File systems ====
+
+Cette section est vitale, il faut absolument que la prise en charge des systèmes de fichiers des partitions racines soit compilée **en dur**.
+
+J'estime que si vous êtes arrivés jusqu'ici c'est que vous savez ce qu'est un système de fichiers.
+<code>File systems  --->
+    <*> Second extended fs support ## Si ext2 utilisé
+    <*> Ext3 journalling file system support ## Pour ext3
+    <*> Reiserfs support ## Reiseirfs
+## Il y en a d'autres, mais je ne détaille pas ;)
+</code>
+
+Si vous utilisez encore des partitions FAT ou NTFS (Windows), je vous conseille ces options :
+<code>File systems  --->
+    DOS/FAT/NT Filesystems  ---></code>
+
+La section suivante mériterait une page entière, c'est pourquoi je la met en valeur :
+
+==== La section Devices Drivers ====
+Cette section est une des plus importantes. C'est elle qui gère les pilotes de votre matériel. Et pas de pilote implique que le matériel ne fonctionnera pas.
+
+Les options que nous toucherons seront celles-ci :
+<code>Device Drivers --->
+    <M> Parallel port support  --->
+    <*> ATA/ATAPI/MFM/RLL support  --->
+    SCSI device support  --->
+    [*] Network device support  --->
+    Graphics support  --->
+    Sound  ---></code>
+
+=== La section Parallel port support ===
+
+Pour utiliser les [[http://fr.wikipedia.org/wiki/Port_parall%C3%A8le|ports parallèles]]
+Je vous conseille cette option, surtout si vous avez une imprimante qui se branche sur un tel port :
+<code>Devices Drivers --->
+    <M> Parallel port support  --->
+        <M>   PC-style hardware
+        [*]   IEEE 1284 transfer modes</code>
+=== La section ATA/ATAPI/MFM/RLL support ===
+
+Si vous avez utilisé //make defconfig//, cette section devrait être bien configurée, toutefois il y a une optimisation à faire :
+
+== Support IDE ==
+
+Une de ces deux options peut être désactivée.
+<code><*>       AMD and nVidia IDE support
+<*>       Intel PIIXn chipsets support</code>
+
+Pour savoir laquelle utiliser (et laquelle ne pas utiliser), vous pouvez procéder ainsi :
+Assurez-vous d'avoir installé udev. Si votre disque est /dev/hda
+<code>udevinfo -a -p /sys/block/hda | grep -i DRIVERS
+
+## Vous obtenez ça :
+    DRIVERS=="ide-disk"
+    DRIVERS==""
+    DRIVERS=="PIIX_IDE"
+    DRIVERS==""
+## Ou ça :
+    DRIVERS=="ide-disk"
+    DRIVERS==""
+    DRIVERS=="VIA_IDE"
+    DRIVERS==""
+</code>
+
+Si vous obtenez un message du style :
+<code> udevinfo: command not found</code>
+Utilisez plutôt udevadm info avec les mêmes options.
+
+Je vous laisse faire le reste ;-)
+
+Cette liste pourra vous être utile si vous avez d'autres disques à activer :
+<code>"AEC62xx_IDE",  AEC62XX chipset support
+"ALI15x3_IDE",  ALI M15x3 chipset support
+"AMD_IDE",      AMD and nVidia IDE support
+"ATIIXP_IDE",   ATI IXP chipset IDE support
+"CMD64x_IDE",   CMD64{3|6|8|9} chipset support
+"TRIFLEX_IDE",  Compaq Triflex IDE support
+"Cypress_IDE",  CY82C693 chipset support
+"Cyrix_IDE",    Cyrix CS5510/20 MediaGX chipset support (VERY EXPERIMENTAL)
+"CS5530 IDE",   Cyrix/National Semiconductor CS5530 MediaGX chipset support
+"CS5535_IDE",   AMD CS5535 chipset support
+"HPT34x_IDE",   HPT34X chipset support
+"HPT366_IDE",   HPT36X/37X chipset support
+"JMicron IDE",  JMicron JMB36x support
+"SC1200_IDE",   National SCx200 chipset support
+"PIIX_IDE",     Intel PIIXn chipsets support
+"ITE821x IDE",  IT821X IDE support
+"NS87415_IDE",  NS87415 chipset support
+"Promise_Old_IDE",  PROMISE PDC202{46|62|65|67} support
+"Promise_IDE",  PROMISE PDC202{68|69|70|71|75|76|77} support
+"Serverworks_IDE",  ServerWorks OSB4/CSB5/CSB6 chipsets support
+"SiI_IDE",      Silicon Image chipset support
+"SIS_IDE",      SiS5513 chipset support
+"SLC90e66_IDE",  SLC90E66 chipset support
+"TRM290_IDE",   Tekram TRM290 chipset support
+"VIA_IDE",      VIA82CXXX chipset support </code>
+
+Tous les disques utilisés par le système doivent être en dur !
+
+=== Support SATA ===
+
+Les disques durs SATA fonctionnent avec le pilote SCSI. Pour pouvoir avoir les bonnes options :
+<code>Device Drivers  --->   
+    SCSI device support  --->
+        <*> SCSI disk support
+        <M> SCSI CDROM support</code>
+
+On va encore utiliser udev pour savoir quels pilotes activer/désactiver :
+Par exemple pour /dev/sda :
+<code>udevinfo -a -p /sys/block/sda | grep -i DRIVERS
+    DRIVERS=="sd"
+    DRIVERS==""
+    DRIVERS==""
+    DRIVERS=="ahci"
+    DRIVERS==""
+</code>
+
+Donc le pilote est ahci, pour savoir quelle option activer :
+<code bash>cd /usr/src/linux
+find -name Makefile | xargs grep ahci
+## Ce qui donne :
+./drivers/ata/Makefile:obj-$(CONFIG_SATA_AHCI)          += ahci.o</code>
+
+Donc l'option est SATA_AHCI, on a juste à lancer une recherche (/) pour trouver la bonne option.
+
+==== La section Network device support ====
+Les options que l'on va modifier sont celles-ci :
+<code>Network device support --->
+    [*]   Ethernet (10 or 100Mbit)  --->
+    [ ]   Ethernet (1000 Mbit)  --->
+    [ ]   Ethernet (10000 Mbit)  ---></code>
+
+Vous l'aurez compris, on s'occupe de la carte réseau...
+Pour chaque interface (eth0 par exemple) utilisez udevinfo :
+<code>udevinfo -a -p /sys/class/net/eth0 | grep -i DRIVER
+## Ce qui donne (exemple) :
+DRIVERS=="8139too"
+DRIVERS==""
+DRIVERS==""</code>
+
+Toujours par la même méthode :
+<code>find /usr/src/linux -name Makefile | xargs grep 8139too
+## Ce qui donne :
+/usr/src/linux-2.6.23-gentoo-r9/drivers/net/Makefile:obj-$(CONFIG_8139TOO) += 8139too.o</code>
+
+Une petite recherche de 8139TOO vous donne l'option à activer. Je vous conseille de la mettre en dur dans le noyau.
+
+Si vous avez une carte Wi-Fi je vous conseille d'aller faire un tour ici :
+<code>Device Drivers  --->
+[*] Network device support  --->
+Wireless LAN  --->
+[*] Wireless LAN (IEEE 802.11)</code>
+
+==== La section Graphic support ====
+
+La vidéo-mémoire((ISO/IEC 2382-13:1996)) (//framebuffer//) peut être intéressante à utiliser, c'est elle qui nous permet de regarder des vidéos ou d'avoir un fond d'écran dans le tty. Mais cette option n'est pas obligatoire.
+
+On travaille ici :
+<code>Device Drivers  --->
+    Graphics support  --->
+        <*> Support for frame buffer devices</code>
+
+Si vous apercevez le nom de votre carte graphique, vous pouvez la mettre en module.
+
+Si vous voulez utiliser [[http://fbsplash.berlios.de|fbsplash]] je vous conseille d'activer ces options :
+<code>Device Drivers  --->
+    Graphics support  --->
+        <*> Support for frame buffer devices --->
+            [*]   VESA VGA graphics support
+        Console display driver support  --->
+            <*> Framebuffer Console support
+            [*]   Support for the Framebuffer Console Decorations</code>
+
+===== 1,2,3 compilez ! =====
+
+Votre noyau doit être assez bien configuré pour pouvoir démarrer maintenant. On doit donc le compiler puis l'installer. Ici encore il y a plusieurs écoles, je vais d'abord vous expliquer la méthode universelle puis ensuite d'autres méthodes qui permettent de faire les choses plus proprement...
+
+En gros voici ce que l'on va faire :
+  - Compiler le noyau
+  - Placer le noyau construit dans /boot
+  - Configurer grub pour démarrer sur le nouveau noyau
+
+==== La méthode universelle ====
+
+On compile :
+<code bash>cd /usr/src/linux
+make && make modules_install</code>
+
+On copie le noyau dans /boot : Vous pouvez lui donner le nom que vous voulez, ici l'exemple est pour l'architecture i386, mais si vous avez une autre architecture vous devez aller voir dans le dossier arch/
+<note help>Ici i386 est à remplacer par votre architecture bien sûr</note>
+<code bash>cp arch/i386/boot/bzImage /boot/kernel-2.6.VERSION</code>
+Je vous conseille aussi de copier votre configuration dans /boot :
+<code bash>cp .config /boot/config-2.6.VERSION
+cp System.map /boot/System.map.2.6.VERSION</code>
+
+Ensuite modifiez le fichier de configuration de grub **/boot/grub/menu.lst** puis rajoutez votre noyau :
+<code>title           Ubuntu GNU/Linux 2.6.VERSION (version perso)
+root            (hd0,3)
+kernel          /boot/kernel-2.6.VERSION root=/dev/hda4
+
+title           Ubuntu GNU/Linux 2.6.VERSION (Rescue)
+root            (hd0,3)
+kernel          /boot/kernel-2.6.VERSION root=/dev/hda4 init=/bin/bb</code>
+
+(hd0,3) doit correspondre à la partition qui contient /boot. Pour grub, hda1=(hd0,0), ainsi hda4=(hd0,3).
+Vous pouvez bien sûr rajouter des options dans la ligne "kernel", par exemple vga=791 (pour la vidéo-mémoire, mais le nombre dépend de votre écran).
+<note important>FIXME : La configuration du menu.lst est valable uniquement pour grub-legacy. Les utilisateurs d'Ubuntu 9.04 et versions ultérieures sont invités à consulter la page dédiée à [[:grub-pc]]</note>
+
+Un petit réamorçage et c'est bon ! 8-)
+
+==== La méthode "Debian" ====
+
+Si vous êtes sous Debian (ou Ubuntu), il est plus malin de créer un paquet .deb pour installer votre noyau.
+Pourquoi ?
+  - Vous pourrez le réutiliser si vous faites une réinstallation.
+  - Vous pouvez l'installer et le supprimer facilement avec APT.
+  - Parce que c'est la classe de faire ses propres paquets :-O
+  - Parce que c'est plus simple et que ça va rajouter automatiquement votre noyau dans /boot/grub/menu.lst
+
+Une seule commande ferra l'affaire :
+<code bash>cd /usr/src/linux
+make-kpkg --append-to-version "-perso" --initrd --us --uc buildpackage</code>
+Dans cette commande, vous pouvez personnaliser le nom de votre noyau ("-perso").
+
+Une fois que c'est fini, le paquet doit être dans /usr/src et vous n'avez plus qu'à l'installer :
+<code>dpkg -i ../linux-image-2.6.24-perso.deb</code>
+
+Et voilà ! Grub est automatiquement mis à jour et votre noyau est disponible dans le menu de grub. Un petit réamorçage et vous voilà sur votre nouveau noyau.
+
+===== Que faire en cas de mauvaise compilation ? =====
+
+Si la compilation donne un noyau qui ne fonctionne pas bien, regardez les messages d'erreurs et allez faire des recherches et demandez de l'aide sur des forums ou sur IRC.
+
+Puis recompilez votre noyau. Mais avant il faut supprimer les fichiers qui on été créés pendant la compilation :
+
+<code bash>cd /usr/src/linux
+make clean # Ne supprime pas le .config
+make mrproper # Supprime aussi le .config</code>
+
+**Si vous avez utilisé make-kpkg, il faut aussi supprimer les fichiers créés par l'utilitaire make-kpkg** :
+<code bash>cd /usr/src/linux
+make-kpkg clean</code>
+
+===== Gestion des bugs =====
+
+En cas de découverte d'un bug il faut commencer par une bissection.\\
+Voir : [[:kernel_bissection|Bissection d'un noyau]]
+
+===== Liens =====
+
+  * [[http://forums.gentoo.org/viewtopic-t-555623.html]] ---> Configuration du noyau
+  * [[http://ashgenesis.debian-fr.net/tutorial/kernel/]] ---> Compilation à la sauce "Debian"
+  * [[http://lea-linux.org/documentations/Hardware-hard_plus-matos]] ---> Connaître son matériel
+  * [[http://www.gentoo.org/doc/fr/gentoo-kernel.xml]] ---> Guide du noyau Gentoo
+  * [[http://casteyde.christian.free.fr/system/linux/guide/online/a12863.html]] ---> Configuration du noyau
+  * [[http://www.kroah.com/lkn/]] ---> Linux Kernel in a Nutshell [EN]
+
+---
+Contributeurs : [[:utilisateurs:philpep-tlse]], [[:utilisateurs:Urhixidur]]

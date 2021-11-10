@@ -1,0 +1,827 @@
+
+{{tag>tutoriel clavier BROUILLON}}
+----
+
+====== Comprendre la configuration du clavier ======
+===== Le clavier et sa relation avec le système =====
+
+Rappelons que les informations transmises par une touche du clavier au système (pilote clavier, [[:noyau|noyau Linux]] et [[:xorg|serveur X]]) ne sont pas directement liées au symbole graphique ou à l’événement attaché à cette touche. Par exemple, l'appui sur la touche //A// de votre clavier ne signifie pas que ce clavier adresse à l'ordinateur quelque code que ce soit représentant le caractère //A//.\\
+Ce qui est envoyé à l'ordinateur est en réalité une suite de valeurs hexadécimales appelées **« scan-codes »** qui représentent la position physique de la touche sur le clavier et des informations précisant s'il s'agit de l'actionnement ou du relâchement de la touche. C'est le système d'exploitation qui va interpréter ces codes plus ou moins directement et transmettre aux applications un **symbole de touche** (( //keysymbol// )).
+
+Ces symboles de touche (( //keysymbols// )) envoyés aux applications représentent :
+  * soit  des **caractères directement affichables**, parmi lesquels les lettres et les chiffres ou divers symboles graphiques, 
+  * soit  des **codes d’événement ou de fonction** que chacune des applications doit interpréter à sa manière.
+
+Dans le détail, les « **scan-codes** » sont d'abord transformés en **codes de touches** (( //keycodes// ))   puis en **symboles de touches** ((// keysymbols// )) .\\
+
+La deuxième étape de l'interprétation fait appel à une table de correspondance entre les **codes de touches** (qui sont invariants) et les **symboles de touches**. Cette table de correspondance qui représente la disposition des caractères sur les touches est appelée «** agencement de clavier**((//keyboard layout//)) »  .\\
+Ainsi, si l'agencement choisi est US, la touche marquée //A// sur votre clavier sera interprétée comme un //Q// ; si l'agencement choisi est FR la touche sera interprétée comme un //A//.
+
+==== Scancode des touches transmis par le clavier ====
+L'appui sur une touche du clavier envoie une séquence scancode au pilote clavier du noyau Linux. Quelques claviers peuvent-être programmés, mais généralement le scancode correspond à des touches fixes.
+Vous pouvez récupérer les codes scancode transmis par votre clavier avec la commande «**showkey -s**» dans une [[:console|console]] (atl+ctrl+Fx)
+
+Exemple pour AZERTY/BÉPOÈ!/QWERTY
+<code>[user@ASUS-K93SM ~]$ showkey -s</code>
+
+<code>le mode clavier était UNICODE
+[ si vous essayez cela sous X Window, cela peut ne pas fonctionner
+étant donné que le serveur X utilise également /dev/console ]
+
+Appuyez sur n'importe quelle touche (le programme terminera 10s après la dernière touche enfoncée)...
+0x10 0x90
+0x11 0x91
+0x12 0x92
+0x13 0x93
+0x14 0x94
+0x15 0x95</code>
+
+Lorsque l'on appuie **↓** sur la même touche «**A**» (AZERTY), soit B (BÉPO), soit Q (QWERTY), le scancode généré est alors : **0x10**.
+Lorsque l'on relâche la touche **↑** le scancode généré est alors : **0x90**. 
+La séquence de scancode «**0x10 0x90**» correspond alors au caractère A pour l'Azerty.
+
+Lorsque l'on appuie **↓** sur la touche «**Alt Gr**» la séquence de code générée est : **0xe0 0x38**. Lorsque l'on relâche la touche **↑** le scancode généré est alors : **0xe0 0xb8**.
+La séquence de scancode «**0xe0 0x38 0xe0 0xb8**» correspond alors à une fonction.
+
+Exemple de codes clavier pour un portable ASUS K93SM
+{{ :tutoriel:asus_k93sm_scancodes.png?direct&600 |}}
+
+==== Keycodes des touches du clavier ====
+Comme nous l'avons vu en introduction des séquences de scancode sont transformées en **code de touche**, c'est ce que nous appelons le **keycode**.
+
+Vous pouvez récupérer le «keycode» du clavier avec la commande «**showkey -k**» dans une [[:console|console]] (atl+ctrl+Fx)
+
+Exemple pour AZERTY/BÉPOÈ!/QWERTY
+<code>[user@ASUS-K93SM ~]$ showkey -k</code>
+
+<code>le mode clavier était UNICODE
+[ si vous essayez cela sous X Window, cela peut ne pas fonctionner
+étant donné que le serveur X utilise également /dev/console ]
+
+Appuyez sur n'importe quelle touche (le programme terminera 10s après la dernière touche enfoncée)...
+code clavier  16 appuyé
+code clavier  16 relâché
+code clavier  17 appuyé
+code clavier  17 relâché
+code clavier  18 appuyé
+code clavier  18 relâché
+code clavier  19 appuyé
+code clavier  19 relâché
+code clavier  20 appuyé
+code clavier  20 relâché
+code clavier  21 appuyé
+code clavier  21 relâché</code>
+
+La séquence de scancode «0x10 0x90» du caractère «**A**» (AZERTY), soit B (BÉPO), soit Q (QWERTY), correspond alors au keycode **16**.
+
+Et la séquence de scancode «0xe0 0x38 0xe0 0xb8» de la fonction «**Alt Gr**» correspond alors au keycode **100**.
+
+Le keycode a aussi ses fonctions, par exemple pour le clavier si dessous l'appui sur «**Fn Off Screen**» de scancode «**0xe0 0x63 0xe0 0xe3**» génère l'appel à la fonction «**143**» avec l'option «**431**», soit le keycode «**143 431**»..
+
+Exemple de codes clavier pour un portable ASUS K93SM :
+{{ :tutoriel:asus_k93sm_keycodes.png?direct&600 |}}
+===== Configuration de l'affichage et des actions clavier dans la console de codage Unicode =====
+Vérifiez que vous avez le paquet console-setup-linux installé :
+<code>apt-cache policy console-setup-linux</code>
+Retourne si installé :
+<code>Installé : 1.178ubuntu2
+Candidat : 1.178ubuntu2
+Table de version :
+*** 1.178ubuntu2 500
+    500 http://fr.archive.ubuntu.com/ubuntu bionic/main amd64 Packages
+    500 http://fr.archive.ubuntu.com/ubuntu bionic/main i386 Packages
+    100 /var/lib/dpkg/status
+</code>
+
+La configuration de l'agencement du clavier se fait avec le fichier de configuration du serveur graphique
+===== Configuration de l'affichage et des actions clavier dans une console de codage ASCII =====
+L'interprétation fait appel à une table de correspondance entre les codes de touches keycodes (qui sont invariantes) et les symboles de touches. Cette table de correspondance, qui représente la disposition des caractères sur les touches correspondant à l'**agencement du clavier**, se trouve dans le répertoire «**/usr/share/keymaps/**».
+Pour charger la table de l'agencement du clavier il faut utiliser la commande «**loadkeys**».
+
+Exemple de chargement d'un clavier bépo :
+<code>sudo loadkeys dvorak-fr-bepo</code>
+
+<note warning>Si cette commande ne fonctionne pas commencez par la [[tutoriel:comprendre_la_configuration_du_clavier#configuration_initiale|Configuration initiale]]</note>
+
+Le fichier chargé pour la gestion du clavier est alors /usr/share/keymap/i386/dvorak-fr-bepo.kmap.gz
+
+Celui-ci peut-être observé avec la commande
+<code>sudo zcat /usr/share/keymap/i386/dvorak-fr-bepo.kmap.gz</code>
+
+La console [[http://blog.securite.free.fr/index.php/difference-les-terminaux-sous-linux-ttypts|TeleTYpewriter agetty]] utilise les polices Unicode, mais elle ne gère pas vraiment l’Unicode avec tous ses caractères.
+
+Vous pouvez afficher le jeux de caractères présent dans le terminal TTY avec la commande :
+<code>sudo showconsolefont</code>
+
+Vous pouvez choisir la police à afficher dans votre terminal avec la commande :
+<code>setfont Uni2-Fixed16</code>
+{{ :tutoriel:showconsolefont_uni2_fixed16.png?direct&600 |}}
+Où vous pouvez trouver [[https://www.zap.org.au/projects/console-fonts-distributed/psftx-debian-9.4/Uni2-Fixed16.psf.png|le jeux complet de la police ici]].
+
+==== Configuration initiale ====
+Vérifiez que le paquet console-data est installé
+<code>apt-cache policy console-data</code>
+Retourne si installé :
+<code>Installé : 2:1.12-5.1
+Candidat : 2:1.12-5.1
+Table de version :
+*** 2:1.12-5.1 500
+    500 http://fr.archive.ubuntu.com/ubuntu artfull/main amd64 Packages
+    500 http://fr.archive.ubuntu.com/ubuntu artfull/main i386 Packages
+    100 /var/lib/dpkg/status
+</code>
+
+et si pas installé :
+<code>  Installé : (aucun)
+  Candidat : 2:1.12-5.1
+ Table de version :
+     2:1.12-5.1 500
+        500 http://fr.archive.ubuntu.com/ubuntu bionic/universe amd64 Packages
+        500 http://fr.archive.ubuntu.com/ubuntu bionic/universe i386 Packages
+</code>
+
+S'il n'est pas installé, installez-le :
+<code>sudo apt-get install console-data</code>
+
+Paramétrez le terminal pour fonctionner avec un clavier bépo
+<code>sudo dpkg-reconfigure console-data</code>
+{{ :tutoriel:console-data1.png?direct&600 |}}
+{{ :tutoriel:console-data2.png?direct&600 |}}
+
+==== Correction du clavier bépo ====
+{{ :tutoriel:asus_k93sm_bepo.png?direct&600 |}}
+
+Pour générer un caractère au clavier, soit on appuie directement sur la touche (Défaut), soit on la compose avec la touche ⇑ {{:tutoriel:Keyboard_White_Shift_Alt.png?direct&48}}, soit on la compose avec la touche Alt Gr {{:tutoriel:keyboard_white_alt_gr.png?direct&48}}, soit on la compose avec les deux ⇑{{:tutoriel:Keyboard_White_Shift_Alt.png?direct&48}}+Alt Gr{{:tutoriel:keyboard_white_alt_gr.png?direct&48}}.
+
+Par exemple comme on peut le voir avec la touche de **keycode 5**   {{:tutoriel:bepo_touch_meta_keys.png?direct&200}}, l'appui direct devrait générer le caractère **(**, l'appui simultané de la touche **⇑** avec ensuite la touche doit générer le caractère **4**, l'appui simultané de la touche **Altr Gr** avec ensuite la touche doit générer le caractère **[**, et enfin l'appui simultané de **⇑** avec **Alt Gr** puis ensuite avec le caractère doit générer le caractère **≤**.
+=== Création d'un fichier clavier de test ===
+Copiez le fichier dvorack-fr-bepo-utf8.kmap.gz pour travailler avec :
+<code>zcat /usr/share/keymaps/i386/dvorak/dvorak-fr-bepo-utf8.kmap.gz > ~/mon-bepo.map</code>
+
+Basculez sur une console tty (Ctlr+Alt+Fx), se connecter si nécessaire, puis saisissez une fonte de police de terminal compatible comme Uni2-Fixed16:
+<code>setfont Uni2-Fixed16</code>
+
+Puis chargez le clavier généré mon-bepo.map :
+<code>sudo loadkeys  ~/mon-bepo.map</code>
+<code>jeu de caractère inconnu - requête de jeu de caractères ignorée</code>
+Vous devez alors modifier la directive **charset "unicode"** du fichier mon-bepo.map en **charset "iso-8859-15"** puis recharger le fichier **sudo loadkeys  ~/mon-bepo.map**.
+
+Tester les touches de composition avec {{:tutoriel:bepo_4.png?direct&64|}}. Vous devez obtenir :
+<code>(4[≤</code>
+
+Voyons ce que le fichier mon-bepo.map contient pour le keycode 5 :
+<file>
+keycode   5 = +parenleft +four bracketleft  U+2264
+        Alt keycode   5 = Meta_parenleft
+        Alt Shift keycode   5 = Meta_four
+        Alt AltGr keycode   5 = Meta_bracketleft</file>
+
+<file>keycode "n° Touche" = "Caractère par Défaut" "Caractère avec la touche ⇑" "Caractère avec la touche Alt Gr" "Caractère avec les touches ⇑ + Alt Gr"</file>
+
+Dans notre exemple la première ligne indique que lors de la frappe sur la touche on affiche **+parentleft** "**(**", lorsque l'on utilise la touche **⇑** on affiche **+four** "**4**", lorsque l'on utilise la touche **Alt Gr** on affiche **bracketleft** "**[**", et enfin avec la combinaison **⇑+Alt Gr** on  affiche **U+2264** "**≤**"
+
+<file>"Touche de composition ou pas" keycode "n° Touche" = "Ma Variable"</file>
+
+Dans notre exemple on définit la variable "**Meta_parentleft**" pour la touche lorsqu'elle est utilisée avec **Alt** , "**Meta_four**" lorsque elle est utilisée avec **Alt** + **⇑**, et la variable "**Meta_bracketleft**" lorsqu'elle est utilisée avec **Alt** + **Alt Gr**.
+
+=== Modification de l'affichage de caractères ===
+{{ :tutoriel:bepo_clavier.png?600 |}}
+La première action à faire c'est de récupérer les variables disponibles pour le paramétrage du clavier avec la commande **dumpkeys** :
+<code>dumpkeys -l</code>
+<code>étendue des codes clavier pris en charge par le noyau :           1 - 255
+nombre maximum d'actions pouvant être associées à une touche :         256
+number of keymaps in actual use:                 256
+of which 9 dynamically allocated
+étendue des codes d'action pris en charge par le noyau :
+nombre de touches de fonction prises en charge par le noyau : 256
+nombre maximal de définitions de combinaisons de touches : 256
+nr of compose definitions in actual use: 68
+Symboles reconnus par dumpkeys :
+(valeur numérique, symbole)
+…
+0x001c	Control_backslash
+0x001d	Control_bracketright
+0x001e	Control_asciicircum
+0x001f	Control_underscore
+0x0020	space
+0x0021	exclam
+0x0022	quotedbl
+0x0023	numbersign
+0x0024	dollar
+0x0025	percent
+0x0026	ampersand
+0x0027	apostrophe
+0x0028	parenleft
+0x0029	parenright
+0x002a	asterisk
+0x002b	plus
+0x002c	comma
+0x002d	minus
+0x002e	period
+0x002f	slash
+0x0030	zero
+0x0031	one
+…
+Les synonymes suivants sont reconnus :
+
+Control_h       pour BackSpace
+Control_i       pour Tab
+Control_j       pour Linefeed
+Home            pour Find
+End             pour Select
+PageUp          pour Prior
+PageDown        pour Next
+multiplication  pour multiply
+pound           pour sterling
+pilcrow         pour paragraph
+Oslash          pour Ooblique
+Shift_L         pour ShiftL
+Shift_R         pour ShiftR
+Control_L       pour CtrlL
+Control_R       pour CtrlR
+AltL            pour Alt
+AltR            pour AltGr
+Alt_L           pour Alt
+Alt_R           pour AltGr
+AltGr_L         pour Alt
+AltGr_R         pour AltGr
+AltLLock        pour Alt_Lock
+AltRLock        pour AltGr_Lock
+SCtrl           pour SControl
+Spawn_Console   pour KeyboardSignal
+Uncaps_Shift    pour CapsShift
+lambda          pour lamda
+…
+
+Nom des modifcateurs reconnus et leur numéro de colonne :
+shift		  1
+altgr		  2
+control		  4
+alt		  8
+shiftl		 16
+shiftr		 32
+ctrll		 64
+ctrlr		128
+capsshift		256</code>
+
+== Définition des touches «keymaps» ==
+Comme nous l'avons vu précédemment pour générer plusieurs caractères avec une touche on la combine avec d'autres touches modificatrices que l'on appelle les «**keymaps**»
+
+Exemple :  {{:tutoriel:bepo_touch_meta_keys.png?direct&200}}
+
+Dans le fichier de configuration d'un clavier **~/mon-bepo.map** nous pouvons précisé les touches modificatrices utilisables par défaut pour la carte de symboles.
+
+Les codes des modificateurs de touches :
+{{ :tutoriel:bepo_touchesmeta.png?600 |}}
+<file>Touche seule = 0
+Maj = 1
+AltGr = 2
+Ctrl = 4
+Alt = 8
+MajG = 16
+MajD = 32
+CtrlG = 64
+CtrlD = 128
+VerMaj = 256</file>
+Pour gérer les touches "Touche seule", Maj, AltGr, Maj+AltGr nous devrons définir au moins le keymaps suivant : 
+<file>keymaps 0-3</file>
+<note warning>Si le keymaps défini ne correspond pas aux combinaisons renseignées dans le fichier ~/mon-bepo.map, lors du chargement du fichier avec la commande loadkeys une erreur «**too many (//x//) entries on one line**» est affichée.</note> 
+Exemple :
+<file>keymaps 0-4,8,12</file>
+  * 0-4 : Touche seule, Maj, AltGr, Maj+AltGr et Ctrl
+  * 8 : Alt, 
+  * 12 : Alt+Ctrl.
+Ce qui nous donne pour la représentation d'une touche :
+<file>keycode «N° Touche» = Touche Maj AltGr Maj+AltGr Ctrl Alt Alt+Ctrl</file>
+
+**Généralement dans nos fichiers de claviers nous utilisons :**
+<file>keymaps 0-15</file>
+
+== Affichage d'un caractère de la table de caractères de Uni2-Fixed16.psf ==
+Si on teste comme précédemment la touche **12** {{:tutoriel:bepo_touche_.png?direct&64}} avec la combinaison ⇑ + Alt Gr, celle-ci ne génère pas «**′**».
+Pour cela on modifie le fichier **~/mon-bepo.map** :
+<file>keycode  12 = equal U+00b0 U+2260 U+00b4 #U+2032</file>
+Nous avons le même problème pour la touche 13 {{:tutoriel:bepo_touche_pct.png?direct&64}} qui ne génère pas «**″**». On modifie alors le code de **~/mon-bepo.map** :
+<file>keycode  13 = percent grave U+2030 U+02dd #U+2033</file>
+
+== Combinaisons de caractères ==
+Maintenant un peux plus difficile {{:tutoriel:bepo_touchej.png?direct&64}}, nous n'avons pas le caractère **ĳ** de disponible pour la touche **25** dans notre jeux de caractères de console. Nous voulons générer deux caractères à la place :
+<file>string F70 = "ij"
+string F71 = "IJ"
+keycode  25 = j J F70 F71
+</file>
+
+== Combinaisons de touches ==
+Nous voulons maintenant gérer les accents en les combinant avec des touches.
+
+Nous définissons d'abord la touche Tux {{:tutoriel:bepo_touchetux.png?64}} de keycode 125 comme la touche compose pour ces accents
+<file>keycode 125 = Compose</file>
+
+La touche «v» {{:tutoriel:bepo_touchev.png?direct&64}} dans le clavier bépo contient l'accent «ˇ». Elle est définie dans le fichier comme :
+<file>keycode 22 = v V</file>
+
+Puis on peut affecter les accents aux touches dont les caractères sont présents dans Uni2-Fixed16.psf :
+<file>compose 'v' 'e' to U+011b
+compose 'v' 'E' to U+011A
+compose 'v' 'c' to U+010d
+compose 'v' 'C' to U+010c
+compose 'v' 't' to U+0165
+compose 'v' 'T' to U+0164
+compose 'v' 'd' to U+010f
+compose 'v' 'D' to U+010e
+compose 'v' 's' to U+0161
+compose 'v' 'S' to U+0160
+compose 'v' 'l' to U+013e
+compose 'v' 'L' to U+013d
+compose 'v' 'r' to U+0159
+compose 'v' 'R' to U+0158
+compose 'v' 'n' to U+0148
+compose 'v' 'N' to U+0147
+compose 'v' 'z' to U+017e
+compose 'v' 'Z' to U+017d</file>
+
+Après la touche «é» {{:tutoriel:bepo_touchee.png?direct&64}} qui dans un clavier bépo contient les accents «'» et «˝» doit être définit comme suit
+<file>keycode 17 = +eacute +Eacute</file>
+Les «+» autorisant l'utilisation de la touche compose.
+
+Ce qui nous donne pour l'accent «'» :
+<file>compose 'é' 'ê' to 'ê'
+compose 'é' 'Ê' to 'Ê'
+compose 'é' 'a' to U+00e1
+compose 'é' 'A' to U+00c1
+compose 'é' 'æ' to 'æ'
+compose 'é' 'Æ' to 'Æ'
+compose 'é' 'u' to U+00fa
+compose 'é' 'U' to U+00da
+compose 'é' 'y' to U+00fd
+compose 'é' 'Y' to U+00dd
+compose 'é' 'p' to U+1e57
+compose 'é' 'P' to U+1e56
+compose 'é' 'i' to U+00ed
+compose 'é' 'I' to U+00cd
+compose 'é' 'o' to U+00f3
+compose 'é' 'O' to U+00d3
+compose 'é' 'e' to 'é'
+compose 'é' 'E' to 'É'
+compose 'é' 'k' to U+045c
+compose 'é' 'K' to U+040c
+compose 'é' 'c' to U+0107
+compose 'é' 'C' to U+0106
+compose 'é' 's' to U+015b
+compose 'é' 'S' to U+015a
+compose 'é' 'g' to U+0121
+compose 'é' 'G' to U+0120
+compose 'é' 'l' to U+013a
+compose 'é' 'L' to U+0139
+compose 'é' 'r' to U+0155
+compose 'é' 'R' to U+0154
+compose 'é' 'n' to U+0144
+compose 'é' 'N' to U+0143
+compose 'é' 'z' to U+017a
+compose 'é' 'Z' to U+0179
+compose 'é' 'm' to 'm'
+compose 'é' 'M' to U+1e40
+compose 'é' 'w' to U+1e83
+compose 'é' 'W' to U+1e82
+compose 'é' 'ç' to 'ç'
+compose 'é' 'Ç' to 'Ç'
+compose 'é' ' ' to '\''</file>
+
+Et pour l'accent «˝» :
+<file>compose 'É' 'o' to U+0151
+compose 'É' 'O' to U+0150
+compose 'É' 'u' to U+0171
+compose 'É' 'U' to U+0170
+compose 'É' ' ' to U+02dd</file>
+
+Vous avez maintenant les bases pour compléter le clavier bépo sur le jeux de caractères Uni2-Fixed16 dans la console.
+
+=== Modularisation du fichier d'agencement mon-bepo.map  ===
+Maintenant on se propose de réaliser ce clavier de façon modulaire pour pouvoir réutiliser ces modules pour construire d'autres claviers. 
+
+Nous devons donc créer des fichiers avec une extension **.inc**. Pour les utiliser il suffira de les appeler avec la commande **include**.
+
+Voici la structure que l'on se propose de mettre en place 
+== Les touches systèmes ==
+{{ :tutoriel:asus_k93sm_systemkeys.png?direct&600 |}}
+Fichier system.inc
+== Les touches d'édition ==
+{{ :tutoriel:asus_k93sm_editorkeys.png?direct&600 |}}
+Fichier edit.inc
+== Les touches de fonctions ==
+{{ :tutoriel:asus_k93sm_functionskeys.png?direct&600 |}}
+Fichier functions.inc
+== Les touches du pavé numérique ==
+{{ :tutoriel:asus_k93sm_numpadkeys.png?direct&600 |}}
+Fichier numpad.inc
+== Les touches bépo ==
+{{ :tutoriel:asus_k93sm_bepokeys.png?direct&600 |}}
+bepo.inc ou bepo.map avec 
+<file>Charset "iso-8859-15"
+
+include "system.inc"
+include "edit.inc"
+include "functions.inc"
+include "numpad.inc"
+
+...
+</file> 
+== Les touches Fn spéciales ==
+{{ :tutoriel:asus_k93sm_fnkeys.png?direct&600 |}}
+bepo_asus_k93sm.map
+Avec
+<file>Charset "iso-8859-15"
+
+include "bepo.map"
+...
+</file> 
+
+===== Configuration de l'affichage et des actions clavier pour le serveur graphique =====
+==== Voir la configuration du clavier ====
+<code>[user@ASUS-K93SM ~]$ setxkbmap -print -verbose 10</code>
+
+<code>Setting verbose level to 10
+locale is C
+Trying to load rules file ./rules/evdev...
+Trying to load rules file /usr/share/X11/xkb/rules/evdev...
+Success.
+Applied rules from evdev:
+rules:      evdev
+model:      pc105
+layout:     fr
+variant:    bepo_afnor
+Trying to build keymap using the following components:
+keycodes:   evdev+aliases(azerty)
+types:      complete
+compat:     complete
+symbols:    pc+fr(bepo_afnor)+inet(evdev)
+geometry:   pc(pc105)
+xkb_keymap {
+        xkb_keycodes  { include "evdev+aliases(azerty)" };
+        xkb_types     { include "complete"      };
+        xkb_compat    { include "complete"      };
+        xkb_symbols   { include "pc+fr(bepo_afnor)+inet(evdev)" };
+        xkb_geometry  { include "pc(pc105)"     };</code>
+ 
+==== Identifier les touches ====
+
+<code>[user@ASUS-K93SM ~]$ xev | awk -F'[ )]+' '/^KeyPress/ { a[NR+2] } NR in a { printf "%-3s %s\n", $5, $8 }'</code>
+
+Affiche une fenêtre de capture des événements claviers dans l’environnement graphique
+
+{{ :tutoriel:xorgkeyboardeventtester.png?nolink&400 |La fenêtre de capture des événements claviers dans l’environnement graphique}}
+
+Et lorsque la fenêtre est active et que l’on tape avec un clavier bépo «bépoè^». Dans le terminal où est exécuté la ligne de commande s’affiche le résultat :
+<code>
+24  b           
+25  eacute
+26  p
+27  o
+28  egrave
+29  dead_circumflex
+</code>
+==== Principes de la gestion du clavier ====
+
+Il existe dans Ubuntu une table qui associe les codes de touche à des **noms symboliques** censés aider à repérer la touche sur le clavier. Un exemple de ce type de table de correspondance est [[:tutoriel:comment_modifier_un_fichier|visible dans le fichier]] [[file:///usr/share/X11/xkb/keycodes/evdev|/usr/share/X11/xkb/keycodes/evdev]] et dans lequel vous verrez différentes lignes de la forme :
+<file><AE01> = 10;</file>
+
+Ici cela signifie que la touche **A**lphanumérique marquée du chiffre //1// ((sur la rangée de chiffres au dessus des lettres sur un clavier [[http://bepo.fr/wiki/TypeMatrix|Typematrix]].)) est en première position (**01**) de la ligne **E** (les lignes sont numérotées de A à E en partant du coté de l'utilisateur et en allant vers l'écran ((Du moins pour ce qui est des caractères imprimables, c'est à dire en excluant les lignes qui ne comprennent que des caractères de contrôle.))  ) et au code **10**.\\
+
+Une autre ligne de la forme :
+<file><LFSH> = 50;</file>
+signifie que la touche majuscule de gauche a le code **50**   (LF pour left = gauche et SH pour Shift =Maj) .
+
+Pour faciliter l'utilisation de certains codes de touche ((  //keycodes// )), il existe également un fichier  [[file:///usr/share/X11/xkb/keycodes/aliases|/usr/share/X11/xkb/keycodes/aliases]]  qui associe au nom symbolique des touches un nom plus intelligible appelé **alias**.\\
+Voici par exemple un court extrait de la section "qwerty" :
+<file>
+xkb_keycodes "qwerty" {
+
+   alias <LatQ> = <AD01>;
+   alias <LatW> = <AD02>;
+   </file>
+Pour autant que la section "qwerty" de ce fichier soit expressément spécifiée dans la configuration, la touche <AD01> pourra être désignée également par <LatQ>.
+<note warning>Il n'y a normalement pas lieu de toucher aux fichiers contenus dans le dossier **/usr/share/X11/xkb/keycodes**. En effet, les codes émis par les touches ne sont pas modifiables. S'il existe de nombreux  fichiers associant ces numéros de code aux noms symboliques' c'est parce que les constructeurs n'utilisent pas tous le même code pour une touche placée au même endroit.  Il y a donc besoin d'un tel fichier pour chacun des types de clavier. </note>
+
+
+==== Conversion codes de touche -> symboles de touche ====
+
+Il existe dans le dossier **/usr/share/X11/xkb/symbols**, des fichiers qui  définissent des **tables de correspondance** entre les **codes de touches** et les **symboles de touches** pour les différentes langues, et dont les sections traitent des différentes variantes de clavier connues, comme par exemple le fichier [[file:///usr/share/X11/xkb/symbols/fr|/usr/share/X11/xkb/symbols/fr]] pour la langue française.\\
+Ces tables, découpées en sections, se combinent selon des règles d'inclusion et d'ajout bien précises afin que le système puisse ainsi faire face à une combinatoire importante entre types de clavier, langues, variantes.
+
+Pour le cas précis de la redéfinition d'une table de correspondance pour un clavier donné, une table linéaire ((C'est à dire ici sans combinaison avec d'autres table par inclusion par exemple.)) reprenant l'ensemble des touches peut suffire. 
+ 
+Par ailleurs, parmi les différentes tables évoquées ci-dessus, celles sélectionnées par l'utilisateur, dans le dialogue des préférences clavier, se combinent au démarrage du système pour former une table plus vaste dénommée **carte du clavier** ((keymap en anglais.)).
+
+Si vous n'avez sélectionné qu'une seule table, c'est à dire un seul [[:tutoriel:configurer_le_clavier|agencement de clavier]], la carte du clavier lui correspondra strictement bien entendu.
+
+=== Lire la carte du clavier ===
+<note important>Si vous avez actuellement plusieurs agencements de clavier, et pour pouvoir faire les manipulations proposées ici, n'en conservez qu'un pour le moment. //France Autre// pour cet exemple. Supprimez les autres dans le dialogue des préférences de clavier.</note>
+<note>Il existe un utilitaire graphique pour xmodmap : xkeycaps, disponible dans les dépôts sur Ubuntu 16.04</note>
+Si vous voulez, voir la **carte du clavier active** correspondant à votre seul ((compte tenu de la note ci-dessus)) agencement actuel, saisissez dans un [[:terminal]]  la [[:commande_shell|commande]] suivante :
+<code>xmodmap -pke | less</code>
+Faites défilez les pages avec les flèches de changement de page.
+
+Si vous désirez pouvoir examiner dans le détail cette carte, sauvegardez-là dans un fichier.\\
+Par exemple, si vous souhaitez en disposer sur votre Bureau avec pour nom //carte_active// vous entrerez la commande :
+<code>xmodmap -pke > ~/Bureau/carte_active</code>.
+
+=== Touches modificatrices (modifier keys)  ===
+Considérez la ligne suivante de la **carte du clavier**.
+<file>keycode  24 = a A æ Æ </file>
+
+Mettez en regard la ligne correspondante issue de la **table** de correspondance correspondant à votre agencement actuel.\\
+Par exemple pour le clavier français, il s'agira du fichier **/usr/share/X11/xkb/symbols/fr** dans lequel vous trouverez, à la section "Autre", la ligne suivante :
+<file>
+    key <AD01>	{ [                a,                A,  æ,    Æ ] }; // a A æÆ
+</file>
+Elles sont très cohérentes entre elles et cela paraît normal.\\
+Maintenant, dans un [[:éditeur de texte]] saisissez au clavier la combinaison de touches suivante, en vous basant sur la marquage du clavier, avec les espaces mais sans les parenthèses :
+<code>
+(A) (⇧+A)  (Alt Gr+A)  (Alt Gr+⇧+A) 
+</code>
+<note>⇧représente la touche majuscule et + indique que les deux ou trois touches doivent être pressées une par une et maintenues jusqu'à ce que la dernière soit frappée.</note>
+Vous obtenez le résultat suivant :
+<file>
+a A æ Æ
+</file>
+Ceci correspond bien à la ligne de définition pour la lettre //A// du fichier **fr** et à celle de la carte de clavier active.
+<note important>La "carte du clavier", rangée dans le fichier **carte_active**, ne correspond à la table **fr** section "Autre" que si des réaffectations de touches n'ont pas été faites par des commandes en ligne.\\ Notez que cette façon de réaffecter les touches par des commandes en ligne est perturbante dans la mesure où elle désynchronise la perception que vous avez de votre agencement par les outils graphiques et la réalité.</note>
+
+Vous observerez donc par cet exemple, et c'est vrai pour d' autres touches, qu'un même code de touche peut être associé à plusieurs (ici quatre) symboles de touche et que ces symboles de touche sont obtenus en accompagnant l'appui sur la touche par maintien préalable d'autres touches, telles que ⇧, //Alt Gr// ou la combinaison des deux. 
+
+Les touches ⇧ et Alt Gr, qui ne produisent pas d'effet en elles-mêmes, mais qui modifient le symbole de touche envoyé par la touche qui les accompagne, sont appelées** touches modificatrices** (( //modifier keys// )).
+
+<note important>En réalité, les touches ne sont pas modificatrices par elles-même. C'est plutôt le symbole de touche qui leur est attaché qui l'est. Aussi ces touches peuvent-elles être changées pour d'autres. Vous verrez plus loin dans cette page, que pour être modificateur, ces symboles doivent être mis en relation avec certaines variables faisant partie de l'**état du clavier** qui est transmis aux librairies chargées de la transformation des scan-codes en symboles de touche.</note>
+
+Ceci introduit la notion de niveau de touches avec ici :
+  * symbole de niveau 1 : **a**  ->  accessible sans touche modificatrice
+  * symbole de niveau 2 : **A**  -> accessible avec la touche modificatrice ⇧
+  * symbole de niveau 3 : **æ**  -> accessible avec la touche modificatrice Alt Gr
+  * symbole de niveau 4 : **Æ**  -> accessible avec les touches modificatrice Alt Gr+⇧
+L'image suivante illustre cet aspect des choses :
+{{ :tutoriel:niveaux_de_touche.jpg?200 |}}
+
+=== Groupes ===
+Pour comprendre la notion de groupe, allez maintenant dans le dialogue des préférences de clavier et ajoutez dans cet ordre :
+  - le clavier anglais US,
+  - le clavier US International
+  - le clavier Allemagne Macintosh.
+L'indicateur de clavier s'affiche alors dans l'applet de notification général pour vous indiquer le clavier en usage et pour vous permettre d'en changer.
+
+Fermez tous les fichiers précédemment ouverts (notamment le fichier **/usr/share/X11/xkb/symbols/fr** et votre fichier sauvegarde de carte de clavier **~/Bureau/carte_active** ) puis dans un [[:terminal]] saisissez de nouveau la [[:commande_shell|commande]] :
+<code>xmodmap -pke > ~/Bureau/carte_active</code>
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez cette sauvegarde]] de la nouvelle carte active et sélectionnez la ligne correspondant au //keycode// 24 pour visualiser ceci:
+<file>
+keycode  24 = a A q Q ae AE q Q adiaeresis Adiaeresis q Q guillemotleft guillemotright
+</file>
+Ce qui en clair correspond à : 
+^keycode 24 | a | A | q | Q | æ | Æ | q | Q | ä | Ä | q | Q | « | » |
+
+Le principe de passage des tables de correspondance des différents agencements à la carte active dans le système est imagé ci-après:
+
+{{ :tutoriel:groupes_et_niveaux.jpg?400 |}}
+
+Dans la terminologie du [[:xorg|serveur X]] et de son extension **XKB**, un groupe correspond à l'ensemble des symboles d'un agencement, que l'on obtient par sélection avec l'indicateur de clavier ou une séquence de touche modificatrices. (( Au démarrage du système il s'agit de ⇧+ Ver Maj. Si vous souhaitez changer cette combinaison, reportez-vous à la section **Passer rapidement d'un agencement à l'autre** de la page << [[:tutoriel:configurer_le_clavier#passer_rapidement_d_un_agencement_a_l_autre|Configurer le clavier]] >>. ))
+
+<note>Notez au passage, que les niveaux 3 et 4 n'étant pas présent dans la table du clavier US, ces niveaux sont aussi omis dans la carte active. Ceci rend la lecture de cette carte un peu plus difficile.</note>
+
+Mis à part, la particularité signalée dans la note ci-dessus, et en notant //GiNj//, **i** étant la valeur du **G**roupe et **j** celle du **N**iveau, la carte présente les données dans cet ordre:
+
+| G1N1 | G1N2 | G2N1 | G2N2 | G1N3 | G1N4 | G2N3 | G2N4 | G3N1 | G3N2 | G4N1 | G4N2 | G3N3 | G3N4 | G4N3 | G4N4 |
+
+===== Principe de gestion du clavier par XKB =====
+==== Schéma  simplifié ====
+Le schéma simplifié de la gestion du clavier par le [[:xorg|serveur X]] avec son module XKB est donné par la figure suivante :
+
+{{ :tutoriel:serveurx-clavier2.jpg?400 |}}
+
+Sur ce schéma, vous remarquerez que :
+  * Le serveur X n'adresse pas lui même les symboles de touche aux applications. Ce sont Xlib et les toolkits qui le font en utilisant la carte du clavier vue précédemment et en se basant sur les "scancodes" et l'**état du clavier** contenus dans l’événement transmis par le serveur X.
+  * Le serveur X gère une variable appelée //état du clavier// et communique cette information aux librairies. En pratique, pour gérer cet **état du clavier**, il utilise le code de touche qui, rappelons le, ne représente pas que des caractères, mais aussi des fonctions à exécuter.
+
+==== État du clavier : modificateurs et numéro de groupe====
+=== Modificateurs ===
+
+Vous avez vu précédemment que certaines touches du clavier étaient à l'origine du choix du symbole parmi ceux associés à un code de touche particulier. Pour que cela puisse se produire, il faut en réalité que deux conditions soient remplies :
+  - que le code de touche soit associé à un symbole bien précis,
+  - que ce symbole de touche soit mis en relation directe avec une des variables binaires de l'état du clavier.
+
+Ainsi, par exemple, pour que la touche //Alt gr// provoque la sélection du symbole de touche de niveau 3, il faut que soient écrites dans les tables de symboles les lignes suivantes :
+ <file> key <RALT> { type[Group1]="ONE_LEVEL", symbols[Group1] = [ ISO_Level3_Shift ]
+    };
+  modifier_map Mod5  {ISO_Level3_Shift };
+</file>
+
+Le symbole de touche ISO_Level3_Shift est le symbole associé au niveau 3.
+
+La variable **Mod5** est une des variables qui font partie de l'état du clavier et qui sont prises en compte dans l'interprétation du niveau par les librairies xlib. Ces variables sont appelées «**Modificateurs**».
+
+=== Voir les modificateurs ===
+Les modificateurs présents dans l'état du clavier transmis aux librairies sont les suivants :
+|Shift|Lock|Control|Mod1|Mod2|Mod3|Mod4|Mod5
+
+Si vous voulez savoir à quelle fonction de modification sont associés ces modificateurs, saisissez dans un [[:terminal]] la [[:commande_shell|commande]] suivante:
+<code>xmodmap -pm</code>
+
+Le résultat devraient ressembler à ceci :
+<code>
+xmodmap:  up to 4 keys per modifier, (keycodes in parentheses):
+
+shift       Shift_L (0x32),  Shift_R (0x3e)
+lock        Caps_Lock (0x42)
+control     Control_L (0x25),  Control_R (0x69)
+mod1        Alt_L (0x85),  Meta_L (0xcd)
+mod2        Num_Lock (0x4d)
+mod3      
+mod4        Super_L (0x40),  Super_R (0x86),  Super_L (0xce),  Hyper_L (0xcf)
+mod5        ISO_Level3_Shift (0x5c),  Mode_switch (0xcb)
+
+</code>
+
+Vous pouvez voir ici entre autres, que le modificateur shift est associé aux touches qui sont elles mêmes associées aux symboles Shift_L ((touche majuscule de gauche)) et Shift_R  ((touche majuscule de droite)) et que le passage en niveau 3 se fait par la touche qui est associée au symbole ISO_Level3_Shift.
+
+Pour que les modificateurs Mod1 à Mod5 aient un effet déterminé sur le choix du symbole de touche, il faut qu'ils soient mis en correspondance avec un symbole de touche modificateur, par une instruction du type :
+<code>modifier_map Mod2   { Num_Lock };</code> ou d'une façon plus générique :
+<code>modifier_map nomModficateur   { NomSymbole };</code>
+
+Des exemples de symboles de touche possédant une fonction modificatrice sont : ISO_Level3_Shift, Num_Lock, ISO_Level5_Shift, Caps_Lock…\\
+Le fichier  [[file:///usr/include/X11/keysymdef.h|/usr/include/X11/keysymdef.h]] présente tous les symboles de touche utilisés dans le système ; les symboles de touche à fonction modificatrice y apparaissent dans des sections repérées par le titre «modifiers».
+
+=== Numéro de groupe ===
+
+La table de clavier étant divisée en [[#groupes]], il faut donc que l'état du clavier comprenne une information sur le numéro de groupe pour le sélectionner. Cette information est bien présente dans l'état du clavier, à coté des [[#modificateurs]] qui, pour leur part,  permettent de sélectionner le bon niveau.
+
+
+====Définition des touches====
+
+=== Types de touche ===
+
+Le type de touche précise la manière dont sont pris en compte les modificateurs pour sélectionner le symbole de touche parmi tous ceux qui, classés par niveaux, font partie de sa définition.\\
+Les différents types de touches sont définis dans les fichiers placés dans le dossier **/usr/share/X11/xkb/types** et sont de la forme 
+<file>type 'NomDeType '{' Instructions '};</file>.  Parmi les instructions, on peut rencontrer les instructions suivantes :
+  * modifiers = <liste de modificateurs> : il s'agit de la liste des modificateurs qui sont repris dans la définition du type.
+  * map[<combinaison de modificateurs>] = <nom du niveau> : c'est la combinaison de modificateurs correspondant au nom du niveau indiqué. \\ Les noms reconnus par le programme xmodmap vont de Level1 à Level8. Au delà il faut utiliser une valeur numérique, mais il y a peu de chances que vous en ayez besoin. 
+  * level_name[<nom normalisé>] = <nom symbolique libre> : xkb ne fait aucun usage de ces noms symboliques, mais ils sont néanmoins requis. Ils servent dans l'affichage des agencements.
+  * preserve[...] = ... : Reportez vous aux documentations citées en référence (( Voir en bas de page)) pour des éclaircissements sur cette instruction dont la compréhension est difficile aux non programmeurs, et n'est pas indispensable ici.\\ 
+Voici un exemple de définition de type :
+<file>
+    type "ALPHABETIC" {
+        modifiers = Shift+Lock;
+        map[Shift] = Level2;
+        map[Lock] = Level2;
+        level_name[Level1] = "Base";
+        level_name[Level2] = "Caps";
+    };
+</file>
+S'agissant ici de touches purement alphabétiques, il n'y a besoin que de la définition des symboles de touche affectés aux différents niveaux standards, soit deux niveaux seulement.
+
+Et pour terminer un type couramment rencontré :
+<file>
+    type "FOUR_LEVEL_ALPHABETIC" {
+	modifiers = Shift+Lock+LevelThree;
+	map[None] = Level1;
+	map[Shift] = Level2;
+	map[Lock]  = Level2;
+	map[LevelThree] = Level3;
+	map[Shift+LevelThree] = Level4;
+	map[Lock+LevelThree] =  Level4;
+	map[Lock+Shift+LevelThree] =  Level3;
+	level_name[Level1] = "Base";
+	level_name[Level2] = "Shift";
+	level_name[Level3] = "Alt Base";
+	level_name[Level4] = "Shift Alt";
+    };
+</file>
+
+<note>  On observera que dans les modificateurs apparaissent des noms (comme LevelThree) qui ne font pas partie de la liste des modificateurs, cités plus haut, qui sont normalement transmis dans l'état du clavier.  Ces modificateurs, à usage réservé de xkb, sont appelés** modificateurs virtuels**. xkb les utilise en réalité pour établir l'état du clavier, en particulier l'état des modificateurs qui en font partie. Ces modificateurs standards sont aussi  appelés : **modificateurs réels**. Cet aspect sera détaillé lorsque sera abordée la définition même des touches.</note>
+
+xkb attache aux touches, les types par défaut suivants  :
+  * ONE_LEVEL ((1 niveau )) : pour les touches qui ne possèdent qu'un seul symbole et qui est indépendant des modificateurs. Par exemple Enter, Escape, Space, etc...
+  * TWO_LEVEL ((2 niveaux)) : pour les touches à deux niveaux non alphabétiques. Le deuxième niveau est choisi par le modificateur //Shift// mais ne fait pas intervenir le modificateur //Lock//. Des exemples de telles touches sont sur un clavier AZERTY standard: //1/€€//,
+  * ALPHABETIC : pour les touches alphabétiques. Elles possèdent deux niveaux également mais sont dépendantes de //Shift// **et** de //Lock//.
+  * "KEYPAD" (( littéralement : pavé de touches, encore appelé «pavé numérique»)): Il s'agit de touches supplémentaires, sur certains claviers, regroupées en carré comprenant le plus souvent les touches numériques et les touches de direction. Elles ont deux niveaux aussi, mais dépendent de //Shift// **et** de //NumLock//. //NumLock// est un symbole de touche qui, lorsqu'il est attaché à un des modificateurs standards Mod1 à Mod5, lui confère une fonction de verrouillage de la fonction numérique des touches du pavé.
+
+===La définition proprement dite des touches===
+
+Chacun des fichiers contenus dans le dossier **/usr/share/X11/xkb/symbols** a le contenu suivant
+<file>key codeDeTouche	{description};</file>
+où //codeDeTouche// est le code de la touche tel qu'[[#Codes de touches (keycodes) |expliqué plus haut]], de la forme **<xxxx>** et où la partie entre accolades comprend la définition proprement dite. Cette définition peut porter sur de nombreux paramètres qu'il est difficile de présenter tous ici sans entrer dans des considérations complexes qui dépassent le besoin de ce tutoriel.\\
+Pour une présentation exhaustive reportez-vous aux documents cités en référence en fin de page. 
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez]] par exemple le fichier  **/usr/share/X11/xkb/symbols/latin** pour y trouver des définitions de touches sous la forme suivante :
+
+<file>
+    key <AD01>	{ [         q,          Q,           at,  Greek_OMEGA ]	};
+    key <AD02>	{ [         w,          W,      lstroke,      Lstroke ]	};
+    key <AD03>	{ [         e,          E,            e,            E ]	};
+    key <AD04>	{ [         r,          R,    paragraph,   registered ]	};
+    key <AD05>	{ [         t,          T,       tslash,       Tslash ]	};
+    key <AD06>	{ [         y,          Y,    leftarrow,          yen ]	};
+</file>
+Il s'agit ici de la déclaration de simples touches alphabétiques pour laquelle sont indiqués les symboles de touche des quatre niveaux qu'elle prévoit.
+
+Vous pourrez également trouver dans certains fichiers des lignes attribuant à la touche un [[#type]] qui aura été renseigné dans un des fichiers du dossier **/usr/share/X11/xkb/types** et qui auront la forme
+<file>type = ..., or type[numéroGroupe] = ...</file>
+par exemple
+<file>
+type[Group1]="ONE_LEVEL",type[Group2]="TWO_LEVEL",
+</file>
+ <note>Si vous souhaitez inclure un type personnel dans une configuration particulière du clavier, prenez exemple sur les types décrits dans les fichiers du dossier **/usr/share/X11/xkb/types**. 
+Vous noterez par ailleurs que les fichiers de symboles ne comprennent en général qu'un seul groupe et que les différents groupes de la carte du clavier sont formés à partir de chacun de ces fichiers lors de la sélection des agencements dans l'interface graphique. Néanmoins, plusieurs groupes peuvent être compris dans un seul fichier.</note>
+  
+Il existe également des lignes qui attribuent les symboles de touche aux différents niveaux des différents groupes
+<file>symbols[...] = ...</file>
+par exemple : 
+<file>
+symbols[Group1] = [ ISO_Level3_Shift, ISO_Next_Group ],
+</file>
+ <note>La remarque faite précédemment à propos des groupes vaut également dans ce cas.</note>
+
+Lorsque la description ne comprend que des symboles de touche, il est possible de se contenter simplement de la partie entre crochets, par exemple :
+<file>
+key <AE02>	{ [         2,   quotedbl,           at,    oneeighth ]	};
+</file>
+<note>Lorsque le type de paramètre décrit est le dernier dans la description de la touche, la virgule finale est supprimée.</note>
+
+=====Règles d'écriture des fichiers de configuration=====
+
+====Syntaxe structurelle des fichiers====
+
+D'une façon assez générale, les fichiers de configuration se présentent comme  une suite de sections de la forme suivante :
+
+[ [[#Drapeaux]] ] [[#TypeDeFichier]] [ [[#NomDeSection]] ] '{' [ [[#Instructions]] ] '};:
+
+=== Drapeaux ===
+Un seul de ces drapeaux est utilisé par xkb : **default**. La section marquée //default// est celle qui est prise en compte lorsqu'une référence au fichier est faite sans mentionner le nom de la section.
+
+Les autres noms sont à destination de l'utilisateur pour l'aider à se repérer. Ces noms sont assez évocateurs pour qu'on ne s'attarde pas sur leur explication.
+
+===  TypeDeFichier ===
+
+Il représente le type du fichier parmi ceux énumérés ci-après :
+^ Type de fichier ^ Définition ^
+|**xkb_keycodes**| Fichiers établissant la correspondance entre le code de chacune des touches et un nom symbolique de ce code. Les fichiers de ce type sont placés dans le dossier **/usr/share/X11/xkb/keycodes**|
+|**xkb_types**| Fichiers décrivant les types de touche, en particulier leur nombre de niveaux et la relation entre ces niveaux et les modificateurs. Les fichiers de ce type sont placés dans le dossier ** /usr/share/X11/xkb/types**|
+|**xkb_symbols**|Fichiers décrivant, entre autres, le type et les symboles de touche de cette touche. Les fichiers de ce type sont placés dans le dossier **/usr/share/X11/xkb/symbols**|
+|**xkb_compat**|Fichiers décrivant le comportement des modificateurs. Ceci renvoie à des notions complexes qui ne sont pas strictement nécessaires pour la compréhension de ce tutoriel. Pour une présentation exhaustive reportez-vous aux documents cités en référence en fin de page. Les fichiers de ce type sont placés dans le dossier **/usr/share/X11/xkb/compat**|
+|**xkb_geometry**|Fichiers décrivant le placement physique des touches sur le clavier. Les fichiers de ce type sont placés dans le dossier **/usr/share/X11/xkb/geometry**|
+
+<note>Notez que toutes les sections d'un même fichier doivent être du même type.</note>
+
+=== NomDeSection ===
+Il attribue un nom à la section. Pour les instructions d'inclusion de fichier, ou de partie de fichier, une  référence à une section particulière pourra être faite en utilisant ce nom.
+
+
+=== Instructions ===
+Les instructions dépendent du type de fichier et sont expliqués dans les différentes sections traitant de ces fichiers.
+Par exemple, dans un fichier du dossier //symbols//, on peut trouver une instruction de définition des symboles attachés aux différents de cette touche telle que :
+ <file>key <AC01>	{ [                q,                Q,           adiaeresis,            Adiaeresis ] }; // q Q ä Ä
+</file>
+==== Règles de fusion / imbrication des fichiers ====
+
+D'une façon générale, les fichiers de configuration n'ont pas une présentation où ceux-ci seraient indépendants les uns des autres. Au contraire, ils sont en général très imbriqués, faisant appel, par des instructions //include//, à des parties d'autres fichier de même type. Ceci rend d'ailleurs la lecture d'une configuration donnée assez difficile.
+
+=== L'instruction include ===
+Les programmeurs n'ont pas besoin d'explication sur cette instruction présente dans nombre de langages de programmation. Pour les autres disons qu'elle permet d'inclure, à l'endroit où elle est placée, le contenu textuel de ce à quoi elle fait référence, comme si ce texte avait été placé directement à cet endroit.
+
+=== Modes de fusion ===
+Le fait de procéder par inclusions, parfois en cascade, conduit à une possibilité accrue de voir un élément, tel qu'une définition de touche par exemple, décrit ou défini plusieurs fois. Ceci conduit à se poser la question de ce qui se passe quand ces déclarations multiples sont en conflit. C'est à ce stade que les modes de fusion interviennent.\\
+Avant de voir comment faire appel à eux, en voici une courte description :
+^ Mode ^ Description ^
+|**augment**|Quand ce mode de fusion est utilisé et qu'une nouvelle déclaration entre en conflit avec une précédente déclaration, la déclaration précédente est conservée. |
+|**override**|Quand ce mode de fusion est utilisé et qu'une nouvelle déclaration entre en conflit avec une précédente déclaration, la nouvelle déclaration est conservée|
+|**replace**|En général, ce mode est équivalent au mode //override//.Cependant, l'interprétation en est plus nuancée dans les fichiers de symboles de touches. Comme la description d'une touche comporte une suite de symboles à associer aux différents niveaux, il se peut que plusieurs descriptions d'une même touche, intéressent chacune une partie seulement de l'ensemble des symboles. Dans un tel cas, si le mode est //override//, les symboles des **niveaux décrits** de la nouvelle déclaration écrasent ceux de l'ancienne; par contre, si le mode est replace, **tous les niveaux sont écrasés**, ce qui signifie que les symboles absents de la nouvelle déclaration seront sans symbole affecté.|
+|**alternate**|Ce mode n'est utilisé que pour les codes de touche. La nouvelle définition est considérée comme un alias.|
+
+=== Mise en œuvre des modes de fusion ===
+  * Sans autre déclaration qui le contredise à l'intérieur de l'élément inclus, lors de l'inclusion d'un élément , le mode //override// est appliqué par défaut.
+  * Si l'inclusion porte sur une suite d'éléments reliés par le signe +, les éléments ajoutés sont fusionnés entre eux avec le mode //override//. Les déclarations internes peuvent néanmoins contredire ce principe.
+  * Si l'inclusion porte sur une suite d'éléments reliés par le signe |, les éléments ajoutés sont fusionnés entre eux avec le mode //augment//. Les déclarations internes peuvent néanmoins contredire ce principe.
+  * Le mode de fusion par défaut, override, peut être contredit en remplaçant le terme include par le nom d'un mode d'insertion. Par exemple, dans un fichier de symboles :
+<file>replace «fr(oss_nodeadkeys)"</file>
+signifie que les déclarations du fichier fr doivent être incluse en appliquant le mode //replace// et non pas le mode  par défaut //override//. Les déclarations internes peuvent néanmoins contredire ce principe.
+  * Pour finir, un appel interne à un mode de fusion, l'emporte sur une déclaration antérieure, par exemple :
+<file> 
+ replace key <HYPR> {
+    vmods = NumLock,
+    symbols[Group1] = [ NoSymbol ],
+    actions[Group1] = [ SetMods(modifiers=NumLock) ]
+  };
+</file> 
+signifie que cette nouvelle définition de la touche <HYPR> annule et remplace toutes les définitions précédentes de cette touche.
+
+
+=====Démarche d'écriture de son agencement personnalisé=====
+Les pages [[tutoriel:creer_et_utiliser_un_agencement_de_clavier_personnalise|Créer et utiliser un agencement de clavier personnalisé]] et [[tutoriel:exemple_de_creation_d_un_agencement_clavier_personnalise|Exemple de création d'un agencement de clavier personnalisé]] décrivent, dans les grandes lignes pour la première et, très en détails pour la seconde, la démarche d'écriture d'un agencement personnalisé.
+
+===== Références bibliographiques =====
+
+Les bases théoriques de cette page sont accessibles sur le site de [[http://pascal.tsu.ru/en/xkb/| Ivan Pascal]], qui traite d'une manière exhaustive tout ce qui n'a pu être qu'effleuré ici. Ce texte, bien écrit, requiert néanmoins une attention soutenue, en particulier, à qui n'est pas un programmeur. 
+
+
+
+
+----
+//Contributeurs: [[:utilisateurs:jaaf64]] //
+----
+**Notes**

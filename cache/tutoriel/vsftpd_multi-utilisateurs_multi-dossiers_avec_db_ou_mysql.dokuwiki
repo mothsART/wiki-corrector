@@ -1,0 +1,516 @@
+
+{{tag> Precise tutoriel vsftpd}}
+----------------
+====== VSFTPD multi-utilisateurs multi-dossiers avec DB ou MYSQL. ======
+
+
+vsftpd est un deamon FTP très léger, rapide et sécurisé.
+Il peut gérer des services FTP de tous types, il est relativement simple à configurer, mais il manque cruellement de documentation et d'exemple.
+
+Voici un petit tutoriel qui vous permettra de monter rapidement votre service FTP en local ou sur votre serveur dédié.
+
+Vous y trouverez deux possibilités pour la gestions de vos utilisateurs, suivant vos préférences avec un simple fichier DB (Berkeley db) ou avec une base mySQL qui offre plus de souplesse et de possibilité.
+
+Ce tuto suppose que avez un minimum de connaissance en ligne de commande, mais il est suffisamment détaillé pour un débutant.
+Il a été réalisé sous Ubuntu 12.04, mais peut s'adapter aux versions précédentes.
+
+Pour réaliser cette installation, il ne vous faudra pas plus de 10 minutes.
+
+===== Pré-requis =====
+
+  * Disposer des droits d'administration
+  * Savoir utiliser un terminal
+  * Avoir installé le paquet vsftpd 
+
+Commencez par ouvrir votre fenêtre de terminal (ctrl-alt-t) 
+Passez en utilisateur « root » pour éviter d'ajouter sudo à toutes les commandes.
+<code>
+sudo -i
+</code>
+
+Si vous n'avez pas encore installé vsftpd tapez :
+<code> 
+apt-get install vsftpd
+</code>
+
+===== Configuration =====
+
+Commencez par créer un fichier de configuration pour vsftpd, si ce fichier existe déjà renommez le :
+<code>
+mv /etc/vsftpd.conf /etc/vsftpd.old
+</code>
+Puis créez un nouveau fichier de configuration :
+<code>
+touch /etc/vsftpd.conf
+</code>
+Editez ce fichier avec votre éditeur favori, ici avec nano :
+<code>
+nano /etc/vsftpd.conf
+</code>
+Insérez ce contenu (copier/coller), quelques commentaires vous permettent de l'adapter suivant vos préférences, et vous trouverez des références à cette configuration dans les chapitres suivants.
+<file>
+# ftp server 
+#####################
+listen=YES
+# port par défaut du FTP
+listen_port=21
+# nom du service d'authentification
+pam_service_name=vsftpd
+# pour le mode passif (firewall)
+pasv_min_port=30000
+pasv_max_port=30999
+#
+#
+# anonymous user
+#####################
+anonymous_enable=NO
+anon_upload_enable=NO
+anon_mkdir_write_enable=NO
+anon_other_write_enable=NO
+#
+#
+# general user
+#####################
+local_enable=YES
+local_umask= 022
+write_enable=YES
+chroot_local_user=YES
+# pour user admin (déconseillé)
+# chroot_list_enable=YES
+#
+#
+# virtual user
+#####################
+guest_enable=YES
+guest_username=vsftpd
+nopriv_user=vsftpd
+virtual_use_local_privs=YES
+user_sub_token=$USER
+local_root=/ftpzone/$USER
+hide_ids=YES
+</file>
+
+Créez maintenant l'utilisateur local pour VSFTPD, il permet de définir les droits des dossiers, et la racine du système ftp (/ftpzone plutôt que /home/user) . Cet utilisateur n'a pas besoin de shell .
+<code>
+useradd --home /ftpzone --shell /bin/false vsftpd
+</code>
+
+Le nom d'utilisateur local et le dossier racine peuvent être adaptés, mais vous devrez changer la configuration en conséquence.
+//cf. config :// 
+//guest_username=vsftpd//
+//nopriv_user=vsftpd//
+//local_root=/ftpzone/$USER// 
+
+
+===== UTILISATEURS VIRTUELS =====
+
+Les utilisateurs virtuels peuvent être gérés de plusieurs façons, je vous en propose deux :
+  * **3.1 un simple fichier DB (Berkeley db)**
+  * **3.2 une base mySQL**
+
+Je vous conseille plutôt la version mySQL qui vous permettra par la suite une gestion beaucoup plus souple et évolutive (ajout des quotas, gestion d'utilisateur en http par php, etc...).
+Bien sûr il faudra disposer du service mysql installé.
+
+
+==== Un simple fichier DB (Berkeley db) ====
+
+Le principe est de créer les utilisateurs dans un fichier texte puis de le convertir au format DB.
+
+Créez le fichier d'utilisateurs virtuels et leurs mot de passe (dans /root il ne sera lisible par personne) , les noms d'utilisateur et les mots de passe seront en alternance sur chaque ligne.
+<code>
+touch /root/vsftpd_login.txt
+</code>
+Editez le fichier et définissez deux utilisateurs pour exemple user1 et user2, respectivement avec les mots de passe 123456 et 654321.
+ <code>
+nano /root/vsftpd_login.txt
+</code>
+Copiez/collez ces 4 lignes :
+<file>
+user1 
+123456
+user2
+654321
+</file>
+<note important>ATTENTION il est important de ne pas ajouter de retour, ni de ligne supplémentaire après le dernier mot de passe .</note>
+
+Générez ensuite le fichier db dans /etc/vsftpd_login.db : 
+<code>
+db_load -T -t hash -f /root/vsftpd_login.txt /etc/vsftpd_login.db
+</code>
+Changez les droits pour le fichier db (securité)  :
+<code>
+chmod 600 /etc/vsftpd_login.db
+</code>
+
+
+Définissez la config de PAM pour l'authentification , créez le fichier /etc/pam.d/vsftpd :
+//cf config : pam_service_name=vsftpd// 
+<code>
+touch /etc/pam.d/vsftpd
+</code>
+Éditez ce fichier :
+<code>
+nano /etc/pam.d/vsftpd 
+</code>
+Copiez/collez ce contenu  :
+<file>
+auth required /lib/x86_64-linux-gnu/security/pam_userdb.so db=/etc/vsftpd_login
+account required /lib/x86_64-linux-gnu/security/pam_userdb.so db=/etc/vsftpd_login
+</file>
+
+**Vos utilisateurs virtuels peuvent maintenant être authentifiés sans être créés comme des utilisateurs locaux.**
+
+
+
+
+==== Une base MySQL ====
+  
+Pour créer la base de données vsftpd, il est nécessaire de connaître le mot de passe root (ici les étoiles) de votre installation de mysql ou celui d'un autre utilisateur ayant les droits de création.
+Nous utiliserons ici des mots de passe cryptés pour nos utilisateurs virtuels.
+
+Connexion au serveur MySQL
+<code>
+sudo mysql
+</code>
+(Ajoutez //-p// à cette commande si vous utilisez un mot de passe pour le compte //root//.)
+
+Vous entrez alors dans l'invite de commande SQL ou vous pouvez créer une base de données vsftpd associée à un utilisateur MySQL vsftpd, puis créer la table d'utilisateurs FTP et insérer vos deux premiers utilisateurs FTP, pour exemple user1 et user2 avec les mots de passe 123456 et 654321 :
+
+<note important>N'oubliez pas de changer le mot de passe de l'utilisateur de la base vsftpd en fonction de vos préférences, ici  « mot_de_passe ».</note>
+<code>
+CREATE DATABASE vsftpd;
+GRANT ALL ON vsftpd.* TO "vsftpd"@"localhost" IDENTIFIED BY 'mot_de_passe';
+USE vsftpd;
+CREATE TABLE `utilisateurs` (
+`username` varchar(64) NOT NULL default '',
+`password` varchar(64) NOT NULL default '',
+`quota` int(10) NOT NULL default '0',
+PRIMARY KEY  (username)
+) ENGINE=MyISAM COMMENT='Utilisateurs Virtuels pour le ftp';
+INSERT INTO `utilisateurs` (`username`,`password`) VALUES ("user1", ENCRYPT("123456"));
+INSERT INTO `utilisateurs` (`username`,`password`) VALUES ("user2", ENCRYPT("654321"));
+QUIT;
+</code>
+
+
+Il vous reste à créer le fichier pour l'identification PAM , et indiquer dans ce fichier comment lire votre base.
+Créez le fichier /etc/pam.d/vsftpd :
+//cf config : pam_service_name=vsftpd// 
+<code>
+touch /etc/pam.d/vsftpd 
+</code>
+Éditez ce fichier : 
+<code>
+nano /etc/pam.d/vsftpd 
+</code>
+Copiez/coller ce contenu  :
+<note important>N'oubliez pas de modifier le mot de passe de l'utilisateur de la base vsftpd en fonction de votre création, ici « mot_de_passe».</note>
+<file>
+auth       required 	pam_mysql.so user=vsftpd passwd=mot_de_passe host=127.0.0.1 db=vsftpd table=utilisateurs usercolumn=username passwdcolumn=password crypt=1 
+account    required 	pam_mysql.so user=vsftpd passwd=mot_de_passe host=127.0.0.1 db=vsftpd table=utilisateurs usercolumn=username passwdcolumn=password crypt=1 
+</file>
+
+
+**Vos utilisateurs virtuels peuvent maintenant être authentifiés sans être créés comme des utilisateurs locaux.**
+
+
+===== Dossiers des utilisateurs virtuels =====
+ 
+
+Nous définissons ici le dossier racine du FTP /ftpzone, mais vous devez l'adapter suivant le home de votre utilisateur principal et modifier la configuration en conséquence.
+//cf. config : virtual_use_local_privs=YES ; user_sub_token=$USER ; local_root=/ftpzone/$USER// 
+
+Pour fonctionner dans ce mode, vsftpd attend : 
+- un dossier racine (jail) pour chaque utilisateur sans droit d'écriture 
+- un ou plusieurs sous-dossiers pour chaque utilisateur avec droit d'écriture, dans notre exemple le sous dossier sera nommé « upload ».
+
+Création des dossiers et sous-dossiers :
+<code>
+mkdir /ftpzone 
+mkdir /ftpzone/user1 
+mkdir /ftpzone/user1/upload 
+mkdir /ftpzone/user2 
+mkdir /ftpzone/user2/upload 
+</code>
+Définition les droits pour les dossiers des utilisateurs virtuels  :
+<code>
+chmod 555 /ftpzone/user1 
+chmod 775 /ftpzone/user1/upload 
+chmod 555 /ftpzone/user2 
+chmod 775 /ftpzone/user2/upload 
+</code>
+Le propriétaire de l'arborescence FTP sera l'utilisateur local « vsftpd » :
+<code>
+chown -R vsftpd:vsftpd /ftpzone 
+</code>
+
+
+===== Démarrage du service et test. =====
+
+
+Pour démarrer le service vsftpd on utilisera la commande « service », pour les versions précédentes de ubuntu, on utilisera plutôt /etc/init.d/vsftpd.
+
+Premier démarrage du service vsftpd :
+<code>
+service vsftpd start 
+</code>
+Si le service est déjà démarré ou pour toutes modification de la configuration :
+<code>
+service vsftpd restart 
+</code>
+<note>Attention si il y a une erreur de configuration, vsftpd n'affiche aucun message, il ne se lance pas alors que la commande affiche néanmoins un id de process. 
+Pour vérifier que le service est bien démarré et que la configuration est correcte, vérifiez les process (top) ou plus simplement redémarrez le service (restart) et s'il affiche « stop: Unknown instance » s'est qu'il n'a pas été lancé et que vous avez une erreur dans le fichier configuration.</note>
+
+
+A partir de là le service FTP fonctionne il peut être testé. Dans un premier temps en local en ligne de commande pour vérifier si les logins fonctionnent  :
+**En gras ce que vous devez taper.**
+
+**ftp 127.0.0.1 21** 
+
+Connected to 127.0.0.1. 
+
+220 (vsFTPd 2.3.5) 
+
+Name (127.0.0.1:xxx):** user1**
+
+331 Please specify the password. 
+
+Password: **123456**
+230 Login successful. 
+
+Remote system type is UNIX. 
+
+Using binary mode to transfer files. 
+
+ftp> **quit** 
+
+221 Goodbye. 
+
+
+Si la connexion s'est bien déroulée, passez maintenant au test avec votre client ftp favori - ex. Nautilus ou FileZilla 
+
+<note>Lorsque vous devez utiliser ce service FTP depuis une autre machine extérieur à votre réseau, ou si vous venez de l'installer sur un serveur dédié, assurez vous que le port défini dans la configuration (par défaut 21) est ouvert dans votre firewall et dans votre passerelle réseau (box).</note>
+
+
+===== OPTION : Administrateur général =====
+
+
+Le but est de définir un utilisateur qui pourra accéder aux fichiers de tous les autres , et qui n'aura pas de dossier personnel.
+
+<note important>ATTENTION : c'est dangereux pour la sécurité, cet admin pourra remonter l'arborescence générale et voir tous les fichiers autorisés en lecture pour tous les utilisateurs locaux (ex. /etc)</note> 
+
+Même si vsftpd permet de le faire, je vous déconseille ce type d'utilisateur, il est préférable de garder votre accès par ssh, ou en utilisateur root local pour accéder à tous les dossiers de vos utilisateurs virtuels.
+
+Le fichier /etc/vsftpd.chroot_list contiendra les utilisateurs qui n'ont pas besoin de dossier et qui pourront parcourir l'arborescence générale. 
+//cf. config : chroot_list_enable=YES// 
+Dé-commentez cette ligne dans la config : chroot_list_enable=YES
+
+Créez le fichier /etc/vsftpd.chroot_list  :
+<code>
+touch /etc/vsftpd.chroot_list 
+</code>
+Éditez ce fichier  :
+<code>
+nano /etc/vsftpd.chroot_list 
+</code>
+Ajoutez les identifiants d'utilisateurs virtuels autorisés (admin) - 1 par ligne 
+
+
+
+
+===== Ajouter des nouveaux utilisateurs =====
+ 
+
+Il faut ajouter le nom et le mot de passe de l'utilisateur dans la BD et il faut créer les dossiers du nouvel utilisateur dans la racine /ftpzone sans oublier de définir les droits des dossiers 555 pour l'utilisateur et 755 pour son dossier upload .
+
+Pour cela un petit scripts shell est bien pratique . Je vous décrit ici un script très simple si vous avez choisi le mode DB, et un autre plus complet si vous avez choisi le mode MYSQL.
+
+
+==== script SH pour DB ====
+ 
+
+
+Ici un script pour ajouter un utilisateur nommé addFTPuser :
+<code>
+touch /root/addFTPuser 
+nano /root/addFTPuser 
+</code>
+Copiez/collez ce contenu :
+<file>
+#!/bin/sh 
+################################################################# 
+# ajoute un utilisateur virtuel pour vsftpd  // BY ChesterKiK 
+################################################################# 
+if [ $# = "2" ] ; then 
+	# ajoute username et mot de passe au fichier texte des logins 
+	echo $1"\n"$2 >> /root/vsftpd_login.txt 
+	# converti le fichier texte en DB 
+	db_load -T -t hash -f /root/vsftpd_login.txt /etc/vsftpd_login.db 
+	# securise le fichier 
+	chmod 600 /etc/vsftpd_login.db 
+	# cree le dossier utilisateur 
+	mkdir /ftpzone/$1 
+	mkdir /ftpzone/$1/upload 
+	# defini les droits et le propriétaire des dossiers utilisateur 
+	chmod 555 /ftpzone/$1 
+	chmod 775 /ftpzone/$1/upload 
+	chown -R vsftpd:vsftpd /ftpzone/$1 
+	# affiche le succés 
+	echo "Utilisateur FTP "$1" ajouté avec succés" 
+else 
+	echo "Deux arguments attendus (ex: addFTPuser username password)" 
+fi 
+</file>
+Donnez le droit d'execution à votre script :
+<code>
+chmod 750 /root/addFTPuser 
+</code>
+
+Exemple d'utilisation  :
+<code>
+/root/addFTPuser user3 456789 
+</code>
+
+
+
+
+==== script SH pour MYSQL ====
+ 
+
+Ici un script scripts d'ajout/suppression/modification nommé FTPuser 
+<code>
+touch /root/FTPuser 
+nano /root/FTPuser 
+</code>
+Copiez/collez ce contenu :
+<note important>N'oubliez pas de modifier le mot de passe de la base de donnée (ici XpassftpX).</note>
+<file>
+#!/bin/sh 
+################################################################# 
+# gestion des utilisateurs virtuels pour vsftpd // BY CHESTERKIK 
+################################################################# 
+if [ $# = "3" ] && [ $1 = "add" ] ; then 
+	# test si l'utilisateur existe 
+	r=$(echo "USE vsftpd;SELECT username FROM utilisateurs WHERE username='$2';" | mysql -u vsftpd --password='XpassftpX') 
+	if [ "$r" = "" ] ; then 
+		# insert l'utilisateur et son mot de passe dans la table utilisateurs 
+		echo "USE vsftpd;INSERT INTO utilisateurs (username,password) VALUES ('$2', ENCRYPT('$3')) ;" | mysql -u vsftpd --password='XpassftpX' 
+		# cree le dossier utilisateur 
+		mkdir /ftpzone/$2 
+		mkdir /ftpzone/$2/upload 
+		# defini les droits et le propriétaire des dossiers utilisateur 
+		chmod 555 /ftpzone/$2 
+		chmod 775 /ftpzone/$2/upload 
+		chown -R vsftpd:vsftpd /ftpzone/$2 
+		# affiche le succés 
+		echo "L'utilisateur FTP $2 a été ajouté"		 
+	else 
+		echo "L'utilisateur $2 existe déjà"; 
+	fi 
+elif [ $# = "2" ] && [ $1 = "delete" ] ; then 
+	# test si l'utilisateur existe 
+	r=$(echo "USE vsftpd;SELECT username FROM utilisateurs WHERE username='$2';" | mysql -u vsftpd --password='XpassftpX') 
+	if [ "$r" = "" ] ; then 
+		echo "L'utilisateur $2 est introuvable"; 
+	else 
+		echo "Attention! L'utilisateur $2 et tous ses fichiers vont être supprimés." 
+		echo -n "Vous êtes sur (o/N) ? " 
+		read rr 
+		if [ "$rr" = "o" ] || [ "$rr" = "O" ] ; then 
+			# supprime l'utilisateur dans la table 
+			echo "USE vsftpd;DELETE FROM utilisateurs WHERE username='$2';" | mysql -u vsftpd --password='XpassftpX' 
+			# supprime les dossiers 
+			rm -r /ftpzone/$2 
+			# affiche le succés 
+			echo "L'utilisateur FTP $2 a été supprimé" 
+		else 
+			echo "Rien n'a été supprimé" 
+		fi 
+	fi 
+elif [ $# = "3" ] && [ $1 = "change" ] ; then 
+	# test si l'utilisateur existe 
+	r=$(echo "USE vsftpd;SELECT username FROM utilisateurs WHERE username='$2';" | mysql -u vsftpd --password='XpassftpX') 
+	if [ "$r" = "" ] ; then 
+		echo "L'utilisateur $2 est introuvable"; 
+	else 
+		# modifie l'utilisateur dans la table 
+		echo "USE vsftpd;UPDATE utilisateurs SET password=ENCRYPT('$3') WHERE username='$2';" | mysql -u vsftpd --password='XpassftpX' 
+		# affiche le succés 
+		echo "L'utilisateur FTP $2 a été modifié" 
+	fi 
+else 
+	echo "Arguments attendus, syntax :" 
+	echo " > Ajout, tapez: FTPuser add username password" 
+	echo " > Suppression, tapez: FTPuser delete username" 
+	echo " > Changer le mot de passe, tapez: FTPuser change username password" 
+fi 
+</file>
+Donnez le droit d'execution à votre script :
+<code>
+chmod 750 /root/FTPuser 
+</code>
+
+
+**Exemples d'utilisation** 
+
+ajout d'un utilisateur
+<code>
+/root/FTPuser add user3 456789 
+</code>
+modification d'un mot de passe 
+<code>
+/root/FTPuser change user3 987654 
+</code>
+suppression d'un utilisateur 
+<code>
+/root/FTPuser delete user3 
+</code>
+
+
+
+
+===== Problèmes connus =====
+
+
+Si vous obtenez les messages suivants lors de la connexion d'un utilisateur virtuel :
+
+<file>500 OOPS: cannot change directory:/ftpzone/user1 the folder doesnt exist</file>  
+Vous n'avez pas créé le dossier racine de l'utilisateur
+
+
+<file>500 OOPS: vsftpd: refusing to run with writable root inside chroot ()</file> 
+Vous n'avez pas restreint les droits d'écriture (555) sur le dossier racine de l'utilisateur (ex. /ftpzone/userx ) 
+
+----
+
+
+Lors du redémarrage si vous constatez un message du type :
+<file>stop: Unknown instance</file>  
+Vous avez une erreur dans le fichier de configuration qui empêche de démarrer le daemon.
+
+----
+
+
+Lors de la connexion vous obtenez le message
+<file>libgcc_s.so.1 must be installed for pthread_cancel to work ubuntu</file>
+Il vous manque une bibliothèque (normalement installé sous ubuntu 12.04). Vous devez installer le paquet **libpam-ldap** pour résoudre votre problème.
+===== Voir aussi. =====
+
+(en) [[https://security.appspot.com/vsftpd.html]]
+
+(en) [[http://ubuntuforums.org/showthread.php?t=518293]]
+
+(en) [[http://www.debiantutorials.com/installing-vsftpd-using-text-file-for-virtual-users/]]
+
+
+----
+
+
+
+--- //[[:utilisateurs:ChesterKiK|ChesterKiK]] Le 24/09/2012, 16:22//
+
+
+
+
+
+

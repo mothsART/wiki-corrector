@@ -1,0 +1,166 @@
+
+<note important>Ceci est un brouillon: 
+  * En cours de révision. En cours de test
+  * plein de FIXME à voir avec la liste
+</note>
+----
+{{tag>bureau_à_distance}}
+----
+====== Accéder visuellement à une machine distante via ssh ======
+
+===== Introduction =====
+
+Après une [[:installation]] chez une tierce personne, par exemple chez des amis, clients..., bien souvent il vous faut accéder à leur machine quelques temps après.\\
+Cette page se propose de vous permettre de vous y connecter grâce au visionneur de bureau distant déjà installé [[:Vinagre]] et, afin de sécuriser cette connexion, d'utiliser le protocole [[:SSH]]((Secure SHell)).
+
+<note>Pour la suite le serveur est la machine distante que l'on cherche à atteindre (le pc de l'ami quoi)\\
+Le client est la machine qui prendra le contrôle (en gros votre pc)</note>
+
+===== Pré-requis =====
+
+==== Côté serveur ====
+
+Pour rappel: Il s'agit ici de la machine que l'on cherche à joindre.
+  * [[:tutoriel:comment_installer_un_paquet|Installer le paquet]] **[[apt>openssh-server]]**
+  * Dans un [[:terminal]], vérifier que le [[:services|service]] est bien actif en saisissant la [[:commande_shell|commande]] suivante :<code>status ssh</code> si la réponse est <code>ssh start/running, process XXXX</code>où //XXXX// est un nombre, c'est que le [[:services|service]] est bien opérationnel sinon il faut le démarrer par: <code>sudo service ssh start</code>
+  * [[:tutoriel:connaitre_son_adresse_ip|Connaître son adresse IP]] du réseau local: <code>ifconfig | awk '/inet adr/ {print $2}' | grep -v "127.0.0.1"</code>
+  * Sur le routeur/box rediriger le port 22 vers le pc.
+<note tip>
+  * Sur les [[:Freebox]] V5 et [[:FreeboxV6|V6]] tout se passe dans [[http://subscribe.free.fr/login/|l'interface de gestion de votre compte]].
+    * Dans la section **Internet** sélectionner la partie **Configurer le routeur**.
+    * Vérifier que le mode routeur est bien activé et dans le bas de cette page redirigé le port 22 en TCP vers l'adresse récupérée plus tôt, ici //192.168.0.10//:22. 
+    * Enregistrer ces nouveaux paramètres puis redémarrer la freebox.
+
+  * Sur une BBox, rendez-vous sur [[http://192.168.1.254]] ou [[http://gestionbbox.lan]] 
+    * Allez dans la rubrique de gauche "Configuration du routeur"
+    * Puis dans l'onglet horizontal "NAT/PAT"
+    * Ensuite entrez le nom d'utilisateur et le Mot de Passe (par défaut : utilisateur : "admin" mot de passe : "admin")
+    * Dans les champs suivants vous allez mettre:
+      * Nom de la règle : ce que vous voulez
+      * Protocole : TCP
+      * Port / Plages de ports : cous laissé port
+      * Port(s) source : 22
+      * @ IP de destination ou nom de l'ordinateur : l'adresse ip récupérée plus tôt, ici //192.168.0.10//
+      * Port(s) de destination : 22
+    * Enfin cliqué sur Validé
+
+  * Sur une Livebox, rendez-vous sur [[http://livebox]] ou [[http://192.168.1.1]] selon votre version de box. Plus d'information [[http://http://assistance.orange.fr/livebox-interface-de-configuration-1094.php|ici]] FIXME à compléter/confirmer
+</note>
+  * Connaitre son adresse IP hors réseau local, c'est à dire votre adresse public visible sur le net, en se rendant par exemple sur [[http://monip.org|monip.org]] ou en saisissant dans un [[:terminal]] la [[:commande_shell|commande]] suivante:<code>wget http://checkip.dyndns.org/ -O - -o /dev/null | cut -d: -f 2 | cut -d\< -f 1</code>
+  * Désactiver les effets graphiques. Par exemple, sur l'environnement [[:Gnome]] il s'agira de //Système → Préférences → Apparences// → Onglet "Effets" → cocher "Aucun".\\ FIXME Toujours utile ? Sous [[:Natty]] cette option ne semble plus possible, comment faire si c'est toujours nécessaire ? (Pas encore cherché dans le forum)
+  * Si besoin, [[:tutoriel:comment_modifier_un_fichier|modifier avec les droits d'administration]] la configuration du fichier **/etc/ssh/sshd_config**. Pour en savoir plus, se reporter à la section [[vnc_via_ssh#securite|sécurité]], mais cette étape peut être réalisée ultérieurement par la personne qui prendra la main à distance.
+
+==== Côté Client ====
+
+__**Rien**__ tout est installé (un café si vous voulez :-)).
+
+===== Première Connexion =====
+Depuis la machine cliente (votre pc), saisissez dans un [[:terminal]] la [[:commande_shell|commande]] suivante:
+<code>ssh -L 5900:localhost:5901 <Login>@<Adresse-ip> -p <Port></code>
+Où:
+  * **<Login>** est le nom de l'utilisateur sur l'ordinateur distant.\\
+  * **<Adresse-ip>** est l'adresse "internet" du serveur.\\
+  * **<Port>** est le port indiqué à rediriger dans l'interface de gestion soit 22 par défaut. Pour plus d'information sur cette valeur, reportez-vous [[#Sécurité|plus bas]]).\\
+<note tip>L'option //**-L 5900:localhost:5901**// est facultative. C'est elle qui permet d'accéder au serveur graphique distant en passant par [[:ssh]]. Si vous comptez utiliser uniquement le [[:terminal]], vous pouvez retirer cette partie</note>
+Par exemple, pour vous connecter à la machine distante dont le nom d'utilisateur de la session est "ami", l'adresse public sur le net est //123.45.67.890// et dont le port redirigé est //22//, saisissez
+<code>ssh -L 5900:localhost:5901 ami@123.45.67.890 -p 22</code>
+
+Vous devriez avoir une demande de confirmation la première fois pour valider votre connexion au serveur, puis le mot de passe du compte distant (donc le mot de passe du compte utilisateur sur la machine serveur) doit vous être demandé.\\
+Vous êtes maintenant sur le serveur, c'est à dire la machine distante.
+
+===== Et maintenant ? =====
+
+Vous avez donc accès à la machine distante, le problème c'est que la personne qui se trouve devant physiquement (votre ami, client...) ne voit pas forcément ce que vous faites, ou vous n'êtes pas très à l'aise avec la [[:tutoriel/console_ligne_de_commande|ligne de commande]].\\
+Pour rappel, vous avez laissez ouvert le [[:terminal]] précédemment connecté.
+
+==== Retour visuel de la ligne de commande ====
+
+Sur le serveur, demander à l'utilisateur distant d'ouvrir un [[:screen]] avec le nom de son choix.\\
+Par exemple, pour une session screen nommé **ami**, il saisira dans un [[:terminal]] la [[:commande_shell|commande]] suivante:
+<code>screen -S ami</code>et de votre côté entrez dans le [[:terminal]] connecté par
+<code>screen -x ami</code>Ce que vous saisirez sera maintenant affiché en parallèle sur le [[:terminal]] distant (donc sous les yeux de votre ami, client...).
+
+==== Retour graphique de l'environnement ====
+FIXME toute la partie à reprendre pour simplifier.
+
+Si vous souhaitez accéder graphiquement au serveur, vérifier sur celui-ci que [[:vnc|vino-server]] est bien dans les applications au démarrage donc bien actif:
+<code>ps aux | grep vino-server</code>si vous avez pour seule réponse un retour au prompt c'est qu'il vous faut le démarrer par
+<code>/usr/lib/vino/vino-server &</code>FIXME --sm-disable?\\
+puis de votre côté entrer
+<code>vinagre localhost:1</code>Une demande d'autorisation doit apparaitre sur l'écran serveur qu'il faut donc faire valider par la personne devant l'ordinateur distant.
+
+Vous devriez être maintenant sur le pc distant et la personne qui se trouve devant physiquement (votre client, ami...) doit voir toutes vos actions.
+<note tip>Si la connexion ne semble pas se réaliser, demander à l'utilisateur distant de vérifier dans les paramètres accessibles depuis le menu //Système -> Préférences -> Bureau à distance//, ou en saisisant dans un [[:terminal]] <code>vino-preferences</code>que les cases suivantes sont bien cochées:
+  * Autoriser d'autres utilisateurs à voir votre bureau
+  * Autoriser d'autres utilisateurs à contrôler votre bureau.
+</note>
+<note tip>FIXME à revérifier car test bizarre pour gconftool en local-VM\\
+Vous pouvez vous même modifier les préferences de vino-server et lancer ce dernier s'il n'était pas actif. Il s'agira de:
+  * saisir en [[:commande_shell|ligne de commande]] <code>gconftool -2 -s -t bool /desktop/gnome/remote_access/enabled true
+gconftool -2 -s -t bool /desktop/gnome/remote_access/prompt_enabled false</code> ou atteindre "vino-preferences" en ajoutant l' option ''-X'' au moment de se connecter avec ssh (cette option n'est pas toujours acceptée selon la configuration du serveur ssh)
+  * lancer le serveur <code>DISPLAY=:0.0 /usr/lib/vino/vino-server --sm-disable &</code>FIXME DISPLAY obligé???
+</note>
+
+
+
+Vous pouvez également activer vino-server et modifier ses préférences (par gconftool-2
+ou utiliser ssh avec l'option -X pour tenter de lancer vino-preferences
+</note>
+
+FIXME remettre une note sur les effets graphique ? déplacer pré-requis à ce sujet ici?
+===== Quitter la connexion distante =====
+
+Côté client, pour quitter votre accès à distance, quittez vinagre et les terminaux ouverts.\\
+Côté serveur, vous pouvez arrêter le serveur ssh par
+<code>sudo service ssh stop</code>
+et [[:vnc|vino-server]] par 
+<code>sudo killall vino-server</code> FIXME Pas mieux ?\\ 
+Quitter également les différents [[:terminal|terminaux]] si vous avez utilisé [[:screen]].
+
+===== Sécurité =====
+
+Afin de sécuriser un peu plus cette communication, il existe différentes possibilités dont:
+  * l' authentification de SSH par un [[#duo clé publique / clé privés]]
+  * [[#les ports|la modification des ports]].
+  * [[#Ne pas démarrer le serveur SSH|le démarrage du serveur SSH]] à la demande et non dès l'allumage de la machine.
+  * [[#Ne pas démarrer le serveur VNC|l' activation du serveur VNC]] à la demande et non à l'ouverture de session.
+
+====Les ports====
+FIXME explication de préférence de l'un par rapport à l'autre.\\
+Afin de sécuriser un peu plus, il est possible de changer de politique quant au port //22// attribué par défaut, souvent attaqué en premier.\\ Vous pouvez en effet choisir de
+  * Rediriger un autre port que le //22// entrant dans votre routeur/box.\\ Il s'agit de le définir sur votre routeur/box comme expliqué [[#pré-requis#côté_serveur|plus avant]] mais en redirigeant non plus le port //22// mais un nouveau numéro au choix et ce toujours vers le port //22// de la machine serveur.
+  * Rediriger le port //22// entrant dans votre routeur/box du routeur vers un port autre que le //22// de la machine serveur.\\ En plus de la redirection à définir sur votre routeur/box comme expliqué [[#pré-requis#côté_serveur|plus avant]], il s'agira également de [[:tutoriel:comment_modifier_un_fichier|modifier avec les droits d'administration]] le port dans le fichier **/etc/ssh/sshd_config**.
+  * Rediriger un autre port que le //22// entrant dans votre routeur/box vers un autre port que le 22 de la machine serveur.
+ Les ports habituellement usités sont visibles dans le fichier **/etc/services**. Choisissez en donc un qui n'y apparait. \\ 
+<note tip>Par exemple si vous souhaitez utiliser le port //2653// (FIXME à priori pas de souci), vous pourrez vérifier si cette valeur n'est pas déjà couramment utilisée en saisissant dans un [[:terminal]] la [[:commande_shell|commande]] suivante: <code>grep -w 2653 /etc/services</code>Si vous avez un retour au prompt pour seul réponse, c'est que vous pouvez utiliser ce port.\\ Si vous faites l'essai avec la valeur //22//, vous constaterez qu'il s'agit du port attribué à SSH</note>
+
+===Exemple===
+Vous souhaitez rediriger le port //2653// entrant dans votre routeur/box vers le port //2654// de la machine //192.168.0.10// dont l'adresse public est //123.45.67.890// et le nom de session est "ami"
+  * Depuis l'interface de votre routeur/box rediriger en FIXME TCP?UDP? le port 2653 vers 192.168.0.10:2654
+  * Sur le serveur [[:tutoriel:comment_modifier_un_fichier|ouvrez avec les droits d'administration]] le fichier **/etc/ssh/sshd_config** pour modifier la ligne de définition du port comme suit:<file>Port 2654</file>
+  * Redémarrer le serveur ssh: <code>sudo service ssh restart</code>
+  * Sur la machine cliente, connectez-vous grâce à <code>ssh ami@123.45.67.890 -p 2653</code>
+
+====Ne pas démarrer le serveur SSH====
+Si vous ne souhaitez pas que le [[:services|service]] [[:ssh]] soit activé à chaque démarrage, deux options:
+  - [[:tutoriel:comment_modifier_un_fichier|modifier avec les droits d'administration]] le fichier **/etc/init/ssh.conf** et commenter (ajouter un # au début de) la ligne **//start on filesystem//**.
+  - renommer le fichier **/etc/init/ssh.conf** pour qu'il ne soit pas vu par le système. Par exemple dans un [[:terminal]], saisissez la [[:commande_shell|commande]] suivante:<code>sudo mv /etc/init/ssh.conf{,.nostart}</code>
+Pour reprendre la main les prochaine fois, il faudra donc demander à l'utilisateur distant de démarrer [[:ssh]] tel qu'indiqué dans les [[#pré-requis#côté_serveur|pré-requis]].
+
+====Ne pas démarrer le serveur VNC====
+Vino-server peut faire partie des applications démarrées à l'ouverture de session. Ne s'agissant pas ici d'un [[:service]], vous pouvez modifier ce comportement depuis votre gestionnaire de session, par exemple depuis le menu //Système -> Préférences -> Applications au démarrage// sur Gnome. \\
+Si vous souhaitez alors avoir un retour graphique de sa machine, vous penserez donc à demander à l'utilisateur disant de le démarrer tel qu'expliqué dans [[vnc_via_ssh#retour_graphique_de_l_environnement|cette section]].\\
+FIXME pas possible de le démarrer à distance avec DISPLAY=0.0 par exemple ?
+
+====Duo clé publique / clé privés====
+Vous pouvez utiliser une sécurité accrue en utilisant [[:ssh#authentification_par_un_systeme_de_cles_publiqueprive|SSH et le système de clés distantes]].\\
+FIXME:si clé ok sinon passphrase possible (pour cybercafé par exemple)? 
+
+===== Voir aussi====
+  * [[:SSH]]
+  * [[:Vino]]
+  * [[http://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xml|Les ports]]
+  * [[:tutoriel:reverse_ssh|Reverse ssh]] : utile pour prendre la main via ssh avec un débutant
+
+----
+//Contributeurs: [[:utilisateurs:fabux]]//

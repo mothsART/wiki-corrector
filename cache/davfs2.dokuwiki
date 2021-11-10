@@ -1,0 +1,169 @@
+
+{{tag>Trusty partage nuage cloud owncloud}}
+----
+
+====== davfs2 ======
+
+Beaucoup plus intéressant que via [[:Nautilus]] (mais un peu moins simple !), il est aussi possible de monter un partage [[:WebDAV]] comme un système de fichier grâce à davfs2.
+
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>davfs2]]**
+
+===== Utilisation =====
+
+==== Montage root ====
+
+Le montage peut se faire de façon classique en tant qu'[[:sudo|administrateur]] comme tout système de fichier en saisissant dans un [[:terminal]] les [[:commande_shell|commandes]] suivantes :
+
+<code>sudo mkdir /media/Box.net
+sudo mount.davfs https://dav.box.com/dav /media/Box.net
+</code>
+La deuxième commande devrait vous demander d'entrer vos identifiants comme suit :
+<code>  Please enter the username to authenticate with server
+https://dav.box.com/dav or hit enter for none.
+Username: votre_login
+Please enter the password to authenticate user votre_login with server
+https://dav.box.com/dav or hit enter for none.
+Password: votre_mot_de_passe
+</code>où vous remplacerez //votre_login// et //votre_mot_de_passe// par vos identifiants WebDAV.
+
+==== Montage en userspace ====
+
+Mais le plus intéressant est que vous pouvez aussi monter un partage [[:WebDAV]] en tant qu'utilisateur "standard" (ie : sans les droits [[:sudo|administrateur]]).\\
+L'utilisateur pourra alors à sa guise monter et démonter le partage sans qu'il ait besoin de lui donner des privilèges administrateur.
+
+<note>Cette façon de monter un partage WebDAV est probablement préférable d'un point de vue sécurité. En effet, avec le [[#montage root]], on a un montage qui est en prise directe sur le Web avec des droits root. Une faille dans la pile WebDAV serait alors plus dangereuse que dans le cas d'un montage en tant que "simple utilisateur".
+
+De plus, comme le fstab est modifié, le partage sera automatiquement disponible pour l'utilisateur, à chaque session.
+</note>
+
+Pour que cela soit possible, il est cependant nécessaire de faire quelques modifications.
+  - dans un [[:terminal]] saisissez :<code>
+sudo dpkg-reconfigure davfs2</code> Et bien sûr, à la question :<code>
+Autoriser les utilisateurs non privilégiés à monter les ressources WebDAV ?</code> répondez : **oui**.
+  - Créez un répertoire dans votre //Dossier Personnel// pour monter le partage non privilégié :<code>
+mkdir $HOME/Box.net</code>
+  - [[:tutoriel:comment_modifier_un_fichier|Éditez avec les droits d'administration]] le fichier **/etc/fstab** que vous aurez __[[:tutoriel:comment_sauver_et_restaurer_un_fichier|sauvegardé]] au préalable__ et rajoutez ces lignes :<file>
+# Mon montage WebDav
+https://dav.box.com/dav /home/votre_nom/Box.net davfs rw,user,noauto 0 0</file>
+  - [[:users-admin#modifier_les_proprietes_d_un_groupe_et_ajouter_ou_retirer_des_comptes_d_utilisateurs_d_un_groupe_administrateurs_seulement|Ajoutez-vous au groupe]] davfs2 <code>sudo adduser $USER davfs2</code>
+  - [[:tutoriel:comment_modifier_un_fichier|Modifier le fichier]] **secrets** qui se trouve dans votre //Dossier Personnel//, sous le [[:fichier_cache|répertoire caché]] **.davfs2**, pour y ajouter les identifiants et mots de passe de votre partage. 
+      * Si vous n'avez pas de répertoire **.davfs2** dans votre //Dossier Personnel//, créez-le en y copiant les 2 fichiers qui se trouvent dans **/etc/davfs2** : <code>mkdir ~/.davfs2
+cp /etc/davfs2/davfs2.conf ~/.davfs2
+sudo cp /etc/davfs2/secrets ~/.davfs2
+sudo chown $USER ~/.davfs2/secrets
+</code>
+  - Dans le fichier **$HOME/.davfs2/secrets**, rajouter <file>/home/votre_nom/Box.net	identifiant_webdav	mot_de_passe_webdav</file> 
+
+<note>
+Cette dernière manipulation étant assez moyenne au niveau sécurité, s'il s'agit d'un ordinateur partagé, il vous est recommandé d'utiliser le [[:securite#chiffrer_et_non_crypter_ses_donnees|chiffrement]] du répertoire personnel. De cette façon, les identifiants/mots de passe du partage WebDAV seront au moins protégés par le mot de passe principal de l'utilisateur.
+
+Vous pouvez bien sûr ne pas indiquer vos identifiants dans le fichier secret. Dans ce cas, le montage via [[:Nautilus]] ou les //Raccourcis// ne sera pas possible, mais l'utilisateur pourra toujours faire une commande [[:montage|mount]] ou lancer un script non privilégié pour monter ses partages.</note>
+
+Vous pouvez maintenant constater que dans les raccourcis, à l'endroit où figurent toutes les unités que vous pouvez monter, vous avez une icône correspondant à votre partage WebDAV.
+
+{{raccourcis:davfs_mount_icon.png|Icône de partage WebDAV}}
+
+Il vous suffit alors de cliquer dessus pour la monter, comme n'importe quelle unité de disque.\\
+Idem pour la démonter, en cliquant sur la petite flèche en regard du nom de montage dans [[:Nautilus]].
+
+<note tip>Box.net ne gère pas les accès concurrents et cela posera des problèmes si vous voulez créer ou modifier des fichiers.
+Afin de corriger cela, il faut éditer le fichier **$HOME/.davfs2/davfs2.conf** et rajouter la ligne :
+<file>
+use_locks       0
+</file>
+</note>
+
+==== OwnCloud ====
+Pour ceux qui ne le connaissent pas, [[:owncloud|ownCloud]] offre les mêmes possibilités à travers davfs2. Pour cela, respecter à la lettre les indications ci-dessus, en remplaçant la ligne du fichier ''fstab'' par une directive adaptée à la configuration de votre installation serveur. Par exemple :
+<code>
+https://serveur:port/owncloud/remote.php/webdav/   /home/votre_nom/votre_répertoire	davfs	rw,user,noauto	0	0
+</code>
+
+EDIT : il est possible d'avoir un problème de certificats avec cette manipulation.
+
+Message d'erreur :
+
+/sbin/mount.davfs: the server certificate does not match the server name
+/sbin/mount.davfs: the server certificate is not trusted
+
+Pour tester votre connexion: utiliser la commande <code> mount "votre point de montage" </code> la commande ira chercher le certificat dans votre serveur. (ajoutez sudo en début de commande si seul root peut monter le dossier)
+
+Pour télécharger votre certificat, utiliser la commande suivante :
+<code>
+openssl s_client -connect HOSTNAME:443 -showcerts </dev/null 2>/dev/null | openssl x509 -outform PEM > certificate.pem
+</code>
+remplacer HOSTNAME par l'adresse de votre serveur
+
+copiez le fichier créé certificate.pem vers  /etc/davfs2/certs/
+Editez le fichier /etc/davfs2/davfs2.conf :
+
+<code>
+#trust_server_cert
+
+trust_server_cert        /etc/davfs2/certs/my.selfsigned.cert.pem
+</code>
+
+vous indiquez que le certificat de votre serveur est placé là.
+
+===== Astuce : Nuage et vie privée =====
+
+==== Chiffrer ses données ====
+<note>La rédaction des pages WebDAV / davfs2 est née d'une astuce expliquée [[http://forum.ubuntu-fr.org/viewtopic.php?id=391271|ici]]. Elle concernait Ubuntu One + encFS, mais cela fonctionne de même avec WebDAV.
+</note>
+De plus en plus nos fichiers seront //dans le [[wpfr>Cloud_computing|nuage]]//. Cela peut poser des problèmes ou des questions quant au respect de notre vie privée, d'autant plus que les hébergeurs ne sont pas toujours soumis à vos lois locales (CNIL et autres).
+
+Ainsi, on connaît bien le modèle économique de Google par exemple, basé sur la valorisation publicitaire de nos données privées. Tous documents, courriels, etc... sont scrupuleusement explorés afin de mieux cibler la publicité que Google vend.
+
+Les fichiers que vous pourriez mettre sur votre partage [[:WebDAV]] sont alors une cible toute indiquée pour de telles pratiques. Si vous souhaitez éviter que l'hébergeur lise vos données privées, rien de plus simple sous Linux : [[:encfs]].\\
+En effet, il est possible de combiner davfs et encfs sans problème. La seule précaution à prendre est que le dossier "en clair" __ne doit pas se trouver__ dans l'arborescence de votre montage WebDAV, sinon le daemon WebDAV s'emmêle un peu les pinceaux !
+
+Donc par exemple vous pouvez faire :
+<code>
+mkdir ~/En_Clair
+encfs /home/$USER/Box.net/Crypt /home/$USER/En_Clair
+</code>
+
+Et vous utilisez votre répertoire **En_Clair** pour y déposer ou lire vos fichiers stockés sur le partage WebDAV. Les fichiers déposés dans **En_Clair** seront cryptés par encfs vers le répertoire **Box.net/Crypt**, et donc sauvegardés ainsi chiffrés sur votre Webdav.\\
+L'hébergeur ne verra alors que des fichiers illisibles. Il n'a même pas le nom des fichiers pour faire des ciblages.
+
+Pour plus de détails sur encfs c'est [[:encfs|ici]].
+
+==== Renforcer la sécurité du chiffrement ====
+
+En utilisant [[#Chiffrer ses données|encfs sur le nuage]], vous créez cependant un nouveau "problème": une partie de votre clé de déchiffrement est confiée à l'hébergeur du nuage (le fichier .encfs6.xml). Si celui-ci est mal intentionné, il pourrait tenter de déchiffrer, par [[wpfr>Attaque_par_force_brute|force brute]] ou si une faille est découverte dans encfs (ce qui n'est pas le cas à ce jour).
+
+Il est donc préférable de ne pas stocker ce fichier dans le répertoire de chiffrement, comme c'est le cas de façon standard avec encfs.\\
+N'ayant plus cette partie de la clé de déchiffrement, l'utilisation de force brute par votre hébergeur devient impossible, même si votre mot de passe est très faible. 
+Pour ce faire :
+  * Déplacez le fichier **.encfs6.xml** par exemple dans le dossier Secret de votre //Dossier Personnel//.
+  * Utilisez une fonction non-documentée (!) de encfs, pour lui indiquer où se trouve désormais ce fichier. Le montage se fait alors ainsi <code>
+ENCFS6_CONFIG=/home/$USER/Secret/.encfs6.xml encfs /home/$USER/Box.net/Crypt /home/$USER/En_Clair</code>
+
+Le risque de déchiffrement par un tiers est ainsi largement réduit... mais un nouveau risque est créé !..
+En effet, si vous utilisez un stockage en nuage, c'est souvent pour disposer d'une sauvegarde de ses données en cas de plantage total de l'ensemble des supports locaux. Or là, puisque vous gardez le fichier **.encfs6.xml** localement, si l'ensemble de vos disques est détruit (court-circuit, incendie, vol,...) vous ne pourrez plus déchiffrer les fichiers que vous avez mis sur votre nuage !\\
+Pour remédier à cela, il faut également garder une copie de ce fichier à distance, mais afin d'éviter que ce fichier soit en clair, il va s'agir de le chiffrer.\\
+Après avoir [[:tutoriel:comment_installer_un_paquet|installé le paquet]] **[[apt>ccrypt]]** saisissez dans un [[:terminal]]:
+<code>
+cp /home/$USER/Secret/.encfs6.xml /tmp
+cd /tmp
+ccrypt -e .encfs6.xml
+</code>
+À la demande du mot de passe, mettez une "pass-phrase" forte, pour éviter les tentatives par force brute ou dictionnaire.
+
+Vous disposez alors du fichier **.encf6.xml.cpt** que vous pouvez copier quelque part dans le nuage chez votre hébergeur... ou mieux encore, si vous avez plusieurs hébergeurs, vous pouvez le stocker chez un autre fournisseur.
+
+Si vous voulez récupérer votre fichier **.encfs6.xml** original, l'opération inverse est :
+<code>ccrypt -d .encfs6.xml.cpt</code>
+
+===== Désinstallation =====
+
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée. Les journaux du système, et les fichiers de préférence des utilisateurs dans leur dossier personnel sont toujours conservés.
+
+===== Liens =====
+
+  * **(en)** [[http://savannah.nongnu.org/projects/davfs2|Site officiel du logiciel]]
+
+----
+//Contribution : [[utilisateurs:Zakhar]]//

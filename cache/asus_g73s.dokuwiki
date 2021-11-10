@@ -1,0 +1,157 @@
+
+{{tag>Trusty matériel portable Asus}}
+----
+
+====== Asus G73J / G73S / G73SW ======
+{{http://img11.hostingpics.net/pics/761453asus.jpg}}
+
+
+===== En un coup d’œil =====
+
+Le tableau suivant récapitule la prise en charge du matériel de ce portable par les différentes versions d'Ubuntu.
+Il utilise les notations suivantes :
+
+Il utilise les notations suivantes :
+  * **Fonctionne immédiatement** :
+
+    * {{:icons:ok_32_64.png|OK 32 et 64 bits}} Testé en 32 bits **et** 64 bits.
+  * {{wiki:modeles:laptop_work.png|Fonctionne après config}} **Fonctionne après quelques manipulations**
+  * {{icons:process-stop.png|Ne fonctionne pas}} **Ne fonctionne pas**
+  * {{icons:icon-support.png?32|Pas testé}} : **Pas d'informations disponibles**
+  * {{:icons:edit-clear.png?32|Information obsolète}} : **Information de support trop ancienne**, si possible mettez là à jour.
+
+
+^ Version ^ Installation ^ Carte \\ graphique ^ Son ^ Réseau ^ Wifi ^ Bluetooth ^ Webcam ^ Touchpad ^ Raccourcis \\ multimédia ^ USB3 USB2 ^ Lecteur de carte SD ^
+| [[:trusty|14.04 (The Trusty Tahr )]] | {{:icons:ok_32_64.png|OK 32 et 64 bits}} | {{:icons:ok_32_64.png|OK 32 et 64 bits}} | {{:icons:ok_32_64.png|OK 32 et 64 bits}} | {{:icons:ok_32_64.png|OK 32 et 64 bits}} | {{:icons:ok_32_64.png|OK 32 et 64 bits}} | {{:icons:ok_32_64.png|OK 32 et 64 bits}} | {{:icons:ok_32_64.png|OK 32 et 64 bits}} | {{:icons:ok_32_64.png|OK 32 et 64 bits}} | {{wiki:modeles:laptop_work.png|Fonctionne après config}} | {{wiki:modeles:laptop_work.png|Fonctionne après config}} {{:icons:ok_64.png|OK 64 bits}}| {{:icons:ok_32_64.png|OK 32 et 64 bits}} |
+
+**Cet ordinateur portable n'est pas [[:pc_tatoué|tatoué]].**
+
+===== Installation =====
+
+Installation OK depuis une clef USB ou depuis un CD. [[:installation |Suivre la procédure d’installation habituelle]]. 
+
+===== Raccourcis multimédia =====
+
+Afin d'activer les touches //**FN**//, [[:tutoriel:comment_modifier_un_fichier|modifiez avec les droits d'administration]] le fichier **/etc/rc.local** pour y ajouter les informations suivantes avant la fin du fichier (avant le exit 0 ): <file>echo 0x00050021 > /sys/kernel/debug/asus-nb-wmi/dev_id
+echo 0x82 > /sys/kernel/debug/asus-nb-wmi/ctrl_param
+cat /sys/kernel/debug/asus-nb-wmi/devs
+</file>
+
+Si vous utiliser les Drivers propriétaire Nvidia, pour activer le contrôle de la luminosité de votre écran avec les touches **//FN+F5//** et **//FN+F6//**, [[:tutoriel:comment_modifier_un_fichier|modifiez avec les droits d'administration]] le fichier **/etc/X11/xorg.conf** pour y ajouter la ligne suivante dans la partie **//Section "Device"//**: <file>Option "RegistryDwords" "EnableBrightnessControl=1"</file>
+
+Redémarrez, et normalement les touches **//FN//** devraient marcher.
+
+
+===== USB3 =====
+
+Pour faire marcher correctement le port USB 3.0 (Fresco Logic FL1000G), voir cette [[:USb|page]].
+
+===== Mise en veille =====
+
+Parce que les récentes version de Ubuntu ont un kernel compilé avec ehci_hcd, il faut désactiver les périphériques USB avant la veille. 
+  - [[:tutoriel:comment_modifier_un_fichier|Créez avec les droits d'administration]] un fichier **/etc/pm/sleep.d/20_custom-ehci_hcd** contenant les informations suivantes:<code bash>#!/bin/sh
+#inspired by http://art.ubuntuforums.org/showpost.php?p=9744970&postcount=19
+#...and http://thecodecentral.com/2011/01/18/fix-ubuntu-10-10-suspendhibernate-not-working-bug    
+# tidied by tqzzaa :)
+
+DEV_LIST=/tmp/usb-dev-list
+DRIVERS_DIR=/sys/bus/pci/drivers
+DRIVERS="ehci xhci" # ehci_hcd, xhci_hcd
+HEX="[[:xdigit:]]"
+MAX_BIND_ATTEMPTS=2
+BIND_WAIT=0.1
+
+unbindDev() {
+  echo -n > $DEV_LIST 2>/dev/null
+  for driver in $DRIVERS; do
+    DDIR=$DRIVERS_DIR/${driver}_hcd
+    for dev in `ls $DDIR 2>/dev/null | egrep "^$HEX+:$HEX+:$HEX"`; do
+      echo -n "$dev" > $DDIR/unbind
+      echo "$driver $dev" >> $DEV_LIST
+    done
+  done
+}
+
+bindDev() {
+  if [ -s $DEV_LIST ]; then
+    while read driver dev; do
+      DDIR=$DRIVERS_DIR/${driver}_hcd
+      while [ $((MAX_BIND_ATTEMPTS--)) -gt 0 ]; do
+          echo -n "$dev" > $DDIR/bind
+          if [ ! -L "$DDIR/$dev" ]; then
+            sleep $BIND_WAIT
+          else
+            break
+          fi
+      done  
+    done < $DEV_LIST
+  fi
+  rm $DEV_LIST 2>/dev/null
+}
+
+case "$1" in
+  hibernate|suspend) unbindDev;;
+  resume|thaw)       bindDev;;
+esac
+</code>
+  - Rendez ce fichier exécutable en saisissant dans un [[:terminal]] <code>sudo chmod 755 /etc/pm/sleep.d/20_custom-ehci_hcd</code>
+  - [[:tutoriel:comment_modifier_un_fichier|Créez avec les droits d'administration]] un fichier ** /etc/pm/config.d/usb3-suspend-workaround** contenant les informations suivantes: <code bash>#File: "/etc/pm/config.d/usb3-suspend-workaround".
+SUSPEND_MODULES="xhci"
+</code>
+
+Redémarrez pour vérifier que la mise en veille s'effectue correctement.
+
+Si a la reprise de veille vous n'avez plus les USB qui fonctionnent, vous pouvez essayer la modification suivante dans le script : /etc/pm/sleep.d/20_custom-ehci_hcd
+
+Remplacer
+
+<code bash>
+bindDev() {
+  if [ -s $DEV_LIST ]; then
+    while read driver dev; do
+      DDIR=$DRIVERS_DIR/${driver}_hcd
+      while [ $((MAX_BIND_ATTEMPTS--)) -gt 0 ]; do
+          echo -n "$dev" > $DDIR/bind
+          if [ ! -L "$DDIR/$dev" ]; then
+            sleep $BIND_WAIT
+          else
+            break
+          fi
+      done  
+    done < $DEV_LIST
+  fi
+  rm $DEV_LIST 2>/dev/null
+}
+</code>
+
+Par
+
+<code bash>
+bindDev() {
+  if [ -s $DEV_LIST ]; then
+    while read driver dev; do
+      DDIR=$DRIVERS_DIR/${driver}_hcd
+      while [ $MAX_BIND_ATTEMPTS -gt 0 ]; do
+          echo -n "$dev" > $DDIR/bind
+          if [ ! -L "$DDIR/$dev" ]; then
+            sleep $BIND_WAIT
+          else
+            break
+          fi
+	let MAX_BIND_ATTEMPTS=MAX_BIND_ATTEMPTS-1
+      done  
+    done < $DEV_LIST
+  fi
+  rm $DEV_LIST 2>/dev/null
+}
+
+</code>
+
+
+=====Voir Aussi=====
+  * [[http://thecodecentral.com/2011/01/18/fix-ubuntu-10-10-suspendhibernate-not-working-bug/comment-page-3#comment-52399|Source du fix pour la mise en veille]]
+  * [[http://scottsautorepair.net/microsoft.sucks/G73SW.keyboard.lights.html|Source du tutoriel pour les raccourcis multimédia]]
+  * [[http://ubuntuforums.org/showpost.php?p=10834900&postcount=44|Source du fix USB3]]
+  * [[http://ubuntuforums.org/showthread.php?p=11065752|Source du driver pour le lecteur de carte SD]]
+----
+//Contributeurs: fabux, e18i3 (corrigé le 01/02/2015)

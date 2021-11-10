@@ -1,0 +1,134 @@
+
+{{tag>Xenial bureau_à_distance tutoriel BROUILLON}}
+
+----
+====== XRDP ou comment se connecter depuis un client RDP® sur un serveur Ubuntu======
+
+On peut être confronté à des machines windows<sup>®</sup> verrouillées, sur lesquelles on ne peut rien installer, et où seul le protocole [[wpfr>Remote_Desktop_Protocol|RDP®]] est disponible. Par exemple des [[wpfr>Client_léger|clients légers]].
+
+Si l'on souhaite se connecter depuis ces machines sur un serveur Ubuntu, une seule solution : installer XRDP sur ce dernier.
+
+Xrdp est une couche s'installant sur le serveur. Elle fait office de serveur RDP<sup>®</sup> pour le client qui veut se connecter, et se comporte comme un client VNC pour le serveur ubuntu.
+
+Entre les deux, se glisse un gestionnaire de session dénommé sesman, qui :
+  * donne le choix, à la connexion, entre différents modules. Ceux-ci sont listés dans /etc/xrdp/xrdp.ini, on y trouve bien sûr VNC.
+  * appelle PAM pour l'authentification.
+  * fait en sorte que le néo client VNC, avatar du client RDP, se connecte à une session VNC fonctionnelle. Le plus souvent en la créant, à l'aide des paramètres choisis dans /etc/xrdp/sesman.ini et /etc/xrdp/startwm.sh.
+
+===== Prérequis =====
+
+Installer vnc4server - Virtual network computing server software, ça fonctionne tel quel donc pas de configuration à modifier.
+
+Si Vino est déjà installé et actif il n'y aura pas de conflit. Il peut donc être ignoré.
+
+===== Installation =====
+
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>xrdp]]**.
+
+<note>sur 14.04 Trusty server,tout fonctionne sans aucun paramétrage supplémentaire... Certe la fenêtre texte est un peu petite! </note>
+
+===== Configuration =====
+
+=== Configuration de sesman ===
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/etc/xrdp/sesman.ini**.
+
+Pour l'instant, rien ne fonctionne, car la section [Xvnc] ne contient que les quatre arguments :
+
+<code>
+param1=-bs     /* désactive le "backing store support" sur tous les écrans */
+param2=-ac     /* interdit l'édition des listes de contrôle d'accès par le client */
+param3=-nolisten
+param4=tcp
+</code>
+
+Il faut compléter cette section, de la manière suivante:
+
+<code>
+param3=-fp                         /* ces quatre paramètres corrigent le bug #78282 du paquet vnc4server */
+param4=/usr/share/fonts/X11/misc
+param5=-extension
+param6=XFIXES</code>
+
+Personnellement, j'y ai aussi ajouté :
+
+<code>
+param7=-depth            /* pour forcer la profondeur de couleur */
+param8=16
+param9=-localhost        /* pour contraindre la connexion via xrdp */
+</code>
+
+On peut aussi ajuster les autres paramètres à sa convenance (sections [Globals], [Security], etc. ...). ATTENTION, certaines options sont ignorées. (Voir la man page de sesman.ini.)
+
+=== Menu de connexion ===
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/etc/xrdp/xrdp.ini**.
+
+Conserver simplement les sections [globals] et [xrdp1] que l'on renomme pour le fun :
+
+<code>[globals]
+bitmap_cache=yes
+bitmap_compression=yes
+port=3389
+crypt_level=low
+channel_code=1
+ 
+[xrdp1]
+name=legaub vous invite sur un serveur Ubuntu
+lib=libvnc.so
+username=ask
+password=ask
+ip=127.0.0.1
+port=-1
+</code>
+
+Redémarrer avec :
+
+<code>sudo /etc/init.d/xrdp restart</code>
+
+Vous pouvez désormais vous connecter à votre serveur en utilisant le protocole RDP<sup>®</sup>.
+
+=== Configuration du clavier ===
+Les configurations du clavier en local et en distant sont différentes. Ainsi si Ubuntu est en anglais à la base et même si en local, vous avez bien configuré le clavier en azerty, le clavier distant reste en qwerty.
+Voici la commande à exécuter **en local**, (pas en session distante) !
+<code>sudo xrdp-genkeymap /etc/xrdp/km-0409.ini</code>
+relancer votre session distante si elle était ouverte.
+
+===== Problème de configuration =====
+
+Une difficulté surgit si l'on veut passer, par exemple -DisconnectClients=0 ou -NerverShared=1. En effet, impossible de glisser le signe "=" nulle part.
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/etc/xrdp/startwm.sh**.
+
+Ajouter les lignes suivantes :
+
+<code>vncconfig -set NeverShared=1
+vncconfig -set DisconnectClients=0
+</code>
+
+Attention, l'utilisation de "vncconfig" fait que le nouveau paramètre ne sera pris en compte que lors du démarrage d'une nouvelle session.
+
+<note>{{ :capture2.jpg?nolink&300|}} Essais sur ubuntu 16.04 depuis Windows 7 : Le log de connexion me renvois une erreur après une autentification réussie, même en apportant les modifications à sesman.ini décrites plus haut :
+</note>
+<note>meme erreur depuis Ubuntu v16.04 (client RDP Remmina) vers ubuntu 15.04
+</note>
+<note>Il semble que les bureaux Unity et Gnome ne soient pas compatibles avec xrdp.
+Mais cela fonctionne en installant xfce4 : <code>sudo apt-get install xfce4</code>
+Il faut ensuite indiquer à Ubuntu que c'est le bureau xfce qui doit être utilisé : <code>echo xfce4-session >~/.xsession</code>
+Ensuite redémarrer xrdp : <code>sudo /etc/init.d/xrdp restart</code>
+NB: Et **il faut conserver le fichier /etc/xrdp/sesman.ini d'origine**.
+Testé avec Ubuntu 16.04 depuis un Windows 7.
+</note>
+===== Désinstallation =====
+Et si vous voulez désinstaller xrdp 
+tapez:
+apt-get remove xrdp
+===== Pour en savoir plus =====
+
+  * [[http://xrdp.sourceforge.net/|(en) XRDP chez sourceforge.]]
+  * [[:vnc|VNC (Virtual Network Computing)]] sur la documentation ubuntu-fr.
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=372863|RDP sur un serveur ubuntu ?]] sur le forum ubuntu-fr.
+
+----
+
+//Contributeurs principaux : [[http://patin.gaubert.free.fr/fiches/fiche16.html|legaub]]//

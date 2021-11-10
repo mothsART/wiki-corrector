@@ -1,0 +1,357 @@
+
+{{tag>kernel tutoriel}}
+----
+
+
+====== Comment compiler un noyau de Kernel.org ======
+
+Il peut être utile de compiler une certaine version du Noyau Linux pour, par exemple, pallier une incompatibilité avec un module spécifique ou encore activer/modifier un paramètre qui ne serait pas dans la version du noyau distribuée avec Ubuntu.\\
+Cette page propose de détailler comment faire et invite tous ceux qui le veulent à ajouter des précisions ...
+
+<note tip>Si vous souhaitez faire de la compilation croisée, comme compiler un noyau pour PowerPC sur un x86, rendez-vous [[compilation_croisee|ici]].</note>
+
+===== Pré-requis : =====
+
+  * Savoir utiliser le [[:terminal]] / la [[:console]] ;
+  * Savoir ce que sont "[[:linux]]", "[[:tutoriel:tout_savoir_sur_les_modules_linux|module]]", etc... ;
+  * Une bonne heure pour configurer (seulement si vous souhaitez optimiser le noyau pour votre utilisation) ;
+  * Deux bonnes heures ou plus pour la compilation suivant la puissance de votre ordinateur.
+
+===== Dépendances =====
+
+==== Paquets basiques ====
+
+Tout d'abord il faut installer le strict minimum pour la compilation :
+  * [[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>build-essential,initramfs-tools,fakeroot|build-essential initramfs-tools fakeroot]]**
+  * [[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>debconf-utils,dpkg-dev,debhelper,bin86|debconf-utils dpkg-dev debhelper bin86]]**
+  * [[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>kernel-package|kernel-package]]**
+
+Ou la ligne de commande pour tout installer d'un coup avec l'outil [[:apt-get]]:
+<code>sudo apt-get install build-essential initramfs-tools fakeroot debconf-utils dpkg-dev debhelper bin86 kernel-package</code>
+
+FIXME
+EDIT : afin de pouvoir compiler les derniers noyaux provenant de kernel.org (version > 3.14), il faut installer la dernière version de "kernel-package" et non celle ci-dessus issue des dépôts, car elle crée des bugs pendant la compilation, et ne produit pas au final les paquets .deb)
+
+[[https://launchpad.net/ubuntu/+source/kernel-package/13.003/+build/5980712/+files/kernel-package_13.003_all.deb]]
+
+(le paragraphe juste au dessus semble être faux puisque la commande installe kernel-package_13.014)
+==== Paquets pour créer le ".config" ====
+
+".config", c'est le fichier de configuration contenant les instructions de compilation qui peut être créé au choix via:
+  * une interface en **console** (bleue) => [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>libncurses5-dev|libncurses5-dev]]**
+  * une interface en **GTK+** (noyau 2.6 seulement) => [[:tutoriel:comment_installer_un_paquet|installez les paquets]] **[[apt>libglib2.0-dev,libgtk2.0-dev,libglade2-dev|libglib2.0-dev libgtk2.0-dev libglade2-dev]]**
+  * une interface en **QT4** (Fonctionne du noyau 2.6 au noyau 4.0 - sûrement l'interface la plus simple et complète - conseillée) => [[:tutoriel:comment_installer_un_paquet|installez les paquets]] **[[apt>libqt4-dev,pkg-config|libqt4-dev pkg-config]]**
+
+===== Méthode simple de compilation (par exemple pour appliquer uniquement un patch) =====
+
+<note tip>Cette méthode s'applique si:
+  * si vous souhaitez vérifier simplement que tout est prêt pour la compilation sans rentrer dans la complication les fichiers de configuration.
+  * si vous avez un noyau (exemple ci-dessous avec une version 5.10) sur laquelle vous souhaitez **simplement appliquer un patch** sans autre modification
+</note>
+
+Lancer votre machine avec le noyau que vous souhaitez modifier. Vérifier la version avec :
+
+  uname -r
+
+Installation des dépendances
+
+  sudo apt install -y git build-essential kernel-package fakeroot libncurses5-dev libssl-dev ccache
+
+Récupération du noyau ; la liste des branches est visible ici https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git ; ne pas chercher à modifier le .y à la fin du nom !
+
+  mkdir ~/NOYAU
+  cd ~/NOYAU
+  git clone --depth=1 -b linux-5.10.y git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git
+  #                    ^ modifier ici selon la branche dont vous avez besoin
+
+Donner les bons droits à vos fichiers et répertoires
+
+  sudo chmod -R 0755 linux-stable
+  cd linux-stable
+
+Optionnel : appliquer le patch
+
+  patch -p1 --dry-run <[fichier-patch] (pour tester qu'il n'y a pas d'erreur sans appliquer)
+  patch -p1 < [fichier_de_patch] (pour appliquer le patch)
+  patch -R < [fichier_de_patch] (pour retirer le patch)
+
+Récupérer le fichier de configuration de votre noyau **en cours d’exécution** (la branche doit être la **même que celle téléchargée** pour la compilation)
+  cp /boot/config-`uname -r` .config
+
+Compiler le noyau (répéter ces étapes à chaque compilation)
+
+  yes '' | make oldconfig
+  make clean
+  make -j$(nproc) deb-pkg LOCALVERSION=-custom
+
+Entre chaque essai de compilation exécuter pour nettoyer :
+
+  rm vmlinux-gdb.py
+  
+Installer les fichiers crées dans ~/NOYAU avec
+
+  sudo dpkg -i *.deb
+
+<note>
+Pour compiler la dernière version de développement il faudrait utiliser plus haut
+
+  git clone --depth=1 git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+</note>
+
+
+===== Téléchargement des sources =====
+
+Tout d'abord téléchargez les sources du noyau depuis Kernel.org:\\
+[[http://www.kernel.org/pub/linux/kernel/|Lien vers les sources sur kernel.org]]
+
+Téléchargez l'archive dans le dossier que vous voulez, puis [[:archivage#graphiquement|décompressez-la]] par exemple avec la [[:commande_shell|commande]] suivante:
+<code>
+tar xvf linux-*
+</code>
+
+<note tip>Il est possible de récupérer les sources par git (voir paragraphe précédent) </note>
+
+===== Configuration particulière =====
+
+Dans certains cas, certains pilotes propriétaires notamment, il faut préparer un peu plus le terrain pour compiler soi-même un Noyau personnalisé. Autant vous dire qu'il est bien plus simple de compiler son noyau pour quelqu'un qui n'utilise que des pilotes libres.
+
+FIXME cette partie est totalement dépassée, peut être n'est-elle plus nécessaire, en tout cas aucune de ces infos ne sont encore garanties de fonctionner.
+
+==== NVIDIA ====
+
+Pour les cartes [[:Nvidia]], vous pouvez décider de ne plus utiliser le pilote propriétaire, mais bien entendu si vous en avez vraiment besoin voici des pistes pour le faire fonctionner avec votre noyau personnalisé.
+
+=== Avec la technique des liens symboliques ===
+
+Voir [[http://ubuntuforums.org/showthread.php?t=441013|ce How-To]] (en).
+
+=== Avec le module ===
+
+Il faut installer le paquet de sources à inclure au noyau :
+
+  - Si vous utilisez le paquet nvidia-glx-new, [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>nvidia-new-kernel-source|nvidia-new-kernel-source]]**
+  - Si vous utilisez le paquet nvidia-glx, [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>nvidia-kernel-source|nvidia-kernel-source]]**
+  - Si vous utilisez le paquet nvidia-glx-legacy, [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>nvidia-legacy-kernel-source|nvidia-legacy-kernel-source]]**
+
+Une fois le paquet installé, il se trouve dans le dossier **/usr/src/**,alors décompressez ((//<TAB>// correspond ici à la touche [[wpfr>Touche_tabulation|tabulation]] utilisant ainsi l'[[wpfr>Complètement|autocomplétion]])).:
+<code>
+tar xvfz nvidia<TAB>.tar.gz
+</code>
+Vous devriez avoir un dossier **/modules/nvidia-kernel** (ou nvidia-kernel-legacy ou nvidia-kernel-new selon le paquet installé).
+
+Lors de la compilation, n'oubliez pas d'ajouter en paramètre (selon le paquet installé) :
+
+<code>
+--added-modules=nvidia-kernel
+--added-modules=nvidia-kernel-legacy
+--added-modules=nvidia-kernel-new
+</code>
+
+=== Avec le .run du site ===
+
+Ne faites rien pour l'instant, puis une fois votre noyau compilé, téléchargez le //.run// sur le site officiel. Tutoriel [[:nvidia|ici]]
+
+==== ATI ====
+
+Si vous utilisez une carte [[:amd-ati]], vous n'utilisez peut être pas le pilote propriétaire (ou celui ci n'est peut être pas indispensable). Il est conseillé, __avant__ d'entreprendre la compilation du noyau, de voir si les performances du pilote libre sont à votre goût celui-ci (le pilote libre est parfois même plus performant que le propriétaire).
+
+FIXME (Méthodes non-testée)
+
+=== Avec la technique des liens symboliques ===
+
+Voir [[http://ubuntuforums.org/showthread.php?t=441013|ce How-To]] (en).
+
+=== Avec le module ===
+
+FIXME J'imagine que ça doit être comme pour NVidia avec le paquet **fglrx-kernel-source** ?
+
+===== Configuration du noyau =====
+
+La configuration du noyau est l'étape où vous choisissez les options. Vous pouvez enlever l'ABS, ajouter des airbags, changer la transmission, etc.
+
+Tout d'abord ouvrez un **[[:terminal]]** puis rendez vous dans le dossier où vous avez décompressé [[#Téléchargement des sources|les sources téléchargées]] grâce à la commande:
+<code>
+cd /le/chemin/vers/le/dossier/qui/contient/linux
+</code>
+
+Puis lancez cette commande qui permet de récupérer la configuration du noyau que vous utilisez actuellement et qui vous demande automatiquement de gérer les conflits si l'ancienne configuration n'est pas compatible avec le nouveau noyau:
+
+<code>
+make oldconfig
+</code>
+
+Vous pouvez garder toutes les réponses proposées par défaut et juste appuyer sur //Entrer// lorsqu'il vous pose une question. Mais, si vous comprenez ce qui est dit, cela permettra d'ajouter ou non de nouvelles fonctions à votre Noyau, options qui n'existait peut-être pas encore lorsque les développeurs d'Ubuntu ont choisi le noyau intégré à la [[:versions|version]] que vous utilisez actuellement.
+
+Maintenant vous devez choisir l'une des différentes interfaces de configuration du noyau si vous voulez faire quelques modifications par rapport aux paramètres par défaut. Même si vous ne modifiez rien, il est conseillé d'y jeter un œil par curiosité.\\
+Vous pouvez au choix utiliser:
+  * une [[#Interface de configuration QT - Recommandé]]
+  * une [[#Interface de configuration en Mode console]]
+  * une [[#Interface de configuration en Mode semi-graphique (menu bleu)]]
+  * une [[#Interface de configuration en GTK+ (interface GNOME -elle n'est pas bien finie...)]]
+
+==== Interface de configuration QT - Recommandé ====
+
+<code>
+make xconfig
+</code>
+
+**Si la commande précédente retourne une erreur du type "qconf: cannot connect to X server", essayez :**
+<code>
+ #exit
+ $sudo xhost +
+ $su
+ #cd /usr/src/linux-*
+ #make xconfig
+</code>
+
+<note tip>Ne saisissez pas les **#** et **$** qui sont là à titre d'information et correspondent respectivement aux prompts [[:root]] et utilisateur standard</note>
+
+==== Interface de configuration en Mode console ====
+
+Déconseillé pour les débutants tout comme les autres.
+
+<code>
+make config
+</code>
+
+==== Interface de configuration en Mode semi-graphique (menu bleu) ====
+
+<code>
+make menuconfig
+</code>
+
+==== Interface de configuration en GTK+ (interface GNOME -elle n'est pas bien finie...) ====
+
+<code>
+make gconfig
+</code>
+
+----
+
+**Si vous n'avez rien à configurer, cliquez simplement sur //Enregistrer// dans l'interface graphique qui apparaît**.\\
+
+
+<note tip>Vous ne risquez rien à compiler un Noyau inutilisable car les anciens restent tout de même installés sur le système, il vous suffira simplement d'en choisir un autre dans le menu [[:amorcage#chargeurs_d_amorcage|d'amorçage]] au démarrage de votre ordinateur.</note>
+
+===== Compilation =====
+
+<note important>Cette partie décrit la plupart des options possibles pour **make-kpkg**, et il y en a plein, les connaître ne vous servira pas à grand chose, **si vous voulez simplement créer un noyau classique rapidement, allez directement à la partie [[#Compilation basique]].**</note>
+
+La compilation se fait avec **make-kpkg** qui automatise en fait plusieurs commandes :
+
+  * //make dep// - établit les dépendances entre fichiers constitutifs du code noyau
+  * //make clean// - supprime les objets résultant d'une compilation antérieure du noyau (si elle a eu lieu)
+  * //make bzImage// - produit l'image compressée qui servira à l'amorçage
+  * //make modules// - compile les modules
+
+En résulte alors un [[:paquet]] //*.deb// (si vous utilisez la cible buildpackage) qu'il faudra installer avec [[:dpkg]] :
+
+<code>
+sudo dpkg -i linux*.deb
+</code>
+
+==== Les arguments de compilation ====
+
+Il existe différents arguments à //make-kpkg//:
+
+=== -j ===
+
+Cet argument **totalement facultatif** permet de choisir le nombre de Threads, c'est à dire le nombre de processus simultané, que le CPU traitera pendant la compilation. En résumé ça ne sert qu'à augmenter la vitesse à laquelle votre ordinateur va créer votre nouveau noyau, si votre CPU à plusieurs cœurs.
+
+<code>
+-j 8
+</code>
+
+Permettra d'utiliser les 8 cœurs d'un CPU en ayant 8 par exemple.
+
+=== --initrd ===
+
+Le plus important: crée un fichier **initrd** qui permet d'utiliser des modules directement à l'amorçage du noyau.
+
+=== --rootcmd=fakeroot|sudo ===
+
+Vous propose de choisir avec quelle méthode vous permettez à //make-kpkg// d'utiliser les ressources de root.
+
+=== --added_modules ===
+
+Pour ajouter des modules (alsa, nvidia/ATI, etc...). Pour en mettre plusieurs, séparez avec une virgule :
+
+<code>
+--added-modules=alsa-driver,nvidia-kernel-legacy
+</code>
+
+
+==== Les cibles de compilation ===
+
+=== buildpackage ===
+
+Cela a pour conséquence d'utiliser la cible "clean"et "binary" décrite ci-dessous. 
+
+=== clean ===
+
+Permet de « nettoyer le répertoire des sources du noyau de tous les fichiers créés par l'invocation de l'une des cibles données ci dessous, et effectue un make distclean » ((traduction de la partie du manuel consacré à cette cible et accessible en saisissant ''man make-kpkg'')).
+
+=== binary ===
+
+Cette cible « construit les quatre paquets Debian du noyau en utilisant les cibles kernel_source, kernel_headers, kernel_doc et kernel_image ((traduction de la partie du manuel consacré à cette cible et accessible en saisissant ''man make-kpkg'')).
+
+=== kernel_doc ===
+
+Cet autre cible compile et crée pour vous un paquet Debian contenant les documentations fournis avec le noyau.
+
+=== kernel_image ===
+
+Cela permet de créer un paquet qui contient l'image du noyau, ses modules et permet aussi la configuration automatique du [[:amorcage#chargeurs_d_amorcage|chargeur d'amorçage]] comme [[:Grub]] ou [[:Lilo]].
+
+=== kernel_source ===
+
+Cette cible construit un paquet Debian des sources du noyau Linux que vous compilez. Cela est particulièrement utile si vous souhaitez réutiliser ultérieurement les sources du noyau que vous souhaiteriez conserver.
+
+=== kernel_headers ===
+
+Celle-ci a pour but de produire un paquet Debian contenant les entêtes du noyau Linux. Les entêtes peuvent être nécessaires pour compiler certains programmes.
+
+=== modules_image ===
+
+Cette cible a pour but de produire un paquet Debian pour chaque module supplémentaire que vous avez installé et qui se trouve dans le répertoire /usr/src/modules/.
+
+==== Compilation basique ====
+
+Avant de procéder à la compilation il faut savoir que une compilation basique peut durer entre 2 heures et trois heures. Mais si vous possédez un ordinateur qui à plusieurs cœur (Core) vous pouvez augmenter la vitesse de compilation en spécifiant le nombre de cœur à utiliser pour la compilation.
+
+Voici un exemple pour un ordinateur à 5 cœurs (A changer en fonction de votre ordinateur)
+
+<code>
+echo "CONCURRENCY_LEVEL= 5" >> /etc/kernel-pkg.conf
+</code>
+
+Et maintenant voici la commande la plus basique pour compiler :
+<code>
+make-kpkg --initrd --append-to-version=-monnoyau --revision=1.0 --rootcmd=fakeroot kernel_image kernel_headers
+</code>
+
+Retournez dans le dossier précédent avec:
+<code>
+cd ..
+</code>
+
+Et installer les //*.deb// :
+
+  * __Sous **Ubuntu**__:<code>sudo dpkg -i linux*.deb</code>
+  * __Sous **Debian**__:<code>su -c 'dpkg -i linux*.deb'</code>
+
+Voilà c'est fait :-)
+
+===== Gestion des bugs =====
+
+En cas de découverte d'un bug il faut commencer par une bissection.\\
+Voir : [[:kernel_bissection|Bissection d'un noyau]]
+
+===== Liens =====
+
+  * [[http://ubuntuforums.org/showthread.php?t=441013|HOW-TO : Utiliser le linux-restricted-module pour un noyau compilé]] (en)
+  * [[http://www.andesi.org/index.php?node=77|Un bon guide pour Debian plein d'infos sympa]]
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?pid=1108685#p1108685|Un guide pour installer la carte wifi **Intel PRO/Wireless 2200BG**]] 
+
+-----
+//Contributeurs: [[:utilisateurs:Fabien26]], [[:utilisateurs:adam0509]], [[:utilisateurs:BeAvEr]], [[:utilisateurs:fleroi91]], [[:utilisateurs:olivier_v]].//

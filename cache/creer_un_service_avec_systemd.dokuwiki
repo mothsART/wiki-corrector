@@ -1,0 +1,308 @@
+
+{{tag>Xenial systemd service}}
+----
+
+====== Créer un nouveau service avec systemd ======
+Ce tutoriel décrit la démarche à suivre pour transformer un programme en un service [[:systemd]] pouvant être lancé automatiquement au démarrage du système.
+
+
+===== Pré-requis =====
+  * Disposer des [[:sudo|droits d'administration]]
+  * Savoir utiliser le [[:terminal]]
+  * Avoir [[:systemd]] comme gestionnaire de service installé (à partir de [[:Xenial]])
+
+
+
+===== Principes de base=====
+Comme [[:Upstart]], [[:systemd]] utilise des fichiers de configuration correspondant aux différents services à manipuler. Il n'est (en général) plus nécessaire de créer des fichiers [[:tutoriel:script_shell|bash]] pour gérer le service, systemd s'occupe de tout (lancement, arrêt, redémarrage, status, gestion des logs, etc)\\
+Ces fichiers de configuration se trouvent dans **/etc/systemd/system/** et permettent d'indiquer les conditions d'activation ou désactivation d'un service, leur propriétaire, etc.
+
+<note important>Ce dossier étant essentiel au bon fonctionnement de votre système, il est conseillé d'en faire une sauvegarde avant toute modification de fichier.\\
+Dans un [[:terminal]] saisissez:
+<code>sudo cp -r /etc/systemd/system /etc/systemd/system.save$(date +%Y%m%d)</code></note>
+
+Une fois le fichier de configuration de service créé, il faut l'activer pour qu'il soit pris en compte par le système et lancé à chaque démarrage.
+<code>systemctl enable <nom du service>.service</code>
+
+On peut ensuite le lancer pour test et contrôler sa bonne marche avec les commandes suivantes :
+<code>systemctl start <nom du service>.service
+systemctl status <nom du service>.service</code>
+
+Pour plus d'infos sur les diverses commandes de gestion, voir la page [[:systemd#les_services|systemd]]
+
+<note help>
+Il est possible d'utiliser un service au niveau utilisateur, dans ce cas, les fichiers de configuration se trouvent dans **~/.config/systemd/user/**
+
+
+Pour un service utilisateur il faut ajouter aux commandes le paramètre --user :
+
+<code>
+systemctl --user enable <nom du service>.service
+systemctl --user start <nom du service>.service
+systemctl --user status <nom du service>.service
+</code>
+
+</note>
+
+Pour créer un service utilisateur :
+
+<code>
+systemctl --user edit <nom du service>.service --full --force
+</code>
+
+Pour éditer un service utilisateur :
+
+<code>
+systemctl --user edit <nom du service>.service --full
+</code>
+
+Pour ajouter une surcharge (drop-in) sur un service utilisateur :
+
+<code>
+systemctl --user edit <nom du service>.service
+</code>
+
+===== Type de services systemd =====
+
+Systemd définit différents types de services :
+  *  Un service de type **simple** (type par défaut) lance un processus principal. Dans le cas où ce processus offre une fonctionnalité à d'autres processus sur le système, ses canaux de communication doivent être installés avant que le processus principal soit démarré. Ce qui est rendu possible par l'activation des sockets, et autres canaux de communication. Ainsi, systemd peut traiter les autres unités sans se préoccuper de la fin du lancement d'une unité de type "simple".
+  * Un service de type **forking**, lance un processus père qui créera un processus fils dans le cadre de son démarrage. Le processus parent est prévu pour s’arrêter une fois le démarrage complet et que tous les canaux de communication sont mis en place. Le processus fils continue à fonctionner en tant que le processus principal du service. systemd poursuit le traitement des autres unités une fois que le processus père se termine. **Ce type de service correspond aux services UNIX traditionnels.**
+  * Un service de type **oneshot** est similaire à un service de type **simple**. Cependant, systemd attend que le processus se termine avant de continuer ses traitements. **Ce type de service est typiquement utilisé comme équivalent aux commandes lancées au démarrage via les scripts d'init system V**. Cela permet à systemd de remplacer ce mécanisme. De ce fait, avec systemd des nouveaux services apparaissent, alors qu'ils auraient été simplement des scripts d'init avec SysVinit.
+  * Un service de type **dbus** est similaire à un service de type **simple**. Cependant, le processus du service doit obtenir un nom via D-Bus. systemd pourra alors traiter les autres unités.
+  * Un service de type **notify** est similaire à un service de type **simple**. Cependant, c'est le processus du service qui avertira systemd (via la fonction sd_notfy(3)) qu'il peut traiter les autres unités.
+
+===== Exemples de services et leur fichier de configuration=====
+
+==== Exemples de service de type "oneshot"====
+
+Un exemple est le service iptables. Voici un extrait de son fichier de configuration :
+
+<file>
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/iptables.init start
+ExecStop=/usr/libexec/iptables.init stop 
+</file>
+
+  * ''ExecStart'' permet d'indiquer la commande à exécuter au lancement du service. Ce paramètre est obligatoire pour tout les types de service.
+  * ''ExecStop'' permet d'indiquer une commande a exécuter pour arrêter le service. Ce paramètre est facultatif.
+  * ''RemainAfterExit'' à la valeur "yes" permet d'indiquer que quand la commande de lancement (ExecStart) est terminée, le service est considéré comme toujours lancé. Ce paramètre est très utile pour les services de type "oneshot" qui exécutent une commande à leur lancement (ExecStart) sans qu'il y ait un processus spécifique qui reste en exécution.
+\\
+  * À son lancement, la commande /usr/libexec/iptables.init start est exécutée. Cette commande va permettre de charger des modules iptables et les règles iptables que le modules netfilter du noyau linux va prendre en compte.
+  * À son arrêt, la commande /usr/libexec/iptables.init stop est exécutée. Cette commande va permettre de remettre en place la politique de traitements iptables par défaut et de décharger les modules iptables.
+  * Le service iptables continuera d'apparaitre comme actif après la fin de la commande /usr/libexec/iptables.init start et jusqu’à ce qu'il soit explicitement arrêté.
+
+====Exemple de service de type "simple"====
+Un exemple est le service deluged qui permet de lancer le service correspondant à la version daemon du client bit-torrent [[:deluge]].
+
+<file txt /etc/systemd/system/deluged.service>
+[Unit]
+Description=Deluge Bittorrent Client Daemon
+After=network-online.target
+
+[Service]
+Type=simple
+
+User=deluge
+Group=deluge
+UMask=007
+
+ExecStart=/usr/bin/deluged -d
+
+Restart=on-failure
+
+# Configures the time to wait before service is stopped forcefully.
+TimeoutStopSec=300
+
+[Install]
+WantedBy=multi-user.target
+</file> 
+
+  * ''Description'' permet de donner une description du service qui apparaîtra lors de l'utilisation de la commande ''systemctl status <nom_du_service>''
+  * ''After'' permet d'indiquer quel pré-requis est nécessaire pour le fonctionnement du service. Ici, on indique qu'il faut attendre que l'ordinateur ait accès à Internet pour lancer le daemon. L'accès à Internet est perdu, le service n'est pas arrêté automatiquement, pour obtenir cet effet, il faut utiliser une balise ''Requires='' \\
+  * ''Type'' permet de specifier le type de service
+  * ''User'', ''Group'' et ''Umask'' permet d'identifier qui est le propriétaire du processus et donc les attributs des fichiers téléchargés. Ici, les fichiers téléchargés seront accessibles en Lecture/Ecriture à l'utilisateur ''Deluge'' et aux membres du groupe ''Deluge'' et invisibles aux autres utilisateurs du système.
+  * ''Restart'' permet de relancer le service automatiquement en cas de plantage.
+  * ''WantedBy'' permet de spécifier dans quel Target doit être actif le service. Ici, en spécifiant ''multi-user.target'', le service est actif dans les Runlevels 2, 3, 4 et 5. Pour en savoir plus sur les **Targets**, consultez la page de [[:systemd#les_targets|systemd]]\\
+
+====Exemple de service modèle====
+Il est possible de créer plusieurs services à partir d'un même modèle. Par exemple, la gestion des consoles est gérée par un seul modèle ''getty@.service'' qui est décliné en ''getty@tty1.service'', ''getty@tty2.service'', etc pour chacune des consoles tty de votre machine. On peut aussi imaginer des services où chaque instance correspond à un utilisateur de la machine. Par exemple, on peut lancer le service syncthing@.service pour synchroniser en parallèle avec [[:syncthing]] les fichiers de Toto, Gerard et Milou :
+
+<file txt syncthing@.service>
+[Unit]
+Description=Syncthing - Open Source Continuous File Synchronization for %I
+Documentation=man:syncthing(1)
+After=network.target
+Wants=syncthing-inotify@.service
+
+[Service]
+User=%i
+ExecStart=/usr/bin/syncthing -no-browser -no-restart -logflags=0
+Restart=on-failure
+SuccessExitStatus=3 4
+RestartForceExitStatus=3 4
+UMask=0002
+
+[Install]
+WantedBy=multi-user.target
+</file>
+
+  * ''Wants'' permet de spécifier une dépendance. Pour connaître les dépendances d'une unité, tapez dans un [[:terminal]]:
+<code>systemctl list-dependencies [<unit>] </code>
+  * Ici, le ''User'' est ''%i'', soit l'argument qui est passé lors de l'activation du service. Pour créer toute les instances du service pour Toto, Gerard et Milou, il faudra avoir tapé une fois :
+<code>systemctl enable syncthing@Toto.service
+systemctl enable syncthing@Gerard.service
+systemctl enable syncthing@Milou.service
+</code>
+**Qu'est ce qu'un timer--
+
+Les timers sont des fichiers de programmation qui vont se charger de lancer des services à intervalles réguliers.
+
+Quand vous créez un timer, il doit avoir l'extension .timer. Un service .service du même nom doit exister. (le service est souvent un service minimaliste, de type oneshot, permettant de lancer une commande)
+
+Les timers «pourraient presque» remplacer le planificateur de tâches cron.
+
+==== Exemple de service cyclique. ====
+Création du fichier de timer        
+<file sh /etc/systemd/system/MAJ0.timer>
+[Unit]
+Description=Lance une mise à jour de l'ordinateur quinze minutes après le démarrage de la machine et  itère toutes les trente minutes.
+[Timer]
+OnBootSec=15minutes   
+# le service démarrera 15 minutes après le démarrage de la machine
+OnUnitActiveSec=30minutes  
+Persistent=true
+# le service démarrera toutes les trente minutes après la dernière activation du timer
+###    voir toutes les possibilités de choix  dans ce  document http://man7.org/linux/man-pages/man7/systemd.time.7.html
+[Install]
+WantedBy=timers.target
+</file>
+Création du fichier de service
+<file sh /etc/systemd/system/MAJ0.service>
+[Unit]
+Description=Service de mise a jour
+After=network.target
+
+[Service]
+ExecStart=apt-get update && apt-get upgrade
+Type=oneshot
+</file>
+Avec les commandes de gestion associées
+<code>sudo systemctl enable MAJ0.timer 
+sudo systemctl start  MAJ0.timer
+sudo systemctl status MAJ0.timer
+</code>
+
+====Exemple de service avancé avec la base graphe neo4j====
+
+<file txt /etc/systemd/system/neo4j.service>
+#La configuration de Systemd se base sur des unités (units) qui ont un nom et un type.
+
+######################################################################
+#La section [Unit] contient de l'information générique sur le service#
+######################################################################
+#https://www.freedesktop.org/software/systemd/man/systemd.unit.html#
+[Unit]
+#Description de l'Unité.
+Description=Neo4j Management Service
+
+#Man page du service  "http://", "https://", "file:", "info:", "man:"
+Documentation=man:neo4j(1)
+
+
+# Type de l'Unité systemd.
+#Les différents types d'unités sont : 
+#    service : pour un service/démon ;
+#    socket : pour une socket réseau (de tous types : UNIX, Internet, fichier etc.) ;
+#    mount : pour un système de fichiers (exemple : home.mount), tout en utilisant /etc/fstab ;
+#    swap : pour les partitions d'échanges ;
+#    automount : pour un système de fichiers monté à la demande ;
+#    device : pour un périphérique ;
+#    timer : pour l'activation basée sur une date ;
+#    path : pour l'activation basée sur des fichiers ou des répertoires ;
+#    target : macro-unité qui permet de grouper plusieurs unités (exemple : multi-user.target pour définir une cible) ;
+#                Ce sont les niveaux d'exécutions de l'ancien init.
+#    snapshot : unités utilisées pour sauvegarder l’état actuel des services et les restaurer ensuite, par exemple avant de passer en veille.
+#Dans cet exemple c'est un service, celui de la base graphe neo4j, qui est notre "unité".
+#########################################################################
+#La section [Service] concerne l'information sur le service en lui-même.#
+#########################################################################
+#https://www.freedesktop.org/software/systemd/man/systemd.service.html
+[Service]
+#Lance le service dans un processus système indépendant. 
+# simple, forking, oneshot, dbus, notify ou idle sont les valeurs possibles de Type=.
+Type=forking
+
+#L'exécution du service se fera avec le nom d'utilisateur neo4j.
+User=neo4j
+
+#Le lancement de l'unité neo4j.service doit créer un répertoire neo4j dans /run.
+#/var/run étant un lien vers le montage du système de fichiers tmpfs /run.
+RuntimeDirectory=neo4j
+
+#Droits d'accès sur le répertoire /run/neo4j.
+# Utilisateur  Groupe    Les_autres
+#     rwx        rwx        ---
+#   7(4+2+1)   7(4+2+1)   0(0+0+0)
+RuntimeDirectoryMode=770
+
+#Où trouver l'identifiant PID du processus du service neo4j.
+PIDFile=/var/run/neo4j/neo4j.pid
+
+#Démarrer le service neo4j.
+ExecStart=/usr/bin/neo4j start
+
+#Arrêter le service neo4j.
+ExecStop=/usr/bin/neo4j stop
+
+#Redémarrer le service neo4j.
+ExecReload=/usr/bin/neo4j restart
+
+#Ne doit pas considérer que le service est actif lorsque le processus neo4j s'est terminé normalement.
+RemainAfterExit=no
+
+#Configure si le service doit être redémarré une fois le processus de service terminé, tué ou si le délai d'attente est atteint.
+#                            *Restart=*    no    always    on-success    on-failure    on-abnormal    on-abort    on-watchdog
+# *Choix redémarrage*                  +_______+_________+____________+_____________+______________+___________+_______________+
+#           Fin normale ou par signal  |       |    X    |      X     |             |              |           |               |
+#                                      +_______+_________+____________+_____________+______________+___________+_______________+
+#        Fin d’exécution avec erreurs  |       |    X    |            |      X      |              |           |               |
+#                                      +_______+_________+____________+_____________+______________+___________+_______________+
+#                       Processus tué  |       |    X    |            |      X      |      X       |     X     |               |
+#                                      +_______+_________+____________+_____________+______________+___________+_______________+
+#             délai d'attente atteint  |       |    X    |            |      X      |      X       |           |               |
+#                                      +_______+_________+____________+_____________+______________+___________+_______________+
+#                            Watchdog  |       |    X    |            |      X      |      X       |           |       X       |
+#                                      +_______+_________+____________+_____________+______________+___________+_______________+
+Restart=on-failure
+
+#Définit des limites logicielles ou matérielles pour le processus exécuté.
+#https://www.freedesktop.org/software/systemd/man/systemd.exec.html#
+# Correspond à ulimit -n 60000. 
+# C'est le nombre maximum de fichiers pouvant être ouvert simultanément pour les processus fils du service.
+LimitNOFILE=60000
+
+#Une directive pour configurer TimeoutStartSec = et TimeoutStopSec = à la valeur spécifiée.
+# TimeoutStartSec= configure le délai d'attente pour attendre le démarrage du service.
+# TimeoutStopSec = configure le temps d'attente pour attendre l'arrêt du service.
+TimeoutSec=600
+
+
+##############################################################################################################################
+# La section [Install] s'occupe des circonstances et des déclencheurs dans le cadre desquels le service devrait être démarré.#
+##############################################################################################################################
+[Install]
+#S'exécute dans le niveau d'exécution multi utilisateur
+WantedBy=multi-user.target
+</file>
+===== Ressources ======
+  * [[wpfr>systemd|systemd]] sur Wikipedia en français
+  * [[http://www.freedesktop.org/wiki/Software/systemd/|Site officiel de systemd]]
+  * [[http://doc.fedora-fr.org/wiki/Systemd|Fedora et systemd]] notamment pour la partie [[#Type de service systemd]]
+  * [[https://docs.syncthing.net/users/autostart.html#using-systemd|Documentation de Syncthing]] Créer un service systemd pour lancer Syncthing au démarrage (en anglais)
+  * [[https://deluge.readthedocs.io/en/latest/how-to/systemd-service.html|Documentation de Deluge]] Créer un service systemd pour lancer Deluge au démarrage (en anglais)
+
+
+----
+//Contributeurs: [[:utilisateurs:zarmu]]//

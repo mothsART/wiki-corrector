@@ -1,0 +1,182 @@
+
+{{tag>serveur réseau sgbd BROUILLON}}
+
+
+----
+===== Version originale =====
+
+
+----
+
+==== Déplacer l'endroit où MySQL stocke les données ====
+
+<note important>Si vous êtes débutant, je vous conseil de sauvegardez manuellement toute vos bases avant d'effectuer cette opération</note>
+
+Dans un environnement de test, vous ne pensez pas forcément à sauvegarder l'intégralité de vos bases. Alors, pour être sur les conservez, vous pouvez déplacer l'endroit où MySQL stocke les données.
+
+Pour se faire, ouvrez un [[terminal]]
+
+Stopper mysql :
+
+<code>/etc/init.d/mysql stop</code>
+
+Créer le nouveau répertoire qui accueillera les base de données. Pour l'exemple, on créera un répertoire MySQL dans votre home (~ remplace /home/<votreutilisateur>)
+
+<code>mkdir ~/MySQL</code>
+
+Par défaut, les données de MySQL sont stockées dans /var/lib/mysql. Donc rendez-y vous (pas besoin d'utiliser "sudo" pour ces commandes)
+
+<code>cd /var/lib/mysql
+ls</code>
+
+Chez moi, cela donne :
+
+<code>-rw-r--r-- 1 root  root         0 2010-01-30 21:36 debian-5.1.flag
+-rw-rw---- 1 mysql mysql 10485760 2010-01-30 22:22 ibdata1
+-rw-rw---- 1 mysql mysql  5242880 2010-01-30 22:22 ib_logfile0
+-rw-rw---- 1 mysql mysql  5242880 2010-01-30 21:36 ib_logfile1
+drwxr-xr-x 2 mysql root      4096 2010-01-30 21:36 mysql
+-rw------- 1 root  root         6 2010-01-30 21:36 mysql_upgrade_info
+drwx------ 2 mysql mysql     4096 2010-01-30 21:37 phpmyadmin</code>
+
+Le dossier qui nous intéresse est "mysql". Le dossier "phpmyadmin" est là puisque j'ai installé [[phpmyadmin|phpMyAdmin]]. Les autres fichiers sont générés par MySQL et servent à sa gestion
+
+On va donc copier l'intégralité du dossier "mysql" dans ~/MySQL
+Toujours dans /var/lib/mysql, faites (necessite de nouveaux sudo) : 
+
+<code>cp -r mysql ~/MySQL</code>
+
+Maintenant, il faut changer le propriétaire et le groupe du dossier pour que seul MySQL puisse se servir du dossier
+
+<code>chow -R mysql:mysql ~/MySQL</code>
+
+<note important>Attention à ce que vous faites ! Vous pourriez changer tous les droits sur l'intégralité de vos dossiers/fichiers si vous vous tromper</note>
+
+Voilà ! Les fichiers sont à l'abri. Maintenant, il reste à reconfigurer MySQL pour qu'il utilise dorénavant le nouvel emplacement
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/mysql/my.conf**
+
+Remplacer
+<code>datadir = /var/lib/mysql</code>
+
+Par
+<code>datadir = /home/<votreutilisateur>/MySQL</code>
+
+On pourrait s'arrêter là, et redémarrer MySQL. Seulement, il est fort probable que vous ayez [[apparmor|AppArmor]]. Si c'est le cas, celui là empêchera MySQL de redémarrer, car sa configuration ne correspondra pas à la nouvelle de MySQL
+
+[[:tutoriel:comment_editer_un_fichier|Éditez le fichier]] **/etc/apparmor.d/usr.sbin.mysqld**
+
+Vous y trouverez quelque chose de similaire
+
+<code># vim:syntax=apparmor
+# Last Modified: Tue Jun 19 17:37:30 2007
+#include <tunables/global>
+
+/usr/sbin/mysqld {
+  #include <abstractions/base>
+  #include <abstractions/nameservice>
+  #include <abstractions/user-tmp>
+  #include <abstractions/mysql>
+  #include <abstractions/winbind>
+
+  capability dac_override,
+  capability sys_resource,
+  capability setgid,
+  capability setuid,
+
+  network tcp,
+
+  /etc/hosts.allow r,
+  /etc/hosts.deny r,
+
+  /etc/mysql/*.pem r,
+  /etc/mysql/conf.d/ r,
+  /etc/mysql/conf.d/* r,
+  /etc/mysql/my.cnf r,
+  /usr/sbin/mysqld mr,
+  /usr/share/mysql/** r,
+  /var/log/mysql.log rw,
+  /var/log/mysql.err rw,
+  /var/lib/mysql/ r,
+  /var/lib/mysql/** rwk,
+  /var/log/mysql/ r,
+  /var/log/mysql/* rw,
+  /var/run/mysqld/mysqld.pid w,
+  /var/run/mysqld/mysqld.sock w,
+}</code>
+
+Remplacer /var/lib/mysql par /home/<votreutilisateur>/MySQL/
+
+
+<code>[...]
+  /var/log/mysql.err rw,
+  /home/<votreutilisateur>/MySQL/ r,
+  /home/<votreutilisateur>/MySQL/** rwk,
+  /var/log/mysql/ r,
+[...]</code>
+
+Maintenant, vous pouvez redémarrer MySQL !
+
+<code>/etc/init.d/mysql start</code>
+
+Sources :
+  * [[http://www.ubuntu-howto.info/howto/how-to-move-mysql-databases-to-another-location-partition-or-hard-drive|How to move mysql database to another drive or partition]]
+  * [[http://forums.mysql.com/read.php?35,290059,290059]]
+
+
+----
+===== Nouvelle version =====
+
+
+----
+
+
+==== Déplacer ses bases de données MySql ====
+
+=== Préambule ===
+ 
+
+la plupart des utilisateurs créent de 2 à 3 partitions sur leur(s) installation(s)
+  * / - une partition système
+  * swap - une partition de de //swap//
+  * /home - une partition réservée aux utilisateurs
+
+L'intérêt de ce mode de partitionning est qu'en cas de re-installation, les données utilisateurs (données, profils, compte courrier, favoris internet, thème de bureau, etc.) sont sauvegardées et aussitôt exploitable. Ça n'est malheureusement pas le cas pour les bases de données MySql, et un utilisateur non averti, écrasera sans le savoir ses bases de données qui sont stockées sur **/var/lib/mysql** (et donc la parttion '**/**' système.
+
+Il peut donc être intéressant pour celà de déplacer ses bases de données dans la partition /home.
+
+=== Mise en place ===
+
+
+Arrêter mysql : 
+<code>sudo /etc/init.d/mysql stop</code>
+
+Déplacer le répertoire des bases de données :
+<code>sudo mv /var/lib/mysql /home/mysql</code>
+Le déplacement par 'mv' permet de ne pas modifier les droits originaux.
+
+Créer un lien symbolique afin de ne pas "//casser//" les fichiers de configuration originel de MySql :
+<code>sudo ln -s /home/mysql /var/lib/mysql</code>
+
+Pour les versions d'Ubuntu utilisant [[/apparmor|Apparmor]], il vous faut modifier le fichier de configuration mysql dans Apparmor.
+
+[[/tutoriel/comment_modifier_un_fichier|Éditer]] **/etc/apparmor.d/usr.sbin.mysqld**
+
+Trouver les deux lignes :
+<file>
+  /var/lib/mysql/ r,
+  /var/lib/mysql/** rwk,
+</file>
+et modifier les en :
+<file>
+  /home/mysql/ r,
+  /home/mysql/** rwk,
+</file>
+
+On relance la configuration d'Apparmor :
+<code>sudo /etc/init.d/apparmor reload</code>
+
+on relance MySql :
+<code>sudo /etc/init.d/mysql start</code>
+
+Et voilà.

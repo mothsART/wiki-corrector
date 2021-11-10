@@ -1,0 +1,174 @@
+
+{{tag>tutoriel serveur apache2 tls ssl}}
+
+----
+
+====== Utiliser HTTPS avec Apache2 ======
+Ce tutoriel présente une procédure permettant de servir des pages web [[:apache2#creation_d_hotes_virtuels|hôte virtuel]] grâce au **protocole HTTPS**.
+Avec HTTPS, les échanges HTTP entre le client et le serveur sont chiffrés (et donc sécurisés) via le protocole TLS (ou autrefois SSL).
+
+===== Introduction =====
+
+==== Le protocole TLS ====
+
+Le protocole [[https://fr.wikipedia.org/wiki/Transport_Layer_Security|TLS]] permet à deux machines de communiquer de manière sécurisée. Les informations échangées entre les deux machines sont de ce fait pratiquement inviolables.
+Il doit assurer l'authentification du serveur grâce à un certificat. La confidentialité des données grâce au chiffrement et l’intégrité des données.
+
+
+==== Les Certificats ====
+
+[[https://fr.wikipedia.org/wiki/Certificat_%C3%A9lectronique|Un certificat]] permet de fournir diverses informations concernant l'identité de son détenteur (la personne qui publie les données). Ce certificat s'accompagne d'une **clé publique** qui est indispensable pour que la communication entre les machines soit chiffrée. 
+
+Afin de garantir l'authenticité du certificat, ce dernier est signé numériquement provenant soit par une autorité de certification (Société spécialisée dans la certification) soit par le détenteur du certificat lui-même. Dans ce dernier cas, on parlera de certificat auto-signé.
+
+Dans la plupart des cas, l'obtention d'un certificat certifié par une AC (autorité de certification) ayant un prix assez élevé, les webmasters auront tendance à vouloir signer eux-même leur certificat. Ce faisant, il est à noter que dans ce cas, le certificat ne sera pas reconnu par les navigateurs web comme étant certifié. 
+
+[[http://www.cacert.org|CA Cert]] permet d'obtenir des certificats gratuits. Il vous faudra néanmoins installer le certificat racine dans votre navigateur.
+
+[[https://letsencrypt.org/|Let's encrypt]] permet également d'obtenir des certificats gratuits. En outre Let'Encrypt fournit l'application [[https://certbot.eff.org/|cerbot]] qui simplifie grandement la création et la gestion des certificats. Vous avez un excellent tuto pour ubuntu 16.04 [[https://www.digitalocean.com/community/tutorials/how-to-secure-apache-with-let-s-encrypt-on-ubuntu-16-04|Ici]]
+
+Pour ce tutoriel, nous supposons que nous avons déjà mis en place un [[:apache2#creation_d_hotes_virtuels|hôte virtuel]] basé sur le nom **example.com**, ce dernier étant accessible sur le **port 80** à l'adresse http://example.com
+
+===== Mise en application avec le Serveur Http Apache2 =====
+
+==== Activation du module SSL/TLS ====
+
+Pour que le protocole TLS puisse fonctionner avec le Serveur HTTP Apache2, il faut activer le module **ssl** avec la commande :
+<code>sudo a2enmod ssl</code>
+puis recharger la configuration d'Apache2 faites :
+<code>sudo systemctl reload apache2</code>
+Ou si vous êtes sur une ancienne version d'Ubuntu :
+<code>sudo service apache2 reload</code>
+Pour vérifier l'activation du module:
+<code>apache2ctl -M | grep ssl </code>
+
+==== Création du certificat avec Let's encrypt ====
+
+Prérequis : 
+  * avoir un nom de domaine pleinement qualifié  (nous utiliserons example.com dans la suite) ;
+  * avoir un serveur web apache déjà configuré, fonctionnel et accessible publiquement.
+
+=== Installation de Certbot ===
+Les instructions pour installer et utiliser simplement certbot sont disponibles en anglais [[https://certbot.eff.org/|sur le site officiel.]]
+
+En voici, un récapitulatif. Il faut d'abord installer le dépôt ppa officiel (sans risques) puis installer le paquet certbot :
+<code>sudo apt update
+sudo apt install software-properties-common
+sudo add-apt-repository ppa:certbot/certbot
+sudo apt update
+sudo apt install certbot</code>
+Au moins depuis la 20.04, certbot est dans les dépôts, pas besoin de ce ppa qui ne contient rien pour focal.
+
+=== Générer le certificat avec Certbot ===
+Certbot dispose de très nombreuses options qui sont documentées en anglais [[hhttps://certbot.eff.org/docs/using.html|sur le site officiel]].
+
+Le script est très bien fait, ce qui implique qu'il est possible de simplement lancer, pour un serveur avec apache:
+<code bash>
+sudo certbot --apache
+</code>
+Le script se déroule et pose des questions, à commencer par les domaine à passer en https, puis si on veut rediriger http vers https…
+
+Une autre méthode également simple pour générer un certificat en utilisant le greffon « //webroot// » est:
+
+<code bash>sudo certbot certonly --webroot -w /var/www/example -d example.com -d www.example.com</code>
+
+Cette commande va générer un certificat valable pour les domaines (option -d) example.com et www.example.com, qui correspondent à un site web existant et fonctionnel placé dans le dossier racine (option -w) var/www/example.
+
+À l'issue de la commande précédente sera crée une arborescence sous /etc/letsencrypt qui contient vos certificats et des fichiers de configuration nécessaires aux procédures de renouvellement et de révocation. Sera crée également une tâche cron (/etc/cron.d./certbot) permettant de renouveler automatiquement les certificats avant qu'ils n'arrivent à échéance (les certificats Let'sEncrypt ne sont valables que 3 mois).
+
+L’emplacement du certificat et de la clé privée est indiqué à la fin de la procédure, typiquement :
+   * **/etc/letsencrypt/live/example.com/privkey.pem** pour la clé privée
+   * **/etc/letsencrypt/live/example.com/fullchain.pem** pour le certificat complet.
+
+==== Configuration de l'hôte virtuel pour HTTPS ====
+
+[[:tutoriel:comment_editer_un_fichier|Ouvrez le fichier]] de configuration de votre hôte virtuel, par exemple /etc/apache2/sites-available/example.com.conf :
+<code apache>
+<VirtualHost *:80>
+    ServerName example.com
+    ServerAlias www.example.com
+    ServerAdmin webmaster@example.com
+    DocumentRoot /srv/web/example.com/www
+	<Directory /srv/web/example.com/www>
+		Options -Indexes +FollowSymLinks +MultiViews
+		AllowOverride none
+		Require all granted
+	</Directory>
+	ErrorLog /var/log/apache2/error.example.com.log
+	CustomLog /var/log/apache2/access.example.com.log combined
+</VirtualHost>
+</code>
+
+Et ajoutez à la suite l'hôte virtuel pour le port 443 (port standard pour le HTTPS) :
+<code apache>
+<VirtualHost *:443>
+    ServerName example.com
+    ServerAlias www.example.com
+    ServerAdmin webmaster@example.com
+    DocumentRoot /srv/web/example.com/www
+	<Directory /srv/web/example.com/www>
+		Options -Indexes +FollowSymLinks +MultiViews
+		AllowOverride none
+		Require all granted
+	</Directory>
+
+       # directives obligatoires pour TLS
+      	SSLEngine on
+	SSLCertificateFile    /etc/letsencrypt/live/example.com/fullchain.pem
+	SSLCertificateKeyFile   /etc/letsencrypt/live/example.com/privkey.pem
+      
+	Header always set Strict-Transport-Security "max-age=15768000"
+
+	ErrorLog /var/log/apache2/error.example.com.log
+	CustomLog /var/log/apache2/access.example.com.log combined
+</VirtualHost>
+</code>
+
+Enregistrez le fichier et rechargez la configuration d'Apache :
+<code> sudo systemctl reload apache2</code>
+
+Votre site devrait maintenant être accessible en HTTP et en HTTPS.
+
+=== Forcer la connexion en HTTPS ===
+Si vous voulez que votre site ne soit accessible qu'en HTTPS et que les internautes soient redirigés automatiquement, modifiez ainsi votre fichier d'hôte virtuel :
+
+<code apache>
+<VirtualHost *:80>
+    ServerName example.com
+    ServerAlias www.example.com
+    ServerAdmin webmaster@example.com
+    # Redirection 301  vers le site en HTTPS
+    Redirect permanent / https://example.com/
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName example.com
+    ServerAlias www.example.com
+    ServerAdmin webmaster@example.com
+    DocumentRoot /srv/web/example.com/www
+	<Directory /srv/web/example.com/www>
+		Options -Indexes +FollowSymLinks +MultiViews
+		AllowOverride none
+		Require all granted
+	</Directory>
+
+       # directives obligatoires pour TLS
+      	SSLEngine on
+	SSLCertificateFile    /etc/letsencrypt/live/example.com/fullchain.pem
+	SSLCertificateKeyFile   /etc/letsencrypt/live/example.com/privkey.pem
+      
+	Header always set Strict-Transport-Security "max-age=15768000"
+
+	ErrorLog /var/log/apache2/error.example.com.log
+	CustomLog /var/log/apache2/access.example.com.log combined
+</VirtualHost>
+</code>
+Enregistrez le fichier et rechargez la configuration d'Apache :
+<code> sudo systemctl reload apache2</code>
+
+Votre site devrait maintenant être accessible uniquement en HTTPS.
+==== Renforcer la sécurité ==== 
+
+Si vous voulez optimiser la sécurité des échanges en HTTPS, le plus simple est d'utiliser le [[https://mozilla.github.io/server-side-tls/ssl-config-generator/|générateur de configuration de Mozilla]]
+
+--- //[[:utilisateurs:bruno|bruno]]//

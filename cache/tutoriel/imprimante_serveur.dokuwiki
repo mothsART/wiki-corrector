@@ -1,0 +1,113 @@
+
+{{tag>Xenial tutoriel partage imprimante}}
+
+----
+
+
+====== Comment configurer un ordinateur en "serveur d'impression" ? ======
+
+Cette page explique comment configurer un poste Ubuntu en **serveur d'impression**. Cette configuration va permettre de** partager une imprimante** qui est raccordée directement à cet ordinateur.
+
+La schéma suivant décrit cette situation :
+
+{{ :print_part_ubuntu.png?nolink }}
+
+<note help>Cette documentation explique la méthode pour Ubuntu & une méthode universelle à tous les systèmes disposants de CUPS : par exemple les systèmes UNIX dont PC-BSD, OpenBSD & OS X).</note>
+
+
+===== Pré-requis =====
+
+  * [[:reseau|Un réseau fonctionnel]] ;
+  * [[:imprimante|Une imprimante installée]].
+ 
+
+===== Méthode pour Ubuntu =====
+
+==== Avec le gestionnaire d'imprimantes ====
+Pour rendre accessible votre imprimante sur le réseau, il s'agit de la partager:
+  * Ouvrez le gestionnaire de configuration d'impression :
+    * //Paramètres Système -> Imprimantes//
+  * Installer l'imprimante si ce n'est pas déjà fait :
+    * Consulter [[:imprimante|cette page]] pour plus d'informations
+  * Allez dans le menu :
+    * //Serveur -> Paramètres//,
+    * Cocher la case //Publier les imprimantes partagées connectées à ce système//,
+    * Cliquer sur //Valider//,
+  * Ouvrir le partage pour votre imprimante :
+    * Clic droit sur l'imprimante à partager -> Cocher la case //Partagée//,
+  * Si besoin, configurez le pare-feu :
+    * Autoriser le port TCP 631 en entrée.
+
+==== Avec l'interface web de CUPS  ====
+Aller à l'adresse ''http://localhost:631/admin'' et cocher //Partager les imprimantes connectées à ce système//.
+
+<note tip>Si votre serveur n'a pas d'interface graphique, il faut autoriser un accès d'une autre machine du réseau (avec interface graphique elle !) : sur le serveur, [[:tutoriel:comment_modifier_un_fichier|modifiez comme suit le fichier]]  **/etc/cups/cupsd.conf** avec [[:sudo|les droits d'administration]]  (dans l'exemple, 192.168.0.1 est le serveur et 192.168.0.2 est la machine de laquelle on veut accéder à l'interface web):<file>
+  Listen 192.168.0.1:631
+
+  # Restrict access to the admin pages...
+  <Location /admin>
+  Order deny,allow
+  Deny From All
+  Allow From 127.0.0.1
+  Allow from 192.168.0.2
+  </Location>
+</file>
+Il faut ensuite redémarrer cups : <code>sudo service cups restart</code>
+
+Une fois ceci fait, on accède à l'interface web via : ''http://192.168.0.1:631/admin''.
+ </note>
+
+
+Si après la configuration vous ne pouvez toujours pas partager votre imprimante, [[:tutoriel:comment_modifier_un_fichier|modifiez comme suit le fichier]]  **/etc/cups/cupsd.conf** avec [[:sudo|les droit d'administration]]  en remplaçant la variable **@LOCAL** par votre adresse réseau **192.168.*** dans la section //Allow shared printing...//
+
+<file>
+<Location />
+  # Allow shared printing...
+  Order allow,deny
+  # Allow @LOCAL
+  Allow 192.168.*
+</Location>
+</file>
+
+Ensuite, relancez CUPS via la commande dans un [[:terminal]]: <code>sudo service cups restart</code>
+
+
+===== Méthode Universelle pour d'autres système avec CUPS =====
+
+Si CUPS est installé, une interface WEB est disponible à l'adresse ''http://localhost:631''.
+Cette jolie interface est celle de CUPS, et à partir de là, votre paramétrage peut se faire en quelques clics de souris. Pour partager une imprimante, reportez vos aux indications [[#Avec l'interface web de CUPS|plus haut]].
+
+==== Administration à distance ====
+Pour activer l'administration à distance, dans l'onglet //Administration//, cochez:
+  * //Partager les imprimantes connectées à ce système//,
+  * //Autoriser l'impression depuis internet//,
+  * et //Autoriser l'administration à distance//.
+
+Cette dernière vous permettra de configurer CUPS depuis n'importe quel poste de votre réseau local, en y accédant à travers cette adresse : ''http://@ip_du_cups_de_l_imprimante:631/''.
+Ou même depuis l'Internet (la 2e ligne servant à ça), à condition que votre connexion à internet redirige le port 631 vers votre ordinateur (enfin celui disposant du CUPS).
+
+Pour illustrer, admettons que votre imprimante soit connectée soit en USB, soit en parallèle (ou tout autre interface), à un ordinateur dont l'adresse IP est ''192.168.1.3'' dans le réseau local. Alors, accéder à cette imprimante (et surtout au CUPS qui la concerne) se fera //via// ''http://192.168.1.3:631/''.
+
+<note help>Si vous avez plusieurs imprimantes sur le réseau, à chaque serveur CUPS sa ou ses imprimantes administrées ; mais vous pouvez ajouter à la liste des imprimantes que gère le serveur CUPS local – & dans le but d'étoffer le nombre d'imprimantes disponibles pour imprimer – une ou des imprimantes partagées, qui seront connectées en IPP //(Internet Printing Protocol)// en entrant en guise d'adresse :
+<file>ipp://<@ip_du_cups_de_l'imprimante>:631/printers/<nom_de_l'imprimante_sur_ce_cups>/</file>
+Pour illustrer, admettons que mon mon ordinateur, dont l'@IP est 192.168.1.3 sur le réseau local dispose d'une imprimante parallèle configurée préalablement, et dont le nom est TralAlA123, alors l'adresse PII((traduction la plus adaptée de IPP : Protocole d'impression par Internet)) est la suivante : <file>ipp://192.168.1.3:631/printers/TralAlA123</file>
+Et celle-ci reste valable sur tout le réseau local.</note>
+
+==== Serveur sans interface graphique ====
+
+
+Pour le cas d'un serveur ne possédant pas d'interface graphique, il est possible d'accéder à l'interface web de cups (non accessible par défaut depuis un autre poste). Pour cela, connectez vous dans un premier temps au serveur grâce au protocole ssh, vous pourrez ainsi à l'aide d'un programme de navigation web en mode texte (lynx ou links) y gérer cups depuis l'adresse suivante : 127.0.0.1:631
+
+Vous pourrez entre autre activer l'administration à distance de cups, comme indiqué [[#Administration à distance|plus haut]].
+Enfin à l'aide de votre navigateur web préféré vous pouvez gérer facilement cups à distance en vous rendant à ''l_adresse_de_votre_serveur:631''
+
+===== Configurer un client pour accéder à l'imprimante =====
+
+Si vous avez partagé votre imprimante sur le réseau vous devriez la voir apparaître dans la liste des imprimantes sur vos postes clients, sans aucune autre manipulation.
+
+Si l'auto-détection ne marche pas, ou si l'ordinateur qui partage l'imprimante ne partage pas les données permettant l'auto-détection, suivez les indications [[:system-config-printer#ajout_d_une_imprimante_partagee|ici]]
+Reportez-vous également à cette [[:tutoriel:imprimante_client|page de la documentation]].
+
+----
+
+//Contributeurs : figaro, [[:utilisateurs:dmoyne]], [[:utilisateurs:Incoming]], [[:utilisateurs:KinderSurpriZ]], [[:utilisateurs:Fabien26]], [[:utilisateurs:dsi0743]], [[:utilisateurs:DarkHylian]], [[:utilisateurs:Mysteroïd]], [[:utilisateurs:guigouz]].//

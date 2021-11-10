@@ -1,0 +1,325 @@
+
+{{tag>tutoriel grub-pc amorçage}}
+----
+<note>Cette page est un tutoriel Grub2 dont la documentation principale est disponible [[:grub-pc|ici]].</note>
+
+====== Tutoriel GRUB 2 : paramétrage manuel ======
+Il existe des [[:grub-pc#fonctionnement_general|applications graphiques pour paramétrer Grub]]. Ici on exposera l'**intervention directe** sur les **fichiers de paramètres** de Grub.
+===== A savoir avant de configurer =====
+
+Nous n'intervenons **pas directement** sur un fichier de configuration **mais** sur des fichiers de **paramètres** qui sont pris en compte uniquement lors du lancement d'une **commande de mise à jour** (update-grub).
+
+Les paramétrages sont **situés uniquement** dans le fichier **/etc/default/grub** et dans le dossier **/etc/grub.d/**.
+
+==== Fichier grub.cfg ====
+
+  * /boot/grub/**grub.cfg** : est un fichier de configuration généré automatiquement par //update-grub// (il est inutile d’éditer ce fichier) et **ne doit** donc **pas être modifié manuellement**.
+
+==== Fichier /etc/default/grub ====
+Dans ce fichier, on peut **activer ou désactiver un paramètre** en le commentant / décommentant avec le caractère **dièse « # »**([[wpfr>wiki|croisillon]]).
+
+=== paramètres présents par défaut ===
+  * **GRUB_DEFAULT=0** correspond au menu qui sera sélectionné par défaut. (-> **[[#Menu par défaut|Détails]]**)
+  * **#GRUB_HIDDEN_TIMEOUT=0** : avec le « # », le menu de grub sera visible. Sans le « # », le menu de grub sera invisible. (-> **[[#Afficher/Masquer le menu|Détails]]**)
+  * **GRUB_HIDDEN_TIMEOUT_QUIET=false** De pair avec ‘GRUB_HIDDEN_TIMEOUT’. (-> **[[#Afficher/Masquer le menu|Détails]]**)
+  * **GRUB_TIMEOUT_STYLE=hidden** Paramètre apparu avec la version 18.04.1 en remplacement des deux qui précèdent.
+  * **GRUB_TIMEOUT=10** est la durée en secondes de l’affichage du menu avant de se lancer sur le menu sélectionné par défaut. (-> **[[#Menu par défaut|Détails]]**)
+  * **GRUB_DISTRIBUTOR=``** est la ligne qui définit la syntaxe des titres du menu (-> **[[#Intitulé dans le menu|Détails]]**)
+  * **GRUB_CMDLINE_LINUX_DEFAULT=" "**  Des paramètres sont déjà présents, ils peuvent être ôtés. On y met les paramètres à ajouter lors de la détection automatique des systèmes lors du démarrage.  (ex: radeon.modeset=1 logo.nologo ..).
+  * **GRUB_CMDLINE_LINUX=""** On  peut y mettre des paramètres supplémentaires à ceux du paramètre précédant à ajouter lors du démarrage  des systèmes en mode recovery  (ex: fsck.mode=force  fsck.repair=yes ...).
+  * **#GRUB_GFXMODE=640x480** (-> **[[#GRUB_GFXMODE|Détails]]**).
+  * **#GRUB_INIT_TUNE="480 440 1"** : sans le « # », on aura un bip à l’affichage du menu Grub.
+
+=== paramètres qu'on peut ajouter ===
+  * **GRUB_GFXPAYLOAD=1024x768** : définit la résolution d’affichage entre Grub et celle définie dans la distribution (pour le splash screen par exemple). Défini à 'keep' par défaut.
+  * **GRUB_GFXPAYLOAD_LINUX=auto** : définit la résolution d’affichage par défaut du linux lancé FIXME
+  * **GRUB_BACKGROUND="/boot/grub/images/fjord.jpg"** : pour mettre une image en fond d'écran (-> **[[#Fond d'écran|Détails]]**)
+  * **GRUB_DISABLE_OS_PROBER="true"** : si on souhaite désactiver la recherche d'autres systèmes à chaque update-grub (inutile si on les lance autrement)
+  * **GRUB_OS_PROBER_SKIP_LIST="..."** : liste de partitions à ne pas inclure dans la recherche automatique de systèmes. (-> **[[#os-prober partiel|Détails]]**)
+  * **GRUB_DISABLE_LINUX_RECOVERY="true"** : on mettra ce paramètre si on ne veut plus avoir la possibilité de lancer les systèmes en mode 'maintenance'
+  * **GRUB_DISABLE_SUBMENU=y** : si on souhaite voir directement une entrée de menu par noyau linux disponible (On peut supprimer les [[:kernel|noyaux]] les plus anciens -> [[:kernel#suppression_des_anciens_noyaux|Nettoyer Ubuntu]])
+  * **LANG=fr_FR** : pour définir la langue utilisée pour l'édition du menu depuis Grub ou le mode 'ligne de commande'
+  * **GRUB_TERMINAL_INPUT=at_keyboard** : nécessaire pour paramétrer le clavier français (pour ne plus avoir à chercher les ()[]= .. du clavier Qwerty). (-> **[[#Clavier français|Détails]]**)
+  * **GRUB_THEME="/boot/grub/themes/ubuntu-mate/theme.txt"** : chemin vers le fichier de configuration du thème (mode graphique). (-> **[[#THEME|Détails]]**)
+
+==== Dossier /etc/grub.d/ ====
+Ce dossier contient tous les scripts qui seront utilisés (en respectant l'ordre de numérotation) par update-grub pour créer le fichier grub.cfg.
+
+  * **00_header** : script gérant les paramètres définis dans /etc/default/grub ;
+  * **05_debian_theme** : script pour gérer le thème en mode texte (fonds d'écran et couleurs) ;
+  * **10_linux** : contient le script de lancement du système sur lequel on est ;
+  * **20_memtest86+** : script permettant de générer les entrées memtest ; semble absent de certaines installations EFI
+  * **20_linux_xen** : script pour Xen Linux et Xen Hypervisor ;
+  * **30_os-prober** : contient le script de recherche des autres systèmes installés ;
+  * **30_uefi-firmware** : script pour localiser les paramètres uefi de l'ordinateur ; 
+  * **40_custom** : configuration personnelle (systèmes à lancer en configuration manuelle, paramètres qui n'existent pas pour /etc/default/grub,..)
+  * **41_custom** : identique à 40_custom (si on le renomme par exemple 07_custom, on pourra y mettre le lancement du mediacenter ou de Windows en premier sur la liste)
+
+**Nous n'utiliserons** pour nos paramétrages **que les fichiers 'custom'**.
+
+===== Paramétrage manuel =====
+<note warning>À partir de ce chapitre, vous allez intervenir directement sur les fichiers de GRUB. Soyez prudent, les fichiers de GRUB ne doivent pas être modifiés à la légère, sous peine d'avoir un système qui ne démarre plus. Si vous ne maîtrisez pas bien, n'hésitez pas à demander de l'aide sur le [[http://forum.ubuntu-fr.org/|forum]]. Pour revenir en arrière, utilisez un live-usb et suivez la procédure décrite dans cette [[:tutoriel:comment_restaurer_grub|page de la doc]].</note>
+<note important>Avant de commencer, il est souhaitable :
+  * de lancer dans un [[:terminal]] une [[:commande_shell|commande]] de mise à jour : //sudo update-grub// ;
+  * de créer une [[:tutoriel:comment_sauver_et_restaurer_un_fichier|sauvegarde]] (ex. : //sudo cp /boot/grub/grub.cfg /boot/grub/grub.cfg.autogénéré//) ;
+
+De même, aucun script de configuration présent dans **/etc/grub.d/** ne doit être effacé.\\ //Par exemple, pour ne pas détecter les autres OS, il est préférable d'utiliser le paramètre GRUB_DISABLE_OS_PROBER="true" de /etc/default/grub//.
+</note>
+Pour tous nos paramétrages, on **[[:tutoriel:comment_editer_un_fichier|éditera]]**, avec les **[[:sudo|droits d’administration]]**, quasi **exclusivement les fichiers /etc/default/grub** et **/etc/grub.d/40_custom**.
+
+**Une fois toutes les modifications opérées**, on lancera la **commande de mise à jour** :
+<code>sudo update-grub</code>
+
+==== Afficher/Masquer le menu ====
+Pour afficher ou non le menu Grub, on utilisera les paramètres **GRUB_HIDDEN_TIMEOUT** et **GRUB_HIDDEN_TIMEOUT_QUIET** du fichier **/etc/default/grub**.
+
+=== cas 1 ===
+**Caché sans attendre le choix**\\
+Remarque : avec GRUB_HIDDEN_TIMEOUT_QUIET=true, impossible de mettre en pause le démarrage en tapotant la touche Shift lors de l'affichage du menu.\\
+Pour Ubuntu 16.04 :
+<file>GRUB_HIDDEN_TIMEOUT=0
+GRUB_HIDDEN_TIMEOUT_QUIET=true
+GRUB_TIMEOUT=0	# dépendance: lorsque GRUB_HIDDEN_TIMEOUT est actif, ce paramètre doit être défini à 0</file>
+À partir d'Ubuntu 18.04 :
+<file>GRUB_TIMEOUT_STYLE=hidden
+GRUB_TIMEOUT=0</file>
+=== cas 2 ===
+**Caché avec un décompte de 5 secondes** pendant lequel on peut appuyer sur les touches **Échap** ou majuscule (**Shift**) pour afficher le menu. Sans action de notre part, le choix par défaut est lancé.\\
+Remarque : puisque GRUB_HIDDEN_TIMEOUT_QUIET=false, alors on peux mettre en pause le démarrage en tapotant la touche Shift pour afficher le menu.\\
+Pour Ubuntu 16.04 :
+<file>GRUB_HIDDEN_TIMEOUT=5
+GRUB_HIDDEN_TIMEOUT_QUIET=false
+GRUB_TIMEOUT=0	# dépendance: lorsque GRUB_HIDDEN_TIMEOUT est actif, ce paramètre doit être défini à 0</file>
+À partir d'Ubuntu 18.04 :
+<file>GRUB_TIMEOUT_STYLE=hidden
+GRUB_TIMEOUT=5</file>
+=== cas 3 ===
+**Affiché directement avec un décompte de 10s**.\\
+Pour Ubuntu 16.04 :
+<file>#GRUB_HIDDEN_TIMEOUT=0
+GRUB_HIDDEN_TIMEOUT_QUIET=true
+GRUB_TIMEOUT=10	# ne pas laisser à zéro si vous voulez avoir le temps de sélectionner éventuellement un autre système.</file>
+À partir d'Ubuntu 18.04 :
+<code>GRUB_TIMEOUT_STYLE=menu
+GRUB_TIMEOUT=10</code>
+==== Intitulé dans le menu ====
+**Par défaut**, la ligne du menu grub concernant la distribution sur laquelle vous êtes affiche **« Ubuntu GNU/Linux »**. Que vous soyez sur une **variante** (Xubuntu, Lubuntu, Kubuntu,..) ou sur un **dérivé** (Linux Mint,..), l'intitulé reste **le même** car il dépend de la commande 'lsb_release'.
+
+Voici comment on peut influencer ce comportement en modifiant le paramètre **GRUB_DISTRIBUTOR** du fichier **/etc/default/grub** selon les possibilités suivantes :
+<file>GRUB_DISTRIBUTOR=`lsb_release -is 2> /dev/null || echo Debian`					# donne : Ubuntu GNU/Linux
+GRUB_DISTRIBUTOR=`lsb_release -ds 2> /dev/null || echo Debian`					# donne : Ubuntu 16.04.1 LTS GNU/Linux
+GRUB_DISTRIBUTOR=`echo -n $(lsb_release -cds 2> /dev/null || echo Debian)`			# donne : Ubuntu 16.04.1 LTS xenial GNU/Linux
+GRUB_DISTRIBUTOR=`echo -n TITRE PERSONNALISÉ $(lsb_release -rs 2> /dev/null || echo Debian)`	# donne : TITRE PERSONNALISÉ 16.04 GNU/Linux
+GRUB_DISTRIBUTOR=`echo -n TITRE PERSONNALISÉ`							# donne : TITRE PERSONNALISÉ GNU/Linux</file>
+
+==== Menu par défaut ====
+On utilisera ici les paramètres **GRUB_DEFAULT** et **GRUB_TIMEOUT** du fichier **/etc/default/grub**
+
+Pour changer le système d'exploitation sur lequel grub démarre par défaut on paramètrera **GRUB_DEFAULT=** au choix avec :
+  * un **chiffre** (0 = le premier, 1 = le deuxième, etc.) ;
+  * **saved** (sans guillemet) pour ce qui a été sélectionné lors du précédent lancement (nécessite de rajouter GRUB_SAVEDEFAULT=true) ;
+  * ou le **titre** de menu exact d’un menu mis **entre guillemets** (par exemple : "Microsoft Windows 10 (on /dev/sda1)"). Pour obtenir les titres exacts des menus : grep menuentry /boot/grub/grub.cfg ;
+  * **chiffre>chiffre** le premier chiffre décrit un menu principal, le second chiffre décrit le sous-menu (par exemple 1>2 pour le mode normal de l'ancien noyau.)
+
+La **temporisation** avant un lancement automatique se définit avec le paramètre **GRUB_TIMEOUT** :
+  * **GRUB_TIMEOUT=5**, lancera le système par défaut au bout de **10 secondes**. Si on ne veut **pas de temporisation**, on mettra : **GRUB_TIMEOUT=-1**
+
+==== Désactiver Memtest ====
+Si on ne souhaite plus voir dans les menus Memtest, on **changera le statut du script** pour qu'il **ne soit plus exécutable** à la prochaine commande de mise à jour :
+<code>sudo chmod -x /etc/grub.d/20_memtest86+</code>
+
+Pour le réactiver, on mettra '+x' au lieu de '-x' avec la même commande.
+
+==== os-prober partiel ====
+On peut demander à grub d'**éviter de scanner certaines partition** par leur UUID (//sudo blkid// pour avoir leur liste). On utilisera le paramètre **GRUB_OS_PROBER_SKIP_LIST** du fichier **/etc/default/grub** :
+<file>GRUB_OS_PROBER_SKIP_LIST="3a43c682-cb67-47e6-83cf-e647a72abb5d@/dev/sda3","1397cb72-27f1-4e01-acaf-86495341c71d@/dev/sda4"</file>
+
+==== Changer l'ordre des menus ====
+On peut **renommer les scripts** utilisés par 'update-grub' dans le dossier /etc/grub.d/ pour en changer l'ordre, par exemple :
+  * **sudo mv /etc/grub.d/30_os-prober /etc/grub.d/06_os-prober** (par exemple pour mettre Windows en premier sur le menu)
+
+On peut **copier les entrées des menus dans 40_custom** (depuis /boot/grub/grub.cfg) dans l'ordre qu'on souhaite **et désactiver la détection automatique** en mettant le paramètre GRUB_DISABLE_OS_PROBER="true" dans /etc/default/grub. On peut renommer 41_custom en 07_custom pour qu'il se place avant 10_linux (on y mettra le menu qu'on veut en premier).
+
+==== Clavier français ====
+Quand on édite un menu, c'est galère de retrouver la ponctuation, les parenthèses ou encore le signe égal sur un clavier qwerty. La solution est de paramétrer la disposition azerty :
+  * testé avec le **clavier 'Français (variante)' actif**. On commencera par **créer** le dossier **/boot/grub/layouts**. Ensuite, on **générera** la disposition du clavier dans un **fichier reconnu par grub** :
+<code>sudo mkdir /boot/grub/layouts
+sudo grub-kbdcomp -o /boot/grub/layouts/fr.gkb fr</code>
+  * On **ajoutera** le paramètre **GRUB_TERMINAL_INPUT=at_keyboard** au fichier **/etc/default/grub**
+  * On **ajoutera** ces lignes au fichier **/etc/grub.d/40_custom** :
+<file># Clavier fr
+insmod keylayouts
+keymap fr</file>
+
+
+==== Booter en automatique comme le choix précédent. ====
+<code>GRUB_DEFAULT=saved
+GRUB_SAVEDEFAULT=true</code>
+==== Ne pas installer la structure de boot. ====
+Ceci est un ajout du 15/08/2017 dont le contenu demande encore à être confirmé.
+Lorsqu'on dispose de plusieurs OS ubuntu et qu'on passe souvent de l'un  à l'autre et que les noyaux se mettent à jour, on arrive rapidement à avoir un énorme fichier boot.cfg.
+Afin de l'épurer, il existe un [[ https://forum.ubuntu-fr.org/viewtopic.php?pid=21701820#p21701820|outil]] 
+
+L'idéal étant de ne pas arriver à cette situation.  Il existe quelques palliatifs pour retarder cet état de fait.    Pour tous les OS qui ne sont pas l'OS dirigeant (souvent la version LTS):
+
+IL faut demander à ne faire aucune recherche d'OS complémentaires  via la commande.
+<code>sudo chmod -x   /etc/grub.d/30_os-prober</code>
+Il faut aussi ne pas ré-écraser le démarrage du boot prioritaire. Ce qui se fait à chaque fois qu'un nouveau noyau arrive. Je n'ai pas vu d'option dans ce fichier de paramétrage pour le faire.   En attendant:
+<code> sudo chmod -x  /usr/sbin/grub-install</code>
+
+
+===== Contenu de menu perso =====
+**Tous ces contenus sont ajoutés à /etc/grub.d/40_custom**
+
+==== Chaîner un autre menu ====
+**chainloader** vous permettra de lancer un autre gestionnaire d’amorçage présent sur le premier secteur des partitions concernées : **Windows, Lilo…**. Ça ne fonctionne pas toujours bien donc on préfère souvent une autre alternative. Voici quelques exemples.\\
+Remarque : l’entête du fichier 40_custom doit comporter ces lignes :\\
+<file>#!/bin/sh
+exec tail -n +3 $0</file>
+<file>menuentry "Windows 10" {
+  insmod ntfs
+  search --set=root --label WINDOWS_10 --hint hd0,msdos2
+  ntldr /bootmgr
+}
+menuentry "Windows 10b" {
+  insmod ntfs
+  search --set=root --label WINDOWS_10b --hint hd0,msdos2
+  ntldr /bootmgr
+}
+menuentry "Windows 7" {
+  insmod ntfs
+  set root='(hd0,3)'
+  search --no-floppy --fs-uuid --set 94E84428E8440B46
+  chainloader +1
+}
+menuentry "Windows 10 en mode bios legacy" {
+  insmod ntfs
+  set root='(hd1,msdos2)'
+  chainloader +1
+}
+menuentry 'Bootloader Lilo sur sda7' {
+  set root=(hd0,7)
+  chainloader +1
+}
+menuentry "Menu grub2 sur sda8" {
+  set root=(hd0,8)
+  configfile /boot/grub/grub.cfg
+}
+menuentry "Menu grub-legacy sur sda6" {
+  set root=(hd0,6)
+  legacy_configfile /boot/grub/menu.lst
+}</file>
+
+==== Aérer le menu ====
+Pour ajouter des **lignes vides**, de **sous-titres**,.. on procédera ainsi avec juste un **'true'** pour qu'elles soient **prises en compte** :
+<file>## ligne vide
+menuentry "   " {
+	true
+}
+## ligne de sous-titre
+menuentry "-------------------     Dérivés Ubuntu     -------------------" {
+	true
+}</file>
+
+==== Ancien paramètre vga=xxx ====
+Dans les options de boot d’un Linux, on trouve parfois **le paramètre « vga=788 »** avec une définition d’écran donné. Consultez [[:tutoriel:definition_demarrage|ce tableau]] pour pouvoir ajouter un 'set gfxpayload' équivalent dans votre 'menuentry'. 
+
+Donc, par exemple, au lieu de **//vga=788//** dans la ligne 'linux', on ajoutera au-dessus une ligne **//set gfxpayload=800x600//** à la place.
+
+==== Menus pour lancer des images iso ====
+
+Dans ce tutoriel vous aurez des exemples de menus « prêts à l'emploi » pour lancer les livecd Ubuntu ou autres depuis leur fichier iso :
+  * **[[:tutoriel:grub2_lancer_des_images_iso|Lancer des images iso directement depuis GRUB 2]]**
+
+==== Menu Arrêt du système ====
+<file>menuentry 'Arrêt du système' {
+	halt
+}
+menuentry 'Redémarrage du système' {
+	reboot
+}</file>
+
+==== mise à jour ====
+Comme toujours, après tous ces paramétrages, on lancera la commande de mise à jour :
+<code>sudo update-grub</code>
+
+===== Habillage (mode texte) =====
+==== Résolution d'affichage ====
+=== vbeinfo ===
+Quand on est sur le menu grub, on **appuie sur « c »**. On est ainsi en **ligne de commande**. On lancera alors la commande :
+<code>vbeinfo</code>
+<note>La commande //**vbeinfo**// est remplacée par //**videoinfo**//</note>
+Toutes les **résolutions supportées par grub** s'affichent. La plus haute est la dernière sur la liste. On la note (par exemple: 1280x1024x32)
+
+=== GRUB_GFXMODE ===
+Sur le fichier **/etc/default/grub**, on modifiera le paramètre GRUB_GFXMODE qui définit la **résolution d'affichage pour Grub** ainsi (sans « # » devant) :
+<file>GRUB_GFXMODE=1280x1024,1024x768x32</file>
+La deuxième valeur sera prise en compte si la première n’est pas supportée par votre matériel. Le x32 est la profondeur de codage des couleurs en bits.
+
+Si le démarrage se bloque sur un écran noir ou sur l'image de fond, appuyez sur 'c' pour passer en ligne de commande et saisissez, par exemple :
+<code>set gfxpayload=1024x768</code>
+
+=== GRUB_GFXPAYLOAD ===
+On fera la même chose qu'au paragraphe précédent pour les résolutions après Grub avec les paramètres **GRUB_GFXPAYLOAD** et **GRUB_GFXPAYLOAD_LINUX**.
+
+==== Fond d'écran ====
+=== Pré-requis ===
+  * **GRUB_GFXMODE** doit être défini (-> [[#GRUB_GFXMODE|voir plus haut]])
+  * une image dans un **format compatible** avec la capacité d'affichage de grub (-> [[#vbeinfo|voir plus haut]])
+  
+=== Convertir l'image ===
+Si vous avez **Gimp d'installé** ou au moins **[[apt>imagemagick|ImageMagick]]**, vous pourrez lancer cette commande de conversion en l'adaptant à vos besoins :
+<code>convert ~/Images/"image exemple.jpg" -resize 1280x1024! -depth 16 ~/Bureau/"00_image_de_fond.jpg"
+sudo mv ~/Bureau/"00_image_de_fond.jpg" /boot/grub/.</code>
+
+=== Utilisation ===
+Pour l'utiliser, on ajoutera le paramètre **GRUB_BACKGROUND** au fichier **/etc/default/grub**
+<file>GRUB_BACKGROUND="/boot/grub/00_image_de_fond.jpg"</file>
+
+Lancer ensuite la commande de mise à jour :
+<code>sudo update-grub</code>
+
+Si le fond d'écran n'est pas détecté lors de cette mise à jour, c'est qu'il n'est pas dans un format compatible pour Grub.
+
+==== Couleurs d'affichage ====
+Pour définir les couleurs utilisées par grub, on ajoutera au fichier **/etc/grub.d/40_custom** les lignes suivantes :
+<file>set color_normal=light-gray/black		# définit les couleurs de texte/fond d'écran autour du cadre de menu
+set menu_color_normal=light-gray/black		# définit les couleurs de texte/fond d'écran dans le cadre de menu
+set menu_color_highlight=yellow/light-blue	# définit les couleurs de texte/surbrillance pour la ligne de menu sélectionnée</file>
+
+Les couleurs à notre disposition sont : black, blue, brown, cyan, dark-gray, green, light-cyan, light-blue, light-green, light-gray, light-magenta, light-red, magenta, red, white, yellow.
+'black' devient une couleur transparente si on a une image de fond.
+
+Lancer ensuite la commande de mise à jour :
+<code>sudo update-grub</code>
+
+===== THEME =====
+<note warning>Ce sont des thèmes prêt à l'emploi. **Attention** tout de même à l'**image incluse (background.png)** qui **doit**, [[#Fond d'écran|comme indiqué précédemment]], **être compatible** avec la résolution d'affichage de votre Grub.
+
+On peut tester sa compatibilité en la définissant comme fond d'écran (-> [[#Utilisation|voir plus haut]]) et en regardant si elle est détectée par la commande de mise à jour.</note>
+
+==== Sources ====
+On peut installer le theme inclus dans les dépots : [[apt>grub2-themes-ubuntu-mate]]. On en trouve aussi **[[https://www.gnome-look.org/browse?cat=109&order=latest|ici]]** (en cherchant bien 'themes Grub2' et non pas seulement 'gfx')
+
+==== Où sont-ils installés ? ====
+Par défaut, ils sont installés dans le dossier **/boot/grub/themes**.
+
+==== Activation ====
+Dans le fichier **/etc/default/grub**, on renseignera le paramètre **GRUB_THEME** ainsi :
+<file>GRUB_THEME="/boot/grub/themes/ubuntu-mate/theme.txt"</file>
+
+Il s'agit du chemin vers le fichier de configuration. Il peut très bien porter un autre nom (par exemple theme-fr.txt sur un autre theme).
+
+Lancer ensuite la commande de **mise à jour** :
+<code>sudo update-grub</code>
+
+===== Autres pages en rapport =====
+
+  * [[:grub-pc|Doc principale de Grub2]]
+  * [[:grub-customizer|Grub Customizer : une interface graphique gérant Grub 2 et permettant de le personnaliser]],
+  * [[:tutoriel:grub2_lancer_des_images_iso|Tutoriel pour lancer des images iso directement depuis GRUB 2]].
+  * [[:tutoriel:comment_recuperer_ubuntu_apres_installation_windows|Récupérer Ubuntu après installation de Windows]]
+
+----
+
+// Contributeurs : [[:utilisateurs:Frombenny]] (rédaction de la page), [[:utilisateurs:Theozzfancometh]], [[:utilisateurs:f.x0]], [[:utilisateurs:albanmartel]], [[:utilisateurs:perco|perco]], [[:utilisateurs:floxyz51]].//

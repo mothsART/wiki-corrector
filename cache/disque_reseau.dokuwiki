@@ -1,0 +1,90 @@
+
+{{tag>serveur réseau partage}}
+
+----
+
+====== Partager une partition en réseau ======
+
+Ce tutoriel explique comment partager une partition de sauvegarde en réseau. Dans cet exemple, on considèrera la partition /media/sdb9 à mettre en réseau dans le dossier « partage » des autres ordinateurs.
+
+
+
+===== Prérequis =====
+  - Avoir [[:/depots|activé tous les dépôts]].
+  - Avoir un réseau local.
+
+===== Fonctionnement du réseau local =====
+
+Dans la suite, les PC sont nommés de la façon suivante : le **PC1** est le serveur contenant la partition à partager et où sont réellement stockées les données. Pour les PC suivants, le nom du PC est **PC2**, **PC3**… — à adapter bien sûr à votre réseau.
+
+
+
+===== Installation du serveur et des autres ordinateurs =====
+
+==== PC1 ====
+
+[[:tutoriel:comment_installer_un_paquet|installer les paquets]] qui vont permettre de partager la partition et de la mettre sur le réseau : \\ [[apt>nfs-kernel-server,nfs-common,ssh,openssh-server,openssh-client| nfs-kernel-server nfs-common ssh openssh-server openssh-client]]
+
+
+
+==== PC2, PC3, PC4… ====
+
+Les applications à [[:tutoriel:comment_installer_un_paquet|installer]] sont moins nombreuses pour les PCs clients :\\
+[[apt>ssh,openssh-server,openssh-client,nfs-common|ssh openssh-server openssh-client nfs-common]]
+
+
+===== Création des dossiers =====
+
+Créer uniquement sur PC2, PC3… un dossier « partage » qui servira de « passerelle » pour sauvegarder les fichiers :
+<code>sudo mkdir /media/partage</code>
+
+
+
+
+==== Configuration NFS sur PC1 =====
+
+<note important>Tous les fichiers sont réellement stockés dans **/media/sdb9**, prévoir donc suffisamment de place s'il y a beaucoup d'utilisateurs…</note>
+
+Il faut spécifier à PC1 quels PCs sont autorisés à communiquer avec lui. [[:/tutoriel/comment_editer_un_fichier|Éditez le fichier]] **/etc/hosts.allow** et insérez-y les lignes suivantes (dans cet exemple, les PCs avec les adresses IP 192.168.0.2, 192.168.0.3 et 192.168.0.4 pourront communiquer avec PC1) :
+
+<file>
+portmap: 192.168.0.2 192.168.0.3 192.168.0.4
+lockd: 192.168.0.2 192.168.0.3 192.168.0.4
+mountd: 192.168.0.2 192.168.0.3 192.168.0.4
+rquotad: 192.168.0.2 192.168.0.3 192.168.0.4
+statd: 192.168.0.2 192.168.0.3 192.168.0.4
+</file>
+
+Enregistrez et fermez, puis [[:/tutoriel/comment_editer_un_fichier|éditez le fichier]] **/etc/exports** et insérez-y la ligne suivante :
+<file>/media/sdb9 192.168.0.2(rw,sync) 192.168.0.3(rw,sync) 192.168.0.4(rw,sync)</file>
+
+Il ne faut pas oublier de créer le dossier /media/sdb9.
+
+Redémarrez ensuite le serveur NFS :
+<code>sudo invoke-rc.d nfs-kernel-server restart</code>
+
+Voilà pour la configuration du serveur NFS du PC1.
+
+<note tips>
+Si vous utilisez un Firewall, n'oubliez pas de le configurer.
+</note>
+
+===== Montage manuel des partitions sur PC2, PC3, PC4… =====
+
+Pour tester la configuration avant mise en place du montage automatique ci-dessous (optionnel). A effectuer sur chaque PC.
+
+<code>sudo mount -t nfs 192.168.0.1:/media/sdb9 /media/partage</code>
+
+
+===== Montage automatique des partitions sur PC2, PC3, PC4… =====
+
+Pour configurer le montage automatique de la partition virtuellement sur les PC2, PC3, PC4…, il suffit de recopier le fichier **/etc/hosts.allow** de PC1 sur chaque machine connectée en ajoutant à chaque ligne l'adresse IP du serveur, et d'[[:/tutoriel/comment_editer_un_fichier|insérer la ligne suivante]] (adaptez l'adresse IP à celle de PC1) dans le fichier **/etc/fstab** de chaque machine :
+<file>192.168.0.1:/media/sdb9 /media/partage nfs rw 0 0</file>
+
+Enfin, sur TOUS les PC, lancer la commande :
+<code>sudo mount -a</code>
+Ce qui va monter tous les points de montage configurés dans **/etc/fstab**. Cette commande est lancée au démarrage du PC, pas besoin de la lancer chaque fois.
+
+----
+
+// Contributeur : William Chevremont //

@@ -1,0 +1,190 @@
+
+{{tag>système partitions disque_dur}}
+
+----
+
+====== UUID et label ======
+
+===== Qu'est-ce que l'UUID ? (**Universal Unique IDentifier**, Identifiant Universel Unique) =====
+
+Il s'agit d'une suite plus ou moins longue de caractères alpha-numériques qui permet d'identifier de façon absolument sûre chaque périphérique de stockage et partition.
+ 
+Le chiffre de l'UUID est calculé automatiquement  au moyen d'un algorithme intégrant notamment certaines données de l'ordinateur hôte, au moment de la création ou du formatage de la partition ou de la table des partitions.
+Ce mode de calcul ne présente aucun risque de sécurité crédible.
+
+Un UUID est de la forme : ''1124d9e8-6266-4bcf-8035-37a02ba75c69''.
+
+Il est à noter que l'UUID d'une partition est stockée dans le système de fichier. Une partition vierge (non formatée) ne peut donc avoir d'UUID et une partition clonée a le même UUID que l'originale. On peut ajouter que ceci est vrai même avec un partitionnement [[:gpt]]. Bien que GPT définisse un UUID qui est stocké dans la table de partition, ce n'est pas ce dernier qui est utilisé par linux pour identifier les partitions.
+===== À quoi va me servir l'UUID ? =====
+Les UUIDs se retrouvent notamment dans deux fichiers de configuration : 
+  * Le fichier de configuration de [[:grub-pc|GRUB]], le chargeur de démarrage (''/etc/default/grub'')
+  * Le fichier récapitulant les partitions à monter au démarrage : ''[[:mount_fstab|/etc/fstab]]''
+
+À chaque formatage d'une partition, un nouvel UUID lui est attribué, il est alors parfois nécessaire de modifier ces fichiers.
+
+<note tip>Dans les fichiers de configuration, vous trouverez les UUID écrits de la façon suivante :
+**UUID=0c22e844-4ecb-48d4-a3c3-f083ddb1df3b**.
+mais on pourra  trouver aussi la forme
+ **UUID=079B6B49295F7AD1**</note>
+
+
+===== Comment connaître l'UUID ? =====
+Le plus simple est en ligne de commandes, mais il existe aussi des méthodes graphiques.
+
+==== Graphiquement ====
+
+ Utilisez [[:Gparted]].
+
+==== En ligne de commande ====
+
+La commande ''blkid'' liste des UUIDs, les Labels et Types de toutes les partitions montées.
+<code bash>sudo blkid</code>
+vous renvoie quelque chose comme :
+<file>
+/dev/sda1: UUID="8bf33340-e94c-4c4c-981d-35e73f8bc65c" TYPE="ext4" 
+/dev/sda2: UUID="ac56a704-260b-45f5-85ac-e1b451bb79bc" TYPE="swap" 
+/dev/sda3: LABEL="Home" UUID="8244710a-5cce-49ad-8b93-a92b5d2e53a0" TYPE="ext4" 
+/dev/sda4: UUID="DCF041AFF0419126" TYPE="ntfs" 
+</file>
+<note important>Il peut être nécessaire de lancer ''sudo blkid -g'' puis ''sudo blkid'' pour mettre à jour le cache des UUIDs. \\
+Évitez d'utiliser ''blkid'' en tant que simple utilisateur. En effet, cela ne mettra pas à jour la table et le résultat sera celui de la dernière exécution par root. \\ Si vous avez ajouté ou supprimé des partitions, il faut exécuter la commande avec un sudo pour mettre à jour la table.</note>
+
+Ou alors, <code bash>ls -l /dev/disk/by-uuid</code>
+vous permet de connaître les droits d'accès, le propriétaire, la date et l'heure de création et, enfin, l'UUID. 
+<file>total 0
+lrwxrwxrwx 1 root root 10 oct.  22 18:05 2c313d40-6bdc-4e42-917a-b04f88764aac -> ../../sdb1
+lrwxrwxrwx 1 root root 10 oct.  22 18:05 8244710a-5cce-49ad-8b93-a92b5d2e53a0 -> ../../sda3
+lrwxrwxrwx 1 root root 10 oct.  22 18:05 8bf33340-e94c-4c4c-981d-35e73f8bc65c -> ../../sda1
+lrwxrwxrwx 1 root root 10 oct.  22 18:05 ac56a704-260b-45f5-85ac-e1b451bb79bc -> ../../sda2
+lrwxrwxrwx 1 root root 10 oct.  22 18:05 DCF041AFF0419126 -> ../../sda4
+</file>
+On peut aussi utiliser la commande **lsblk** :
+<code bash>lsblk --fs</code>
+<file>
+sda                                                             
+├─sda1 ntfs     WIN10      6C8CA3038CA2C6C4                     
+├─sda2 ext4                2e5f5a06-a3c3-4df5-a2c6-00be4b836223 /
+├─sda3 ext4     Home       4bdc4735-801e-43fe-b3f1-58fd832638f5 /home                                                          
+└─sda4 ext4     DATAS      08d50cc2-9aa0-45b2-a314-5f8bee8b8714 /media/user/DATAS
+</file>
+
+===== Mettre à jour ''/etc/fstab'' =====
+Supposons que vous avez modifié (par formatage par exemple) l'UUID de la partition ''/dev/sdc1'' qui était, par ''/etc/fstab'', montée dans ''/media/stockage''.
+
+  * Lancez la commande suivante pour obtenir son nouvel UUID :<code bash>sudo blkid /dev/sdc1</code>ce qui renvoie quelque chose comme<code bash>/dev/sdc1: UUID="8244710a-5cce-49ad-8b93-a92b5d2e53a0" TYPE="ext4"</code>
+  * Éditez avec les droits administrateurs le fichier ''/etc/fstab'' pour modifier la ligne :<code bash>UUID=f1ca2fca-895f-4066-91c4-8a33197e1284      /media/stockage        ext4        defaults           0    1</code> (''defaults'' peut être accompagné d'autres options) \\ afin d'obtenir :<code bash>UUID=8244710a-5cce-49ad-8b93-a92b5d2e53a0      /media/stockage        ext4        defaults           0    1</code>
+
+En fait, le répertoire **/dev/disk/by-uuid/** qui recense les disques par UUID n'est mis à jour que pendant le démarrage.\\
+On peut le mettre à jour manuellement (si vous ne voulez pas redémarrer tout de suite) par :<code bash>sudo udevadm trigger</code>
+
+Et finalement monter la partition :<code bash>sudo mount /media/stockage</code>
+
+
+===== Swap et hibernation =====
+L'UUID est aussi nécessaire pour la partition de Swap, et notamment pour l'hibernation.\\
+
+Si vous voulez utiliser votre partition de Swap pour l'hibernation, il faut faire quelques manipulations. \\
+Veuillez vous rendre à la page sur la [[:swap#definir_une_partition_comme_partition_d_echange|swap (activer l'hibernation)]] pour plus d'infos.
+===== Périphériques branchés à chaud =====
+FIXME Utilité de ce paragraphe ?
+Cette méthode utilise [[udev]] pour forcer le nom du **node** correspondant au périphérique USB en fonction de son UUID.
+
+  * Création d'une règle udev pour associer le périphérique avec le nom de node choisi :
+   <code>sudo touch /etc/udev/rules.d/85-disque_externe.rules</code>
+<note warning>Les noms de fichier règle sont soumis à des conventions strictes, en particulier pour le choix du préfixe numérique.\\ Pour plus de précisions se rapporter à la page [[udev#fichiers_de_regles_et_syntaxes|Udev - Fichiers de règles et syntaxes]]</note>
+
+  * Rajouter les lignes suivantes pour associer le nom de node au périphérique
+   <file>SUBSYSTEM!="block", GOTO="hotname_end"
+IMPORT{program}="vol_id --export $tempnode"
+ENV{ID_FS_USAGE}=="filesystem", ENV{ID_FS_UUID}=="f0343b8c-1226-4f66-8b41-6a5c02c028dd", SYMLINK+="sos"
+
+LABEL="hotname_end"</file>
+
+  * Redémarrage de udev pour prendre la nouvelle règle en compte
+   <code>sudo  /etc/init.d/udev restart</code>
+
+  * Créer le point de montage s'il n'existe pas déjà
+   <code>sudo mkdir /media/sos</code>
+
+  * Rajouter une ligne dans la **fstab** pour associer le nouveau node avec le point de montage
+   <file>/dev/sos /media/sos auto user,uid=1000,gid=1000,atime,auto,rw,nodev,exec,suid 0 0</file>
+
+Ainsi, ce périphérique sera **TOUJOURS** monté sur ///media/sos// après l'avoir branché à chaud, que vous utilisiez [[konqueror]], Dolphin ou la commande [[:mount_fstab|mount]]
+
+
+
+===== Modifier manuellement l'UUID d'un système de fichiers =====
+Lors d'un clonage de partition, il peut être nécessaire de changer l'UUID de la nouvelle partition car il est dangereux d'avoir deux UUID identiques. \\ 
+Si, en effet, vous clonez un disque et que, sans changer dans le clone les UUID des partitions destinées à être montées au démarrage, vous tentez de démarrer en oubliant de débrancher le clone ou son modèle, alors vous obtiendrez un message voisin de celui-ci : \\ 
+**Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,0)**
+
+
+==== Génération du nouvel UUID ====
+Rappelez-vous que l'UUID doit être un identifiant **unique**, ne peut contenir que des nombres hexadécimaux (chiffres et/ou lettres [a-f], [A-F]) et des tirets, et ne peut débuter ni finir par un tiret.
+
+Si vous n'avez pas besoin d'un UUID spécifique, voici un outil de génération :
+<code bash>uuidgen -r # Pour une génération aléatoire
+uuidgen -t # Pour une génération basée sur un peu d'aléatoire et surtout la date et l'heure.
+</code>
+
+==== Partitions Ext ====
+On peut définir manuellement un UUID défini manuellement avec l'outil ''tune2fs'' :
+<code bash>sudo tune2fs -U <l'UUID desirée> /dev/<votre partition></code>
+ 
+==== Partitions Swap ====
+N'oubliez pas de désactiver la Swap avant :
+<code bash>sudo swapoff -a</code>
+puis
+<code bash>sudo mkswap -U <l'UUID desirée> /dev/<votre partition> </code>
+enfin réactivez-la :
+<code bash>sudo swapon -a</code>
+<note warning>Attention : Les fichiers /etc/initramfs-tools/conf.d/resume et /etc/fstab doivent contenir le bon uuid pour la swap ! Pensez à les modifier eux aussi !</note>
+<note warning>Attention : certains installateurs, comme celui de Debian, reformatent d'office la swap en modifiant son uuid ! Donc si vous avez une **partition** swap partagée par Ubuntu et une autre distribution, soyez en mesure, là encore, de conserver la cohérence de l'uuid et de ces deux fichiers !
+</note>
+Si vous n'avez pas besoin d'UUID spécifique, ne mettez simplement pas l'argument -U :
+<code bash>sudo mkswap /dev/<votre partition> </code>
+un UUID aléatoire sera alors attribué.
+
+==== Partitions ReiserFS ====
+<code bash>sudo reiserfstune -u [UUID désirée] /dev/[votre partition]</code>
+
+==== Partitions Fat ====
+<code bash>sudo mlabel -N [UUID désirée] -i /dev/sd[votre partition] ::</code>
+L'UUID est constituée d'une série de 8 chiffres et lettres au format hexadécimal (1234ABCD)
+
+===== Les Étiquettes, c'est mieux non ? =====
+
+On peut aussi attribuer une étiquette (en anglais : //label//) à chaque partition.\\   Elles sont **pratiques**, puisqu'elles permettent au gestionnaire de fichier d'afficher //DONNEES_3// au lieu de //Système de fichiers 12345678-abcd-1234-abcd-1234567890ab//. Pensez-y pour tous vos supports amovibles ou internes !\\ <note warning>Pour vous éviter des tracas ultérieurs, n'y mettez ni espaces ni voyelles accentuées ni autre signe diacritique (cédille...)</note>  Elles sont **plus sûres** qu'une appellation comme /dev/sdb6 qui risque fort d'être périmée si votre bios est de ceux qui changent l'ordre des disques sans prévenir, et qui sera certainement périmée le jour où vous supprimerez sdb5. Il faut aussi savoir que dans certaines circonstances, **testdisk** ou l'éditeur de partitions de Windows remettent dans l'ordre les numéros de partitions (de sda1, 2, 4, 3 vers sda1, 2, 3, 4).\\ **Plus sûres encore** car, quand on modifie un fstab, il est beaucoup plus facile de se tromper d'uuid que de se tromper d'étiquette (cas concret : voir https://forum.kubuntu-fr.org/viewtopic.php?id=2010416).\\ 
+\\   Mais les étiquettes ne sont **pas uniques**, contrairement aux UUID. Alors, pour obtenir la même fiabilité que les UUID, veillez à ceci : 
+<note importante>Il suffit d'éviter d'avoir deux partitions de même étiquette, même sur des disques différents, **même dans des pc différents**.</note>
+ Par exemple, si vous avez des partitions de données sur un Samsung 500 Mo, un Seagate 1 To et un Western Digital 1 To, vous pouvez les nommer DONN-SAM500, DONN-SG-1T et DONN-WD-1T.\\ Moyennant cette simple précaution, il est pleinement fonctionnel de remplacer dans /etc/fstab\\ UUID=12345678-abcd-1234-abcd-1234567890ab\\ par\\ LABEL=DONN-SAM500\\ Ainsi pourrez-vous brancher votre disque sur un autre pc sans risquer de confondre deux différentes "DATA".
+
+Les étiquettes sont attribuées manuellement.\\ - Avec gparted, la partition doit être démontée au préalable, tandis qu'avec "partitionmanager" de KDE ou en ligne de commande, cela n'est pas toujours nécessaire.  \\ - Veillez, pour ext et pour reiserfs, à ne pas donner un nom de plus de 16 caractères, sinon il sera tronqué.\\ - Pour les partitions **Windows** en NTFS ou en FAT, il est conseillé de les étiqueter en majuscules car leurs minuscules seraient automatiquement affichées en **majuscules par linux**, comme //DATA...//, alors que Windows continuerait d'afficher //Data...//, ce qui pourrait favoriser une fausse manipulation ultérieure.\\ - Les étiquettes des partitions **Linux**, elles, peuvent comporter des minuscules, comme //Data...//
+
+
+==== Renommer une partition en ligne de commande ====
+Voici un tableau qui récapitule les systèmes de fichiers les plus utilisés.\\
+On supposera qu'on travaille sur la partition **/dev/sdb1**.\\ 
+Il est parfois nécessaire d'installer un paquet supplémentaire, ce qui est indiqué dans la dernière colonne.
+
+^ Système de fichiers ^ Commande à lancer ^ Commentaires ^
+|  ''Ext2,3,4''  |<code bash>sudo e2label /dev/sdb1 NouveauNom</code>  |Seize caractères au maximum. \\ En ext4, le changement d'étiquette fonctionne sur une partition **montée**.  |
+|  ''Fat16,32''  |Vérification du nom courant : <code bash>mlabel -i /dev/sdb1 -s ::</code> Pour changer l'étiquette, tapez :<code bash>sudo mlabel -i /dev/sdb1 ::NOUVEAUNOM</code> (Ne pas oublier les 2 deux-points devant le nom)  |Il faut avoir installé **mtools**. Onze caractères au maximum ; marche même quand la partition est **montée** (mais ne sera complètement pris en compte qu'après démontage-remontage). \\ Si vous avez un message du genre : <code>Total number of sectors (6204) not a multiple of sectors per track (62)! 
+Add mtools_skip_check=1 to your .mtoolsrc file to skip this test</code> alors effectuez ceci : <code>echo mtools_skip_check=1 >> ~/.mtoolsrc</code>   |
+|  ''Ntfs''  |<code bash>sudo ntfslabel /dev/sdb1 NOUVEAUNOM</code> |La partition doit être **démontée**. \\ 128 caractères maximum. (Le paquet ntfs-3g est pré-installé). |
+|  ''Swap''  |<code bash>sudo swapoff -v /dev/sdb1 # Pour désactiver la Swap
+sudo mkswap -L NouveauNom -U UUID-à-conserver /dev/sdb1
+sudo swapon -av # Pour réactiver la Swap</code> | Il faut en effet désactiver la Swap puis la réactiver après renommage.\\ Et pour pouvoir la réactiver, il **faut conserver** son ancien UUID, repéré **avant** grâce à <code>sudo blkid | grep swap</code>  |
+|  ''ReiserFS''  | <code bash>sudo reiserfstune -l NouveauNom /dev/sdb1</code>  | 16 caractères maximum.  |
+|  ''XFS''  | <code bash>sudo xfs_admin -L NouveauNom /dev/sdb1</code><code bash>sudo xfs_admin -L -- /dev/sdb1</code>  | Il faut avoir installé le paquet **xfsprogs** et la partition doit être **démontée**. \\ Ajouter une étiquette. \\ \\ Supprimer l'étiquette.  |
+
+==== Renommer une partition graphiquement, avec gparted ====
+On peut utiliser Gparted, qui sélectionnera automatiquement l'outil à utiliser.
+
+On sélectionne le __disque__ en haut à droite, puis un clic droit sur une __partition__ affiche le menu d'options.\\
+Il faut démonter la partition, puis sélectionner //étiquette// ou //label// pour entrer l'étiquette voulue.\\
+Enfin, pour que les modifications soient prises en compte, valider par la coche verte.
+
+----
+
+//Contributeurs : [[utilisateurs:FélixP]] pour la retouche de décembre 2013. moko138 (nov. 2015)//

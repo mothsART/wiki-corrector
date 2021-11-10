@@ -1,0 +1,291 @@
+
+{{tag>brouillon Xenial vpn réseau sécurité vétuste}}
+
+----
+
+====== Client OpenVPN ======
+Le client OpenVPN permet de se connecter à un réseau privé virtuel [[:vpn|VPN]] sur lequel tourne un serveur [[:OpenVPN]].\\
+Ce type de réseau est [[:vpn#differentes_utilisations_de_vpn|fréquemment utilisé]] pour permettre un accès protégé à des réseaux d'entreprise à partir de n'importe quelle connexion internet. On pourra citer d'autres types de VPN comme les VPN Cisco, IPSEC, PPTP, L2TP et SSH. Les plus répandus étant les Cisco (éventuellement propriétaire) et les OpenVPN
+
+===== Installation =====
+
+Pour installer le client OpenVPN, il suffit  d'[[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt://openvpn|openvpn]]** disponible dans les dépôts officiels.\\
+On pourra aussi [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt://network-manager-openvpn|network-manager-openvpn]]** pour avoir une interface graphique qui permet de simplifier l'utilisation.
+
+===== Configuration =====
+==== Sans interface graphique ====
+
+Pour définir une connexion à un VPN, il faut disposer d'un fichier contenant certaines informations.
+Ce fichier sera généralement fourni avec vos certificats et clés par le service informatique ou le fournisseur gérant le [[:OpenVPN|serveur]]\\
+L'exemple de fichier client officiel se trouve : [[https://github.com/OpenVPN/openvpn/blob/master/sample/sample-config-files/client.conf|github/OpenVPN/client.conf]]
+
+Les champs les plus importants de ce fichier sont:
+<file - client.conf>
+##############################################
+# Sample client-side OpenVPN 2.0 config file #
+# for connecting to multi-client server.     #
+#                                            #
+# This configuration can be used by multiple #
+# clients, however each client should have   #
+# its own cert and key files.                #
+##############################################
+
+# précise le mode client
+client
+
+# le type d'interface tun ou tap (comme définit par le serveur)
+dev tap
+;dev tun
+
+# défini le protocole (comme définit par le serveur)
+proto tcp
+;proto udp
+
+# adresse publique du serveur (adresse IP ou nom du serveur) et port (1194 par défaut)
+remote  my-server-1 1194
+
+# les certificats et clés, le certificat et la clé client peuvent être communs à plusieurs clients (comme ci-dessous)
+# ou personnalisé (par exemple: mon_nom.crt et mon_nom.key)
+ca ca.crt
+cert client.crt
+key client.key
+
+# vérification du certificat serveur
+remote-cert-tls server
+
+# si le serveur utilise une clé tls-
+tls-auth ta.key 1
+
+</file>
+==== Avec network-manager-openvpn ====
+
+Un clic sur l'icône de network-manager montre un champ **Connexions VPN**, qui permet de configurer le VPN. L'interface est assez intuitive, mais aussi assez limitée par rapport aux nombreuses options disponibles dans le fichier de configuration.
+
+Sur Xubuntu 16.04 (au moins) il faut ajouter le paquet  [[apt>network-manager-openvpn-gnome|network-manager-openvpn-gnome]] pour que l'interface propose un VPN de type openvpn ou l'importation d'un fichier de configuration openvpn.
+
+Pour une utilisation basique, ou si les réglages envoyés par le serveur au client vous conviennent ce moyen est suffisant.
+
+À noter que le plugin propose d'importer le profil depuis un fichier de configuration openvpn. Cette option est assez pratique mais perdra tous les réglages non pris en charge directement par network-manager, ce qui est bien dommage, en particulier les routages différenciés pour ne router qu'une partie du trafic par le vpn et les scripts up et down.
+
+<note>
+Depuis Maverick Meerkat (10.10), il faut activer la compression LZO dans les paramètres avancés, sinon vous ne pourrez pas avoir accès à Internet, quand bien même vous seriez connecté à votre VPN.
+</note>
+
+==== Avec kvpnc ====
+
+Kvpnc est une interface graphique très complète pour gérer de nombreux types de VPN. Elle vous permettra de configurer presque aussi finement votre configuration qu'en éditant à la main le fichier de configuration. Il prend notament en charge les scripts up et down qui peuvent être nécessaires dans certains cas et permet même d'en générer automatiquement. 
+
+Kvpnc permet en outre d'exporter un profile vpn en fichier de configuration pour une utilisation indépendante.
+
+==== Avec gopenvpn ====
+
+Si vous voulez utiliser une interface graphique simple, légère, uniquement pour la connexion et la déconnexion et non pour la configuration de votre VPN, gopenvpn est probablement fait pour vous. Il s'agit d'un petit programme se mettant dans le //tray// d'Ubuntu et qui lit les fichiers de configurations openvpn situés dans /etc/openvpn.
+
+Il existe un paquet binaire pour Jaunty (9.04), malheureusement, pour les versions plus récentes l'installation nécessite de passer par les sources, voici la marche à suivre :
+
+<code>
+cd ~
+svn co https://svn.code.sf.net/p/gopenvpn/svn/trunk/gopenvpn gopenvpn
+cd gopenvpn
+./autogen.sh
+intltoolize
+./configure
+make
+sudo make install
+</code>
+
+Si vous utilisez Unity, il vous faudra ajouter l'icône de tray de gopenvpn à la liste blanche :
+
+<code>
+gsettings set com.canonical.Unity.Panel systray-whitelist "`gsettings get com.canonical.Unity.Panel systray-whitelist |sed s/]/,\ \'gopenvpn\']/g`"
+</code>
+
+==== Avec l'application propre ====
+
+Certains fournisseurs tels que [[https://airvpn.org|AirVPN]] proposent leur propre interface graphique. C'est généralement la méthode la plus simple.
+==== Routage ====
+
+Il y a certaines options qui vont vous permettre de définir la table de routage pour votre connexion en fonction de ce que vous donnera le serveur vpn.
+
+Classiquement, on aime bien utiliser la passerelle du vpn uniquement pour les ressources du réseau auquel on accède via le vpn uniquement et non pour tout internet.
+
+Le serveur vpn peut envoyer certaines directives de routage, qui peuvent être suivies ou non. //A priori// openvpn ne les suit pas sans qu'on le lui demande, network-manager-openvpn semble les suivre et kvpnc se comporte plutôt comme openvpn.
+
+Pour refuser les directives de routage du serveur, il suffit de passer l'option ''route-nopull'', on peut ensuite définir les routes avec les directives 
+
+''route destination masque_réseau passerelle''
+
+Il est à noter que dans le fichier de configuration d'openvpn, il existe des variables qui permettent de faire les routes facilement, en particulier on notera les variables **vpn_gateway** et **net_gateway** qui sont respectivement les passerelles du vpn et celle de la connexion initiale.
+
+Ainsi pour diriger le traffic destiné au vpn par la passerelle du vpn, on pourra rentrer un 
+
+''route 10.0.0.0 255.0.0.0 vpn_gateway''
+ (en général les vpn sont configurés de telle sorte que 10.0.0.0 255.0.0.0 soit le réseau auquel on accède)
+
+===== Utilisation =====
+Pour se connecter au VPN, il faut lancer dans un terminal
+
+<code>sudo openvpn fichierdeconfiguration</code>
+
+Si l'on veut passer des paramètres optionnels à openvpn, on doit alors spécifier aussi l'option **--config** devant le nom du fichier de configuration. Parmi les option utiles, on remarquera **--auth-user-pass** qui permet de donner un fichier contenant le nom d'utilisateur et le mot de passe, ce qui permet de ne pas avoir à rentrer ces derniers à l'invite de commande, et donc de lancer plus facilement openvpn en tâche de fond.
+
+On notera qu'il faut les droits d'administration pour se connecter, ce qui est normal car openvpn va créer une interface réseau virtuelle, la configurer avec ifconfig et changer les tables de rout
+
+Avec network-manager, on évite d'avoir son mot de passe à rentrer, ce plugin reposant sur un démon lancé au démarrage avec les privilèges d'administration.
+
+Avec kvpnc, votre mot de passe est demandé au lancement de l'application.
+
+----
+
+//Contributeurs principaux : [[:utilisateurs:gilles|Gilles]], [[:utilisateurs:Zenigata|Zenigata]].//
+
+===== Sécurisation =====
+Le serveur VPN peut se déconnecter intempestivement, ceci est gênant pour les clients VPN, lors de téléchargement de torrent(s) par exemple. Plusieurs solutions existent de type programme (vpnautoconnect) ou scripts
+En voici un basé sur la publication    [[http://ubuntuforums.org/showthread.php?t=1941380&page=2]]
+
+<code>#--------------------------------------------------
+#!/bin/bash
+# auteur: alan524 --  06 Avril 2014
+#
+# surveillance de la liaison vpn 
+#   -> arret du programme de transfert si le vpn se déconnecte
+#   -> essai périodique de reconnexion vpn avec relance prpgramme
+#
+#--------------------------------------------------
+# ce programme est basé sur la note publiée ci-après:
+#  --- cf  http://ubuntuforums.org/showthread.php?t=1941380&page=2
+#--------------------------------------------------
+#
+#
+#
+#Note: can not use a string to represent the program because the name 
+#of the string will be stored as the job name instead of the program name.
+#
+	function lanceprocess()
+	{
+#myprogram01 &			# replace myprogram01 by program name 
+#qbittorrent &			# 
+transmission-gtk &
+
+#programID=`pidof myprogram01`	# replace myprogram01 by program name 
+#programID=$(pidof qbittorrent)	# 
+programID=$(pidof transmission-gtk)	# 
+	}
+#
+#nameVPN="myconnexionVPN"	# replace myconnexionVPN by vpn name
+#nameVPN="vyprvpn-PPTP"		# 
+nameVPN="mullvad_linux"		# 
+#
+#myIPext="xxx.xxx.xxx.xxx"	# replace xxx par mon adresse ip externe (provider)
+myIPext="12.345.67.89"
+#-----------------
+#
+#
+#
+#==== Test etat VPN ====
+	function testVPN()
+	#if vpn connected  vpn=1
+	{
+	connected=$(nmcli con status | awk -v nVPN=$nameVPN '{if($1 == nVPN) {print $5;}; }')
+
+	if [ "$connected" = "oui" ] || [ "$connected" = "yes" ]; then 
+		vpnuuid=$(nmcli con status | awk -v nVPN=$nameVPN '{if($1 == nVPN) {print $2;}; }')
+		vpn=1
+		else
+		vpn=0
+	fi
+	}
+
+#==== Test etat VPN ====
+	function rwaitIPext()
+	{
+	IPext=$myIPext
+	vpn=0
+	testVPN
+
+	while [ "$IPext" = "$myIPext" ]
+	do
+	   while [ "$vpn" = 0 ]
+	    do
+	      sleep 5
+	      testVPN
+	   done
+	   nmcli -p con up uuid $vpnuuid		#Retry the VPN
+	   # essai sur un 2eme site si le premier est out
+	   IPext=$(wget -qO- www.adresseip.com | grep -Eo '[0-9]{1,3}(\.[0-9]{1,3}){3}' | awk 'BEGIN {flag = 0}{if (flag == 0){print $1; flag = 1;}}')
+	   if [ "$IPext" = "" ]; then 
+	   IPext=$(wget -qO- www.ipchicken.com | grep -Eo '[0-9]{1,3}(\.[0-9]{1,3}){3}' | awk 'BEGIN {flag = 0}{if (flag == 0){print $1; flag = 1;}}')
+	   fi
+	   if [ "$IPext" = "" ]; then 
+		IPext=$myIPext
+	   fi
+	   if [ "$IPext" != "$myIPext" ]; then 
+	 	break
+	   fi
+	sleep 10		# attente que le vpn soit effectif
+	done
+	}
+
+
+#==== VPN nok ====
+	function nokVPN()
+	{
+	date
+	echo "VPN disconnected. Stoping VPN dependancies"
+	if [ "$programID" != 0 ]; then
+	 kill -SIGKILL $programID	#Connection lost stop the VPN dependancy.
+	fi
+	echo "VPN dependancies stopped."
+	jobs
+	rwaitIPext			#  attente reconnexion
+	echo "VPN dependencies restarted."
+	lanceprocess			# relance du process
+	date
+	}
+
+#==== VPN OK ====
+	function okVPN()
+	{
+	sleep 1				# surveillance périodique 1 seconde
+	}
+#===================
+#==== Main Proc ====
+#===================
+#
+#
+programID=0
+vpn=0
+vpnuuid=''
+IPext=''
+
+	date
+	echo "-- lancement torrent --"
+	echo "-- Activation surveillance VPN --"
+
+	rwaitIPext			# connexion OK?
+	lanceprocess
+
+while true; do
+	testVPN
+	if [ $vpn = 1 ]; then 
+		okVPN 
+			else 
+		nokVPN 
+	fi
+done
+
+</code>
+
+
+  * recopier le code dans un fichier texte  (//veille-VPN.sh//  par exemple), 
+  * renseigner: votre adresse ip que vous voulez masquer sur internet, le nom de la connexion VPN ainsi que celui du processus a stopper en cas de défaut du serveur
+  * sauvegarder le fichier en lui donnant les droits d’exécution
+  * placer un raccourci sur le bureau.
+
+Son utilisation est simple:
+  * Au niveau de la connexion ne pas cocher la case "activer automatiquement" (fonction assurée par le script)
+  * Activer le VPN (openVPN, PPTP) via le network manager
+  * puis lancer dans un terminal le script crée
+  * Tester le fonctionnement en déconnectant le VPN via le network manager: on constate l’arrêt de la transmission, la relance de la connexion puis la reprise du transfert.
+
+

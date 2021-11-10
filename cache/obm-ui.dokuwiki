@@ -1,0 +1,260 @@
+
+{{tag>Xenial bureautique travail_collaboratif entreprise BROUILLON}}
+
+----
+
+====== OBM-UI ======
+
+OBM est une solution logicielle Open Source de travail collaboratif, intégrant les meilleurs composants libres pour gérer et partager les informations au sein d’une organisation. OBM-UI est l'interface web de base de cette solution.
+
+OBM-UI fournit :
+
+  * une interface de gestion des utilisateurs et des ressources.
+  * un agenda partagé/partageable (interface web en ajax).
+  * une gestion simplifiée des tâches.
+  * une gestion de contacts (publics et privés).
+
+Cette documentation explique comment installer manuellement OBM-UI à partir des sources et sans interférer avec vos autres applications web.
+
+===== Pré-requis =====
+  * Disposer d'un SGBD ([[/mysql|MySQL]] ou [[postgresql|PostgreSQL]]) - cette documentation ne traitera que du cas particulier de MySQL.
+  * Disposer d'un serveur web opérationnel : [[apache2|apache2]] avec php et [[tutoriel:securiser_apache2_avec_ssl|configuré avec ssl]].
+
+Voici quelques éléments en cas de problème  :
+
+  * Le plus simple est d'[[:tutoriel:comment_installer_un_paquet|installer les paquets]] [[apt://mysql-server|mysql-server]], [[apt://apache2|apache2]], [[apt://phpmyadmin|phpmyadmin]] (phpmyadmin permet l'installation des paquets php nécessaires à obm-ui).
+
+  * Il faut activer les modes rewrite et ssl d'apache2
+<code>
+''sudo a2enmod rewrite ssl''
+</code>
+
+  * Pour la création et l'installation du certificat, merci de suivre ce [[tutoriel:securiser_apache2_avec_ssl|tutoriel]].
+
+
+===== Installation =====
+
+Télécharger les sources sur le [[http://obm.org/doku.php?id=downloads:source:sourcedownloadslist|site communautaire obm.org]]. Les extraire dans un répertoire accessible par apache (nous utiliserons /var/www/obm pour ce tutoriel). Modifier le propriétaire et le groupe pour les fichiers d'obm.
+
+<code>
+wget http://download.obm.org/obm-2.2.x.tar.gz
+sudo mv obm-2.2.x.tar.gz /var/www
+cd /var/www
+sudo tar xzf obm-2.2.x.tar.gz
+sudo mv obm-2.2.x obm
+sudo chown www-data.www-data obm/ -R
+</code>
+
+===== Configuration =====
+==== Configuer Apache ====
+
+Le mieux est d'utiliser un virtualhost. Pour cela, créer un fichier **''obm''** dans **''/etc/apache2/sites-available/''** avec les informations suivantes (le serveur sera accessible via le nom **obm.mondomaine.tld**) :
+
+<code apache>
+<VirtualHost *:80>
+        ServerName obm.mondomaine.tld
+        DocumentRoot "/var/www/obm/php"
+        ErrorLog /var/log/apache2/obm-error.log
+        CustomLog /var/log/apache2/obm-access.log combined
+        RewriteEngine on
+        RewriteRule ^(.*)$ https://%{HTTP_HOST}$1 [L,R]
+</VirtualHost>
+
+NameVirtualHost *:443
+<VirtualHost *:443>
+        ServerName obm.mondomaine.tld
+        DocumentRoot "/var/www/obm/php"
+
+        SSLVerifyClient none
+        SetEnvIf User-Agent ".*MSIE.*" nokeepalive ssl-unclean-shutdown downgrade-1.0 force-response-1.0
+
+        ErrorLog /var/log/apache2/obm-error.log
+        CustomLog /var/log/apache2/obm-access.log combined
+
+        SetEnv OBM_INCLUDE_VAR obminclude
+        Alias /images /var/www/obm/resources
+        #OBM 2.2.x use utf8
+        #AddDefaultCharset ISO-8859-15
+        DirectoryIndex obm.php
+        Options -Indexes
+
+        php_value include_path  ".:/var/www/obm/"
+        php_value session.bug_compat_42  0
+        php_value session.bug_compat_warn  0
+        #php_value session.gc_maxlifetime 2880
+        php_value magic_quotes_gpc  On
+        #les options suivantes sont recommandées ma facultative
+        #php_value memory_limit 128M
+        #php_value post_max_size 10M
+        #php_value upload_max_filesize 10M
+
+        # section nécessaire uniquement pour le synchro PDA
+        #<Location /funambol>
+        #ProxyPass ajp://_TOMCAT_SERVER_:8009/funambol
+        #</Location>
+
+        # section nécessaire uniquement pour le module obm-sync
+        #<Location /obm-sync>
+        #ProxyPass ajp://_TOMCAT_SERVER_:8009/obm-sync
+        #</Location>
+
+        # section nécessaire uniquement pour le webmail minig
+        #<Location /minig>
+        #ProxyPass ajp://_TOMCAT_SERVER_:8009/minig
+        #</Location>
+        # alias /webmail/images /usr/lib/minig/images
+        #If you install minig on an other server,
+        #comment alias /webmail/images, and use
+        #proxyPass ajp:
+        #<Location /webmail/images>
+        #ProxyPass ajp://_TOMCAT_SERVER_Minig:8009/minig/images
+        #</Location>
+</VirtualHost>
+</code>
+
+Activer le virtualhost et relancer apache :
+<code>
+sudo a2ensite obm
+sudo /etc/init.d/apache2 reload
+</code>
+
+==== Configurer la base de données ====
+
+Créer une base de données ('obm'), un utilisateur ('obm') qui aura tous les droits sur la base. Utiliser pour cela [[phpmyadmin|phpmyadmin]] ou saisir dans une console :
+
+<code>
+mysql -u root -p
+mysql> CREATE USER 'obm'@'localhost' IDENTIFIED BY 'password';
+mysql> CREATE DATABASE IF NOT EXISTS `obm` ;
+mysql> GRANT ALL PRIVILEGES ON `obm` . * TO 'obm'@'localhost';
+mysql> exit
+</code>
+
+Créer les tables et importer les données par défaut :
+
+<code>
+cd /var/www/obm/scripts/2.2/
+./install_obmdb_mysql_2.2.sh obm obm password fr 
+( ajouter full en fin de ligne si cette commande ne fonctionne pas )
+</code>
+(syntaxe : [...]/install_obmdb_mysql_2.2.sh db user password lang)
+
+==== Configurer obm ====
+
+Charger les configurations par défaut d'OBM :
+
+<code>
+sudo cp /var/www/obm/conf/obm_conf.inc.sample /var/www/obm/conf/obm_conf.inc
+sudo cp /var/www/obm/conf/obm_conf.ini.sample /var/www/obm/conf/obm_conf.ini
+</code>
+
+[[:tutoriel:comment_editer_un_fichier|Editez le fichier]] ''/var/www/obm/conf/obm_conf.ini'' et modifier les paramètres suivantes :
+
+<code>
+external-url = obm.mondomaine.tld
+external-protocol = https
+...
+dbtype = MYSQL
+db = obm
+user = obm
+password = "password"
+...
+; Enabled OBM module
+obm-ldap = false
+obm-mail = false
+...
+; backupRoot is the directory used to store backup data
+backupRoot = "/var/backups/obm"
+</code>
+
+Il faut encore créer le répertoire pour les sauvegardes :
+<code>
+sudo mkdir /var/backups/obm
+sudo chown www-data /var/backups/obm
+</code>
+
+Normalement, tout devrait fonctionner, vous pouvez passer à l'étape suivante.
+
+
+===== Utilisation =====
+
+Accéder à l'interface OBM : https://obm.mondomaine.tld/
+
+==== Préliminaires ====
+
+=== Créer un domaine ===
+
+Il faut impérativement commencer par créer un premier domaine. Le domaine global n'est qu'un domaine à usage technique pour l'administrateur global d'OBM : il ne sert qu'à créer des domaines et ne devrait normalement pas contenir d'utilisateur (les utilisateurs du domaine global n'ont par exemple pas d'agenda).
+
+  * Se connecter en tant qu'administrateur global : Utilisateur = 'admin0' et mot de passe = 'admin' (il est impératif de changer ce mot de passe tout de suite).
+  * Choisir ''Administration > Domaines'' et cliquer sur ''Nouveau''.
+  * Saisir les informations pour votre premier domaine d'utilisateurs
+
+^Champs  ^Explications ^
+|''**Label**'' | C'est le nom qui apparaît dans les formulaires (connexion par exemple) où le domaine doit être précisé (on peut mettre '**Domaine 1**')|
+|''Description'' | L'intitulé du champ est explicite (facultatif)|
+|''**Nom de domaine**'' | C'est le nom de domaine au sens DNS (dans notre exemple, '**mondomaine.tld**') - attention, cette valeur n'est plus modifiable une fois le domaine créé|
+|''Adresse1 ...'' | Ce sont les informations qui seront renseignées par défaut lors de la création des utilisateurs ; elles sont donc facultatives|
+
+=== Créer l'administrateur de ce domaine ===
+
+Il doit maintenant créer l'administrateur de ce domaine, car, dans l'esprit d'OBM, ''admin0'' ne sert qu'à la création des domaines et du premier administrateur. Il est plus prudent de tout faire par la suite avec le compte d'administration du domaine.
+
+  * Choisir maintenant ''Annuaire > Utilisateurs'' et cliquer sur ''Nouveau''.
+  * Saisir les informations pour votre administrateur de domaine
+
+^Champs  ^Explications ^
+|''Genre'' | On y saisit normalement Mlle/Mme/M (facultatif)|
+|''**Nom**'' | L'intitulé du champ parle de lui-même, il est obligatoire (dans notre exemple, on peut choisir '**admin1**'|
+|''Prénom'' | (facultatif)|
+|''**Identifiant**'' | Champs obligatoire (dans notre exemple, '**admin1**' également) - cette valeur est modifiable a posteriori|
+|''**Mot de passe**'' | Champ obligatoire, 4 caractères mininum, 12 maxi, le message d'erreur est explicite si l'on saisit des caractères non autorisés|
+|''**Domaine**'' | Choisir évidemment le domaine 1|
+|''**Profil**'' | Laisser la valeur ''Admin''|
+|''Titre, @M, Tel, Adresse1 ...'' | Ces informations (fonction, adresse courriel, téléphone...) concernent plutôt l'annuaire, elles sont facultatives|
+
+
+==== Créer les utilisateurs ====
+
+On peut maintenant commencer à créer les utilisateurs à l'aide du compte administrateur du domaine 1.
+
+  * Se connecter en tant qu'admin1 : Utilisateur='admin1' et Mot de passe=//celui que vous avez choisi supra// (il est impératif de changer ce mot de passe tout de suite).
+
+<note tip>Pour la connexion, il y a deux possibilités. Soit vous entrez l'identifiant, c'est-à-dire 'admin1' puis le mot de passe et enfin vous sélectionnez le domaine. Soit vous entrez comme identifiant, une pseudo adresse courriel (identifiant@mondomaine.tld) et dans ce cas, le domaine sélectionné n'a aucune importance : c'est ce qui est à droite du @ qui est pris en compte. L'adresse courrielle saisit lors de la création de l'utilisateur n'est par contre pas utilisable pour la connexion.</note>
+
+  * Créer les utilisateurs suivant la même procédure que la création de l'administrateur du domaine 1 (''Annuaire > Utilisateurs'' et puis ''Nouveau''... en choisissant cette fois le profil ''Utilisateur'' bien entendu)
+
+Voilà, votre serveur est normalement totalement opérationnel.
+
+===== Désinstallation =====
+
+  * Suppression de la base de données
+<code>
+mysql -u root -p
+mysql> DROP USER 'obm'@'localhost';
+mysql> DROP DATABASE `obm` ;
+mysql> exit
+</code>
+
+  * Suppression de la configuration du virtualhost d'apache2
+<code>
+sudo rm /etc/apache2/sites-available/obm /etc/apache2/sites-enabled/obm
+sudo /etc/init.d/apache2 reload
+</code>
+
+  * Suppression des fichiers et répertoires
+<code>
+sudo rm -rf /var/www/obm /var/backups/obm
+</code>
+
+Pour ceux qui avaient installés des paquets supplémentaires pour satisfaire aux pré-requis : les supprimer également.
+
+===== Liens =====
+
+  * [[wpfr>OBM_Groupware|OBM Groupware sur Wikipedia]]
+  * [[http://www.obm.org/|Site communautaire]] et [[http://www.obm.org/doku.php?id=tools:ml|Mailing-list]] (anglais et français)
+  * Cette solution bénéficie d'un [[http://obmpro.aliasource.fr/|support technique pour les professionnels]].
+
+----
+
+//Contributeurs : [[:utilisateurs:philoux99]].//

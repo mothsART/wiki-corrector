@@ -1,0 +1,485 @@
+
+{{tag>programmation serveur}}
+
+----
+
+====== Subversion ======
+
+**Subversion** (abrégé SVN) est un [[wpfr>VCS|système de gestion de versions]] visant à remplacer [[CVS]].
+
+===== Installation =====
+
+Toute installation de SVN nécessitera l'[[:tutoriel:comment_installer_un_paquet|installation du paquet]] **[[apt>subversion|subversion]]**
+
+Une bonne base pour les futurs dépôts ("//repository//") est **///var/svn//** :
+
+  sudo mkdir /var/svn
+
+C'est dans ce dossier que vous créerez vos futurs //repository//.
+<note important>Nous considérerons cette base pour la suite de la documentation.</note>
+ 
+
+===== Configuration =====
+
+SVN peut être installé de plusieurs façons :
+  * Seul, en local, l'accès au dépôt se faisant par [[file://dossier/projet]]
+  * seul, en mode serveur, c'est-à-dire que l'accès au dépôt SVN sera sous la forme [[svn://mon_serveur/projet1]] , avec des utilisateurs SVN créés à cet effet;
+
+  * ou administré via un module d'Apache (//dav_svn//), c'est-à-dire que l'accès au dépôt SVN sera sous la forme [[http://mon_serveur/projet1]], avec des utilisateurs créés pour le module //dav_svn// pour l'authentification.
+
+<note tip>
+  * Dans les 2 derniers cas, dans l'adresse d'accès à un dépôt, //mon_serveur/// représente **la base** des dépôts.
+  * La configuration SVN + Apache (avec le module //dav_svn//) semble plus simple mais est moins performante.
+</note>
+==== Serveur SVN seul ====
+
+Tout d'abord, [[subversion#creer_un_depot_svn|créez un dépôt]] (nous considérerons le répertoire //projet1//).
+
+  cd /var/
+  sudo mkdir svn
+  sudo svnadmin create /var/svn/projet1
+
+=== Création des utilisateurs SVN ===
+
+Vous pouvez ensuite éditer les fichiers de configuration (pour choisir mot de passe et autres) dans le répertoire créé (nous considérerons le dépôt //projet1//).
+
+
+Dans le répertoire /var/svn/projet1/conf/
+
+il faut éditer le fichier svnserve.conf avec au minimum :
+
+
+        [general]
+        # Les utilisateurs non auth : none/read/write
+        anon-access = none
+        # Les utilisateurs auth : none/read/write
+        auth-access = write
+        # le fichier de password
+        password-db = passwd
+        # Cette option spécifie l'authentification du référentiel.
+        # Si deux repo ont les mêmes référentiels d'authentification, 
+        # ils devraient avoir le même mot de passe de base de données, et vice versa.
+        # Le domaine par défaut est le référentiel uuid.
+        realm = projet1
+
+<note important>
+Il ne faut pas mettre d'espace en début de ligne ! Sinon les clients auront une erreur du style "svnserve.conf:12: Option expected svnserve.conf"
+</note>
+il faut éditer le fichier passwd pour qu'il ressemble à :
+
+
+        [users]
+        # nom   =  mot de passe
+        joeuser = joepassword
+        jayrandom = randomjay
+
+les mots de passe sont en clair dans ce fichier, il convient donc d'en interdire l'accès en lecture à tout le monde ("other") :
+
+
+  sudo chmod o-r /var/svn/projet1/conf/authz
+  sudo chmod o-r /var/svn/projet1/conf/passwd
+
+
+=== Lancer le serveur ===
+
+Pour lancer le serveur, il suffit d'exécuter :
+
+  sudo svnserve -d -r /var/svn
+
+Il est possible (et conseillé) d'automatiser le lancement de SVN afin de ne pas avoir à taper cette commande à chaque démarrage de la machine. Voir [[#automatiser_le_lancement_de_svn|plus bas]].
+
+Le port par défaut écouté par svnserve est 3690.
+
+=== Accès ===
+
+Le dépôt créé est désormais accessible, via les [[#commandes_de_base|commandes SVN de base]], à l'adresse :
+
+[[svn://mon_serveur/projet1]]
+
+=== Automatiser le lancement de SVN ===
+
+Jusqu'ici, le serveur SVN est lancé avec votre utilisateur.
+Ce qui implique que le serveur a les mêmes droits que vous.
+
+Il est donc recommandé de créer un utilisateur pour lancer le serveur et le définir comme propriétaire du dépôt (nous prendrons ici l'utilisateur //svn//) :
+
+  sudo addgroup svn --system
+  sudo adduser svn --system --home /var/svn --no-create-home --ingroup svn
+  sudo chown -R svn: /var/svn
+
+<note warning>Il est désormais préférable de créer chaque nouveau //repository// avec l'utilisateur //svn// grâce à la commande :\\
+**sudo -u svn svnadmin create /var/svn///votre_nouveau_repository//**</note>
+
+Maintenant que nous avons un utilisateur spécifique, pour exécuter SVN au démarrage, il faut créer un script exécutable **///etc/init.d/svnserve//** contenant le code :
+
+<code bash>
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          subversion 
+# Required-Start:    $local_fs $remote_fs $network $syslog
+# Required-Stop:     $local_fs $remote_fs $network $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Start/stop subversion daemon 
+### END INIT INFO
+
+set -e
+if [ -x /usr/bin/svnserve ] ; then
+    HAVE_SVNSERVE=1
+else
+    echo "Svnserve not installed."
+    exit 0
+fi
+
+. /lib/lsb/init-functions
+
+case "$1" in
+    start)
+        log_action_begin_msg "Starting SVN server"
+        /sbin/start-stop-daemon --start --chuid svn:svn --exec /usr/bin/svnserve -- -d -r /var/svn
+        log_action_end_msg $?
+        ;;
+    stop)
+        log_action_begin_msg "Stopping SVN server"
+        /sbin/start-stop-daemon --stop --exec /usr/bin/svnserve
+        log_action_end_msg $?
+        ;;
+    force-reload|restart)
+        $0 stop
+        $0 start
+        ;;
+    *)
+        echo "Usage: /etc/init.d/svnserve {start|stop|restart|force-reload}"
+        exit 1
+        ;;
+esac
+
+exit 0
+</code>
+
+  * ne pas oublier de rendre exécutable le script :
+
+  sudo chmod +x /etc/init.d/svnserve
+
+Vous pouvez alors respectivement le démarrer, redémarrer et arrêter à l'aide des commandes suivantes :
+
+  sudo /etc/init.d/svnserve start
+  sudo /etc/init.d/svnserve restart
+  sudo /etc/init.d/svnserve stop
+
+  * Pour ajouter le serveur SVN au démarrage de la machine :
+
+  sudo update-rc.d svnserve defaults
+
+Note : les LSBize initScript ont changé de format; vous pouvez avoir un message d'avertissement en retour.
+
+==== Serveur SVN + Apache ====
+
+Pour installer un serveur SVN utilisant le serveur web [[Apache]], nous aurons besoin d'Apache et de la bibliothèque de Subversion pour Apache.
+
+Il faut donc [[:tutoriel:comment_installer_un_paquet|installer les paquets]] **[[apt>apache2,libapache2-svn|apache2 libapache2-svn]]**
+
+=== Configuration d'Apache ===
+
+Il est nécessaire dans un premier temps d'activer le module dav_svn pour apache (non activé par défaut):
+
+  sudo a2enmod dav_svn
+
+La configuration principale du serveur SVN se situe maintenant dans le fichier **''/etc/apache2/mods-enabled/dav_svn.conf''**.
+
+
+Il y a deux orientations de configuration:
+
+* Configurer tous les dépôts un par un, ce qui permet de gérer les autorisations dépôt par dépôt mais qui oblige à modifier la configuration d'Apache (et donc de le relancer ensuite) à chaque ajout de dépôt.
+
+* Configurer un répertoire parent de tous les dépôts, ce qui n'oblige pas à reconfigurer Apache pour chaque ajout mais qui ne permet pas de gérer les autorisations finement.
+
+Une source classique d'erreur est d'utiliser un répertoire pour SVN qui est dans le path d'Apache, dans ce cas SVN ne fonctionne pas. Il faut obligatoirement utiliser un répertoire en dehors du path d'Apache.
+
+=== Configuration au cas par cas ===
+
+Ici nous considérons que le nom du dépôt que l'on veut créer s'appelle "projet1" et qu'il doit se situer dans le répertoire "/var/svn" et que l'on veut y accéder //par l'url// http://mon_serveur/projet (le nom et l'url sont ici volontairement différents pour voir la différence).
+
+Ouvrir le fichier **''/etc/apache2/mods-enabled/dav_svn.conf''** et décommenter la ligne d'ouverture de l'environnement, et modifier le nom par l'url que vous voulez utiliser:
+
+  <Location /projet>
+
+Enlever le commentaire sur la ligne pour activer le module:
+
+  DAV svn
+
+Enlever le commentaire et faire pointer vers votre répertoire SVN la ligne suivante vers l'adresse du dépôt sur votre disque dur:
+
+  SVNPath /var/svn/projet1
+
+Enlever le commentaire devant la ligne de fermeture de l'environnement ouvert précédemment:
+
+  </Location>
+
+Redémarrer Apache:
+
+  sudo /etc/init.d/apache2 restart
+
+[[#creer_un_depot_svn|Créez le dépôt]] //projet1// et donner les droits d'accès au dépôt uniquement à Apache:
+
+  sudo svnadmin create /var/svn/projet1
+  find /var/svn/projet1/ -type f -exec chmod 640 {} \;
+  find /var/svn/projet1/ -type d -exec chmod 770 {} \;
+  chown -R www-data:www-data /var/svn/projet1
+  
+Vérifier à l'aide d'un navigateur que http://mon_serveur/projet réponde.
+
+Pour ajouter un deuxième répertoire, il faut recopier le contenu entre les balises <location> et </location> une deuxième fois dans le fichier, et donner une url différente au deuxième projet.
+
+=== Configuration globale ===
+
+Dans ce cas on a juste besoin de connaître l'url de la racine des dépôts et l'adresse de cette racine sur le disque dur. Ici nous utilisons
+//l'url// http://mon_serveur/svn et la racine s'appelle /var/svn.
+
+Ouvrir le fichier **''/etc/apache2/mods-enabled/dav_svn.conf''** et décommenter la ligne d'ouverture de l'environnement, et modifier le nom par l'url que vous voulez utiliser:
+
+  <Location /svn>
+
+Enlever le commentaire sur la ligne pour activer le module:
+
+  DAV svn
+
+Enlever le commentaire et faire pointer vers la racine de votre répertoire SVN la ligne suivante:
+
+  SVNParentPath /var/svn
+
+Ajouter cette ligne après SVNParentPath si vous voulez que //la racine// http://mon_serveur/svn affiche la liste des dépôts SVN existants:
+
+  SVNListParentPath On
+
+Enlever le commentaire devant la ligne de fermeture de l'environnement ouvert précédemment:
+
+  </Location>
+
+Redémarrer Apache:
+
+  sudo /etc/init.d/apache2 restart
+
+Vérifier à l'aide d'un navigateur que http://mon_serveur/svn réponde (liste des dépôts si la liste est activée, erreur HTTP 403 sinon).
+
+Maintenant vous pouvez créer autant de dépôts que vous voulez dans le répertoire racine puis donner les droits de modification à Apache, ils seront accessibles sans redémarrer Apache.
+
+Créez le dépôt //projetXXX// et donner les droits d'accès au dépôt à Apache:
+  sudo svnadmin create /var/svn/projet1
+  sudo chown -R www-data:www-data /var/svn/projet1
+
+=== Authentification ===
+
+[[:tutoriel:comment_editer_un_fichier|Modifier]] le fichier **///etc/apache2/mods-enabled/dav_svn.conf//** pour activer l'authentification, en décommentant et renseignant certaines lignes comme ceci :
+
+  AuthType Basic
+  AuthName "Depot Subversion"
+  AuthUserFile /etc/apache2/dav_svn.passwd
+  Require valid-user
+
+Puis créer, avec ''htpasswd'', le fichier « /etc/apache2/dav_svn.passwd » pour un utilisateur, de cette manière :
+
+  sudo htpasswd -cs /etc/apache2/dav_svn.passwd utilisateur1
+
+Pour créer d'autres utilisateurs, utiliser la commande :
+
+  sudo htpasswd -s /etc/apache2/dav_svn.passwd utilisateur
+
+Faire appartenir ce fichier à l'utilisateur d'Apache :
+
+  sudo chown www-data:www-data /etc/apache2/dav_svn.passwd
+
+Redémarrer à nouveau Apache :
+
+  sudo /etc/init.d/apache2 restart
+
+<note important>En mode d'authentification « Basic », comme indiqué dans le fichier **//dav_svn.conf//**, veuillez noter qu'une connexion SSL (https) est nécessaire pour éviter l’interception du mot de passe</note>
+=== Accès ===
+
+Votre dépôt doit maintenant être accessible //via// les [[#commandes_de_base|commandes SVN de base]] sous l'URL :
+
+[[http://mon_serveur/svn/projet1]]
+
+Si vous avez suivi la procédure d'authentification, un nom d'utilisateur et mot de passe (précédemment créés) seront demandés.
+
+==== Subversion et Eclipse ====
+
+Subversive et Subclipse sont tous deux des greffons pour Eclipse permettant de se connecter à un dépôt SVN.
+
+=== Subversive ===
+
+Voir le tutoriel spécifique : [[eclipse_subversive|Subversive]]
+
+=== Subclipse ===
+
+Voir le tutoriel spécifique : [[eclipse_subclipse|Subclipse]]
+
+===== Utilisation =====
+
+==== Créer un Dépôt SVN ====
+
+Vous pouvez créer un //repository// pour un projet (nous prendrons ici //projet1//) avec la commande :
+
+  sudo svnadmin create /var/svn/projet1
+
+==== Commandes de base ====
+
+=== Créer une copie de travail locale ===
+
+Commande à exécuter dans le **répertoire parent**, qui contiendra la copie locale :
+
+  svn checkout svn://mon_serveur/projet1
+
+Si l'authentification est requise pour votre dépôt, précisez votre nom d'utilisateur de cette manière :
+
+  svn checkout --username nom svn://mon_serveur/projet1
+
+Ceci créera un dossier //projet1// contenant les sources du dépôt.
+
+Les commandes suivantes sont à exécuter **depuis la copie de travail** locale.
+
+=== Mettre à jour sa copie ===
+
+Pour récupérer les dernières modifications du dépôt et ainsi mettre sa copie de travail à jour, il suffit de taper :
+
+  svn update
+
+=== Envoyer ses modifications ===
+
+Pour valider et apporter ses modifications au dépôt, il suffit de :
+
+  svn commit -m "Message"
+
+Le message du //commit// (option //-m//) est obligatoire, il permet d'inscrire dans les logs une explication des modifications. Exemple : "Ajout de la fonction xxx dans le fichier xxx, ...". Si vous ne précisez pas cette option, SVN vous ouvre un éditeur de texte (Nano par défaut) afin d'y inscrire ce message.
+
+Si vous voulez changer l'éditeur par défaut (Nano), il faut modifier la valeur de la variable **editor-cmd** du fichier ~/.subversion/config. Par exemple //editor-cmd = vi//
+
+<note tip>Pensez à toujours exécuter un //update// avant d'exécuter un //commit//. Ceci évitera beaucoup de conflit.</note>
+
+=== Ajouter un fichier ===
+
+Si vous ajoutez un nouveau fichier à votre copie locale, il ne sera pas envoyé au dépôt lors du prochain //commit//. Il faut déclarer l'ajout d'un fichier avec :
+
+  svn add <fichier>
+
+//add// déclare l'ajout du fichier au dépôt pour le prochain //commit//. Pensez donc à //commiter// après avoir ajouté un fichier.
+
+=== Supprimer un fichier ===
+
+Fonctionnant comme pour l'ajout d'un fichier, la déclaration de la suppression pour le prochain //commit// s'effectue avec :
+
+  svn delete <fichier>
+
+
+=== Importer un répertoire local existant ===
+
+L'importation s'effectue avec la commande :
+
+  svn import votre_repertoire URL_svn
+
+"URL_svn" pouvant être un répertoire local, il suffit de faire: 
+
+  svn import votre_repertoire file:///repertoire_svn
+  
+=== Retour en arrière ===
+Connaître les révisions:
+<code>svn log</code>
+S'il y en a beaucoup, on peut les rediriger dans un fichier pour l'éditer dans son éditeur préféré:
+<code>svn log > liste_revisions.log</code>
+
+Retour en arrière (remplacer //###// par le numéro de la révision):
+<code>svn update -r ###</code>
+
+==== Client SVN graphique ====
+
+* [[rapidSVN]] n'est pas mal du tout, il permet de réaliser toutes les actions de base en mode graphique.
+
+* esvn (très léger) permet de travailler avec des "workspaces", dans le cas où votre projet reprend des dépôts différents. <note tip>fonctionne très bien avec fldiff et kdiff3 </note>
+
+* kdesvn
+
+==== Intégration à Nautilus ====
+
+=== RabbitVCS ===
+
+Anciennement appelé NautilusSVN, il s'agit d'un outil réalisé en Python couplé aux scripts Nautilus et utilisant des emblèmes de Nautilus (à l'instar de TortoiseSVN sous Windows).
+
+RabbitVCS est disponible en paquet
+  * dans les dépôts officiels depuis la version 10.10 d'Ubuntu
+  * et dans le [[https://launchpad.net/~rabbitvcs/+archive/ppa|PPA du projet]] **ppa:rabbitvcs/ppa** pour toutes les versions d'Ubuntu depuis la 8.04.
+
+Installation :
+  * pour Ubuntu 12.04 et 11.10 (utilisant le Nautilus de gnome 3) : en attendant la [[https://bugs.launchpad.net/ubuntu/+source/rabbitvcs/+bug/741562|MAJ de la version dans Ubuntu]], utiliser la version du [[https://launchpad.net/~rabbitvcs/+archive/ppa|PPA du projet]] **ppa:rabbitvcs/ppa**, puis [[:tutoriel:comment_installer_un_paquet|installant le paquet]] **[[apt>rabbitvcs-nautilus3|rabbitvcs-nautilus3]]**
+
+  * pour Ubuntu 10.10 et 11.04, les dépôts officiels suffisent
+  * pour Ubuntu 9.10 à 10.10, utiliser le PPA
+[[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>rabbitvcs-nautilus|rabbitvcs-nautilus]]** et optionnellement **[[apt>rabbitvcs-gedit,rabbitvcs-cli|rabbitvcs-gedit rabbitvcs-cli]]**
+
+  * pour Ubuntu 8.04 à 9.04 : [[http://rabbitvcs.googlecode.com/files/rabbitvcs_0.12-1%7Ehardy_all.deb|RabbitVCS 0.12 (Hardy)]], [[http://rabbitvcs.googlecode.com/files/rabbitvcs_0.12-1%7Ekarmic_all.deb|RabbitVCS 0.12 (Karmic)]]. Il est toutefois conseillé d'utiliser le [[https://launchpad.net/~rabbitvcs/+archive/ppa|PPA du projet]] pour bénéficier des mises a jour.
+
+
+=== Scripts SVN pour Nautilus ===
+
+Pour vous éviter d'avoir à faire ces manipulations sur votre copie à l'aide de la console, il existe un script pour nautilus (explorateur de fichier de Gnome) afin d'intégrer ces commandes au menu contextuel.
+
+[[:tutoriel:comment_installer_un_paquet|
+Installez le paquet]] **[[apt>nautilus-script-collection-svn|nautilus-script-collection-svn]]**.
+
+Puis activez-le : 
+
+  nautilus-script-manager enable Subversion
+
+Et enfin redémarrez [[Nautilus]] :
+
+FIXME La commande nautilus --restart ne fonctionne pas. A remplacer par nautilus restart (Ubuntu 9.10 et +)
+
+FIXME La commande nautilus restart ne fonctionne pas non plus (Ubuntu 10.10). Il faut faire nautilus -q puis relancer nautilus
+
+  nautilus --restart
+
+ou :
+  
+  nautilus restart
+
+==== Intégration à Nemo ====
+
+=== RabbitVCS ===
+Un port de la version Nautilus a été réalisé pour Nemo. Pour cela :
+  - ajoutez le [[https://launchpad.net/~gwendal-lebihan-dev/+archive/cinnamon-stable|PPA du projet]] : **ppa:gwendal-lebihan-dev/cinnamon-stable**
+  - [[:tutoriel:comment_installer_un_paquet|
+Installez le paquet]] **[[apt>nemo-rabbitvcs]]**.
+
+==== KDESVN : plugin SVN pour Konqueror ====
+
+Avantage non négligeable pour certains, le plugin est accessible en français.
+
+Tout d'abord, [[:tutoriel:comment_installer_un_paquet|installez le paquet]] **[[apt>kdesvn|kdesvn]]** ainsi que les dépendances proposées.
+
+[[http://kdesvn.alwins-world.de/|KDESVN]] gère :
+  * le dépôt lui-même : indiquez dans la barre d'adresse [[http://mon_serveur/projet1]]
+  * votre copie locale : indiquez dans la barre d'adresse /var/svn/projet1
+
+Une fois le dépôt ou répertoire affiché, allez dans le menu de Konqueror et cliquez sur "Affichage > Type d'affichage > SVN Client" pour activer le mode d'affichage SVN vous permettant de faire les modifications / mises à jour / etc...
+
+À noter aussi, que ce soit dans Dolphin, Konqueror ou les dossiers sous formes de plasmoïdes, le menu contextuel (bouton droit) vous permet d'ouvrir un dossier avec KDESVN.
+
+==== Colorsvn ====
+Pour ajouter de la couleur dans l'utilisation de svn en ligne de commandes :
+
+Téléchargez l'archive de code source de colorsvn (la dernière version est la 0.3.2) depuis le site de tigris : [[http://colorsvn.tigris.org/]]
+
+Décompressez l'archive et placez votre terminal dans le répertoire des sources :
+<code>:~$ cd Téléchargements/colorsvn-0.3.2/</code>
+L'installation se fait via configure, make, make install :
+<code>
+$ ./configure
+$ make
+$ sudo make install
+</code>
+Enfin ajoutez un alias en fin de .bashrc (ou .bash_aliases)
+<code>alias svn='colorsvn'</code>
+
+==== git-svn ====
+Il est possible d'interagir sur un dépôt SVN avec [[:git]]. \\
+Pour cela, il faut installer [[apt>git-svn]]\\
+Plus d'infos: [[https://git-scm.com/book/fr/v2/Git-et-les-autres-syst%C3%A8mes-Git-comme-client | §9.1 et 9.2 de la doc git fr]]

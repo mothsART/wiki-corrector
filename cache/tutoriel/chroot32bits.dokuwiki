@@ -1,0 +1,182 @@
+
+{{tag>tutoriel Maverick Ubuntu_64bits installation}}
+----
+
+
+====== Mettre en place un environnement 32 bits =====
+
+
+<note important>Les distributions récentes intègrent directement quasiment toutes les librairies pour faire simplement un chroot, tout en étant mieux configuré et intégré : [[:ubuntu_64bits#utiliser_des_programmes_32_bits_sur_ubuntu_64_bits|Voir la partie comment installer un programme 32 bits sur Ubuntu 64 bits sur la documentation de Ubuntu_64bits]].
+
+Cependant cette méthode peut tout de même être intéressante pour tester un programme dans un environnement totalement 32bits. Un exemple récent est l'utilisation de xsane qui posait problème à un utilisateur dans sa version 64 bits.</note>
+
+
+
+===== La problématique =====
+
+Dans un environnement 64 bits tel que celui des versions amd64 de Ubuntu, certaines applications compilées ou adaptées uniquement pour des architecture 32 bits ne fonctionnent pas. Ceci est particulièrement vrai pour les applications propriétaires telles que [[:formats_non-libres|Flash]] ou encore les applications exclusivement 32 bits comme [[:Wine]] ainsi que les transfuges des deux tels w32codecs.
+
+
+===== La solution =====
+
+La solution consiste à mettre en place un second environnement en 32 bits et d'y exécuter les applications problématiques. C'est l'objet de cette page.
+
+===== Mise en place =====
+
+Cette méthode fonctionne normalement avec Ubuntu toutes versions, mais elle a été testée sur [[:gutsy|Ubuntu 7.10 "Gutsy"]]
+
+==Première étape==
+
+Dans un [[:terminal]], A :
+
+  sudo apt-get install dchroot debootstrap
+  sudo mkdir -p /chroot/ubuntu32bits
+  gksudo gedit /etc/dchroot.conf
+
+Ajoutez la ligne
+  gutsy /chroot/ubuntu32bits
+
+<note warning>**Remplacez ''gutsy'' par le nom de code de votre version d'Ubuntu, si vous n'êtes pas sous [[:gutsy|Ubuntu 7.10 "Gutsy"]]**
+</note>
+
+Enregistrez et fermez
+
+  sudo debootstrap --arch i386 `lsb_release -c -s` /chroot/ubuntu32bits http://archive.ubuntu.com/ubuntu
+  sudo cp /etc/resolv.conf /chroot/ubuntu32bits/etc/resolv.conf
+  sudo cp /var/lib/locales/supported.d/* /chroot/ubuntu32bits/var/lib/locales/supported.d
+  sudo chroot /chroot/ubuntu32bits
+  dpkg-reconfigure locales
+
+Pour un système français, sélectionnez dans la liste :
+  fr_FR.UTF-8 UTF-8
+et indiquez la comme valeur par défaut.
+
+<note>Ce n'est pas dramatique si aucun choix ne vous est proposé</note>
+
+== Deuxième étape ==
+
+Dans un autre terminal, B, nous allons créer un source.list pour notre environement 32bits:
+  gksudo gedit /chroot/ubuntu32bits/etc/apt/sources.list
+
+Vous devez mettre dans ce fichier le sources.list de la version d'Ubuntu en 32bits que vous êtes en train de mettre, voir cette page: [[http://repogen.simplylinux.ch/index.php|Générateur de sources.list]]
+Pour faire simple copiez collez votre sources.list et ça fonctionnera très bien.
+<note important>Il est fort probable qu'il vous manque des clés GPG, dans ce cas suivez donc [[:apt-key|le guide]]</note>
+
+== Troisième étape ==
+
+Dans l'environnement chrooté A (premier terminal ouvert) :
+  apt-get update
+
+== Quatrième étape ==
+
+Dans l'environnement habituel B (deuxième terminal ouvert) :
+  sudo cp /etc/passwd /chroot/ubuntu32bits/etc/
+  sudo cp /etc/shadow /chroot/ubuntu32bits/etc/
+  sudo cp /etc/group /chroot/ubuntu32bits/etc/
+  sudo cp /etc/sudoers /chroot/ubuntu32bits/etc/
+  sudo cp /etc/hosts /chroot/ubuntu32bits/etc/
+  gksudo gedit /etc/fstab
+
+Ajoutez les lignes suivantes :
+  # chroot 32 bits
+  /home /chroot/ubuntu32bits/home none bind 0 0
+  /tmp /chroot/ubuntu32bits/tmp none bind 0 0
+  /dev /chroot/ubuntu32bits/dev none bind 0 0
+  /proc /chroot/ubuntu32bits/proc proc defaults 0 0
+  /media/cdrom0 /chroot/ubuntu32bits/media/cdrom0 none bind 0 0
+  /media/floppy0 /chroot/ubuntu32bits/media/floppy0 none bind 0 0
+  /usr/share/fonts /chroot/ubuntu32bits/usr/share/fonts none bind 0 0
+ 
+
+<note tip>
+floppy et cdrom (respectivement le lecteur de disquette et le lecteur de CD) étant facultatifs, mieux vaut ne pas les mettre si vous n'en avez pas besoin
+</note> 
+  
+Si vous avez d'autres volumes auxquels vous souhaitez pouvoir accéder dans l'environnement 32 bits, ajoutez les avec des lignes de la forme suivante :
+  /point_de_montage/d_origine /chroot/ubuntu32bits/point_de_montage/d_origine none bind 0 0
+
+Enregistrez et fermez
+> Attention : si l'envie vous prenait de supprimer votre chroot, NE LE FAITES PAS pendant que ces volumes sont montés ou vous risquez de perdre certaines données de votre répertoire personnel
+
+
+  sudo mkdir /chroot/ubuntu32bits/media/cdrom0
+  sudo mkdir /chroot/ubuntu32bits/media/floppy0
+  sudo mkdir /chroot/ubuntu32bits/usr/share/fonts
+
+De la même manière, si vous avez choisi de monter d'autres volumes, utilisez des commandes de la forme suivante :
+  sudo mkdir /chroot/ubuntu32bits/point_de_montage/d_origine
+
+  sudo mount -a
+  gksudo gedit /usr/local/bin/do_dchroot
+
+Ajoutez les lignes suivantes:
+  #!/bin/sh
+  /usr/bin/dchroot -d "`basename $0` $*"
+
+Enregistrez et fermez
+
+  sudo chmod 755 /usr/local/bin/do_dchroot
+
+== Cinquième étape ==
+Afin de bien faire la différence entre votre environnement normal et votre chroot, nous allons renseigner un fichier qui vous indiquera si vous êtes dans un chroot ou non.
+<code>sudo chroot /chroot/ubuntu32bits
+echo 32bits > etc/debian_chroot
+exit
+</code>
+
+Ensuite nous allons installer synaptic dans l'environnement 32bits, permettre l'utilisation des fenêtres pour root et faire un lanceur depuis l'environnement chrooté :
+<code>dchroot -d
+  sudo apt-get install synaptic x11-xserver-utils
+  sudo ln -s /usr/sbin/synaptic /usr/sbin/synaptic32
+  xhost + 
+  exit
+  sudo ln -s /usr/local/bin/do_dchroot /usr/local/bin/synaptic32
+  sudo synaptic32
+</code>
+
+<note>La commande "xhost +" (fournie par le paquet x11-xserver-utils) permet d'autoriser tout le monde à utiliser les fenêtres graphiques dans votre environnement chrooté. Si vous n'entrez pas cette commande, l'environnement va tenter de lancer une fenêtre GTK pour synaptic en mode root alors que le seul utilisateur logué sera vous (et non pas root), du coup vous allez vous retrouver avec une belle erreur.</note>
+
+Désormais vous devriez avoir un environnement 32 bits avec synaptic.
+Si vous désirez garder une uniformité visuelle entre vos deux environnements, vous devriez dans votre environnement chrooté [[:tutoriel:comment_editer_un_fichier|installer les paquets]] (via le lanceur synaptic32 qui vient d'être créé par exemple) **ubuntu-artwork** **libgnome2-perl** ainsi que les paquets de langue: **language-pack-kde-fr language-pack-gnome-fr language-pack-fr language-support-fr**
+
+Ensuite quand vous démarrerez une prochaine fois un programme 32bits dans cet environnement, il apparaîtra en français, et avec une interface utilisant les mêmes thèmes et icônes que dans votre environnement 64 bits !
+
+
+
+
+
+===== Installation de logiciels =====
+
+L'installation de logiciels doit se faire depuis synaptic de l'environnement 32 bits.
+
+== L'exemple de Flash ==
+
+Flash étant un greffon (plugin) il est aussi nécessaire d'installer la version 32 bits de son application hôte en l'occurrence Firefox.
+
+ATTENTION: firefox 32 bits ne se lance pas avec le kernel 2.6.20-16-generic
+
+Lancez synaptic32 depuis un terminal
+  sudo synaptic32
+Installez mozilla-firefox, libxt6, libxt-dev, libxmu6, libxext6 libxext-dev
+
+Fermez synaptic32
+
+Entrez dans l'environnement 32 bits et créez les liens nécessaires à l'exécution depuis l'environnement 64 bits:
+  dchroot -d
+  sudo ln -s /usr/bin/firefox /usr/bin/firefox32
+Quittez et créez les liens suivants
+  exit
+  sudo ln -s /usr/local/bin/do_dchroot /usr/local/bin/firefox32
+Assurez-vous d'avoir fermé toutes les instances de Firefox sinon firefox32 lancera simplement une nouvelle instance 64 bits
+  firefox32
+Visitez un site avec du flash puis installer le greffon par la procédure automatisée de Firefox.
+
+Attention il se peut qu'il manque la bibliothèque libXmu6 nécessaire à la bonne exécution du plugin flash, si c'est le cas, installez-la avec synaptic32.
+
+===== Sources et références =====
+
+  * http://ubuntuforums.org/showthread.php?t=24575
+
+----
+
+//Contributeurs : [[:utilisateurs:raph|Raphaël Doursenaud]], [[:utilisateurs:Nathanos]], [[:utilisateurs:piccolo|PiccoLo]].//

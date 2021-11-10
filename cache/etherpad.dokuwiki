@@ -1,0 +1,285 @@
+
+{{tag>Trusty bureautique travail_collaboratif éditeur_de_texte}}
+
+----
+
+{{ :etherpad-logo.png| Logo de Etherpad}}
+
+====== Etherpad ======
+ 
+**EtherPad** est un [[:éditeur de texte]] collaboratif en temps réel. Il permet par défaut à un maximum de seize personnes de partager un texte en cours d'élaboration. Les contributions de chacun apparaissent immédiatement sur l'écran de tous les participants et sont signalées par des couleurs différentes. Une fenêtre de messagerie instantanée est également disponible. À l'utilisation, le système ne requiert aucune installation, ni aucune inscription, il suffit d'avoir une connexion internet et un navigateur web. Sur cette page, vous constaterez que vous n'installerez non pas Etherpad mais Etherpad Lite, il s'agit du même logiciel mais réécrit en JavaScript qui lui permet d’être beaucoup mieux optimisé.
+
+[[wpfr>EtherPad|Source texte]]
+
+{{:applications:etherpad:etherpad_lite-1.4.1.png?650}}
+
+===== Pré-requis =====
+ 
+  * Disposer des [[:sudo|droits d'administration]].
+  * Disposer d'une connexion à Internet configurée et activée.
+
+===== Installation =====
+
+Il faut installer quelques paquets dans un premier temps, qu'utilisera Etherpad Lite lors de son installation dans un second temps.
+
+==== Installer les paquets dépendants ====
+
+[[:tutoriel:comment_installer_un_paquet|Installez les paquets]] **[[apt>nodejs-legacy npm git curl]]**
+
+
+==== Installer Etherpad Lite ====
+
+Ouvrez le terminal, et allez dans le répertoire **/opt**
+
+  cd /opt
+  
+Chargez y un clone du logiciel Etherpad Lite à l'aide de Git :
+
+  sudo git clone 'git://github.com/ether/etherpad-lite.git'
+
+Ceci fait, allez dans le répertoire **/opt/etherpad-lite/bin** :
+
+  cd etherpad-lite/bin
+
+Puis lancez l'installation d'Etherpad Lite à l'aide d'un script adapté :
+
+  sudo ./installDeps.sh
+
+<note>Pour pouvoir exécuter ce script, il faut que npm soit installé. Vous pouvez le récupérer via [[https://github.com/npm/npm|cette page]]</note>.
+===== Mise en service=====
+
+==== Démarrage ====
+ 
+  *Il est possible de lancer Eterpad Lite en exécutant simplement ce script shell :
+
+  sudo /opt/etherpad-lite/bin/run.sh --root
+
+  *Où en tant que service si vous comptez l'utiliser régulièrement :
+
+[[:tutoriel:comment_modifier_un_fichier|Créez le fichier]] **/etc/init.d/etherpad-lite** (avec les droits d'administrations), et insérez y ceci :
+
+<file powershell>#!/bin/sh
+### BEGIN INIT INFO
+# Provides: etherpad-lite
+# Required-Start: $local_fs $remote_fs $network $syslog
+# Required-Stop: $local_fs $remote_fs $network $syslog
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: starts etherpad lite
+# Description: starts etherpad lite using start-stop-daemon
+### END INIT INFO
+PATH="/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/opt/node/bin"
+LOGFILE="/var/log/etherpad-lite/etherpad-lite.log"
+EPLITE_DIR="/opt/etherpad-lite"
+EPLITE_BIN="bin/run.sh"
+USER="root"
+GROUP="root"
+DESC="Etherpad Lite"
+NAME="etherpad-lite"
+set -e
+. /lib/lsb/init-functions
+start() {
+	echo "Starting $DESC... "
+	start-stop-daemon --start --chuid "$USER:$GROUP" --background --make-pidfile --pidfile /var/run/$NAME.pid --exec "$EPLITE_DIR/$EPLITE_BIN" -- $LOGFILE || true
+	echo "done"
+}
+# Nous avons besoin de cette fonction pour assurer la totalité du processus lorsqu'il sera tué
+killtree() {
+	local _pid=$1
+	local _sig=${2-TERM}
+	for _child in $(ps -o pid --no-headers --ppid ${_pid}); do
+		killtree ${_child} ${_sig}
+	done
+	kill -${_sig} ${_pid}
+}
+stop() {
+	echo "Stopping $DESC... "
+	while test -d /proc/$(cat /var/run/$NAME.pid); do
+		killtree $(cat /var/run/$NAME.pid) 15
+		sleep 0.5
+	done
+	rm /var/run/$NAME.pid
+	echo "done"
+}
+status() {
+	status_of_proc -p /var/run/$NAME.pid "" "etherpad-lite" && exit 0 || exit $?
+}
+case "$1" in
+	start) start ;;
+	stop) stop ;;
+	restart) stop ; start ;;
+	status) status ;;
+	*) echo "Usage: $NAME {start|stop|restart|status}" >&2
+		exit 1 ;;
+esac
+exit 0
+</file>
+
+Donnez les droits d’exécution au fichier précédemment créé :
+
+  sudo chmod +x /etc/init.d/etherpad-lite
+
+Activez-le :
+
+  update-rc.d etherpad-lite default
+
+Démarrez Etherpad Lite en tant que service :
+
+  sudo /etc/init.d/etherpad-lite start
+
+==== Démarrage automatique ====
+
+Il est possible d'automatiser le démarrage d'Etherpad Lite lors de l'ouverture de session ou du démarrage de l'ordinateur. Il faudra au préalable créer le fichier **/etc/init.d/etherpad-lite** et lui donné les droits d’exécution comme expliqué ci dessus.
+
+  * Vous pouvez consulter [[:tutoriel/application_demarrage|ce tutoriel]] pour y parvenir.
+
+  * Sinon, une solution universelle et assez rapide qui fonctionne avec Ubuntu et ses dérivés en ligne de commandes, commencez par installer un logiciel pour configurer system V :
+
+  sudo apt-get install sysv-rc-conf
+
+Démarrez le logiciel :
+
+  sudo sysv-rc-conf
+
+Cochez y les cases de la ligne etherpad-lite de 2 à 5 avec la touche **espace**, puis quittez avec la touche **q**. Je vous conseille de ne toucher à rien d'autre si vous n’êtes pas familier avec la gestion des services au démarrage.
+
+===== Base de données =====
+
+Par défaut, Etherpad-lite est déjà équipé de sa propre base de données, Dirty. Elle est fonctionnelle mais est plutôt destiné à tester, pour la production il est préférable de migrer sur une base de données plus performante (Mysql, Postgresql, ...) .
+
+<note>Les configurations des bases de données ont été testé uniquement avec Ubuntu Trusty 14.04</note>
+
+==== Fichier de configuration ====
+
+Vous devez dans un premier temps modifier le fichier de configuration d'Etherpad Lite. [[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **/opt/etherpad-lite/settings.json**.
+
+<file javascript>// An Example of MySQL Configuration
+   "dbType" : "mysql",
+   "dbSettings" : {
+                    "user"    : "ether", 
+                    "host"    : "localhost", 
+                    "password": "motdepasse", 
+                    "database": "etherpad-lite"
+                  },
+</file>
+
+  * Bien entendu remplacez **"mysql"** par **"postgres"** si vous comptez utiliser PostgreSQL et **motdepasse** par un mot de passe.
+  * Concernant (uniquement) Mysql, vous devrez commenter [[:mysql#utiliser_un_autre_numero_de_port|bind-address]], ou remplacer **"localhost"** par **"127.0.0.1"**.
+  * Vous pouvez aussi personnaliser les autres informations, mais pensez à les appliquer également sur les commandes ci dessous.
+
+Vous constaterez également la présence de symboles tels que /* et */ , ils servent à commenter (ignorer) des partie du fichier de configuration. Pensez bien à dé-commenter la partie concernant Mysql, et commenter la partie Dirty.
+
+Ce qui donne :
+
+<file javascript>  /*
+
+  //The Type of the database. You can choose between dirty, postgres, sqlite and mysql
+  //You shouldn't use "dirty" for for anything else than testing or development
+  // "dbType" : "dirty",
+  //the database specific settings
+  //"dbSettings" : {
+                   "filename" : "var/dirty.db"
+                 },
+               
+  */
+
+  // An Example of MySQL Configuration
+   "dbType" : "mysql",
+   "dbSettings" : {
+                    "user"    : "ether", 
+                    "host"    : "localhost", 
+                    "password": "motdepasse", 
+                    "database": "etherpad-lite"
+                  },
+</file>
+
+==== Mysql ====
+
+Suite à son installation et sa configuration (voir cette page [[:mysql|Mysql]]), mettons les mains dans la base de données Mysql, pour commencer nous allons nous y connecter avec le compte principal, en principe root :
+
+  sudo mysql -u root -p
+  
+Puis nous allons créer la base de données etherpad-lite :
+
+  create database `etherpad-lite`;
+
+Créer l'utilisateur ether et remplacez motdepasse par celui que vous voulez :
+
+  grant all privileges on `etherpad-lite`.* to 'ether'@'localhost' identified by 'motdepasse';
+  
+Quittez Mysql :
+
+  exit
+  
+Redémarrez Etherpad Lite pour qu'il prenne en compte les modifications :
+
+  sudo /etc/init.d/etherpad-lite restart
+  
+Puis coupez le :
+
+  sudo /etc/init.d/etherpad-lite stop
+  
+Reconnectez vous sur Mysql avec votre compte principal, puis modifiez les caractères de la base de données etherpad-lite, et la table store qui a été créé automatiquement :
+
+  ALTER DATABASE `etherpad-lite` CHARACTER SET utf8 COLLATE utf8_bin;
+
+  USE `etherpad-lite`;
+
+  ALTER TABLE `store` CONVERT TO CHARACTER SET utf8 COLLATE utf8_bin;
+
+==== PostgreSQL ====
+
+Vous devrez installer en plus de [[:postgresql|PostgreSQL]] une librairie lui permettant d’être compatible avec Javascript : [[:tutoriel:comment_installer_un_paquet|Installez le paquet]] **[[apt>node-pg|node-pg]]**
+
+Connectez vous sur l'utilisateur par défaut :
+
+  sudo -i -u postgres
+
+Créez l'utilisateur ether, et rentrer le mot de passe deux fois :
+
+  createuser -P ether
+
+Créez lui la base de données etherpad-lite :
+
+  createdb -O ether etherpad-lite
+
+Et quittez postgres :
+
+  exit
+
+==== Pour terminer ====
+
+Si vous avez reproduit convenablement l'une de ces méthodes, Etherpad Lite devrait être fonctionnel avec la nouvelle base de données en effectuant cette commande :
+
+  sudo /etc/init.d/etherpad-lite restart
+
+Si ce n'est pas le cas, consultez la page [[:mysql|Mysql]] ou [[:postgresql|PostgreSQL]] et n’hésitez pas à demander de l'aide sur le [[http://forum.ubuntu-fr.org/viewforum.php?id=28|forum]], il est vrai que les bases de données sont difficiles à maîtriser pour un néophyte.
+
+===== Utilisation =====
+
+Après avoir [[:etherpad#demarrage|exécuté]] Etherpad Lite, lancez votre navigateur internet, puis ...
+
+==== En local ====
+
+Si vous utilisez votre navigateur sur la machine hébergeant Etherpad Lite, allez tout simplement sur [[http://localhost:9001]]
+
+==== Depuis Internet ====
+
+Si vous comptez vouloir y accéder depuis un autre ordinateur via Internet, alors il faudra veuillez que votre [[:pare-feu]] et/ou votre [[http://www.craym.eu/tutoriels/utilitaires/ouvrir_les_ports_de_sa_box.html|routeur]] ne bloquent pas les connexion sur le port 9001. L'adresse ressemblera à ceci :
+
+http://adresse_ip:9001
+
+==== Pour un serveur (avancé) ====
+
+Dans ce cas, il est préférable de consulter directement la documentation du projet Etherpad proposant des solutions de [[https://github.com/ether/etherpad-lite/wiki/How-to-put-Etherpad-Lite-behind-a-reverse-Proxy|proxy inverse et d'hébergement virtuel]]  [en].
+
+===== Désinstallation =====
+ 
+Pour supprimer cette application, [[:tutoriel:comment_supprimer_un_paquet|supprimez les paquets]] dépendants installés. Effacez le dossier **etherpad-lite** créé dans le dossier /opt. Pensez aussi à annuler le démarrage automatique d'Etherpad Lite. Si vous désirez aussi effacer tous les contenus créés, vous devrez supprimer les tables dédiées sur votre base de données.
+
+===== Voir aussi =====
+ 
+  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=400383|Discussion « Etherpad »]] sur le forum Ubuntu-fr
+
+----
+//Contributeurs principaux : [[utilisateurs:mario_26|mario_26]], [[utilisateurs:axel55|Axelos]].//

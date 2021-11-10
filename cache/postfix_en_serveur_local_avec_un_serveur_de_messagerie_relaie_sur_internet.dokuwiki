@@ -1,0 +1,125 @@
+
+{{tag>messagerie courriel postfix MTA serveur}}
+
+====== Postfix en serveur local avec distribution des courriels vers un serveur de messagerie relaie ======
+C'est la fusion d'[[:installer_postfix_en_local_pour_un_poste_de_travail|Installer Postfix en local pour un poste de travail]] et d'[[:installer_postfix_avec_le_serveur_de_messagerie_sur_internet|Installer Postfix pour l'envoie des courriels vers un serveur de messagerie du réseau local ou d'internet]]
+
+Pour plus d'informations sur la messagerie lire [[:comment_fonctionne_le_courriel_sous_linux|Comment fonctionne le courriel sous Linux ?]], et sur les principes du serveur Postfix lire [[:comment_configurer_sa_distribution_de_courriels_systemes_mta|Comment configurer sa distribution de courriels systèmes MTA avec Postfix ?]]
+
+===== Installation du serveur de messagerie Postfix =====
+D'abord il faut faire [[:installer_postfix_en_local_pour_un_poste_de_travail|Installer Postfix en local pour un poste de travail]]
+
+===== Prérequis avec le serveur de messagerie relaie =====
+Pour vous connecter sur votre serveur distant relaie de courriels, il vous faut disposer d'un compte messagerie et d'un mot de passe SASL.
+
+==== Exemple de mot de passe SASL Gmail ====
+Pour un identifiant SASL avec Gmail
+=== Création du mot de passe applicatif ===
+{{ :doc:1_accesconfigcompte.png?nolink |}}
+
+Cliquez sur {{:doc:2_gerercomptegoogle.png?nolink|}}
+
+{{ :doc:3_menuinformationscompte.png?nolink |}}
+
+Cliquez sur {{:doc:4_securite.png?nolink|}}
+
+{{ :doc:5_connexionagoogle.png?nolink |}}
+
+Cliquez sur {{:doc:6_motdepasseapplications.png?nolink|}}
+
+{{ :doc:7_fenetremotdepasseapplications.png?nolink |}}
+
+Cliquez sur **Sélectionnez un application** pour afficher le menu  {{:doc:8_selectionapplication.png?nolink|}}
+
+Saisissez le nom Postfix de votre serveur de messagerie pour Google {{:doc:9_saisienomserveurpostfix.png?nolink|}}
+
+Cliquez sur {{:doc:10_generer.png?nolink|}}
+
+Notez le mot de passe générez {{:doc:11_motdepasseapplication.png?nolink|}}
+
+{{ :doc:12_resultat.png?nolink |}}
+Vous avez créé votre mot de passe sécurité Google pour votre application Postfix.
+
+===== Configuration de l'identifiant du serveur relaie =====
+Éditez le fichier /etc/postfix/sasl/sasl_passwd (''kate /etc/postfix/sasl/sasl_passwd'') :
+<file>[smtp.fm.fr]:587    mon_compte_messagerie:mdp_messagerie</file>
+
+Passez la commande pour valider le mot de passe avec Postfix :
+<code bash>sudo postmap /etc/postfix/sasl/sasl_passwd</code>
+
+==== Exemple avec Gmail ====
+<file>[smtp.gmail.com]:587    utilisateur@gmail.com:ygvpyhldoiqujhth</file>
+
+===== Le serveur de messagerie relaie =====
+Il faut éditer le fichier /etc/postfix/main.cf (''kate /etc/postfix/main.cf'') et modifier la variable **relayhost** et **default_transport** pour votre serveur distant.
+<file># La machine par défaut où livrer le courrier au départ lorsqu'il n'y a aucune destination locale d'arrivée (mydestination).
+relayhost = [smtp.fm.fr]:587
+# La route alternative que doit prendre le courriel lorsque $mydestination, $inet_interfaces n'aboutissent pas.
+default_transport = smtp:[smtp.fm.fr]:587</file>
+
+==== Exemple avec Gmail ====
+Modifier en plus de la configuration ci-dessus :
+<file># La machine par défaut où livrer le courrier au départ lorsqu'il n'y a aucune destination locale d'arrivée (mydestination).
+relayhost = [smtp.gmail.com]:587
+default_transport = smtp:[smtp.gmail.com]:587</file>
+
+===== Configurer la partie cliente SASL =====
+Dans le fichier /etc/postfix/main.cf ajouter la configuration SASL de la partie cliente :
+<file># Active l'authentification SASL
+smtp_sasl_auth_enable = yes
+# Désactive l'authentification anonyme
+smtp_sasl_security_options = noanonymous
+# Location de l'indentifiant SASL
+smtp_sasl_password_maps = hash:/etc/postfix/sasl/sasl_passwd</file>
+
+==== Pour Gmail ====
+ Modifier en plus de la configuration ci-dessus :
+<file># Modifications pour SASL
+# Pour corriger des erreurs d'authentification SASL avec GMAIL
+smtp_sasl_mechanism_filter = plain
+
+# Modifications pour TLS
+# Niveau de sécurité dans la négociation du protocole
+smtp_tls_security_level = encrypt
+# Location du certificat CA
+smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt</file>
+
+===== Correction sur l'expéditeur =====
+À ce stade, si on redémarre le service Postfix, l'envoie de courriels fonctionnent localement et sur le serveur distant. 
+
+Mais nous allons obtenir un message d'erreur sur l'expéditeur dans notre client de messagerie MUA distant à la réception du message. 
+
+Par exemple dans Gmail :
+{{ ::adresseexpincorrecte.png?nolink&600 |}}
+
+Il faut, pour éviter cela, substituer le nom d'expéditeur avec le nom de l'adresse de messagerie du serveur de messagerie pour lequel on envoie le courriel.
+
+==== Substitution des comptes locaux avec les adresses du fournisseur de messagerie ====
+Éditez le fichier generic (''kate /etc/postfix/generic'') et modifiez le comme suivant :
+<file>utilisateur@mon_nom_machine             username@mon_fm.fr
+utilisateur@mondomainemessagerie.fr     username@mon_fm.fr 
+root@mondomainemessagerie.fr            admin@mon_fm.fr
+sudoer@mondomainemessagerie.fr          admin@mon_fm.fr</file>
+
+=== Exemple avec Gmail ===
+<file>utilisateur@mon_nom_machine             username@gmail.com
+utilisateur@localhost                   username@gmail.com
+utilisateur@mondomainemessagerie.fr     username@gmail.com 
+root@mondomainemessagerie.fr            username@gmail.com
+sudoer@mondomainemessagerie.fr          username@gmail.com</file>
+
+==== Validez pour Postfix les substitutions ====
+<code bash>sudo postmap /etc/postfix/generic</code>
+
+Ajoutez dans main.cf (''kate /etc/postfix/main.cf'') :
+<file>smtp_generic_maps = hash:/etc/postfix/generic</file>
+
+Redémarrer Postfix :
+<code bash>systemctl restart postfix</code>
+
+Vous pouvez maintenant envoyer vos messages localement et vers votre serveur de messagerie distant. 
+
+Mais pour lire les courriels distants il vous faudra [[:comment_configurer_sa_distribution_de_courriels_locale_MDA|installer un MDA local]], ou vous connecter sur le MDA de votre serveur de messagerie distant pour rapatrier les courriels dans votre client local de messagerie MUA (Mutt).
+
+===== Filtrage des courriels indésirables =====
+* [[https://guide.ubuntu-fr.org/server/mail-filtering.html|Comment filtrer les courriels indésirables d'Internet du serveur de messagerie]]

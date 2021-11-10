@@ -1,0 +1,156 @@
+
+{{tag>Trusty paquet tutoriel installation_logiciel dépôts apt}}
+
+----
+
+====== Scripts de mise à jour sans internet ======
+
+Ce tutoriel vient en complément de la page [[:apt-offline]] qui est à consulter en priorité. Les méthodes expliquées ici y étaient originellement incluses. 
+<note important>Pour des raisons évidentes de sécurité, l'utilisation de scripts trouvés sur internet en mode administrateur est à éviter, à moins de s'y connaitre suffisamment pour en contrôler la qualité. Nous essaierons ici de détailler la signification de quelques uns des éléments des scripts que nous utiliserons, mais nous vous recommandons chaudement de tester d'abord les [[:apt-offline|méthodes officielles]].</note>
+
+===== Pré-requis =====
+
+  * Disposer des [[:sudo|droits d'administration]] sur son ordinateur.
+  * Avoir accès à un ordinateur sous Ubuntu ou Windows (d'un ami, ou café Internet) disposant d'une connexion Internet (les droits d'administration n'y sont pas nécessaires).
+  * Disposer d'une clé USB (d'au moins 1 Go de préférence) ou tout autre support amovible.
+  * Avoir un fichier sources.list fonctionnel. Si ce n'est pas le cas, des générateurs sont disponibles sur la page [[:sources.list|sources.list]].
+
+===== Mise à jour manuelle des listes de paquets =====
+
+Le but de cette section est de faire un ''sudo apt-get update'' manuel.
+
+==== Scripts de bertrand0 ====
+Enregistrez le texte de chaque script qui suit dans un fichier texte dans votre **Dossier Personnel** et rendez-le [[[[:tutoriel:script_shell#executer_un_script|exécutable]].
+  * Script auquel vous donnerez le nom **gen-myupdate-download**:
+<code bash>#!/bin/bash
+MYSH=myupdate-download
+MYTB2=myupdate.tar.bz2
+cat > $MYSH << EOF
+#!/bin/bash
+TMPDIR="\$(mktemp -dt)" || exit 1
+trap 'rm -rf "\$TMPDIR"' EXIT
+
+OLDDIR="\$PWD"
+cd "\$TMPDIR"
+EOF
+apt-get update -qq --print-uris \
+| awk '!/\.bz2/{print "wget",$1,"-O",$2};\
+/\.bz2/{sub("\.bz2'\''","",$1);\
+printf "(wget %s.bz2'\'' -O- | bunzip2 > %s) \
+|| (wget %s.gz'\'' -O- | gunzip > %s) \
+|| wget %s'\'' -O%s\n",$1,$2,$1,$2,$1,$2}' >> $MYSH
+
+echo "tar --mode 644 --owner root --group root -cjf \"\$OLDDIR/$MYTB2\" *" >> $MYSH
+chmod 755 $MYSH</code>
+* Script auquel vous donnerez le nom **myupdate-copy**:
+
+<code bash>#!/bin/bash
+MYTB2=my-update.tar.bz2
+[ -f "$MYTB2" ] || exit 1;
+OLDDIR="$PWD"
+cd /var/lib/apt/lists
+tar -xjf "$OLDDIR/$MYTB2"
+touch /var/lib/apt/periodic/update-stamp</code>
+
+===Utilisation===
+
+  * Sur l'ordinateur qui n'a pas internet : <code>sudo bash gen-myupdate-download</code>
+Ce script crée un autre script nommé ''myupdate-download'' à emporter sur la machine (linux) reliée à internet.
+  * Sur l'ordinateur qui a internet : <code>./myupdate-download</code>
+Ce script télécharge les listes dans un fichier nommé ''myupdate.tar.bz2'' qu'il faut ramener sur son ordinateur sans internet,
+  * À nouveau sur l'ordinateur qui n'a pas internet, on peut alors exécuter le troisième script dans le même dossier que celui où se trouve ''myupdate.tar.bz2'' : <code>sudo bash myupdate-copy</code>
+... et vos listes sont à jour :D.
+
+==== Script de Skippy le grand gourou ====
+
+Ce script permet à la fois la mise à jour des listes et le téléchargement des paquets, il télécharge même les clés de sécurité. Il est particulièrement utile dans le cadre des mises à jour du système. Skippy l'avait autrefois développé et avait eu l'obligeance de mettre à la disposition de tous, et même s'il ne s'en sert plus, il a eu la gentillesse de le moderniser et de le débugger jusqu'à ce qu'il atteigne son efficacité actuelle.  Voici le [[http://forum.ubuntu-fr.org/viewtopic.php?id=79113&p=4|lien vers le forum]] où poster si vous avez un souci. 
+
+Le script à enregistrer sous le nom de ''apt-off'' est un peu long pour le poster ici, vous le trouverez [[http://forum.ubuntu-fr.org/viewtopic.php?id=79113|ici]], en tête du topic.
+
+Pour l'utiliser dans le but de mettre à jour les listes de paquets, il suffit de copier dans un dossier de sauvegarde les listes de paquets déjà présentes dans votre dossier **/var/lib/apt/lists/**, c'est-à-dire tous les fichiers textes sauf le fichier **lock**. 
+
+<code>#creation du dossier de sauvegarde dans le home
+mkdir save
+#sauvegarde des listes
+cp /var/lib/apt/lists/*_Packages save/
+#on se place dans le répertoire
+cd /var/lib/apt/lists/
+#suppression des listes
+sudo rm -f *_Packages</code>
+
+Si vous n'êtes pas à l'aise avec la console, vous pouvez préalablement naviguer jusqu'à votre répertoire **/var/lib/apt/lists/** et sélectionner les fichiers à la souris puis les coller dans le dossier de sauvegarde.
+
+<note warning>Un utilisateur pressé pourrait être tenté de remplacer les deux dernières lignes par la simple commande 
+<code>sudo rm -f /var/lib/apt/lists/*_Packages</code>
+Je vous le déconseille très vivement. En effet si jamais vous faites des erreurs dans la commande comme par exemple glisser un espace entre le / et le var, il y a de grands risques d'endommager gravement votre système.
+</note>
+Maintenant placez-vous sur votre clé USB, et tapez :
+<code>./apt-off -g dist-upgrade</code>
+le script se lance puis affiche un avertissement vous invitant à exécuter la commande :
+<code>./apt-off -c</code>
+sur un ordinateur disposant d'internet. Remarquez qu'un dossier **config_files** s'est créé. Vous devez l'avoir avec vous sur l'ordinateur relié à internet. Effectuez-y la commande. Normalement, des téléchargements devraient s'afficher dans le terminal. Revenez sur votre ordinateur (toujours avec le script et le dossier **config_files** qui s'est un peu rempli) et tapez à nouveau: <code>./apt-off -g dist-upgrade</code>
+Ceci devrait mettre à jour vos listes. Remarquez aussi qu'un fichier //offline packages// s'est créé. C'est ce fichier qui va permettre la mise à jour de votre système.
+
+===== Mise à jour du système et installation de nouveaux paquets =====
+
+==== Script de Skippy le grand gourou (suite) ====
+
+Que vous ayez exécuté la mise à jour des listes avec [[http://forum.ubuntu-fr.org/viewtopic.php?id=79113|apt-off]] ou non, importe peu du moment qu'elles sont à jour.
+Enregistrez ''apt-off'' sur votre clé USB et placez vous dans le répertoire. Puis tapez: <code>#si vous voulez installer un paquet
+./apt-off -g nom_du_paquet
+#si vous voulez mettre à jour le système
+./apt-off -g dist-upgrade
+</code>
+
+Notez l'apparition du fichier ''offline.packages'' qui va contenir toutes les commandes de téléchargement. Vous pouvez bien sûr demander plusieurs paquets à la fois, ou encore exécuter deux commandes successives, qui vont se concaténer, sauf si à la question du script, vous optez pour l'écrasement. Allez sur l'ordinateur relié à internet et tapez la commande :
+<code>./apt-off -d</code>
+vous devez avoir suffisamment de place sur votre clé. Surtout si vous mettez à jour le système. Un dossier **deb** se crée dans le répertoire courant qui contient tous les paquets téléchargés. Revenez sur votre ordinateur personnel et exécutez:
+<code>#si vous vouliez installer un paquet
+./apt-off -x nom_du_paquet
+#si vous vouliez mettre à jour le système
+./apt-off -x dist-upgrade</code>
+fin de la pocédure avec ''apt-off''. 
+<note tip>Notez que si vous avez un doute sur une option, vous pouvez taper
+<code>#pour afficher l'aide de apt-off
+./apt-off -h
+#pour afficher juste les options
+./apt-off -o</code>
+et appuyez sur <q> pour sortir de ces écrans.</note>
+
+===== Complément : détail des commandes utilisées dans le script =====
+
+==== Automatisation de la mise à jour des listes de paquets ====
+
+Les listes de paquets contiennent toutes les informations sur les paquets disponibles pour votre distribution, ainsi que leur version. C'est sur ces informations que se base votre gestionnaire de paquet pour décider ce qui peut être installé et ce qui peut être mis à jour. Les listes de paquets sont stockées dans le dossier ''/var/lib/apt/lists/''. Leurs url de téléchargement sont écrites dans le fichier ''/etc/apt/sources.list'', et dans les fichiers contenus dans le dossier ''/etc/apt/sources.list.d''.
+
+Par conséquent la mise à jour des listes de paquets consiste à récupérer toutes ces url, à télécharger les fichiers de listes de paquets correspondants, et à les placer dans leur dossier en écrasant les listes précédentes. C'est en substance ce que font les scripts présentés ici, à quelques limitations près : dans sa version actuelle, le script de Skippy le grand gourou ne regarde que le contenu du fichier ''/etc/apt/sources.list'', et il faut donc y copier coller manuellement le contenu des sous fragments pour pouvoir les mettre à jour aussi. Par ailleurs, la mise à jour des listes avec ce script ne s'activera que si vous avez vous même vidé manuellement votre dossier ''/var/lib/apt/lists/''.
+
+==== Automatisation de l'installation / la mise à jour d'un/de plusieurs paquets/de la distribution ====
+
+L'astuce ici, est d'utiliser des options spéciales de ''apt-get'' pour décomposer en plusieurs étapes ce qui tient d'habitude en une seule ligne de commande, et d'effectuer ces étapes sur des ordinateurs différents.
+
+=== Étape 1 : préparation sur l'ordinateur hors ligne ===
+
+On utilise la commande suivante pour simuler l'installation des paquets, en affichant juste leurs url.
+<code>sudo apt-get -qq --print-uris install NOM_PAQUET</code>
+Bien sûr, cela marche comme avec ''apt-get'', vous pouvez spécifier plusieurs noms de paquets, ou remplacer ''install NOM_PAQUET'' par ''dist-upgrade'' si vous le souhaitez.
+On récupère toutes ces urls, et on crée un script de téléchargement qui va utiliser la commande wget sur chacune de ces url.
+
+=== Étape 2 : exécution du script de téléchargement sur l'ordinateur relié au net ===
+
+Cette étape n'a rien de mystérieux, on effectue juste tous les téléchargements de fichiers. C'est pour cela que les droits d'administrations ne sont pas nécessaires.
+
+=== Étape 3 : fin de l'installation sur l'ordinateur hors ligne ===
+
+Ça y est on possède tous les paquets. La dernière étape consiste à dire à apt d'utiliser notre dossier comme source à la place d'internet : C'est la commande
+<code>sudo apt-get -o dir::cache::archives=CHEMIN/VERS/LE/DOSSIER install NOM_PAQUET</code>
+De même que précédemment, vous pouvez remplacer ''install NOM_PAQUET'' par ''dist-upgrade'' si requis.
+
+==== Conclusion ====
+Ce que font les divers scripts, c'est simplement l'automatisation de toutes ces étapes, et leur longueur tient à la volonté de leurs développeurs de rajouter des options ou d'automatiser au maximum certaines étapes afin de faciliter son utilisation par l'utilisateur final.
+
+===== Pages en rapport avec les dépôts APT =====
+{{topic>dépôts}}
+
+----
+//Contributeurs: [[:utilisateurs:Aldian]].//
