@@ -34,10 +34,49 @@ def get_errors(content):
         errors += error
     return errors
 
+
 def create_file(errors, path):
     print(path, '[created]')
     with open(path, 'w') as f:
         f.write(errors)
+
+def analyse_file(root, _file):
+    if not _file.endswith('.dokuwiki'):
+        return
+
+    with open(join(root, _file), 'r') as f:
+        content = f.read()
+
+    try:
+        errors = get_errors(content)
+    except Exception as e:
+        print("Error: {0}".format(e))
+        print("path: {0}".format(path))
+        print("content : {0}".format(content))
+        return
+    path = DIR_DESTINATION + root[len_dir_cache:] + '/' + _file.replace('.dokuwiki', '.txt')
+    os.makedirs(
+        DIR_DESTINATION + '/' + root[len_dir_cache:],
+        exist_ok=True
+    )
+
+    if not isfile(path):
+        create_file(errors, path)
+        return
+
+    file_date = datetime.fromtimestamp(os.path.getmtime(path))
+    if not full and index and index['last_date'] > file_date:
+        print(path, '[exist]')
+        return
+    
+    create_file(errors, path)
+
+
+def walk():
+    for root, _dir, files in os.walk(DIR_ORIGIN):
+        for _file in fnmatch.filter(files, '*'):
+            analyse_file(root, _file)
+
 
 if __name__ == '__main__':
     full = False
@@ -50,34 +89,4 @@ if __name__ == '__main__':
 
     state.create_index(full)
 
-    for root, _dir, files in os.walk(DIR_ORIGIN):
-        for _file in fnmatch.filter(files, '*'):
-            if not _file.endswith('.dokuwiki'):
-                continue
-
-            with open(join(root, _file), 'r') as f:
-                content = f.read()
-
-            try:
-                errors = get_errors(content)
-            except Exception as e:
-                print("Error: {0}".format(e))
-                print("path: {0}".format(path))
-                print("content : {0}".format(content))
-                continue
-            path = DIR_DESTINATION + root[len_dir_cache:] + '/' + _file.replace('.dokuwiki', '.txt')
-            os.makedirs(
-                DIR_DESTINATION + '/' + root[len_dir_cache:],
-                exist_ok=True
-            )
-
-            if not isfile(path):
-                create_file(errors, path)
-                continue
-
-            file_date = datetime.fromtimestamp(os.path.getmtime(path))
-            if not full and index and index['last_date'] > file_date:
-                print(path, '[exist]')
-                continue
-            
-            create_file(errors, path)
+    walk()
