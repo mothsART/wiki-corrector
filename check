@@ -16,8 +16,8 @@ DIR_ORIGIN = 'cache'
 DIR_DESTINATION = 'result'
 
 
-def get_errors(content):
-    errors = ""
+def get_anomalies(content):
+    anomalies = ""
     content_list = content.splitlines()
     last_line = 0
     for message in grammalecte_text(content):
@@ -25,43 +25,60 @@ def get_errors(content):
         if last_line != 0 and last_line != message.line:
             cr = '\n'
         last_line = message.line
-        error = "{0}{1} {2} => {3}\n".format(
+        anomalie = "{0}{1} {2} => {3}\n".format(
             cr,
             message.line,
             message.message,
             content_list[message.line - 1]
         )
-        errors += error
-    return errors
+        anomalies += anomalie
+    return anomalies
 
 
-def create_file(errors, path):
+def create_file(anomalies, path):
     print(path, '[created]')
     with open(path, 'w') as f:
-        f.write(errors)
+        f.write(anomalies)
 
-def analyse_file(root, _file):
+
+def detect_redirection(content):
+    if content.startswith('\n~~REDIRECT>'):
+        return True
+    return False
+
+
+def write_error(path, e, content):
+    error = "path: {0}".format(path)
+    error += "exception: {0}".format(e)
+    error += "content : {0}".format(content)
+    with open(join(DIR_ORIGIN, 'crash.log'), 'a') as f:
+        f.write(error)
+
+
+def analyse_file(root, _file, full=False):
     if not _file.endswith('.dokuwiki'):
         return
 
     with open(join(root, _file), 'r') as f:
         content = f.read()
 
-    try:
-        errors = get_errors(content)
-    except Exception as e:
-        print("Error: {0}".format(e))
-        print("path: {0}".format(path))
-        print("content : {0}".format(content))
+    if detect_redirection(content):
         return
+
     path = DIR_DESTINATION + root[len_dir_cache:] + '/' + _file.replace('.dokuwiki', '.txt')
+    try:
+        anomalies = get_anomalies(content)
+    except Exception as e:
+        write_error(path, e, content)
+        return
+
     os.makedirs(
         DIR_DESTINATION + '/' + root[len_dir_cache:],
         exist_ok=True
     )
 
     if not isfile(path):
-        create_file(errors, path)
+        create_file(anomalies, path)
         return
 
     file_date = datetime.fromtimestamp(os.path.getmtime(path))
@@ -69,13 +86,13 @@ def analyse_file(root, _file):
         print(path, '[exist]')
         return
     
-    create_file(errors, path)
+    create_file(anomalies, path)
 
 
-def walk():
+def walk(full=False):
     for root, _dir, files in os.walk(DIR_ORIGIN):
         for _file in fnmatch.filter(files, '*'):
-            analyse_file(root, _file)
+            analyse_file(root, _file, full)
 
 
 if __name__ == '__main__':
@@ -89,4 +106,4 @@ if __name__ == '__main__':
 
     state.create_index(full)
 
-    walk()
+    walk(full)
