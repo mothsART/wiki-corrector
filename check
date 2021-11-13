@@ -2,6 +2,7 @@
 
 import sys
 import os
+from pathlib import Path
 from os.path import join, isfile
 from datetime import datetime
 
@@ -9,6 +10,7 @@ import fnmatch
 
 from scrapy.selector import Selector
 from pygrammalecte import grammalecte_text
+from pygrammalecte.pygrammalecte import GrammalecteSpellingMessage
 
 from wiki_c.state import State
 
@@ -16,29 +18,78 @@ DIR_ORIGIN = 'cache'
 DIR_DESTINATION = 'result'
 
 
-def get_anomalies(content):
-    anomalies = ""
-    content_list = content.splitlines()
-    last_line = 0
-    for message in grammalecte_text(content):
+class GrammalecteChecker:
+    def __init__(self):
+        self.personal_dict: Set[str] = set()
+
+        lines = Path('dict').read_text(encoding="UTF-8")
+        for line in lines.splitlines():
+            word = line.strip()
+            self.personal_dict.add(word.lower())
+            self.personal_dict.add(word.title().lower())
+
+    def get(self, content):
+        warnings = ''
+        content_list = content.splitlines()
+        self.last_line = 0
+        for message in grammalecte_text(content):
+            warnings += self._set_warn(message, content_list)
+        return warnings
+
+    def _set_warn(self, message, content_list):
         cr = ''
-        if last_line != 0 and last_line != message.line:
+        target_line = content_list[message.line - 1]
+        if self.last_line != 0 and self.last_line != message.line:
             cr = '\n'
-        last_line = message.line
-        anomalie = "{0}{1} {2} => {3}\n".format(
+        self.last_line = message.line
+
+        if type(message) == GrammalecteSpellingMessage:
+            word = str(message.word)
+            word_l = word.lower()
+            if word_l in self.personal_dict:
+                return ''
+            if '[[utilisateurs:{0}'.format(word) in target_line:
+                return ''
+            if '[[:utilisateurs:{0}'.format(word) in target_line:
+                return ''
+            if '[[:tutoriel:{0}'.format(word) in target_line:
+                return ''
+            if '[[{0}>'.format(word) in target_line:
+                return ''
+            if '[[:{0}'.format(word) in target_line:
+                return ''
+            if '[[apt>{0}|'.format(word) in target_line:
+                return ''
+            if '|{0}]]'.format(word) in target_line:
+                return ''
+            if ':{0}]]'.format(word) in target_line:
+                return ''
+            index_start = target_line.find('<code>')
+            index_end = target_line.find('</code>')
+            if index_start != -1 and index_end != -1:
+                sub_str = target_line[index_start + 6:index_end]
+                if word in sub_str:
+                    return ''
+
+        warning = "{0}{1} {2} => {3}\n".format(
             cr,
             message.line,
             message.message,
-            content_list[message.line - 1]
+            target_line
         )
-        anomalies += anomalie
-    return anomalies
+        return warning
 
 
-def create_file(anomalies, path):
-    print(path, '[created]')
+def create_file(warnings, path):
+    content = Path(path).read_text(encoding="UTF-8")
+    if content == warnings:
+        return
+    if isfile(path):
+        print(path, '[updated]')
+    else:
+        print(path, '[created]')
     with open(path, 'w') as f:
-        f.write(anomalies)
+        f.write(warnings)
 
 
 def detect_redirection(content):
@@ -66,8 +117,11 @@ def analyse_file(root, _file, full=False):
         return
 
     path = DIR_DESTINATION + root[len_dir_cache:] + '/' + _file.replace('.dokuwiki', '.txt')
+    
+    g_checker = GrammalecteChecker()
+
     try:
-        anomalies = get_anomalies(content)
+        warnings = g_checker.get(content)
     except Exception as e:
         write_error(path, e, content)
         return
@@ -78,15 +132,15 @@ def analyse_file(root, _file, full=False):
     )
 
     if not isfile(path):
-        create_file(anomalies, path)
+        create_file(warnings, path)
         return
 
     file_date = datetime.fromtimestamp(os.path.getmtime(path))
     if not full and index and index['last_date'] > file_date:
         print(path, '[exist]')
         return
-    
-    create_file(anomalies, path)
+
+    create_file(warnings, path)
 
 
 def walk(full=False):
