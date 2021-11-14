@@ -17,12 +17,17 @@ from wiki_c.state import State
 DIR_ORIGIN = 'cache'
 DIR_DESTINATION = 'result'
 
+class FakeMessage:
+    def __init__(self, line, message):
+        self.line = line
+        self.message = message
 
 class GrammalecteChecker:
     def __init__(self):
         self.personal_dict: Set[str] = set()
+        self.code_open = False
+        lines = Path('dict').read_text(encoding='UTF-8')
 
-        lines = Path('dict').read_text(encoding="UTF-8")
         for line in lines.splitlines():
             word = line.strip()
             self.personal_dict.add(word.lower())
@@ -32,16 +37,46 @@ class GrammalecteChecker:
         warnings = ''
         content_list = content.splitlines()
         self.last_line = 0
-        for message in grammalecte_text(content):
+
+        g_lines = grammalecte_text(content)
+        warn = next(g_lines)
+        for key, line in enumerate(content_list):
+            if warn.line == key + 1:
+                warnings += self._set_warn(warn, content_list)
+                try:
+                    warn = next(g_lines)
+                except StopIteration:
+                    continue
+                while warn.line == key + 1:
+                    warnings += self._set_warn(warn, content_list)
+                    try:
+                        warn = next(g_lines)
+                    except StopIteration:
+                        break
+                continue
+            message = FakeMessage(key, line)
             warnings += self._set_warn(message, content_list)
         return warnings
 
     def _set_warn(self, message, content_list):
         cr = ''
         target_line = content_list[message.line - 1]
-        if self.last_line != 0 and self.last_line != message.line:
+        if type(message) == FakeMessage:
+            target_line = content_list[message.line]
+
+        elif self.last_line != 0 and self.last_line != message.line:
             cr = '\n'
-        self.last_line = message.line
+            self.last_line = message.line
+
+        if target_line.find('<code') != -1:
+            self.code_open = True
+        if target_line.find('</code>') != -1:
+            self.code_open = False
+        if self.code_open:
+            return ''
+
+        if type(message) == FakeMessage:
+            return ''
 
         if type(message) == GrammalecteSpellingMessage:
             word = str(message.word)
@@ -64,7 +99,7 @@ class GrammalecteChecker:
                 return ''
             if ':{0}]]'.format(word) in target_line:
                 return ''
-            index_start = target_line.find('<code>')
+            index_start = target_line.find('<code')
             index_end = target_line.find('</code>')
             if index_start != -1 and index_end != -1:
                 sub_str = target_line[index_start + 6:index_end]
@@ -99,9 +134,9 @@ def detect_redirection(content):
 
 
 def write_error(path, e, content):
-    error = "path: {0}".format(path)
-    error += "exception: {0}".format(e)
-    error += "content : {0}".format(content)
+    error = 'path: {0}'.format(path)
+    error += 'exception: {0}'.format(e)
+    error += 'content : {0}'.format(content)
     with open(join(DIR_ORIGIN, 'crash.log'), 'a') as f:
         f.write(error)
 
