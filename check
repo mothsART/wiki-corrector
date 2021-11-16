@@ -8,6 +8,9 @@ from datetime import datetime
 
 import fnmatch
 
+import requests
+from requests.exceptions import ConnectionError
+
 from scrapy.selector import Selector
 from pygrammalecte import grammalecte_text
 from pygrammalecte.pygrammalecte import GrammalecteSpellingMessage
@@ -15,15 +18,70 @@ from pygrammalecte.pygrammalecte import GrammalecteSpellingMessage
 from wiki_c.state import State
 
 DIR_ORIGIN = 'cache'
-DIR_DESTINATION = 'result'
+DIR_URL_DESTINATION = 'url_result'
+DIR_GRAMMAR_DESTINATION = 'grammar_result'
+
 
 class FakeMessage:
     def __init__(self, line, message):
         self.line = line
         self.message = message
 
-class GrammalecteChecker:
-    def __init__(self):
+
+class Checker:
+    def __init__(self, _dir, full=False):
+        self.dir = _dir
+        self.full = full
+        self.state = State(_dir)
+        self.index = self.state.get_index()
+        self.state.create_index(full)
+
+    def set_path(self, root, _file, len_dir_cache):
+        self.warnings = ''
+        self.path = self.dir + root[len_dir_cache:] + '/' + _file.replace('.dokuwiki', '.txt')
+        self.root = root
+        self.len_dir_cache = len_dir_cache
+
+    def create_file(self):
+        if isfile(self.path):
+            content = Path(self.path).read_text(encoding="UTF-8")
+            if content == self.warnings:
+                return
+            print(self.path, '[updated]')
+        else:
+            print(self.path, '[created]')
+        with open(self.path, 'w') as f:
+            f.write(self.warnings)
+
+    def write(self):
+        if self.warnings == '':
+            return
+
+        os.makedirs(
+            self.dir + '/' + self.root[self.len_dir_cache:],
+            exist_ok=True
+        )
+
+        if not isfile(self.path):
+            return self.create_file()
+
+        file_date = datetime.fromtimestamp(os.path.getmtime(self.path))
+        if not self.full and self.index and self.index['last_date'] > file_date:
+            print(self.path, '[exist]')
+            return
+
+        self.create_file()
+
+    def write_error(self, e, content):
+        error = f'path: {self.path}\nexception: {e}\ncontent : {content}'
+        with open(join(self.dir, 'crash.log'), 'a') as f:
+            f.write(error)
+
+
+class GrammalecteChecker(Checker):
+    def __init__(self, full=False):
+        super(GrammalecteChecker, self).__init__(DIR_GRAMMAR_DESTINATION, full)
+
         self.personal_dict: Set[str] = set()
         self.code_open = False
         self.first_warn = False
@@ -34,7 +92,14 @@ class GrammalecteChecker:
             self.personal_dict.add(word.lower())
             self.personal_dict.add(word.title().lower())
 
-    def get(self, content):
+    def parse(self, content):
+        try:
+            self._parse(content)
+        except Exception as e:
+            self.write_error(e, content)
+            return
+
+    def _parse(self, content):
         warnings = ''
         content_list = content.splitlines()
         self.last_line = 0
@@ -117,16 +182,48 @@ class GrammalecteChecker:
         return warning
 
 
-def create_file(warnings, path):
-    content = Path(path).read_text(encoding="UTF-8")
-    if content == warnings:
-        return
-    if isfile(path):
-        print(path, '[updated]')
-    else:
-        print(path, '[created]')
-    with open(path, 'w') as f:
-        f.write(warnings)
+class UrlChecker(Checker):
+    def __init__(self, full=False):
+        super(UrlChecker, self).__init__(DIR_URL_DESTINATION, full)
+
+    def _extract_url(self, line):
+        pos = len(line)
+        sub_str_list = [' ', '|', ']', '}}']
+        for sub_str in sub_str_list:
+            tmp_pos = line.find(sub_str)
+            if tmp_pos != -1 and tmp_pos < pos:
+                pos = tmp_pos
+        tmp_pos = line.find('))')
+        if tmp_pos != -1 and tmp_pos < pos:
+            pos = tmp_pos + 1
+        return line[:pos]
+
+    def parse(self, content):
+        content_list = content.splitlines()
+
+        for pos, line in enumerate(content_list):
+            http_start_pos = line.find('https://')
+            if http_start_pos == -1:
+                http_start_pos = line.find('http://')
+            if http_start_pos == -1:
+                continue
+            url = self._extract_url(line[http_start_pos:])
+            self.warnings += self._set_warn(pos, url)
+
+    def _set_warn(self, pos, url, redirect_url=''):
+        try:
+            r = requests.head(url)
+        except ConnectionError as e:
+            return f'{pos} HTTP 500 : {url}'
+
+        status_code = r.status_code
+        if status_code == 200:
+            return ''
+        if status_code in [301, 302] and not redirect_url:
+            return self._set_warn(pos, r.headers['location'], url)
+        if redirect_url:
+            redirect_url = f' REDIRECT FROM {redirect_url}'
+        return f'{pos} HTTP {status_code} : {url}{redirect_url}\n'
 
 
 def detect_redirection(content):
@@ -135,66 +232,35 @@ def detect_redirection(content):
     return False
 
 
-def write_error(path, e, content):
-    error = 'path: {0}'.format(path)
-    error += 'exception: {0}'.format(e)
-    error += 'content : {0}'.format(content)
-    with open(join(DIR_ORIGIN, 'crash.log'), 'a') as f:
-        f.write(error)
-
-
-def analyse_file(root, _file, full=False):
+def analyse_file(list_checkers, root, _file, len_dir_cache, full=False):
     if not _file.endswith('.dokuwiki'):
         return
-
-    with open(join(root, _file), 'r') as f:
-        content = f.read()
+    content = Path(join(root, _file)).read_text(encoding='UTF-8')
 
     if detect_redirection(content):
         return
 
-    path = DIR_DESTINATION + root[len_dir_cache:] + '/' + _file.replace('.dokuwiki', '.txt')
-    
-    g_checker = GrammalecteChecker()
-
-    try:
-        warnings = g_checker.get(content)
-    except Exception as e:
-        write_error(path, e, content)
-        return
-
-    os.makedirs(
-        DIR_DESTINATION + '/' + root[len_dir_cache:],
-        exist_ok=True
-    )
-
-    if not isfile(path):
-        create_file(warnings, path)
-        return
-
-    file_date = datetime.fromtimestamp(os.path.getmtime(path))
-    if not full and index and index['last_date'] > file_date:
-        print(path, '[exist]')
-        return
-
-    create_file(warnings, path)
+    for checker in list_checkers:
+        checker.set_path(root, _file, len_dir_cache)
+        checker.parse(content)
+        checker.write()
 
 
-def walk(full=False):
+def walk(list_checkers, full=False):
+    len_dir_cache = len(DIR_ORIGIN)
     for root, _dir, files in os.walk(DIR_ORIGIN):
         for _file in fnmatch.filter(files, '*'):
-            analyse_file(root, _file, full)
+            analyse_file(list_checkers, root, _file, len_dir_cache, full)
 
 
 if __name__ == '__main__':
     full = False
-    len_dir_cache = len(DIR_ORIGIN)
-    state = State(DIR_DESTINATION)
-    index = state.get_index()
 
     if '-f' in sys.argv or '--full' in sys.argv:
         full = True
 
-    state.create_index(full)
-
-    walk(full)
+    list_checkers = [
+        UrlChecker(full),
+        GrammalecteChecker(full)
+    ]
+    walk(list_checkers, full)
