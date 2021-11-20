@@ -9,7 +9,9 @@ from datetime import datetime
 import fnmatch
 
 import requests
-from requests.exceptions import ConnectionError
+from requests.exceptions import (
+    ConnectionError, MissingSchema, InvalidURL, TooManyRedirects, ReadTimeout
+)
 
 from scrapy.selector import Selector
 from pygrammalecte import grammalecte_text
@@ -39,6 +41,7 @@ class Checker:
     def set_path(self, root, _file, len_dir_cache):
         self.warnings = ''
         self.path = self.dir + root[len_dir_cache:] + '/' + _file.replace('.dokuwiki', '.txt')
+        print(self.path)
         self.root = root
         self.len_dir_cache = len_dir_cache
 
@@ -53,6 +56,15 @@ class Checker:
         with open(self.path, 'w') as f:
             f.write(self.warnings)
 
+    def exist(self):
+        if not isfile(self.path):
+            return False
+        file_date = datetime.fromtimestamp(os.path.getmtime(self.path))
+        if not self.full and self.index and self.index['last_date'] > file_date:
+            print(self.path, '[exist]')
+            return True
+        return False
+
     def write(self):
         if self.warnings == '':
             return
@@ -64,11 +76,6 @@ class Checker:
 
         if not isfile(self.path):
             return self.create_file()
-
-        file_date = datetime.fromtimestamp(os.path.getmtime(self.path))
-        if not self.full and self.index and self.index['last_date'] > file_date:
-            print(self.path, '[exist]')
-            return
 
         self.create_file()
 
@@ -210,20 +217,16 @@ class UrlChecker(Checker):
             url = self._extract_url(line[http_start_pos:])
             self.warnings += self._set_warn(pos, url)
 
-    def _set_warn(self, pos, url, redirect_url=''):
+    def _set_warn(self, pos, url):
         try:
-            r = requests.head(url)
-        except ConnectionError as e:
-            return f'{pos} HTTP 500 : {url}'
+            r = requests.get(url, timeout=10, allow_redirects=True)
+        except (ConnectionError, MissingSchema, InvalidURL, TooManyRedirects, ReadTimeout) as e:
+            return f'{pos} HTTP 500 {type(e).__name__} : {url}\n'
 
         status_code = r.status_code
         if status_code == 200:
             return ''
-        if status_code in [301, 302] and not redirect_url:
-            return self._set_warn(pos, r.headers['location'], url)
-        if redirect_url:
-            redirect_url = f' REDIRECT FROM {redirect_url}'
-        return f'{pos} HTTP {status_code} : {url}{redirect_url}\n'
+        return f'{pos} HTTP {status_code} : {url}\n'
 
 
 def detect_redirection(content):
@@ -242,6 +245,8 @@ def analyse_file(list_checkers, root, _file, len_dir_cache, full=False):
 
     for checker in list_checkers:
         checker.set_path(root, _file, len_dir_cache)
+        if checker.exist():
+            continue
         checker.parse(content)
         checker.write()
 
@@ -263,4 +268,5 @@ if __name__ == '__main__':
         UrlChecker(full),
         GrammalecteChecker(full)
     ]
+
     walk(list_checkers, full)
