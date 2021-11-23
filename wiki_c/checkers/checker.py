@@ -1,5 +1,6 @@
 import os
 from os.path import join, isfile
+from pathlib import Path
 from datetime import datetime
 
 from ..state import State

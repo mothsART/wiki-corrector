@@ -36,16 +36,15 @@ class UrlChecker(Checker):
                 continue
             url = self._extract_url(line[http_start_pos:])
             if url.find('...') != -1:
-                print('yo', url)
                 # this URL is an example
                 continue
             self.warnings += self._set_warn(pos, url)
 
     def _set_warn(self, pos, url):
-        print(f'{pos} => {url}')
+        #print(f'{pos} => {url}')
         try:
             r = requests.head(url, timeout=10, allow_redirects=True)
-        except (ConnectionError, MissingSchema, InvalidURL, TooManyRedirects, ReadTimeout, LocationParseError) as e:
+        except (ConnectionError, MissingSchema, InvalidURL, TooManyRedirects, ReadTimeout) as e:
             return f'{pos} HTTP 500 {type(e).__name__} : {url}\n'
 
         status_code = r.status_code
