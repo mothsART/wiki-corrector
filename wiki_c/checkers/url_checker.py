@@ -1,3 +1,5 @@
+from urllib3.exceptions import LocationParseError
+
 import requests
 from requests.exceptions import (
     ConnectionError, MissingSchema, InvalidURL,
@@ -15,7 +17,7 @@ class UrlChecker(Checker):
 
     def _extract_url(self, line):
         pos = len(line)
-        sub_str_list = [' ', '|', ']', '}}']
+        sub_str_list = [' ', '|', ']', '}}', '<', '>']
         for sub_str in sub_str_list:
             tmp_pos = line.find(sub_str)
             if tmp_pos != -1 and tmp_pos < pos:
@@ -44,7 +46,7 @@ class UrlChecker(Checker):
         #print(f'{pos} => {url}')
         try:
             r = requests.head(url, timeout=10, allow_redirects=True)
-        except (ConnectionError, MissingSchema, InvalidURL, TooManyRedirects, ReadTimeout) as e:
+        except (ConnectionError, MissingSchema, InvalidURL, TooManyRedirects, ReadTimeout, LocationParseError) as e:
             return f'{pos} HTTP 500 {type(e).__name__} : {url}\n'
 
         status_code = r.status_code
