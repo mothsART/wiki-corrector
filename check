@@ -3,230 +3,23 @@
 import sys
 import os
 from pathlib import Path
-from os.path import join, isfile
-from datetime import datetime
+from os.path import join
 
 import fnmatch
 
-import requests
-from requests.exceptions import (
-    ConnectionError, MissingSchema, InvalidURL, TooManyRedirects, ReadTimeout
+from wiki_c.checkers import (
+    GrammalecteChecker,
+    DokuwikiChecker,
+    UrlChecker
 )
 
-from scrapy.selector import Selector
-from pygrammalecte import grammalecte_text
-from pygrammalecte.pygrammalecte import GrammalecteSpellingMessage
-
-from wiki_c.state import State
-
 DIR_ORIGIN = 'cache'
-DIR_URL_DESTINATION = 'url_result'
-DIR_GRAMMAR_DESTINATION = 'grammar_result'
 
 
 class FakeMessage:
     def __init__(self, line, message):
         self.line = line
         self.message = message
-
-
-class Checker:
-    def __init__(self, _dir, full=False):
-        self.dir = _dir
-        self.full = full
-        self.state = State(_dir)
-        self.index = self.state.get_index()
-        self.state.create_index(full)
-
-    def set_path(self, root, _file, len_dir_cache):
-        self.warnings = ''
-        self.path = self.dir + root[len_dir_cache:] + '/' + _file.replace('.dokuwiki', '.txt')
-        print(self.path)
-        self.root = root
-        self.len_dir_cache = len_dir_cache
-
-    def create_file(self):
-        if isfile(self.path):
-            content = Path(self.path).read_text(encoding="UTF-8")
-            if content == self.warnings:
-                return
-            print(self.path, '[updated]')
-        else:
-            print(self.path, '[created]')
-        with open(self.path, 'w') as f:
-            f.write(self.warnings)
-
-    def exist(self):
-        if not isfile(self.path):
-            return False
-        file_date = datetime.fromtimestamp(os.path.getmtime(self.path))
-        if not self.full and self.index and self.index['last_date'] > file_date:
-            print(self.path, '[exist]')
-            return True
-        return False
-
-    def write(self):
-        if self.warnings == '':
-            return
-
-        os.makedirs(
-            self.dir + '/' + self.root[self.len_dir_cache:],
-            exist_ok=True
-        )
-
-        if not isfile(self.path):
-            return self.create_file()
-
-        self.create_file()
-
-    def write_error(self, e, content):
-        error = f'path: {self.path}\nexception: {e}\ncontent : {content}'
-        with open(join(self.dir, 'crash.log'), 'a') as f:
-            f.write(error)
-
-
-class GrammalecteChecker(Checker):
-    def __init__(self, full=False):
-        super(GrammalecteChecker, self).__init__(DIR_GRAMMAR_DESTINATION, full)
-
-        self.personal_dict: Set[str] = set()
-        self.code_open = False
-        self.first_warn = False
-        lines = Path('dict').read_text(encoding='UTF-8')
-
-        for line in lines.splitlines():
-            word = line.strip()
-            self.personal_dict.add(word.lower())
-            self.personal_dict.add(word.title().lower())
-
-    def parse(self, content):
-        try:
-            self._parse(content)
-        except Exception as e:
-            self.write_error(e, content)
-            return
-
-    def _parse(self, content):
-        warnings = ''
-        content_list = content.splitlines()
-        self.last_line = 0
-
-        g_lines = grammalecte_text(content)
-        warn = next(g_lines)
-        for key, line in enumerate(content_list):
-            if warn.line == key + 1:
-                warnings += self._set_warn(warn, content_list)
-                try:
-                    warn = next(g_lines)
-                except StopIteration:
-                    continue
-                while warn.line == key + 1:
-                    warnings += self._set_warn(warn, content_list)
-                    try:
-                        warn = next(g_lines)
-                    except StopIteration:
-                        break
-                continue
-            message = FakeMessage(key, line)
-            warnings += self._set_warn(message, content_list)
-        return warnings
-
-    def _set_warn(self, message, content_list):
-        cr = ''
-        target_line = content_list[message.line - 1]
-        if type(message) == FakeMessage:
-            target_line = content_list[message.line]
-
-        elif self.first_warn and self.last_line != 0 and self.last_line != message.line:
-            cr = '\n'
-        self.last_line = message.line
-
-        if target_line.find('<code') != -1:
-            self.code_open = True
-        if target_line.find('</code>') != -1:
-            self.code_open = False
-        if self.code_open:
-            return ''
-
-        if type(message) == FakeMessage:
-            return ''
-
-        if type(message) == GrammalecteSpellingMessage:
-            word = str(message.word)
-            word_l = word.lower()
-            if word_l in self.personal_dict:
-                return ''
-            if '[[utilisateurs:{0}'.format(word) in target_line:
-                return ''
-            if '[[:utilisateurs:{0}'.format(word) in target_line:
-                return ''
-            if '[[:tutoriel:{0}'.format(word) in target_line:
-                return ''
-            if '[[{0}>'.format(word) in target_line:
-                return ''
-            if '[[:{0}'.format(word) in target_line:
-                return ''
-            if '[[apt>{0}|'.format(word) in target_line:
-                return ''
-            if '|{0}]]'.format(word) in target_line:
-                return ''
-            if ':{0}]]'.format(word) in target_line:
-                return ''
-            index_start = target_line.find('<code')
-            index_end = target_line.find('</code>')
-            if index_start != -1 and index_end != -1:
-                sub_str = target_line[index_start + 6:index_end]
-                if word in sub_str:
-                    return ''
-
-        self.first_warn = True
-        warning = "{0}{1} {2} => {3}\n".format(
-            cr,
-            message.line,
-            message.message,
-            target_line
-        )
-        return warning
-
-
-class UrlChecker(Checker):
-    def __init__(self, full=False):
-        super(UrlChecker, self).__init__(DIR_URL_DESTINATION, full)
-
-    def _extract_url(self, line):
-        pos = len(line)
-        sub_str_list = [' ', '|', ']', '}}']
-        for sub_str in sub_str_list:
-            tmp_pos = line.find(sub_str)
-            if tmp_pos != -1 and tmp_pos < pos:
-                pos = tmp_pos
-        tmp_pos = line.find('))')
-        if tmp_pos != -1 and tmp_pos < pos:
-            pos = tmp_pos + 1
-        return line[:pos]
-
-    def parse(self, content):
-        content_list = content.splitlines()
-
-        for pos, line in enumerate(content_list):
-            http_start_pos = line.find('https://')
-            if http_start_pos == -1:
-                http_start_pos = line.find('http://')
-            if http_start_pos == -1:
-                continue
-            url = self._extract_url(line[http_start_pos:])
-            self.warnings += self._set_warn(pos, url)
-
-    def _set_warn(self, pos, url):
-        try:
-            r = requests.get(url, timeout=10, allow_redirects=True)
-        except (ConnectionError, MissingSchema, InvalidURL, TooManyRedirects, ReadTimeout) as e:
-            return f'{pos} HTTP 500 {type(e).__name__} : {url}\n'
-
-        status_code = r.status_code
-        if status_code == 200:
-            return ''
-        return f'{pos} HTTP {status_code} : {url}\n'
 
 
 def detect_redirection(content):
@@ -266,7 +59,12 @@ if __name__ == '__main__':
 
     list_checkers = [
         UrlChecker(full),
+        DokuwikiChecker(full),
         GrammalecteChecker(full)
     ]
 
-    walk(list_checkers, full)
+    #print("before")
+    #requests.head("https://www.icann.org/fr", timeout=10, allow_redirects=True)
+    #print("after")
+    analyse_file(list_checkers, DIR_ORIGIN, 'virtualbox.dokuwiki', len(DIR_ORIGIN))
+    #walk(list_checkers, full)
