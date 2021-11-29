@@ -14,13 +14,16 @@ from wiki_c.state import State
 URL_ROOT = 'https://doc.ubuntu-fr.org/'
 DIR_DESTINATION = 'cache'
 
+
 def get_html_index():
     r = requests.get('%saccueil?do=index' % URL_ROOT)
     return r.text
 
+
 def save_cache_index(index_raw):
     with open('%s/index.html' % DIR_DESTINATION, 'w') as f:
         f.write(index_raw)
+
 
 def download_page(href, force_update=False):
     path = DIR_DESTINATION + href + '.dokuwiki'
@@ -38,6 +41,15 @@ def download_page(href, force_update=False):
             print("Url : {0}".format(page))
             print("content : {0}".format(page.text))
             exit(1)
+
+
+def remove_page(href):
+    path = DIR_DESTINATION + href + '.dokuwiki'
+    if not isfile(path):
+        return
+    print(path, '[deleted]')
+    os.remove(path)
+
 
 def recursive_link(a_dic, force_update=False):
     sub_sec = requests.post(
@@ -67,6 +79,7 @@ def recursive_link(a_dic, force_update=False):
             continue
         download_page(sub_a_dic['href'])
 
+
 def walk_links(force_update=False):
     with open('%s/index.html' % DIR_DESTINATION, 'r') as f:
         index_raw = f.read()
@@ -93,7 +106,7 @@ def walk_links(force_update=False):
         download_page(a['href'], force_update)
 
 
-def get_diff(last_date, index=0):
+def get_hrefs(last_date, index=0, hrefs_dict = {}):
     nb_per_page = 40
     url = '{0}?do=recent&show_changes=pages&first%5B{1}%5D='.format(
         URL_ROOT, index * nb_per_page
@@ -120,8 +133,26 @@ def get_diff(last_date, index=0):
             href = wikilink1.attrib['href']
         if 'href' in wikilink2.attrib:
             href = wikilink2.attrib['href']
-        download_page(href, True)
-    get_diff(last_date, index + 1)
+
+        _sum = Selector(text=a).css('.sum::text').get()
+        hrefs_dict[page_date] = {
+            'href': href,
+            'sum':  True if _sum == '\n – supprimée' else False
+        }
+    get_hrefs(last_date, index + 1, hrefs_dict)
+
+
+def get_diff(last_date):
+    hrefs_dict = {}
+    get_hrefs(last_date, 0, hrefs_dict)
+
+    for i in sorted(hrefs_dict.keys()):
+        value = hrefs_dict[i]
+        if value['sum']:
+            remove_page(value['href'])
+        else:
+            download_page(value['href'], True)
+
 
 if __name__ == '__main__':
     full = False
