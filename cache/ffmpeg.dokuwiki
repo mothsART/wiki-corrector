@@ -38,7 +38,7 @@ Par exemple pour  **-vcodec copy** taper dans un [[:terminal]]:
 <code>ffmpeg -vcodec copy</code>
 
 Pour identifier le format d'un fichier multimedia (audio et/ou video), tapez :
-  ffmpeg -i fichier 2>&1 | egrep "Seems|Input|Duration:|Stream"
+  ffmpeg -i fichier 2>&1 | grep -E "Seems|Input|Duration:|Stream"
 <code>
 Seems stream 1 codec frame rate differs from container frame rate: 1000.00 (1000/1) -> 25.00 (25/1)
 Input #0, asf, from 'fichier':
@@ -414,50 +414,23 @@ Attention, ici le chemin n'est pas précisé. Le fichier doit se trouver dans vo
 
 Ce script permet d'automatiser la conversion de vidéos de plusieurs formats ( Mpeg4, Avi, Flv etc... ) vers le format MP3.
 Plusieurs formats de vidéos peuvent se trouver dans le même dossier au moment de la conversion. 
+<file bash videos_to_mp3_converter.sh>
+#!/bin/bash
 
-<code> #!/bin/bash
-#Fichier "Conversion Script " 
+echo videos to mp3 converter!
 
-echo "Création de la liste de fichiers..."
-cd CHEMIN_VERS_LES_VIDEOS ( par exemple ~/Downloads ou ~/Videos )
-ls *.* > to_convert
-echo "Préparation de ffmpeg..."
-while read line  
-do
-		echo "Traitement de $line programmé"
-done < to_convert
-#On s'assure que chaque vidéo a été détectée
-while read line
-do
-	sed -i -e "s/(//g" to_convert
-	sed -i -e "s/)//g" to_convert 
-	sed -i -e "s/\[//g" to_convert 
-	sed -i -e "s/\]//g" to_convert 
-	sed -i -e "s/\ /\./g" to_convert
-done < to_convert
-#Ceci permet de contourner le problème posé par d'éventuels caractères spéciaux dans le titre de la vidéo traitée ( tels que "[","]","(",")" ou " ")
-echo "_______________________________________________"
-while read line
-do
-	rename=`echo ${line%%.*}`
-	original=`ls CHEMIN_VERS_LES_VIDEOS| grep $rename`
-	mv CHEMIN_VERS_LES_VIDEOS/"$original" CHEMIN_VERS_LES_VIDEOS/"$line"
-	echo "$line loaded"
-done < to_convert
-echo "______________________________________________"
-echo "La conversion a démarré : "
-while read line 
-do
-	sdot=`echo ${line%.*}`
-	echo "CONVERSION EN COURS :[ $line ]"
-	ffmpeg -ab 192k -i `echo "$line"` `echo "$sdot.mp3"` 1>.ffmpeg_last_log 2>/dev/null
-        #Le fichier log de la conversion seront stockés dans le dossier courant sous le nom ".ffmpeg_last_log"
-	mv $line /RÉPERTOIRE OU SERONT STOCKÉES LES VIDÉOS SI ON SOUHAITE LES CONSERVER ( COMMENTER POUR ENLEVER )
-	mv "$sdot.mp3" /RÉPERTOIRE OU SERA DÉPLACÉ LE FICHIER *.MP3 GÉNÉRÉ ( COMMENTER POUR ENLEVER )
-	echo "→ OK !"
-done < to_convert
-rm to_convert
-</code>
+VIDEO_DIR="$HOME/Vidéos" # mettez le chemin vers votre dossier de vidéos
+MUSIQUE_DIR="$HOME/Musique" # mettez le chemin vers votre dossier de musiques/sons
+
+cd "$VIDEO_DIR" || exit 1
+
+for FILE in *.*; do
+	if file --mime-type "$FILE" | grep -qF video; then
+		echo -e "Processing file '$FILE'"
+		ffmpeg -i "${FILE}" -vn -ab 128k -ar 44100 -y "$MUSIQUE_DIR""/""${FILE%.*}.mp3" 2> /dev/null
+	fi
+done
+</file>
 
 === Convertir tous les fichiers Windows Media Audio ( WMA ) en mp3  ===
 
@@ -509,8 +482,8 @@ Voici la  commande pour -90°:
 <code>ffmpeg -i vidéo_originale.mp4 -vf "transpose=2" vidéo_correctement_orienté.mp4</code>
 du fait du  codec audio utilisé, //aac//, une erreur est survenu en précisant d'ajouter //-strict -2//, ce qui donne:
 <code>ffmpeg -i vidéo_originale.mp4 -strict -2 -vf "transpose=2" vidéo_correctement_orienté.mp4</code>
-==== Effectuer une capture vidéo (screencast) de l'écran ====
 
+==== Effectuer une capture vidéo (screencast) de l'écran ====
 Après avoir exécuté cette commande, appuyez sur q pour arrêter la capture.
 
 <code>ffmpeg -f x11grab -s 1920x1080 -r 25 -i :0.0 screencast.mp4</code>
@@ -547,6 +520,7 @@ ffmpeg -i fichieradecouper.avi -ss 00:18:00.00 -t 00:12:18.25 -c:v copy -c:a cop
 ffmpeg -ss 00:8:00.00 -t 00:12:18.25 -i fichieradecouper.avi -c:v copy -c:a copy  extrait.avi
 </code>
 </note>
+
 ==== Pivoter une vidéo ====
 Utile par exemple pour redresser une vidéo réalisée avec un téléphone mobile tourné dans le mauvais sens
 <code>
@@ -561,6 +535,7 @@ L'option transpose supporte plusieurs paramètres selon la transformation à ré
 
 ==== Concaténer plusieurs vidéos ====
 Abouter (enfiler plusieurs vidéos successivement en une seule plus longue) plusieurs vidéos n'est pas l'opération la plus simple. Celle-ci dépend de la nature des fichiers à concaténer.
+
 === Concaténation simple ===
 Quelques rares formats ("file level") acceptent la concaténation simple : MPEG-1, MPEG-2 PS, DV. Dans ce cas l'opération reste assez simple à réaliser.
 <code>
@@ -571,6 +546,7 @@ ou
 ffmpeg -i concat:"fichier1.mpg|fichier2.mpg" -c copy Fichier_concatene.mpg
 </code>
 <note tip>Si la qualité des fichiers s'y prête, il peut être plus simple de convertir les fichiers à concaténer en mpg, de réaliser la concaténation en mpg puis de ré-encoder le fichier concaténé dans votre format de prédilection.</note>
+
 === Avec concat ===
 Le filtre concat opère sur des segments synchrones de flux vidéo et audio. Tous les segments doivent avoir le même nombre de flux, qui sera également celui du fichier concaténé.
 Options du filtre :
@@ -587,6 +563,7 @@ ffmpeg -i ouverture.avi -i milieu.avi -i fin.avi -filter_complex '[0:0] [0:1] [0
 
 === Autres cas et cas complexes ===
 Voir la documentation (en anglais), notamment [[https://ffmpeg.org/faq.html#How-can-I-concatenate-video-files_003f|3.14]], [[https://ffmpeg.org/ffmpeg-filters.html#concat|15.8]] et [[https://ffmpeg.org/ffmpeg-formats.html#concat|3.4]]
+
 ==== Méta-données ====
 On peut visualiser quelques méta-données en exécutant :
 <code bash>ffmpeg -i ma_vidéo.AVI</code>
@@ -600,20 +577,7 @@ Pour les méta-données, on peut aussi utiliser [[:exiftool]]
 Pour une synthèse des options
 <code>ffmpeg -help long</code>
 
-===== JDownloader 2 Beta =====
-
-FFmpeg is missing ! Pour résoudre ce problème, notamment avec le site Youtube, il faut:
-  * Installer FFmpeg avec la Logithèque 
-  * Ouvrir JD et aller dans les Préférences
-  * Puis dans les Paramètres avancés
-  * Trouver la clef FFmpegSetup: Binary Path
-  * A la place de 'null', mettre /usr/bin/ffmpeg
-  * Arrêter les téléchargements (bouton Stop), puis redémarrer les (bouton Lecture)
-  * Enjoy !
-
-
 ===== Pour en savoir plus sur Internet =====
-
   * ''**(en)**'' [[http://ffmpeg.org/|Site officiel]] 
   * ''**(fr)**'' [[http://www.jcartier.net/spip.php?article36|Exemples d'usages]]
   * ''**(fr)**'' [[http://www.korben.info/ffmpeg-pour-les-nuls.html|FFMPEG pour les nuls]]
