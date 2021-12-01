@@ -14,7 +14,7 @@ class DokuwikiChecker(Checker):
         last_open_pos = 0
 
         for pos, line in enumerate(content_list):
-            open_el_count = line.count('<note')
+            open_el_count = line.count('<note ') + line.count('<note>')
             close_el_count = line.count('</note>')
 
             ratio = open_el_count - close_el_count
