@@ -1,14 +1,21 @@
-from urllib3.exceptions import LocationParseError
+import asyncio
 
-import requests
-from requests.exceptions import (
-    ConnectionError, MissingSchema, InvalidURL,
-    TooManyRedirects, ReadTimeout
-)
+import aiohttp
 
 from .checker import Checker
 
 DIR_URL_DESTINATION = 'url_result'
+
+async def get(url, session):
+    pos = url['pos']
+    url = url['url']
+    try:
+        async with session.get(url=url) as response:
+            if response.status == 200:
+                return ''
+            return f'{pos} HTTP {response.status} : {url}\n'
+    except Exception as e:
+        return f'{pos} HTTP {e.__class__} : {url}\n'
 
 
 class UrlChecker(Checker):
@@ -29,6 +36,7 @@ class UrlChecker(Checker):
 
     def parse(self, content):
         content_list = content.splitlines()
+        urls = []
 
         for pos, line in enumerate(content_list):
             http_start_pos = line.find('https://')
@@ -40,16 +48,12 @@ class UrlChecker(Checker):
             if url.find('...') != -1:
                 # this URL is an example
                 continue
-            self.warnings += self._set_warn(pos, url)
+            urls.append({ 'pos': pos, 'url': url})
 
-    def _set_warn(self, pos, url):
-        #print(f'{pos} => {url}')
-        try:
-            r = requests.head(url, timeout=10, allow_redirects=True)
-        except (ConnectionError, MissingSchema, InvalidURL, TooManyRedirects, ReadTimeout, LocationParseError) as e:
-            return f'{pos} HTTP 500 {type(e).__name__} : {url}\n'
+        asyncio.run(self._set_warn(urls))
 
-        status_code = r.status_code
-        if status_code == 200:
-            return ''
-        return f'{pos} HTTP {status_code} : {url}\n'
+
+    async def _set_warn(self, urls):
+        async with aiohttp.ClientSession() as session:
+            _warnings = await asyncio.gather(*[get(url, session) for url in urls])
+        self.warnings += ''.join(_warnings)
