@@ -24,7 +24,7 @@ class UrlChecker(Checker):
 
     def _extract_url(self, line):
         pos = len(line)
-        sub_str_list = [' ', '|', ']', '}}', '<', '>']
+        sub_str_list = [' ', '|', ']', '}}', '<', '>', '))']
         for sub_str in sub_str_list:
             tmp_pos = line.find(sub_str)
             if tmp_pos != -1 and tmp_pos < pos:
