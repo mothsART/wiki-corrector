@@ -1,5 +1,7 @@
+from urllib.parse import urlparse
 import asyncio
 
+import tldextract
 import aiohttp
 
 from .checker import Checker
@@ -10,12 +12,24 @@ async def get(url, session):
     pos = url['pos']
     url = url['url']
     try:
-        async with session.get(url=url) as response:
-            if response.status == 200:
-                return ''
-            return f'{pos} HTTP {response.status} : {url}\n'
+        async with session.head(url=url, allow_redirects=True) as response:
+            if response.status != 200:
+                return f'{pos} HTTP {response.status} : {url}\n'
     except Exception as e:
         return f'{pos} HTTP {e.__class__} : {url}\n'
+    redirect_url =  str(response.url)
+    if url == redirect_url:
+        return ''
+    if url.replace('http', 'https') == redirect_url:
+        return f'{pos} HTTP redirect to HTTPS : {url} => {redirect_url}\n'
+    hostname = urlparse(url).hostname.rstrip('/')
+    if hostname == redirect_url.split('://')[1].rstrip('/'):
+        return f'{pos} Url redirect to root path : {url} => {redirect_url}\n'
+    redirect_hostname = urlparse(redirect_url).hostname.rstrip('/')
+
+    if tldextract.extract(url).domain != tldextract.extract(redirect_url).domain:
+        return f'{pos} Url redirect to an other hostname: {url} => {redirect_url}\n'
+    return ''
 
 
 class UrlChecker(Checker):
