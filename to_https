@@ -18,8 +18,7 @@ def replace(doc, https_lines):
     return doc
 
 
-async def update(login, password, url, https_lines):
-    url = f'{url}?do=edit'
+async def update(login, password, datas):
     async with aiohttp.ClientSession() as session:
         connection_payload = {
             'id': 'accueil',
@@ -30,26 +29,33 @@ async def update(login, password, url, https_lines):
         async with session.post('https://doc.ubuntu-fr.org/accueil?do=login', data=connection_payload):
             pass
 
-        async with session.get(url) as r:
-            page = await r.text()
+        for d in datas:
+            print('Editer "%s" ?' % d['path'].replace('.txt', ''))
 
-        page_sel = Selector(text=page)
-        dokuwiki = page_sel.css('#wiki__text::text').get()
-        sectok = page_sel.xpath('//input[@name="sectok"]').attrib['value']
-        date = page_sel.xpath('//input[@name="date"]').attrib['value']
-        changecheck = page_sel.xpath('//input[@name="changecheck"]').attrib['value']
+            async with session.get(d['url']) as r:
+                page = await r.text()
 
-        payload = {
-            'sectok': sectok,
-            'date': date,
-            'changecheck': changecheck,
-            'summary': 'passage de http à https sur les liens externes (détecté et corrigé via le bot wiki-corrector (https://forum.ubuntu-fr.org/viewtopic.php?id=2067892)',
-            'do[save]': '',
-            'wikitext': replace(dokuwiki, https_lines)
-        }
+            page_sel = Selector(text=page)
+            dokuwiki = page_sel.css('#wiki__text::text').get()
+            sectok = page_sel.xpath('//input[@name="sectok"]').attrib['value']
+            date = page_sel.xpath('//input[@name="date"]').attrib['value']
+            changecheck = page_sel.xpath('//input[@name="changecheck"]').attrib['value']
 
-        async with session.post(url, data=payload):
-            pass
+            payload = {
+                'sectok': sectok,
+                'date': date,
+                'changecheck': changecheck,
+                'summary': 'passage de http à https sur les liens externes (détecté et corrigé via le bot wiki-corrector (https://forum.ubuntu-fr.org/viewtopic.php?id=2067892)',
+                'do[save]': '',
+                'wikitext': replace(dokuwiki, d['https_lines'])
+            }
+
+            async with session.post(d['url'], data=payload):
+                pass
+
+            # update file
+            with open(d['path'], 'w') as f:
+                f.write(d['update_warnings'])
 
 
 def extract_link(line):
@@ -59,7 +65,7 @@ def extract_link(line):
     }
 
 
-def replace_page(login, password, root, _file):
+def get_content(root, _file):
     content = Path(join(root, _file)).read_text(encoding='UTF-8')
     has_https = 'HTTP redirect to HTTPS'
     if not has_https in content:
@@ -67,24 +73,31 @@ def replace_page(login, password, root, _file):
     lines = content.split('\n')
     https_lines = [extract_link(line) for line in lines if has_https in line]
 
-    url = join(
-        'https://doc.ubuntu-fr.org/',
-        root.replace(f'{DIR_URL_DESTINATION}', ''),
-        _file.replace('.txt', '')
-    )
-    asyncio.run(update(login, password, url, https_lines))
-    lines = [line for line in lines if not has_https in line]
-    
-    # update file
-    with open(join(root, _file), 'w') as f:
-        f.write('\n'.join(lines))
+    return {
+        'path': join(root, _file),
+        'url': '%s?do=edit' % join(
+            'https://doc.ubuntu-fr.org/',
+            root.replace(f'{DIR_URL_DESTINATION}', ''),
+            _file.replace('.txt', '')
+        ),
+        'https_lines': https_lines,
+        'update_warnings': '\n'.join([line for line in lines if not has_https in line])
+    }
+
+
+def replace_page(login, password, datas):
+    asyncio.run(update(login, password, datas))
+
 
 def walk(login, password):
+    datas = []
     for root, _dir, files in os.walk(DIR_URL_DESTINATION):
         for _file in fnmatch.filter(files, '*'):
-            print('Editer "%s" ?' % join(root, _file.replace('.txt', '')))
-            input()
-            replace_page(login, password, root, _file)
+            d = get_content(root, _file)
+            if not d:
+                continue
+            datas.append(d)
+    replace_page(login, password, datas)
 
 
 if __name__ == '__main__':
@@ -93,5 +106,8 @@ if __name__ == '__main__':
     print('Enter password :')
     password = input()
 
-    #replace_page(login, password, DIR_URL_DESTINATION, 'abiword.txt')
+    #replace_page(
+    #    login, password,
+    #    [get_content(DIR_URL_DESTINATION, 'abiword.txt')]
+    #)
     walk(login, password)
