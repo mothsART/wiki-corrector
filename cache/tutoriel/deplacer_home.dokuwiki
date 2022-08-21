@@ -16,7 +16,7 @@ Si votre situation nécessite un déplacement du HOME sans réinstaller ubuntu, 
 
 ===== Public =====
 
-Si vous avez effectué une installation par défaut, votre répertoire /home se trouve sur la même partition que la racine /. Mais cette situation, qui a des avantages et des inconvénients, peut-être modifiée.
+Si vous avez effectué une installation par défaut, votre répertoire /home se trouve sur la même partition que la racine /. Mais cette situation, qui a des avantages et des inconvénients, peut être modifiée.
 
 Le dossier /home contient :
   * tous vos fichiers personnels, 
@@ -36,12 +36,11 @@ Les avantages d'un /home séparé sont :
   * Complexité relative de la démarche
   * Il faut réserver de la place libre sur la partition (/) qui contient Ubuntu (pour les mises à jour ou les ajouts de logiciels), et de la place libre sur la partition /home séparée (pour des ajouts de fichiers). La méthode du /home séparé prend donc plus de place disque. 
   * Si vous attribuez trop peu d'espace à votre partition racine (/), vous risquez de recevoir des notifications gênantes ([[http://forum.ubuntu-fr.org/viewtopic.php?pid=4078454#p4078454|exemple]]), d'être bloqué pour ajouter des logiciels supplémentaires, voire de faire bugguer Ubuntu si votre partition / est quasi-pleine ([[https://bugs.launchpad.net/bugs/610358|exemple]]). Un /home séparé n'est donc pas recommandé si vous possédez un petit disque dur (<20Gio par exemple) et ne savez pas anticiper vos besoins en espace sur la partition racine (/).
-
-
+  * Si l'ordinateur se [[https://forum.ubuntu-fr.org/viewtopic.php?pid=22517024#p22517024|plante]], le redémarrage ne se fait pas facilement.
+  * Si le répertoire home est mis dans un disque dur alors qu'il existe un SSD ou un NVME pour accueillir tout le logiciel qu'il héberge, le fonctionnement des applications sera ralenti.
 
 
 Si le /home séparé vous semble bien adapté à vos besoins (en cas de doute, posez votre question sur [[http://forum.ubuntu-fr.org/viewtopic.php?id=397167|ce forum]]), les **2 démarches** ci-dessous vous permettent d'effectuer cette opération, soit avec le terminal, soit en mode (presque) graphique.
-
 
 ===== Méthode 1 : Démarche en mode (presque) graphique =====
 
@@ -61,11 +60,17 @@ Si le /home séparé vous semble bien adapté à vos besoins (en cas de doute, p
        - puis sur 'Modifier les options de montages 
        - Décocher 'Options de montage automatique'
        - Changez point de montage pour /home
-  - Redémarrer le système. Votre /home pointe maintenant sur une partition séparée.
+  - Redémarrer le système. Votre partition séparée monte dorénavant dans le dossier /home de votre système.
 
 <note tip>Si vous déplacez un ''/home'' déjà sur une partition séparée, Suivez les points 1 à 3. Ensuite il vous suffit de [[:tutoriel:comment_modifier_un_fichier|modifier]] le fichier **/etc/fstab** (faites une [[:comment_sauver_et_restaurer_un_fichier#en_ligne_de_commande|copie]] de ce fichier avant modification) avec les droits administrateurs afin **de pointer vers le nouveau /home** \\
-Vous aurez besoin de connaître l'[[:uuid_et_label|UUID]] de la partition du nouveau /home \\ **''##liste les partitions et leur UUID##''**<code>sudo blkid</code> **''##Sauvegarde du fichier /etc/fstab##''**<code>sudo cp -a /etc/fstab /etc/fstab.save</code>**''##Modifiez le fichier /etc/fstab##''** <code>gksudo gedit /etc/fstab</code>
-Cherchez la ligne pointant vers l'ancien home et remplacez l'[[:uuid_et_label|UUID]] par celui de la partition du **nouveau /home**. Profitez-en pour changer dans les commentaires le /dev/sdXy par le nouveau (vous pouvez le trouver avec l'[[:gnome-disk-utility|utilitaire de disque]] en cliquant sur la partition voulue) comme dans **l'exemple ci-dessous** :
+Vous aurez besoin de connaître l'[[:uuid_et_label|UUID]] de la partition du nouveau /home \\
+**''##liste les partitions et leur UUID##''**\\
+<code>sudo blkid</code>
+**''##Sauvegarde du fichier /etc/fstab##''**\\
+<code>sudo cp -a /etc/fstab /etc/fstab.save</code>
+**''##Modifiez le fichier /etc/fstab##''**\\
+<code>gedit admin:///etc/fstab</code>
+Cherchez la ligne pointant vers l'ancien home et remplacez l'[[:uuid_et_label|UUID]] par celui de la partition du **nouveau /home**. Profitez-en pour changer dans les commentaires le /dev/sdXy par le nouveau (vous pouvez le trouver avec l'[[:gnome-disk-utility|utilitaire de disque]] en cliquant sur la partition voulue) comme dans **l'exemple ci-dessous** :\\
 <file>#Entry for /dev/sdc1 :
 UUID=905ce836-7aa9-4413-853f-126a0eb2587c	/home	ext4	defaults	0	2</file>
 Fermez et enregistrez le fichier puis redémarrer votre ordinateur </note>
@@ -214,6 +219,54 @@ Tout s'est bien passé, reste à faire un peu de ménage en supprimant les fichi
 <note important>Attention : Ne vous trompez pas dans la syntaxe de cette commande ! Tout ce qui se trouvait dans /home va être effacé (ce qui n'est pas un problème puisque tout a été copié dans sda3 si tout s'est correctement déroulé).</note>
 
   * **Cas n<sup>o</sup> 2 :** Votre home était déjà sur une partition séparée : vous pouvez simplement [[:partitions#que_signifie_formater_une_partition|reformater votre partition]].
+
+===== Méthode 3 : Démarche avec le terminal ; réutilisation d'une autre partition ext4 avec copie =====
+
+**Avant propos**\\
+On va transférer le /home qui fonctionne, installé dans la même partition que le logiciel, dans une autre partition EXT4.\\
+**Prérequis**\\
+Une partition formatée en EXT4 probablement stockée dans un autre disque contenant éventuellement déjà des données voir un ancien logiciel qui deviendra le futur /home. On l'appelle Home0. On aura besoin de connaître son nom.\\
+Une installation fonctionnant avec la racine / contenant /home.\\
+**But**\\
+Le but est alors de virer home et d'utiliser Home0 à la place.\\
+**Méthode**\\
+Définir la partition Home0 comme point de montage du futur home dans le fichier fstab.\\
+Monter la partition\\
+Pour chaque utilisateur, transférer les données de home dans Home0 lorsqu'elles sont absentes sinon dans $USER/Home1 afin que le choix puisse se faire  en conscience. Souvent, il n'y a qu'un utilisateur de défini.\\
+Rebooter.\\
+**Réalisation**\\
+  * Trouver le nom de la partition.\\
+Cette recherche peut se faire en lançant l'une de ces commandes "lsblk" ou  "sudo fdisk -l". La partition doit être au format ext4. Elle est de grande taille. Normalement  elle n'est pas stockée dans le même disque que le logiciel. Son nom est semblable à SDB1 ou NVME0P1.   Cette valeur est destinée à remplacer **XXXX** dans les deux commandes suivantes.
+  * Mettre à jour le fichier /etc/fstab.
+<code bash>echo UUID=$(sudo blkid  | grep /dev/XXXX |  grep -o ' UUID.*BLOCK' | cut -d'"' -f2) /home ext4 defaults 0 2 | sudo tee -a /etc/fstab</code>
+  * Monter la partition.
+<code bash>sudo mkdir -v  /mnt/Home0
+sudo mount -v /dev/XXXX   /mnt/Home0</code>
+  * __Pour chaque utilisateur:__ 
+  *  Créer l'utilisateur si besoin.
+<code bash>sudo mkdir -v /mnt/Home0/$USER
+sudo chown $USER:$USER /mnt/Home0/$USER</code>
+  *  Transférer les données personnelles absentes.
+<code bash>mv -nv $HOME/* /mnt/Home0/$USER</code>
+  *  Transférer les données techniques absentes.
+<code bash>mv -nv $HOME/.[0-9a-zA-Z]* /mnt/Home0/$USER</code>
+  *  Mettre à jour la configuration en conservant les anciens contenus.
+<code bash>mv  -v -b --suffix=.OLD $HOME/.config/* /mnt/Home0/$USER/.config
+rmdir  -v .config </code>
+  *  Transférer les données personnelles en double dans un sous-répertoire.
+<code bash>mkdir -v /mnt/Home0/$USER/Home1
+mv -v $HOME/* /mnt/Home0/$USER/Home1</code>
+  *  Transférer les données techniques en double dans le même sous-répertoire.
+<code bash>mv -v $HOME/.[0-9a-zA-Z]* /mnt/Home0/$USER/Home1</code>
+  *  Supprimer l'utilisateur
+<code bash>ls -Rals
+cd /
+sudo rm  -rv $HOME</code>
+  * Lorsque tous les utilisateurs sont traités, relancer le système.
+Cela libérera physiquement l'espace disque encore utilisé par les applications en cours et permettra d'utiliser la nouvelle partition.
+
+  
+
 
 
 ===== Méthode 4 : Démarche avec le terminal ; réutilisation sans copie du /home d'une autre partition =====

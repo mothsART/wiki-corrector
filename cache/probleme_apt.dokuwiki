@@ -1,4 +1,5 @@
 
+
 {{tag>apt paquet dépôts}}
 ----
 
@@ -25,13 +26,14 @@ Afin d'éviter des conflits, une seule instance d'APT peut être utilisée en m�
 Ce message d'erreur indique donc que ce fichier ''/var/lib/dpkg/lock'' existe et bloque la suite des opérations. Cela peut être le cas pour deux raisons différentes :
 
   * Soit un autre [[:gestionnaire de paquets]] (ou de mise à jour) est ouvert. Si c'est le cas, fermez-le proprement puis relancez votre commande.
-  * Soit l'un de ces gestionnaires a "planté", ou l'ordinateur a été éteint sauvagement pendant une opération, et le gestionnaire n'a pas terminé normalement ses opérations en supprimant ce fichier. Dans ce cas (si vous êtes absolument certain·e qu'aucun autre gestionnaire ne tourne), vous pouvez supprimer ce fichier au moyen d'un [[:terminal]] :
-<code>cd /var/lib/dpkg/ && sudo rm -v lock</code>
-<note warning>Il est **impératif** que tous les gestionnaires de paquets soient fermés au moment d'exécuter la commande ci-dessus !
+  * Soit l'un de ces gestionnaires a "planté", ou l'ordinateur a été éteint sauvagement pendant une opération, et le gestionnaire n'a pas terminé normalement ses opérations en supprimant ce fichier. (//FIXME : ce point mérite vérification, le verrou devant normalement disparaître même en cas de plantage du processus l’ayant requis en premier lieu//)
 
-Vous pouvez lister la liste des processus utilisant le fichier ''/var/lib/dpkg/lock'' au moyen de la commande suivante :
-<code>sudo lsof /var/lib/dpkg/lock</code>
-</note>
+La documentation de dpkg rappelle que la suppression manuelle de ce fichier n’est **jamais** une solution correcte : [[https://wiki.debian.org/Teams/Dpkg/FAQ#Q:_What_can_be_done_when_the_dpkg_lock_is_held.3F|What can be done when the dpkg lock is held?]] (en anglais).
+
+Si la présence de ce verrou bloque vos opérations, vous devez tout d’abord fermer les éventuels processus ayant requis ce verrou, avec : <code>sudo fuser -vki -TERM /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend</code>
+Puis la cohérence de la base de données de dpkg doit être rétablie avec : <code>sudo dpkg --configure --pending</code>
+
+<note warning>Vous croiserez souvent des guides recommandant de supprimer manuellement le fichier ''lock''. Ce conseil n’est pas à suivre, cette opération menant à des corruption de la base de données de dpkg ou même du système de fichiers.</note>
 '===== Dpkg was interrupted =====
 
 Si un [[gestionnaire de paquets]] vous dit quelque chose comme ça :
@@ -191,7 +193,7 @@ Des erreurs ont été rencontrées pendant l'exécution : 'le paquet qui bloque'
 </code>
 Faites : 
 <code>gksu gedit /var/lib/dpkg/info/lepaquetquibloque.postrm</code>
-Supprimer tout jusqu'au [[http://fr.wikipedia.org/wiki/Shebang|Shebang]] Bash, et ajouter juste après le [[http://fr.wikipedia.org/wiki/Shebang|Shebang]] Bash ceci :
+Supprimer tout jusqu'au [[https://fr.wikipedia.org/wiki/Shebang|Shebang]] Bash, et ajouter juste après le [[https://fr.wikipedia.org/wiki/Shebang|Shebang]] Bash ceci :
 <code>/bin/true</code>
 Vous devez donc avoir dans votre fichier .postrm ceci et rien de plus :
 <code>#!/bin/bash
@@ -270,7 +272,7 @@ La suppression du contenu du dossier /var/lib/apt/lists/ règle souvent le probl
 sudo rm /var/lib/apt/lists/* -vf
 sudo apt update
 </code>
-[[http://forum.ubuntu-fr.org/viewtopic.php?id=481901|Discussion à propos de ce problème sur le forum ubuntu-fr]].
+[[https://forum.ubuntu-fr.org/viewtopic.php?id=481901|Discussion à propos de ce problème sur le forum ubuntu-fr]].
 
 ===== Erreur de Signature =====
 
@@ -337,16 +339,13 @@ E: Les listes de paquets ou le fichier « status » ne peuvent être analysés o
 Soit le fichier "status" est corrompu, soit il a été effacé. Ce fichier contient l'ensemble des informations relatives aux paquets installés sur votre système et toutes les manipulations que vous avez effectuées. Sans ce fichier apt et dpkg sont bloqués. Le fonctionnement de votre système est alors fortement compromis.
 
   * Solution simple, utiliser le fichier status.old généré automatiquement par le système et le renommer en status :<code>
-cp /var/lib/dpkg/status.old /var/lib/dpkg/status</code>Attention, si il y a trop de différence entre le fichier status et le old, la solution devient aléatoire.\\ Processus complet à suivre dans tous les cas, au delà de la récupération du fichier status.old :<code>
-## au cas ou un gestionnaire de paquets est encore lancé
-sudo rm /var/lib/apt/lists/lock
+cp /var/lib/dpkg/status.old /var/lib/dpkg/status</code>Attention, si il y a trop de différence entre le fichier status et le old, la solution devient aléatoire.\\ Processus complet à suivre dans tous les cas, au delà de la récupération du fichier status.old : <code>
 ## un petit backup au cas ou, prudence
 sudo cp -arf /var/lib/dpkg /var/lib/dpkg.backup
 ## on remplace
 sudo cp /var/lib/dpkg/status-old /var/lib/dpkg/status
 sudo cp /var/lib/dpkg/available-old /var/lib/dpkg/available
 ## on purge
-sudo rm -rf /var/lib/dpkg/updates/*
 sudo rm -rf /var/lib/apt/lists
 sudo mkdir /var/lib/apt/lists
 sudo mkdir /var/lib/apt/lists/partial
@@ -360,9 +359,12 @@ sudo dpkg --configure -a
 sudo apt install -f
 sudo apt update
 sudo apt upgrade
-</code>
+</code> //FIXME : La suppression manuelle de /var/lib/apt/lists n’est certainement pas une bonne idée, ça vaudrait le coup de demander conseil aux développeurs/mainteneurs d’APT pour connaître la marche à suivre recommandée.//
   * Si le fichier status.old(ou status-old) n'est plus disponible, le plus sûr, hélas, va consister à réinstaller votre système (ou a le laisser en l'état, sans mise à jour possible ni aucune installation de nouveau paquets possible. 
 
+<note warning>
+Si une de ces opérations échoue à cause d’un verrou (//lock//) dpkg encore en place, suivez ces instructions : [[probleme_apt#impossible_de_verrouillervarlibdpkglock|Impossible de verrouiller /var/lib/dpkg/lock]]
+</note>
 ===== "W: Failed to fetch gzip:/var/lib/apt/lists/partial/..." lors d'une mise à jour =====
      
  Voici la solution trouvée sur [[http://www.kubuntuforums.net/showthread.php?57567-Ubuntu-problems-on-update|ce forum]] (en) :

@@ -1,4 +1,5 @@
 
+
 {{tag>imprimante brother}}
 ----
 
@@ -26,8 +27,8 @@ A noter qu'avec le script d'installation de **[[:utilisateurs:demonipuch:script_
 
 =====Divers type d'installation=====
 Il y a plusieurs manière d'installer son imprimante brother :
-  * Conseillée : avec le [[:tutoriel:script_shell|script]] d'un contributeur, **[[:utilisateurs:demonipuch:script_brother|Demonipuch]]**, ce script non officiel, qui a été testé avec succès sur différentes imprimantes et versions d’Ubuntu, son auteur suit assidûment tout retour des utilisateurs quant à son utilisation sur [[http://forum.ubuntu-fr.org/viewtopic.php?id=652931|ce sujet du forum]].
-  * [[brother_driver_install_tool|Avec le script fourni par Brother]].
+  * Avec le [[:tutoriel:script_shell|script]] d'un contributeur, **[[:utilisateurs:demonipuch:script_brother|Demonipuch]]**, ce script non officiel, qui a été testé avec succès sur différentes imprimantes et versions d’Ubuntu, son auteur suit assidûment tout retour des utilisateurs quant à son utilisation sur [[https://forum.ubuntu-fr.org/viewtopic.php?id=652931|ce sujet (fermé) du forum]].
+  * [[brother_driver_install_tool|Avec le script fourni par Brother]]. Pour les versions 20.04 et +, suivre la procédure [[https://support.brother.com/g/b/faqend.aspx?c=fr&lang=fr&prod=mfcj5920dw_us_eu&faqid=faq00100729_000|ici]] pour les imprimantes listées sur la page.
   * Manuellement, en téléchargeant et installant soi-même les deb.
 
 
@@ -36,7 +37,7 @@ Il y a plusieurs manière d'installer son imprimante brother :
 
 Brother donne différents tutoriels pour tous les types d’imprimante et/ou scanner à cette adresse : 
 
-  * Page de téléchargement du site officiel disponible en passant par [[http://support.brother.com/g/b/productsearch.aspx?c=fr&lang=fr&content=dl|brother.fr]]. Cette page va vous permettre de sélectionner votre imprimante ; ensuite choisissez Linux et le format .deb. Un message en anglais vous dit qu'il n'y a pas de réponse en français : choisissez simplement 'English' dans la liste déroulante pour accéder aux pilotes. 
+  * Page de téléchargement du site officiel disponible en passant par [[https://support.brother.com/g/b/productsearch.aspx?c=fr&lang=fr&content=dl|brother.fr]]. Cette page va vous permettre de sélectionner votre imprimante ; ensuite choisissez Linux et le format .deb. Un message en anglais vous dit qu'il n'y a pas de réponse en français : choisissez simplement 'English' dans la liste déroulante pour accéder aux pilotes. 
   * Pilotes par modèle,  **[[http://support.brother.com/g/s/id/linux/en/download_prn.html|pour l'imprimante]]** et pour le **[[https://support.brother.com/g/s/id/linux/en/download_scn.html|scanner]]**.
   * Page officielle de [[http://support.brother.com/g/s/id/linux/en/index.html?c=us_ot&lang=en&comple=on&redirect=on|téléchargement des pilotes Brothers]] — //étant donné notre distribution, le pilote 'cupswrapper' au format .deb devrait suffire. Néanmoins, vous pouvez télécharger aussi le pilote 'LPR'…//
 
@@ -140,6 +141,111 @@ et ajoutez à la suite:
 <file bash>convert $output_file "$output_file.png"
 rm -f $output_file</file>
 <note important>//convert// est une commande issue du paquet **[[:Imagemagick]]**. Installez-le s’il ne l’est pas déjà.</note>
+
+== La conversion automatique en PDF ==
+
+L'idée de cette amélioration est de laisser le format généré par défaut (TIFF) pour la fonction Scan to Image (à adapter séparément à vos besoins via les fichiers /opt/brother/scanner/brscan-skey/scantoimage.config et /opt/brother/scanner/brscan-skey/script/scantoimage.sh). Pour les documents on va plutôt utiliser Scan to File. Pour ce faire on va utiliser une copie de /opt/brother/scanner/brscan-skey/script/scantoimage.sh, plus adaptée :
+ <file bash>sudo cp /opt/brother/scanner/brscan-skey/script/scantofile.sh /opt/brother/scanner/brscan-skey/script/scantofile.original
+sudo cp /opt/brother/scanner/brscan-skey/script/scantoimage.sh /opt/brother/scanner/brscan-skey/script/scantofile.sh
+sudo nano /opt/brother/scanner/brscan-skey/script/scantofile.sh</file>
+Voici le fichier modifié, avec par ordre de priorité/préférence du convertisseur 
+  * **tiff2pdf** (installer libtiff-tools si nécessaire). Testé OK sur 22.04 et 20.04
+  * **mogrify** (installer ImageMagick si besoin). Testé OK sur 22.04 (pas testé sur 20.04)
+  * **gimp** (permet la conversion manuellement)
+  * **evince** (permet d'enregistrer une copie du fichier tiff (sans conversion) dans un répertoire pertinent avant qu'il ne soit, comme pour les 3 autres méthodes ci-dessus, supprimé automatiquement du répertoire brscan).
+Le début jusqu'aux tests if...which... est inchangé. La suite de tests if...which... défini la priorité selon votre préférence. Beaucoup des outils prévus par Brother sont désactivés par des commentaires. Pour en réactiver un, le passer en tête de liste (car c'est qu'on veut l'utiliser) en conservant la séquence if/elif/elif/fi et ajouter un autre test or ( || ) adapté à l'antépénultième ligne : 
+
+<file>#! /bin/bash
+# scantoimage custom pour scantofile
+#
+mkdir -p ~/brscan
+sleep 0.2
+
+if [ -e ~/.brscan-skey/scantofile.config ];then
+   source ~/.brscan-skey/scantofile.config
+elif [ -e /etc//opt/brother/scanner/brscan-skey/scantofile.config ];then
+   source /etc//opt/brother/scanner/brscan-skey/scantofile.config
+fi
+
+
+SCANIMAGE="/opt/brother/scanner/brscan-skey/skey-scanimage"
+OUTPUT=~/brscan/Scan_"$(date +%Y-%m-%d-%H-%M-%S)".tif
+OPT_OTHER=""
+
+
+if [ "$resolution" != '' ];then
+   OPT_RESO="--resolution $resolution" 
+else
+   OPT_RESO="--resolution 100" 
+fi
+
+if [ "$source" != '' ];then
+   OPT_SRC="--source $source" 
+else
+   OPT_SRC="--source FB" 
+fi
+
+if [ "$size" != '' ];then
+   OPT_SIZE="--size $size" 
+else
+   OPT_SIZE="--size A4" 
+fi
+
+if [ "$duplex" = 'ON' ];then
+   OPT_DUP="--duplex"
+   OPT_SRC="--source ADF_C" 
+else
+   OPT_DUP=""
+fi
+OPT_FILE="--outputfile  $OUTPUT"
+
+OPT_DEV="--device-name $1"
+
+OPT="$OPT_DEV $OPT_RESO $OPT_SRC $OPT_SIZE $OPT_DUP $OPT_OTHER $OPT_FILE"
+
+if [ "$(echo "$1" | grep net)" != '' ];then
+    sleep 1
+fi
+
+#echo  "$SCANIMAGE $OPT" 
+$SCANIMAGE $OPT
+
+if [ ! -e "$OUTPUT" ];then
+   sleep 1
+   $SCANIMAGE $OPT
+fi
+
+sleep 1
+
+if [ "$(which tiff2pdf 2>/dev/null)" != '' ];then
+  APL=tiff2pdf
+elif [ "$(which mogrify 2>/dev/null)" != '' ];then
+#nécessite /etc/ImageMagick-6/policy.xml ligne coder domain read|write 
+  APL=mogrify
+elif [ "$(which gimp 2>/dev/null)" != '' ];then
+  APL=gimp
+#elif   [ "$(which okular 2>/dev/null)" != '' ];then
+#  APL=okular
+#elif   [ "$(which xreader 2>/dev/null)" != '' ];then
+#  APL=xreader
+#elif   [ "$(which libreoffice 2>/dev/null)" != '' ];then
+#  APL=libreoffice
+#elif   [ "$(which atril 2>/dev/null)" != '' ];then
+#  APL=atril
+#elif   [ "$(which eom 2>/dev/null)" != '' ];then
+#  APL=eom
+else
+  APL=evince
+fi
+if [ "$APL" = 'tiff2pdf' ];then
+$APL -j -s "Scan Brother converti" -o ${OUTPUT%.*}.pdf "$OUTPUT" 2>/dev/null; rm -f "$OUTPUT" 
+elif [ "$APL" = 'mogrify' ];then
+$APL -format pdf -compress jpeg "$OUTPUT" 2>/dev/null; rm -f "$OUTPUT"
+elif [ "$APL" = 'gimp' ] || [ "APL" = 'evince' ];then
+echo "$APL $OUTPUT  2>/dev/null" \;sleep 2\;rm -f "$OUTPUT" | bash &
+fi</file>
+À la fin de vos modifications du fichier faites-en une copie en cas de réinstallation de brscan-skey :
+<file bash>sudo cp /opt/brother/scanner/brscan-skey/script/scantofile.sh /opt/brother/scanner/brscan-skey/script/scantofile.bak</file>
 
 == Le choix : noir & blanc ou couleur ==
 
@@ -280,7 +386,7 @@ Puis déconnectez/reconnectez-vous.
 Si les manipulations ci-dessus n’ont rien données, vérifiez qu’il existe bien une ligne de type //brotherX// ((X étant un chiffre)) dans le fichier /etc/sane.d/dll.conf 
 Si ce n’est pas le cas, [[:tutoriel:comment_editer_un_fichier|éditer le fichier]] avec les [[sudo|droits d’administration]] et ajoutez à la fin « **brotherX** » (où « X » correspond au même chiffre que dans le nom du paquet « brscanX » que vous avez installé).
 
-Vérifiez aussi que vous avez installé le paquet [[:tutoriel:comment_installer_un_paquet|libusb-0.1-4]] qui peut être un pré-requit pour certain modèle. Les versions récentes d'Ubuntu ayant plutôt //libusb-1.0.0//
+Vérifiez aussi que vous avez installé le paquet [[:tutoriel:comment_installer_un_paquet|libusb-0.1-4]] qui peut être un pré-requis pour certain modèle. Les versions récentes d'Ubuntu ayant plutôt //libusb-1.0.0//
 ===== Mise à jour du micrologiciel (firmware) =====
 Il n'existe pas d'utilitaire fourni par Brother pour mettre à jour le micrologiciel de votre imprimante. Cependant le script [[https://github.com/CauldronDevelopmentLLC/oh-brother|"Oh Brother"]] ((sous licence libre GPL v2)) permet de faire cette opération en téléchargeant directement les mises à jours sur les serveurs de Brother et en les envoyant à l'imprimante. 
 

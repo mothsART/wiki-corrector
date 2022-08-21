@@ -181,7 +181,6 @@ N'essayez pas de faire des modifications dans /etc/samba/smb.conf en parallèle 
 
 Puis relancer le service : 
 <code>
-[musique]
 sudo service smbd restart
 </code>
 </note>
@@ -317,8 +316,8 @@ Pour corriger ce problème il suffit :
 
 [[https://ubuntuforums.org/showthread.php?t=2384959|Source]]
 
-==== Impossible de se connecter à un partage réseau via gestionnaire de fichier Ubuntu 20.04====
-Depuis la version 4.11 (livré dans 20.04) //Samba// ne prend plus en charge le vieux protocole SMBv1, seuls SMB2 et SMB3 sont gérés. Certains partages sur les box et les NAS ne sont plus accessibles. Ainsi pour résoudre tous problèmes de connexion à un réseau samba suivez la procédure qui suit :
+==== Impossible de se connecter à un partage réseau via gestionnaire de fichier Ubuntu 20.04 (et sup)====
+Depuis la version 4.11 (livré dans 20.04) //Samba// ne prend plus en charge le vieux protocole SMBv1, seuls SMB2 et SMB3 sont gérés. Certains partages sur les box et les NAS ne sont plus accessibles (beaucoup de box continuent à utiliser SMBv1). Pour résoudre ce problème, suivez la procédure qui suit :
   * s'assurer que les paquets suivants sont installés : **[[apt>smbclient,cifs-utils|smbclient cifs-utils]]** .
   * [[:tutoriel:comment_modifier_un_fichier|Modifiez le fichier]] de configuration **/etc/samba/smb.conf** [[sudo|en administrateur]], pour y ajouter juste en dessous de ''workgroup = WORKGROUP'' (dans la section [global] ces lignes : <file bash>client min protocol = NT1
 server min protocol = NT1</file>
@@ -329,11 +328,105 @@ Un redémarrage peut être nécessaire.
 
 Voir une [[https://forum.ubuntu-fr.org/viewtopic.php?id=2051986|discussion sur le forum]] pour plus d'informations.
 
+===== Exemple pratique de A à Z pour version Ubuntu 20.04 ou 22.04 =====
+==== Création du premier dossier partagé. ====
+  * Ouvrir l'application **Fichiers**.
+  * Cliquer sur **+ Autres emplacements**.
+  * Cliquer sur **Ordinateur**.
+  * Double-cliquer sur **home** afin d'ouvrir son contenu.
+  * Faire un clic droit sur le dossier à votre nom afin d'ouvrir une boite de dialogue.
+  * Cliquer sur **Partage réseau local** afin d'ouvrir une autre boite de dialogue.
+  * Cocher **Partager ce dossier**. Un message vous dira que **Le service de partage n'est pas installé**.
+  * Cliquer sur **Installer le service**. Une nouvelle boite de dialogue va s'ouvrir **"Voulez-vous installer le paquet "samba"?**
+  * Cliquer sur **Installer**. Fournir votre mot de passe et attendre le temps nécessaire. Puis poursuivre le remplissage de la grille.
+  * Modifier le nom de partage afin de ne __pas avoir de doublon__ en ajoutant, par exemple, **-Partage** au nom du dossier.
+  * Éventuellement, cocher la case **Permettre à d'autres de créer et supprimer des fichiers dans ce dossier**.
+  * Éventuellement, cocher la case **Accès invité (si vous n'avez pas de compte utilisateur**). Comprendre que l'utilisateur distant ne connaît pas le mot de passe de l'utilisateur local.
+  * Cliquer sur **Créer un partage**.
+ <note tip>Si le dossier à partager n'appartient pas à l'utilisateur (cas des dossiers accessibles par /media) un message vous dira  d'ajouter le paramètre **usershare owner only = false** après la section **[global]** du fichier **/etc/samba/smb.conf**</note>
+
+==== Trouver l'adresse IP des ordinateurs ====
+=== Sous ubuntu ===
+  * Cliquer tout en haut à droite sur le triangle équilatéral afin d'ouvrir une boite de dialogue.
+  * Cliquer sur **Paramètres filaires**.
+  * Cliquer sur l'engrenage situé à l'extrême droite de la description filaire. Une grille s'ouvre.
+  * Relever l'adresse IPv4.   Elle sera certainement semblable à 192.168.0.**n**.
+
+Ou utiliser la commande <code bash> hostname -I </code>
+En profiter pour vérifier que l'autre ordinateur est accessible. C'est en ligne de commande en remplaçant **X** par la bonne valeur:
+<code bash> ping -c4 192.168.0.x </code>
+=== Sous windows10 ===
+  * Cliquer sur** Démarrer**.
+  * Cliquer sur **Paramètres**.
+  * Cliquer sur **Réseau et ethernet**.
+  * Cliquer sur **Propriétés**.
+  * Rechercher la ligne **Adresse IPv4:**. Il est nécessaire de dérouler le menu car elle est dans le 'Paragraphe' **Propriétés**. Elle sera certainement semblable à 192.168.0.**n**.
+
+ Ou utiliser la commande
+<code bash>ipconfig</code>
+
+
+==== Accéder au dossier de l'autre ordinateur ====
+  * Ouvrir l'application **Fichiers**.
+  * Cliquer sur **+ Autres emplacements**.
+  * Mettre l'adresse du serveur à accéder dans la dernière ligne  dans la zone **Saisir l'adresse du serveur**. La codification est semblable à **%%smb://%%**192.168.0.x 
+  * Cliquer sur **Se connecter.** 
+  * Double-Cliquer sur le  dossier partagé   souhaité (Le suffixe ajouté est un plus pour bien identifier).
+  * Cliquer sur  **Se connecter** si la case **Accès invité** avait été cochée __sinon__:
+  * Cocher la case **utilisateur enregistré**.
+  * Remplir la  case **Nom d'utilisateur**  en mettant le nom distant.
+  * Remplir la  case **Mot de passe **  en mettant le mot de passe de l'utilisateur distant.
+  * Éventuellement, cocher la case **Se souvenir pour toujours**.
+  * Revenir cliquer sur **Se connecter**. 
+ 
+Il peut arriver que la connexion ne soit pas  immédiatement réussie. Une seconde tentative  est à faire. Voir même une troisième si les messages d'erreurs évoluent.
+
+L'adresse de connexion est mémorisée et peut donc être retrouvée  pour les connexions suivantes.
+
+==== Monter automatiquement les dossiers au démarrage de ubuntu ====
+  * Installer le logiciel de montage avec cette commande <code bash>sudo apt install cifs-utils</code>
+  * Ajouter une ligne de commande par dossier à monter automatiquement.
+  * Exemple de ligne pour un dossier dans une partition EXT4 <code bash> //192.168.0.n/Utilisateur1-Partage /media/Utilisateur1-externe cifs  uid=1000,password=Inutile</code>
+  * Exemple de ligne pour  un dossier dans une partition NTFS <code bash> //192.168.0.n/Donnees-Partage /media/Donnees-externe cifs  credentials=/root/MPD1,uid=1000,gid=46</code>
+  * La création du fichier décrivant un utilisateur windows peut se faire par ces commandes <code bash>echo username=XXXXXXXX | sudo tee    /root/MDP1
+echo password=ZZZZZZZZ | sudo tee -a /root/MDP1
+echo domaine=WORKGROUP | sudo tee -a /root/MDP1
+sudo chmod 700 /root/MDP1</code>
+
+<note important>Pour raison  de sécurité, on peut ne pas mettre la ligne contenant le mot de passe. Dans ce cas, il sera demandé au démarrage de l'ordinateur. </note>
+<note warning>Si plusieurs utilisateurs sont définis dans l'ordinateur, la valeur du **uid=1000** est à adapter.
+
+Le mot de passe d'un utilisateur windows est celui défini à sa création. A ne pas confondre avec son code confidentiel qu'il utilise  maintenant depuis pas mal de temps.
+
+Le mot de passe de l'utilisateur ubuntu n'est pas contrôlé. Si on l'omet, la commande **"Mount -av"**  le demande inutilement. On peut donc** actuellement** mettre n'importe quoi.
+
+Les points de montage sous **/media** sont à créer  avant d'effectuer le montage.
+
+Les noms des répertoires distants sont ceux définis au moment du partage. Ils peuvent dont être différant  du vrai nom du répertoire partagé.
+
+Le montage en utilisant le nom de l'ordinateur distant semble ne pas fonctionner. </note>
+
+
+
+
+
+
+
+
+
+
+
+
+
+.
+
+
+
 ===== Ressources supplémentaires =====
   * **[[http://www.samba.org|Site officiel]] (en)**
   * [[http://www.commentcamarche.net/reslinux/reslsamba.php3|Mise en place de Samba sous Linux]] (fr)
   * [[http://www.mirabellug.org/docs/samba/x307.html|Les variables de Samba]] (fr)
-  * //[[http://www.editions-eyrolles.com/Livre/9782746401532/samba|Samba, le guide de l'administrateur]]// (Éditions Eyrolles)
+<del>  * //[[http://www.editions-eyrolles.com/Livre/9782746401532/samba|Samba, le guide de l'administrateur]]// (Éditions Eyrolles)</del>
   * //Using Samba, Second Edition// ([[http://samba.org/samba/docs/using_samba/toc.html|en ligne]] et [[http://oreilly.com/catalog/9780596002565/|O'Reilly Medias]])
   * [[http://www.reponses.net/blog/2010/02/15/573-integrer-facilement-une-machine-ubuntu-dans-un-environnement-windows|Intégrer une machine Ubuntu dans un environnement Windows avec SADMS]] (Samba as Active Directory Member Server/Station)
   * [[http://support.microsoft.com/kb/204279|Hébergement direct de SMB sur TCP/IP]]

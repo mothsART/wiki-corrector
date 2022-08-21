@@ -1,0 +1,153 @@
+
+===== Contexte =====
+
+Ce tutoriel n’est pas  une redite  de [[tutoriel:installation_raid_lvm|celui-ci]]
+ 
+Il acte le fait que  ubuntu est actuellement fourni en version **22.04** (Jammy Jellyfish) généralement installé en EFI,  que les "alternates CD" ne sont plus disponibles, que la version en mode serveur n'est pas intuitive, que l'assistance pour  une installation standard par la méthode  
+[[tutoriel/partitionner_manuellement_avec_installateur_ubuntu |"autre chose"]] est  régulièrement présente dans le forum
+ et que l'alternative  [[utilisateurs/bcag2/zfs|ZFS]] n'est pas crédible. Elle  ne propose que l'installation dans un seul disque.
+
+Il pourra être utilisé pour remplacer [[https://forum.ubuntu-fr.org/viewtopic.php?id=2072332|une installation périmée]].
+
+Le but est de faire une installation du logiciel et de la structure de boot sur les disques [[https://fr.wikipedia.org/wiki/RAID_(informatique)|RAIDS]] alors que souvent la structure de boot est installée sur une clé USB. L'installation sera compatible LEGACY/EFI   et permettra le chiffrement. 
+
+Les tests de réalisation RAID5 ont été fait sur seul disque simulant cinq disques différents et en RAID1 sur deux disques.
+
+
+===== Acquisition du logiciel =====
+
+[[https://www.ubuntu-fr.org/download/|Télécharger]]  la  version standard de Ubuntu et fabriquer un support [[/ventoy| d'installation]] ou acheter [[https://enventelibre.org/fr/ubuntu-fr/178-cle-usb-ubuntu-64go.html|un tel support]].
+
+N'hésitez pas à perdre un peu de temps pour installer une structure [[https://doc.ubuntu-fr.org/ventoy#creation_de_la_persistance|persistance]] lorsque cela est (deviendra) possible.
+
+===== Travail préparatoire =====
+
+Booter avec la clé USB,  sélectionner l'ISO  à installer dans la liste proposée, choisir la méthode persistante si disponible.
+
+Patienter le temps nécessaire pour l'affichage de l'écran d'installation. Positionner la langue d'installation  si pas le français puis cliquer sur le menu  **Essayer ubuntu**.
+
+Le premier but est de préparer chaque disque avec la structure suivante:
+  * Table de partition GPT
+  * Partition  Bios_boot dont la taille officielle est de 32 MO alors de 1 Mo pourrait probablement suffire.
+  * Partition de boot EFI en FAT32 dont la taille officielle est de 512 MO alors que 36 Mo pourrait probablement suffire. Il serait même possible de  faire une partition de boot EFI en FAT16 de  6 Mo.
+  * Partition de boot LEGACY en EXT4. La taille retenue est de 1 Go. Il semblerait que la taille officielle soit de 1,5 Go. Cependant les exemples montrent que 500 Mo est  parfois implémenté.
+  * Partition EXT4 avec le reste de l'espace disque. Cette partition contiendra le logiciel et les données.  
+
+Cela peut se faire en mode graphique avec l'application  [[:gparted|GParted]] préinstallée ou en ligne de [[tutoriel/console_ligne_de_commande|commande]] après avoir ouvert un [[:terminal|terminal]]. Faire attention à ne pas mettre le support d'installation (souvent SDA) dans la liste des disques à utiliser.
+<code bash> Liste=" sde "  # Mettre  la totalité des disques à formater.</code>
+<code fash>for Dsk in $Liste;do
+sudo parted /dev/$Dsk mklabel gpt   # Fabriquer une table de partition GPT en éliminant tout ce qu'il y a dans le disque. Accepter la destruction des données  du disque
+sudo parted  -s --align=none /dev/$Dsk mkpart "Bios$Dsk" 34s $((32*2048-1))s #    Créer une partition bios-boot 
+sudo parted /dev/$Dsk set 1 bios_grub on  #  et y mettre le drapeau bios_grub
+sudo parted  -s --align=none /dev/$Dsk mkpart "Fat$Dsk" 32MiB  $(((32+512)*2048-1))s #    Créer une partition de 512 Mio.
+sleep 2 # attendre la mise à jour effective.
+sudo mkfs.fat -F32 /dev/"$Dsk"2 -n "$Dsk"Fat    # La formater. 
+sudo parted /dev/$Dsk set 2 esp on   #  et y mettre le drapeau ESP.
+sudo parted  -s --align=none /dev/$Dsk mkpart "Boot$Dsk" $((32+512))MiB  $(((32+512+1024)*2048-1))s #  et une autre partition  pour la partition de boot-légacy
+sleep 2 # attendre la mise à jour effective.
+sudo mkfs.ext4 /dev/"$Dsk"3 -L "$Dsk"Boot   # La formater.
+sudo parted  -s --align=none /dev/$Dsk mkpart "Raid$Dsk" $((32+512+1024))MiB  100% #  et une autre partition  pour le RAID inutile à formater   avec le reste de l'espace disque.
+done </code>
+Nota : Si les disques ne sont pas de la même taille ( à 1% près), remplacer 100%  par la taille du plus petit disque  exprimée en Mio ou GiB. 
+
+Le second but va être de fabriquer la structure. Il est nécessaire  d’installer le logiciel  [[:raid_logiciel|mdadm]]  non fourni en vue de créer le RAIDS avec les partitions qui viennent d’être créées.    Tout cela se fait en ligne de commande telle que celle-ci à adapter.
+<code bash>sudo apt install mdadm
+sudo mdadm --create /dev/md0 --level=L --assume-clean --raid-devices=N /dev/sd[b-g]4
+sudo mkfs.ext4 /dev/md0
+ </code>
+Quelques remarques :
+**L** est le niveau de raids. Avec utilisation de deux  disques, la seule valeur possible est 1 et donne un espace réel d’un disque. 
+Avec utilisation de  trois disques ou plus, la valeur **1** donne un disque de secours en attente de panne, la valeur **5** permet de fonctionner normalement et donne un espace réel égal au nombre de disques moins un.
+A partir de quatre disques, il est possible de choisir  la valeur **6** qui permet d’avoir un  disque de secours en attente de panne. L’espace réel est alors égal au nombre de disque moins deux.
+**N** est le nombre de partitions présentes dans la liste qui suit.
+La liste est à fournir. Notons l’abréviation permettant de dire :  Toutes les partitions n°**4** de tous les disques dont la lettre de fin est dans la plage  commençant à **b** et finissant à **g**.
+
+===== Installation =====
+Le moment est maintenant venu de lancer l’[[tutoriel:installer_ubuntu_avec_le_live_cd|installation]] en cliquant sur l'icône d'installation ou en frappant la commande<code bash>sudo ubiquity</code>.  
+  * Cliquer sur **Effacer le disque et installer Ubuntu**.
+  * Cliquer sur ** Fonctions avancées**.
+  * [[utilisateurs:bcag2:zfs|Cocher]] la case **Utiliser LVM pour la nouvelle installation de Ubuntu**.
+  * Surtout cocher la case **Chiffrer la nouvelle installation de Ubuntu pour  la sécurité**. Cependant vous pouvez ne pas utiliser cette protection.
+  * Cliquer sur **OK** pour valider.
+  * Cliquer sur **Continuer**.
+  * Réaliser l’étape de la clé de sécurité bien que son utilisation en mode dépannage ne soit pas  encore bien documentée.
+  * Puis cliquer sur ** installer maintenant**. 
+  Puis installation classique.
+<note>Si vous avez choisi de ne pas chiffrer l'installation, il est possible de se passer de la couche [[:lvm|LVM]].
+Il est alors nécessaire de choisir **Autre chose** puis d’allouer la partition FAT32 du premier disque au point de montage **/boot/efi**, la partition BOOT du premier disque au point de montage **/boot**  et d’allouer la partition __**/dev/md0**__ au point de montage **/** avec le format ext4 et  **sans cocher l’option formater**. Dans ce contexte l'installation se passe très bien mais le boot plante car refus d'accès  à la partition /dev/md0 puisque le logiciel MDADM est absent.    Il faut donc malgré tout installer le bon grub.</note>
+ 
+Au bout de plusieurs minutes, ce qui va être fait est affiché. Contrôler.  Cliquer sur **Continuer**.
+L’installation est classique sauf que le logiciel d’installation va [[https://bugs.launchpad.net/ubuntu/+source/grub-installer/+bug/1979814|planter]] au moment d’installer le grub  dans **/dev/md0**. Inutile de prévenir. A la fin de l’installation on va dire de **"continuer à tester"** afin de réparer . On va  [[:chroot|se déporter]] dans l’installation raids pour  installer le grub défaillant. 
+
+===== installation du grub =====
+ Le répertoire **/target** contient la nouvelle installation qu’elle soit chiffrée ou pas. Passons en administrateur.
+<code bash> sudo -i</code>
+  * Vérification  facultative.
+<code bash>lsblk ## permet de faire le point et vérifier le montage de /target  </code>
+En cas de relance, il est nécessaire de réallouer  le logiciel au point de montage avec cette commande si  l'installation est faite avec le choix  "disque  entier".
+<code bash>mkdir -v /target ; mount -v /dev/mapper/vgubuntu-root /target</code>
+ou celle-ci si l'installation est faite avec le choix  "autre chose".
+<code bash>mkdir -v /target ; mount -v /dev/md0 /target</code>
+  * puis procéder au chroot
+<code bash>mount -t proc  /proc              /target/proc
+mount -t sysfs /sys               /target/sys
+mount --bind   /dev               /target/dev
+mount --bind   /run               /target/run
+mount --bind   /sys               /target/sys
+modprobe efivars   ### pas gênant si l’ordinateur n’est pas EFI   
+chroot /target</code>
+  * Puis faisons le nécessaire: Remettre toute la liste des disques afin d'installer les logiciels de boot dans les partitions préparées car la variable  est perdue au changement de niveau
+<code bash> Liste=" sde "  # remettre  la totalité des disques devant recevoir la structure de boot.</code>
+<code bash>df -h      ##  afin de vérifier que le chroot est bien fait, 
+mount -t devpts devpts /dev/pts 
+apt install mdadm  ## car ce logiciel n’a pas été installé.
+mkdir -v /boot
+for Dsk in $Liste;do
+parted /dev/$Dsk set 1 bios_grub on
+mount -v /dev/"$Dsk"3 /boot
+mkdir -pv /boot/efi
+mount -v /dev/"$Dsk"2 /boot/efi
+if [ -d /sys/firmware/efi ]; then
+grub-install   ## --no—efi-secure-boot --no-nvram ## Il est souhaitable de ne pas mettre les options
+grub-install  --target=i386-pc --directory=/usr/lib/grub/i386-pc --removable   /dev/$Dsk
+else 
+grub-install  --target=x86_64-efi  --no-nvram ## --no-uefi-secure-boot ## Il est souhaitable de ne pas interdire le mode sécurisé mais on ne peut pas installer le mode EFI dans la RAM d'un ordinateur qui ne connaît pas EFI.
+grub-install /dev/$Dsk 
+fi
+umount -v /dev/"$Dsk"2 
+umount -v /dev/"$Dsk"3 
+done
+update-grub
+exit
+exit
+##shutdown
+ </code>
+Il ne reste plus qu’à rebooter. Mettre le logiciel à jour pour en profiter.
+
+===== Annexes =====
+==== Exemple de contenu du fichier de paramétrage EFI ====
+<code bash>cat grub.cfg
+search.fs_uuid 68b4f4d1-a7e4-47af-9d97-cfcbdc582c3c root mduuid/cbfd98853a1735bb4d21cf68a51cd5cc 
+set prefix=($root)'/boot/grub'
+configfile $prefix/grub.cfg</code>
+
+==== extraits de boot-info ====
+ <code bash>=> Grub2 (v2.00) is installed in the MBR of /dev/sde and looks at sector 34 
+    of the same hard drive for core.img. core.img is at this location and 
+    looks for (mduuid/aa68ea8a3f43280766489d724b6da16f)/boot/grub.,,,,, 
+    ===================== sde2/efi/ubuntu/grub.cfg (filtered) ======================
+search.fs_uuid 6e07a36c-5671-49c3-b648-84c542ade426 root mduuid/aa68ea8a3f43280766489d724b6da16f 
+set prefix=($root)'/boot/grub'
+configfile $prefix/grub.cfg</code>
+
+==== Quelques pièges. ====
+Le boot avec un raid dégradé n'a pas été testé. Cependant le test de boot en raid-1 avec l'un quelconque des deux disques  absent. fonctionne.  Le disque est déclaré remove. Après le boot, il est nécessaire de réinjecter celui manquant.
+
+Le boot avec un disque de mauvaise qualité peut nécessiter d'utiliser l'option "rootdelay=60".
+
+Cette installation fabrique un raid nommé MD0 même s'il en existe déjà un de ce nom. Le boot va aussi planter en disant      qu'il y a des doubles  UUID pour un même MD0. L'un des deux raids sera à détruite ou à changer de nom.
+==== Pourquoi cette double structure ====
+Les disques peuvent être actuellement connectés à une carte mère fonctionnant  en mode légacy. Le pari a été pris qu'en cas d'incident carte mère elle serait remplacée  par une carte EFI. Il aurait alors fallu réinstaller le logiciel EFI  dans la partition  de boot LEGACY. Mais on ne doit pas être à 512 Mo près  vu la taille des disques actuels.
+La question se pose pour une installation EFI. Il y a peu de chance que, plus tard, les disques fonctionnent en LEGACY. Mais sait-on jamais... 
+
+Cependant les commandes sont probablement suffisamment claires pour éliminer toute la partie LEGACY si elle n'est pas souhaitée. Cela permettra de gagner **1** Go dans la taille du RAID. 

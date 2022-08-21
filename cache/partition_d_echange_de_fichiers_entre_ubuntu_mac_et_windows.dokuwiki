@@ -1,0 +1,165 @@
+
+====== Gérer une partition d'échange de fichiers entre Ubuntu / Mac / Windows ======
+
+{{tag>windows mac partition système_de_fichiers}}
+
+Vous avez plusieurs plateformes (Linux / Mac / Windows) sur votre machine et vous voulez échanger / partager des fichiers. Vous êtes au bon endroit :)
+
+===== Résumé de toutes les solutions =====
+Voici les partitions qui sont au moins compatible avec 2 plateformes (Linux / Mac / Windows)
+^SOLUTIONS^Taille max fichier / partition^[[droits|permissions POSIX]]^Linux^Mac^Windows^Commentaire^
+|NTFS|gros/gros|En gros, oui|Driver plutot bon|?|Support natif excellent||
+|exFAT|gros/gros|Non|Excellent via exfat-utils|Excellent|Excellent|Une évolution de FAT32|
+|FAT32|4 Go/2 To|Non|Excellent via exfat-utils|Excellent|Excellent|Comme le exFAT mais en moins bien. Aucun intérêt|
+|ext2/ext3/ext4|gros/gros|Oui|Excellent|?|via Ext2fsd ou Ext2IFS|Question ouverte sur les performances et stabilités sous Windows|
+|HFS+|8 exaOctets/8 exaOctets|oui|Via hfsplus hfsprogs hfsutils. Fiabilité ?|Natif, excellent|Via l'installation de logiciel|C'est l'ancien système des Macs. Très bon choix pour un partage Linux/Mac|
+|UDF|gros/gros|Oui|Excellente en version UDF 2.05|Excellente si la partition prend tout le disque|Excellente si la partition ne prend pas tout le disque|Solution idéale si vous arrivez à l'installer correctement|
+|XFS|Gros/Gros|Oui|Oui depuis qq années|En lecture seule via Fuse-xfs|?||
+|ZFS|Gros/Gros|Oui|Oui depuis qq années|Oui|?||
+
+En résumé, les meilleurs solutions sont (par ordre de préférence) :
+  * **Partage Linux / Windows / Mac :**
+    - UDF (si vous réussissez à l'installer correctement. Voir plus bas)
+    - NTFS (un bon compromis même si certaines personnes se plaignent de la fiabilité)
+    - exFAT (support parfait mais vieux système de fichiers)
+  * **Partage Linux / Mac :**
+    - UDF (si installation sur un disque complet)
+    - HFS+ (sinon)
+
+Après, le débat est toujours ouvert et les supports de ces systèmes changent de mois en mois. Faites-vous votre propre opinion :)
+
+
+===== Partition NTFS =====
+La partition [[https://fr.wikipedia.org/wiki/NTFS_(Microsoft)|NTFS]] est la solution la plus simple. Son principal défaut est que cette  technologie est confidentielle, elle appartient à Microsoft. Il n'y a pas de documentation. Grace à 25 ans d'effort de reverse engineering, le support sous Linux est aujourd'hui plutôt bon.
+
+==== Linux ====
+Support intégré dans Linux
+Le désavantage de cette option est que les droits d'accès aux fichiers ne sont pas disponibles, et donc l'ensemble des données seront accessibles sous Ubuntu à tous les utilisateurs. Ceci peut être dérangeant sur des systèmes multi-utilisateurs qui doivent partager des fichiers sensibles.
+
+==== Mac ====
+MacOs sait lire les partitions NTFS par defaut
+Pour avoir l'accès en écriture, une piste serait de modifier le fichier /etc/fstab mais ce fichier n'est peut etre plus supporté ou ne le sera bientôt plus...
+==== Windows ====
+Support natif
+
+===== Partition UDF =====
+La partition [[https://fr.wikipedia.org/wiki/Universal_Disk_Format|UDF]] est solution idéale sous certaines conditions (voir ci après)... C'est une norme ouverte, universelle, elle est nativement supporté par Linux, Mac, Windows avec les contraintes ci-dessous.
+
+Pour plus de détail, voir [[https://en.wikipedia.org/wiki/Universal_Disk_Format|la page Wikipedia en Anglais]] et [[https://qastack.fr/ubuntu/27936/can-and-should-udf-be-used-as-a-hard-drive-format|cette discussion interessante]]
+
+
+==== Linux ====
+Compatible jusqu'à UDF 2.0x et pas au dessus
+
+Une solution universelle serait d'utiliser [[https://github.com/JElchison/format-udf|ce script]]
+
+Une solution universelle manuelle serait de :
+1. Créer une partition FAT32 (ou autre avec gparted ou équivalent)
+
+2. Installer udftools
+   sudo apt-get install udftools
+
+2. Remplacez le premier bloc par rien sur la partition que vous souhaitez formater en UDF ^:
+   sudo dd if=/dev/zero of=/dev/sdxN bs=512 count=1
+   
+3. Et enfin formater en UDF :
+  sudo mkudffs --media-type=hd --blocksize=512 /dev/sdxN
+
+x est un espace réservé pour la lettre actuellement attribuée à votre disque dur
+N est un espace réservé pour le numéro de partition
+
+<note>Avec cette solution, la partition est illisible chez moi sous mac (sangorys)</note>
+==== Mac ====
+Compatible jusqu'à UDF 2.5x (ou 2.6x en lecture seule)
+MacOs ne reconnait la partition que si elle est seule sur un disque
+
+==== Windows ====
+Compatible jusqu'à UDF 2.6x
+Windows ne reconnait la partition que si elle n'est pas seul sur le disque et que si les blocs font 512
+On format en ligne de commande : 
+   format x: /fs:UDF
+
+ATTENTION :
+  * cette commande efface le lecteur
+  * Remplacer x: par le bon lecteur
+  * ne pas utiliser /q
+
+===== Partition exFAT =====
+[[https://fr.wikipedia.org/wiki/exFAT|exFAT]]Une évolution de FAT32 par Microsoft qui a fini par la mettre en open source il y a qq année. 2 grandes avancées par rapport à la FAT32 :
+  * Meilleur support des disques flash
+  * Suppression de la limite maximum d'un fichier à 4 Go
+Non compatible POSIX. Support natif par toutes les plateformes
+
+==== Linux ====
+Support natif et excellent. Des infos sur exFAT sur [[https://doc.ubuntu-fr.org/exfat|doc.ubuntu-fr.org]]
+==== Mac ====
+Support natif et excellent
+==== Windows ====
+Support natif et excellent
+
+
+===== Partition FAT32 =====
+[[https://fr.wikipedia.org/wiki/FAT32|FAT32]] est l’ancêtre de exFAT. Il n'y a aucun intérêt dans notre cas d'utilisation à l'utiliser à la place de exFAT
+
+==== Linux ====
+Support natif et excellent
+==== Mac ====
+Support natif et excellent
+==== Windows ====
+Support natif et excellent
+
+===== Partition EXT2/EXT3/EXT4 =====
+[[https://fr.wikipedia.org/wiki/Ext2|EXT2]], [[https://fr.wikipedia.org/wiki/Ext3|EXT3]], [[https://fr.wikipedia.org/wiki/Ext4|EXT4]] sont les partitions natives de Linux.
+
+==== Linux ====
+Support natif et excellent
+
+==== Mac ====
+On peut utiliser OS X Fuse ou [[https://qastack.fr/apple/171506/formatting-usb-disk-as-ext3-on-mac|e2fsprogs]].
+Ca marcherait bien en lecture. En revanche, les developpeurs de OS X Fuse déconseille d'activer le mode écriture car ils considèrent que le mode écriture n'est pas encore mature (en mai 2014)
+
+(section à developper...)
+
+
+==== Windows ====
+Via Ext2IFS ou Ext2fsd. Voir [[tutoriel:comment_acceder_a_ses_partitions_d_ubuntu_sous_windows|Comment accéder à ses partitions d'Ubuntu sous Windows ?]]
+Question ouverte pour les questions de sécurité d'accès des partitions EXT2/EXT3/EXT4 depuis Windows !
+
+
+===== Partition HFS/HFS+ =====
+[[https://fr.wikipedia.org/wiki/HFS%2B|HFS+]] a été inventé par Apple et qui a été remplacé par APFS. Il est encore supporté par les dernières versions de MacOs jusqu'en 2040 (je ne me rappelle plus d'ou j'ai lu cette info...)
+
+==== Linux ====
+Ce type de partition directement supporté par le noyau Linux.
+
+Pour créer, gérer, manipuler ou réparer ces partitions, les paquets suivant sont recommandés :
+  * [[apt>hfsprogs]] (pour le HFS+)
+  * [[apt>hfsutils]] (pour le HFS)
+Ils fournissent entre autre des fonctionnalités supplémentaires utilisables notamment avec [[:gparted]].
+
+Comme Linux supporte mal la fonction journaling de HFS+, il est conseiller de créer / formatter la partition HFS+ depuis Linux ([[:gparted]] le fait très bien).
+Sinon, il faut désactiver le journaling depuis MacOs sachant que toutes les versions macOs ne le ferait pas...
+==== Mac ====
+Support natif et excellent
+
+==== Windows ====
+Avec l'installation d'un des logiciels suivant :
+  * [[https://sourceforge.net/projects/hfsforwindows/|hfs for windows]]
+  * [[https://www.paragon-software.com/home/hfs-windows/|HFS+ for Windows by Paragon Software]]
+  * [[http://www.catacombae.org/hfsexplorer/|HFS Explorer]]
+
+===== Partition ZFS =====
+[[https://fr.wikipedia.org/wiki/ZFS|ZFS]] est open source avec un bon support Linux BSD. Apple voulait l'utiliser avant de changé d'avis.
+
+==== Linux ====
+Via [[https://zfsonlinux.org/|openZFS]]
+
+==== Mac ====
+Non reconnu par defaut.
+Marche via [[https://openzfsonosx.org/|openZFS]]. (je n'ai aucune idée de la fiabilité ! Besoin de collaborateurs ici)
+
+==== Windows ====
+Pas de support
+===== Liens =====
+- [[https://docs.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison|(en) Comparaison détaillée par Microsoft des formats NTFS, UDF, exFAT et FAT32]]
+- [[systeme_de_fichiers|Les systèmes de fichiers]]

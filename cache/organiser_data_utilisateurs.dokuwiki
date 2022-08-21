@@ -1,0 +1,402 @@
+
+{{tag>administration partitions optimisation}}
+====== Organiser les données du ( ou des ) utilisateurs « humains » d'un système ======
+**L'objectif de cette page est de proposer une méthode de « rangement » //alternative// des affaires personnelles des utilisateurs**. Cette méthode, en stockant « hors système » la partie visible des données utilisateurs tout en laissant « dans le système » la partie [[dossiers_et_fichiers_caches|cachée]] des données utilisateurs, amène un gain de polyvalence et de robustesse, voire de performances, dans de nombreuses situations.\\
+Un fil dédié à cette page sur le forum : https://forum.ubuntu-fr.org/viewtopic.php?id=2070904\\
+\\
+**Elle requiert** :\\
+  * une installation qui compte au moins 2 partitions : l'une dédiée au système, installé classiquement ( la racine / entière ) ; l'autre pour l'instant « vide » qui accueillera une partie des données utilisateurs ( les visibles ).\\
+  * que les partitions hébergent des [[systeme_de_fichiers|systèmes de fichiers]] nativement compatibles avec les [[droits|droits]] et [[permissions|permissions]] Linux.\\
+  * que la partition qui accueillera les données utilisateurs soit montée dès le démarrage, dans un dossier opportun du système ( ici pour l'exemple, ce point de montage sera le dossier ''/media/DATA'' )
+**Elle fait appel** :
+  * essentiellement et finalement aux [[lien_physique_et_symbolique|liens symboliques]]\\
+  * à des notions //relativement// basiques : [[partitions|partition]], [[montage|montage]], [[mount_fstab|fstab]]\\
+  * à rien qui serait //exclusif// à ×buntu, c'est transposable dans d'autres OS Linux.\\
+**À qui s'adresse-t-elle** ?\\
+  * À des utilisateurs relativement **aguerris, à l'aise avec les « fondamentaux »** :\\
+     * nuances et implications des propriétaires, permissions, montages, partitions, systèmes de fichiers…\\
+     * et éventuellement, pour aller « plus loin », une certaine maîtrise des « profils » de configuration de vos logiciels préférés.\\
+  * Pour autant, la **mise en œuvre concrète est plutôt enfantine** :\\
+     * c'est 3 lignes de commande impliquant [[sudo|sudo]] pour l'organisation convenable de la partition qui accueillera les données utilisateurs visibles,\\
+     * le déplacement de dossiers et la création de liens symboliques sont accessibles en « graphique » depuis votre explorateur de fichiers habituel et depuis l'utilisateur « normal », pas besoin de //sudo// ( les commandes équivalentes sont aussi indiquées ).\\
+
+**Des six paragraphes** suivants, **les trois premiers sont « théoriques »** et visent à poser contextes, tenants, aboutissants et limites ou avantages des méthodes,\\
+**le [[organiser_data_utilisateurs#mise_en_œuvre|quatrième]] est la partie « pratique », concrète** et les cinquième et dernier illustrent l'usage au quotidien, donnent exemples ou recommandations, ouvrent vers d'autres possibilités…\\
+
+…**il n'y a ni bonnes ou mauvaises méthodes, il y en a seulement de plus adaptées que d'autres en fonction du contexte des utilisateurs.**
+===== La situation par défaut =====
+==== Le dossier /home à la racine du système ====
+Dans l'[[arborescence|arborescence]] des dossiers d'un système Linux, ''/home'' sert à héberger les répertoires personnels des utilisateurs « humains » créés dans ce système. //Généralement// ceux qui disposent d'une session graphique dans le système.\\
+//Toutes// les données concernant //tous// les utilisateurs « humains » sont rangées dans ce dossier ''/home'', cet emplacement relève d'une norme attendue par l'écrasante majorité des logiciels que vous utiliserez sur ce système.
+==== $HOME ou le répertoire personnel /home/$USER ====
+<note>**$HOME** est une variable qui désigne le répertoire personnel de l'utilisateur courant, soit le dossier ''/home/$USER''.\\
+**$USER** est la variable qui désigne l'utilisateur courant.\\
+Si on est dans la session de //Noubie//, **$HOME** renvoie donc au dossier ''/home/noubie'' et **$USER** au nom //noubie//.</note>
+
+Dans son répertoire personnel il y a //toutes// les données concernant //un// utilisateur.\\
+Cet utilisateur en est le propriétaire, ce qui lui accorde le droit d'écrire-modifier-supprimer **dans** ce répertoire.\\
+Il est aussi le propriétaire de tous les éléments **contenus** dans ce répertoire.
+
+Dans un répertoire personnel il y a 2 « familles » de données, qui toutes concernent l'utilisateur :\\
+  - **les cachées** qui sont les configurations, caches, paramètres… de //tous// les logiciels employés par l'utilisateur,\\
+  - **les visibles** qui sont les document et médias créés, utilisés et gérés par l'utilisateur, directement ou à travers ses logiciels préférés.\\
+
+**Les documents et médias de l'utilisateur**, généralement stockés dans les dossiers Bureau, Documents, Images, Modèles, Musique, Public, Téléchargements, Vidéos, sont les données visibles, sans dépendance particulière avec le système hôte, ce sont des données **agnostiques**.\\
+
+**Les configurations, caches, paramètres**… toutes les données cachées, elles, dépendent de la version de l'OS hôte et des logiciels employés, elles sont **spécifiques** au contexte de l'utilisateur dans ce système.\\
+
+**Ces 2 familles de données** ont donc des objectifs différents. Pourtant elles sont toutes rangées dans un seul emplacement, **$HOME** soit ''/home/$USER''.
+
+
+
+===== Une méthode souvent conseillée ( à raison ) =====
+Elle est éminemment recommandable, car doublement simple : à appréhender et à mettre en œuvre.\\
+Cependant comme elle continue de laisser dans un même emplacement les données visibles ( agnostiques ) et les données cachées ( spécifiques ) des utilisateurs, **elle restreint son usage à un contexte constant** ( même OS, mêmes logiciels… )
+==== La « partition /home séparée » ====
+Il s'agit de monter dans le dossier ''/home'' de votre système, une partition qui servira d'emplacement de stockage pour //toutes// les données de //tous// les utilisateurs « humains » du système. C'est une méthode documentée, par exemple [[tutoriel:partitionner_manuellement_avec_installateur_ubuntu|ici]] §3.2 ou [[tutoriel:deplacer_home|là]].\\
+
+On dédiera le plus grand support de stockage disponible aux données utilisateurs et, à priori le support de stockage le plus rapide au système ; un gros HDD d'un côté et un SSD de l'autre par exemple.\\
+
+**Cette méthode est //déjà// un moyen d'optimiser vos espaces de stockage.**
+==== Ses cas d'usage typiques ====
+**Un ordinateur qui n'aurait qu'un seul disque.**\\
+Sur un disque unique il sera très prudent de créer 2 partitions, l'une minoritaire en taille pour le système ( mais pas [[exigences_minimales|trop petite]] non plus ), l'autre majoritaire en taille qui contiendra toutes les données utilisateurs, montée dans ''/home''.\\
+En cas de problème côté système, avoir isolé les données utilisateurs permet de réinstaller le même OS dans la partition dédiée et //grosso modo// de reprendre exactement là où on en était avant le problème ( quelques logiciels à réinstaller ), sans impact sur les données utilisateur.\\
+
+**Un système « constant »**\\
+Vous maintenez à jour votre système par [[mise_a_niveau|mise à niveau]] ( par ex. d'une version LTS à la suivante ), vous ne vous aventurez pas dans le cumul d'environnements de bureaux variés, ni les tests de logiciels //bêta// ou de provenances exotiques, votre système compte moins d'utilisateurs que les doigts d'une main, il n'y a qu'un seul système installé dans votre machine ou à la rigueur un [[cohabitation_ubuntu_windows|dual-boot]] Linux/Windows **sans** partage de données entre les 2 OS…\\
+
+…**la partition /home séparée fera votre bonheur, dans ces contextes, « simple » ou « constant. »**\\
+
+Dans des contextes moins simples et constants, la partition /home séparée //deviendra// une contrainte :\\
+  * plusieurs OS en multi-boot, ou réinstallations fréquentes d'OS,\\
+  * partage des données utilisateurs ( visibles ) entre plusieurs OS,\\
+  * nombre d'utilisateurs humains « conséquent » ( d'expérience : à partir de 4 )\\
+  * présence de divers environnements de bureau ( qu'il faut impérativement « isoler » les uns des autres )…\\
+**Dans ces conditions certes moins ordinaires mais pas rares du tout, une partition dédiée aux données agnostiques des utilisateurs\\
+vous simplifiera la maintenance à long terme.**
+
+
+
+
+===== Une méthode plus granulaire et robuste à long terme ====
+Ici l'idée est de traiter séparément les 2 familles de données concernant les utilisateurs :\\
+  * **ne laisser dans $HOME //que//** - ou essentiellement, majoritairement - les **données cachées, spécifiques** ( configurations, paramètres… )\\
+  * placer dans **une partition dédiée**, distincte du système les **données visibles, agnostiques** ( documents ou médias ).
+
+Quelques intérêts immédiats :
+  - les données cachées bénéficient de la rapidité du support de stockage du système ( ssd, nvme ),\\
+  - ces données spécifiques sont hébergées à l'intérieur du système auquel elles correspondent,
+  - l'autre emplacement qui contient les données visibles ( non spécifiques à un OS et ses logiciels ) est facilement et rapidement exploitable depuis tout OS ( Linux ).\\
+  - **Toutes ces données continuent d'être accessibles depuis le répertoire personnel, les habitudes de navigation de l'utilisateur ne sont pas changées.**
+
+**Cette méthode organise les données utilisateurs à travers 2 critères** :\\
+  - la « fonction » des données d'un point de vue logiciel,\\
+  - la « nature » des supports de stockage,\\
+**optimisant à la fois** leur gestion **physique** ( taille, performance, adaptation des stockages ) et leur gestion **logique** ( conforter les données spécifiques dans leur système, protéger les données agnostiques, associer un utilisateur à ses données qu'importe la diversité et concurrence des contextes… )\\
+
+D'où les qualificatifs :\\
+  * **granulaire** on détermine plus précisément, sélectivement et prudemment ce qui est « partagé » ( entre systèmes, utilisateurs ou supports ), en fonction des intérêts et attentes de l'un ou l'autre,\\
+  * **robuste** la partition dédiée aux données visibles des utilisateurs devient un emplacement quasiment « immuable » : tout autour peut changer, elle, reste en place //ad vitam aeternam// sous cette forme, quoi qu'il arrive « autour ».\\
+
+
+
+==== Séparer les données visibles ( agnostiques ) des données cachées ( spécifiques ) ====
+Rappelons **les prérequis** :
+  * on a la **racine « entière »** d'un système sur une partition ( le dossier ''/home'' inclus )
+  * on a **déjà** attaché une autre partition à ce système, montée dans ''/media/DATA'' //( opération réalisable dès l'installation du système\\
+ou //post//-installation via création du dossier ''/media/DATA'' puis ajout d'une ligne de montage au fichier ''/etc/fstab'' )//\\
+  * pour l'instant ''/media/DATA'' ne contient pas de données ( par ex. c'est un support de stockage récemment ajouté à votre machine ).
+
+Il s'agit **dans un premier temps** d'organiser une « structure » de dossiers adéquate dans ''/media/DATA'' et, scoop, c'est la même structure qu'un **$HOME**,\\
+avec ces 2 différences :\\
+  * on ne mettra là que **des éléments visibles non spécifiques** ( rien n'interdit à l'utilisateur d'y cacher les éléments de son choix ni d'utiliser //sciemment// cet emplacement pour des éléments cachés, spécifiques, si c'est dans son intérêt → gardons ça pour plus tard )\\
+  * il y aura là par contre des dossiers « corbeille » pour chaque utilisateur, **puisqu'on se trouve à la racine d'une partition** ( [[https://specifications.freedesktop.org/trash-spec/trashspec-latest.html|fonctionnement des corbeilles]] ).
+
+**La structure adéquate** se résume donc à un **couple** de dossiers **appartenant** à chaque « humain » utilisateur potentiel, enregistré dans le système, où chaque humain rangera **ses** affaires :\\
+  * l'un caché qui est la corbeille, nommé ''.Trash-$UID'',\\
+  * l'autre visible qui est le « répertoire personnel //alternatif// », nommé ''$USER-$UID'' pour le distinguer du **$HOME** primaire et se souvenir à long terme de l'//uid// associé à un utilisateur ( ça fait pas de mal, ça servira plus tard ).\\
+
+<note>**$UID** est la variable renvoyant l'identifiant numérique de l'utilisateur.\\
+Cet identifiant numérique est **porté par** l'élément **lui-même** pour indiquer son utilisateur propriétaire,\\
+contrairement à l'**$USER** ( le nom littéral ) qui est **relatif** au système **local**.\\
+Les **correspondances $UID↔$USER** sont consignées dans le fichier ''/etc/passwd''.</note>
+Une fois mise en place cette structure, **il n'y a plus qu'à**\\
+  * déplacer les éléments visibles d'un **$HOME** vers ''/media/DATA/$USER-$UID'',\\
+  * //puis// créer à leur place dans **$HOME** des liens symboliques ( de mêmes noms ) qui ciblent les éléments qu'on vient de déplacer.
+
+==== Implications et conséquences de cette organisation des données ====
+**Celles des liens symboliques**. On évoque souvent le terme « raccourci » pour en simplifier l'idée car c'est un //pointeur// très puissant.\\
+  * Un lien est un //fichier spécial// qui se comporte comme l'élément qu'il cible ( comme un dossier, comme un fichier simple, comme un fichier //exécutable//… )\\
+  * Il se conforme aux droits et permissions de l'élément ciblé.
+  * Un lien et sa cible sont 2 éléments distincts, 2 objets différents, souvent dans des emplacements différents ( il est impossible d'avoir deux éléments //de même nom// dans un dossier. )\\
+  * Effacer un lien symbolique ne supprime pas l'élément qu'il cible ( les données ciblées restent sauves. )\\
+  * Copier un lien, ne copie que le //fichier spécial lien//, pas les éléments qu'il cible ( on peut copier un lien à divers endroits, qui pointent la même cible. )\\
+  * Supprimer l'élément ciblé par un lien, casse ce lien ( mais le //fichier spécial lien// continue d'exister ) ; restaurer les données cibles restaure le fonctionnement du lien.\\
+
+…liste non exhaustive qui peut déjà nourrir votre imagination quant aux possibilités offertes.
+<note>**D'un point de vue graphique, visuel**, un lien symbolique prend la même icône que l'élément qu'il cible, **agrémentée** d'une petite flèche ou d'un maillon ( forme et taille variable selon les thèmes d'icônes ).\\
+\\
+**Dans le retour d'une commande** ''ls -l ~'' un lien symbolique prendra cette forme :\\
+<code>lrwxrwxrwx 1 $USER $USER   28 janv. 11 19:17 Nom_du_lien -> /chemin/vers/élément/ciblé</code>
+l'idée de « cible » est explicitement signifiée par la flèche ; les droits « ouverts » sont restreints par ceux de la cible.\\
+\\
+**Ces signes distinctifs** empêchent la confusion entre lien //symbolique// et élément « classique » fichier ou dossier.\\
+</note>
+
+
+
+===== Mise en œuvre =====
+==== L'organisation des dossiers « sur » une partition DATA ====
+On agit depuis la session graphique de l'utilisateur « Noubie » qui a été créé pendant l'installation du système.\\
+
+Le point de montage ''/media/DATA'' de la partition qui contiendra les données visibles des utilisateurs\\
+appartient **légitimement** à //root:root// avec droits //rwxr-xr-x// soit 755 - situation par défaut.\\
+
+D'où la nécessité de s'attribuer temporairement les droits de //root// dans les commandes ci-après, via //sudo//.\\
+
+  * **Création des 2 dossiers** pour l'utilisateur ( le répertoire personnel //alternatif// + la corbeille ) :
+<code>sudo mkdir /media/DATA/{$USER-$UID,.Trash-$UID}</code>
+→ crée 2 dossiers, l'un visible nommé ''noubie-1000'' ; l'autre caché nommé ''.Trash-1000''\\
+
+  * **Appropriation des 2 dossiers** par Noubie : 
+<code>sudo chown $USER:$USER /media/DATA/{$USER-$UID,.Trash-$UID}</code>
+→ ces dossiers appartiennent dorénavant à Noubie, qui peut donc écrire-modifier-supprimer **dans** ces dossiers.\\
+
+  * **Restriction de l'usage de la corbeille** à son utilisateur uniquement ( confidentialité ) :
+<code>sudo chmod 700 /media/DATA/.Trash-$UID</code>
+→ seul Noubie peut voir, ajouter, restaurer, supprimer les éléments de cette corbeille.\\
+
+**À partir de là**, ou si on s'arrête là, Noubie dispose alors d'un dossier ''noubie-1000'' lui appartenant qui pourrait déjà lui servir d'emplacement de stockage complémentaire ( en plus, en dehors, de son répertoire personnel habituel ).\\
+Cet emplacement est accessible depuis l'explorateur de fichiers en suivant le chemin ''/media/DATA/noubie-1000''.\\
+Comme il est monté sous ''/media/'' il apparaît automatiquement dans le volet latéral de l'explorateur de fichiers ( dans la section //périphériques// ou //autres emplacements//, présentation variable selon les explorateurs de fichiers. )
+
+**La suite de la démarche** consiste à faire de cet emplacement ''noubie-1000'' le « stockage » par défaut des dossiers usuels de l'utilisateur //tout en conservant// ses habitudes de navigation : les éléments « Bureau, Documents, Images, Modèles, Musique, Public, Téléchargements, Vidéos » continueront d'apparaître dans le répertoire personnel, au premier niveau de l'explorateur de fichiers ( mais sous forme de //liens symboliques//, au lieu de //dossiers//. )
+
+<note tip>**Grâce aux variables**, il suffit de ré-employer exactement les mêmes commandes,\\
+depuis la session d'un autre utilisateur, pour créer les dossiers nécessaires pour celui-ci.\\
+\\
+Si après //Noubie//, le deuxième utilisateur créé sur le système s'appelle //Lairneur//, alors depuis sa session à lui\\
+on obtiendra dans ''/media/DATA'' des dossiers nommés ''lairneur-1001'' et ''.Trash-1001''.</note>
+<note>**L'appartenance du point de montage à //root//** est légitime :\\
+  * les supports matériels, physiques ( partitions ) sont gérés par le système //via// l'utilisateur //root//,
+  * les données, logiques ( dossier, fichiers ) sont gérés par des utilisateurs déterminés //via// les droits et permissions **portés par les données elles-mêmes.**\\
+  * On n'a donc pas besoin d'agir sur les droits et permissions d'**un dossier qui sert de point de montage à une partition**, ici ''/media/DATA''.\\
+
+Cette organisation des dossiers sur une partition n'est jamais qu'une application basique des droits et permissions Linux,\\
+même organisation qu'on trouve dans un dossier ''/home''.
+</note>
+==== Création des liens symboliques en lieu et place des dossiers usuels ====
+But de la manœuvre : placer les dossiers usuels de l'utilisateur hors de la partition système, dans ''/media/DATA/$USER-$UID/''\\
+**tout en conservant l'accès à ses éléments usuels depuis son répertoire personnel habituel**.\\
+Accès du point de vue humain mais aussi logiciel : la plupart des applications « s'attendent » à trouver vos affaires dans **$HOME** ( grâce à [[https://freedesktop.org/wiki/Software/xdg-user-dirs/|xdg-user-dirs]]. )\\
+Procéder de la sorte **évite d'intervenir sur ce mécanisme** //xdg-user-dirs// : le fichier ''~/.config/user-dirs.dirs'' conserve ses valeurs initiales, par défaut.\\
+  * **Déplacer** les actuels dossiers usuels de l'utilisateur ( stockés dans **$HOME** pour l'instant )\\ vers le dossier adéquat sur la partition DATA ( attention au dossier //Bureau// voir [[organiser_data_utilisateurs#precaution_concernant_le_dossier_bureau|point 4.2.1 suivant]] ) :
+<code>mv   /home/$USER/{Bureau,Documents,Images,Modèles,Musique,Public,Téléchargements,Vidéos}   /media/DATA/$USER-$UID/</code>
+  * **Créer des liens symboliques** dans **$HOME** pour remplacer les éléments qu'on vient de déplacer :
+<code>ln   -s   /media/DATA/$USER-$UID/{Bureau,Documents,Images,Modèles,Musique,Public,Téléchargements,Vidéos}   /home/$USER/</code>
+Ces 2 opérations sont tout à fait réalisables « en graphique » depuis votre explorateur de fichiers habituel :
+  * **déplacer** : c'est au clic droit couper / coller ou au clavier [ Ctrl ] + [ X ] puis [ Ctrl ] + [ V ] dans l'emplacement de destination\\ ou à la souris glisser-déposer les éléments entre 2 fenêtres de votre explorateur de fichiers, l'une ouverte sur ''/home/$USER'', l'autre sur ''/media/DATA/$USER-$UID''
+  * **créer des liens symboliques** ( un exemple parmi d'autres //à priori// valide dans la plupart des explorateurs de fichiers ) :
+     * ouvrez 2 fenêtres de votre explorateur de fichiers, l'une sur ''/home/$USER'', l'autre sur ''/media/DATA/$USER-$UID''
+     * dans ''/media/DATA/$USER-$UID'' faites une sélection multiple des dossiers pour lesquels vous souhaitez un lien,
+     * tout en maintenant les touches [ Ctrl ] et [ Maj ] glissez-déposez votre sélection vers la fenêtre ''/home/$USER''
+     * relâchez le clic puis les touches, les liens se sont créés dans ''/home/$USER''.\\
+
+<note tip>**Grâce aux variables**, il suffit de ré-employer exactement les mêmes commandes,\\
+depuis la session d'un autre utilisateur, pour déplacer les dossiers et créer les liens symboliques pour celui-ci.</note>
+<note>**//Un exemple parmi d'autres//** : c'est un peu l'inconvénient des applications graphiques,\\
+d'un explorateur de fichiers à l'autre il pourra y avoir des nuances dans les procédures.\\
+Consultez les documentations et préférences de votre explorateur de fichiers ( Nautilus, Dolphin, Nemo, Caja, Thunar… )\\
+pour vous assurer des bons gestes et raccourcis.
+</note>
+=== Précaution concernant le dossier « Bureau » ===
+**Dans cet exemple, //tous// les dossiers usuels** visibles de l'utilisateur\\
+( qui relèvent de la norme //xdg// : Bureau, Documents, Images, Modèles, Musique, Public, Téléchargements, Vidéos )\\
+**sont concernés** par //déplacement + remplacement par liens symboliques//.\\
+\\
+Bien qu'il s'agit d'un dossier tout ce qu'il y a de plus normal et classique, ''~/Bureau'' **est l'objet d'une particularité selon les environnements graphiques** :\\
+son contenu est affiché à l'écran, via des icônes.\\
+→ tant qu'un tel affichage graphique occupe le dossier ''~/Bureau'' il est impossible de le déplacer ( ou supprimer ), il faut d'abord libérer le dossier de cette occupation.
+
+**Si vous êtes dans un tel cas ( icônes sur l'//écran// bureau ), il faudra ruser un peu. Plusieurs solutions** :
+  - **la plus simple** : désactiver ( temporairement ) la fonctionnalité « icône sur le bureau » suffit à passer les commandes ( ou manipulations depuis l'explorateur de fichiers ) précédentes avec succès, après avoir quitté/relancé la session. Consultez les documentations relatives à votre environnement de bureau pour découvrir comment désactiver la fonction « icônes sur le bureau ».\\
+  - **en mode console** 100% textuel et uniquement commandes : **ne pas** lancer la session graphique de l'utilisateur mais seulement une **[[console|console]]** → de là, passez les commandes précédemment proposées. Pas d'explorateur de fichiers « graphique » ici.\\
+  - **si vous avez déjà plusieurs utilisateurs** dans ce système, en commandes uniquement : **ne pas** lancer la session graphique de l'utilisateur dont vous souhaitez déplacer le dossier //Bureau// **mais** agir depuis la session d'un autre utilisateur → implique d'adapter les commandes et d'utiliser //sudo// ( détails plus bas ).\\
+  - **ou encore, ne déplacez pas ni ne liez** le dossier Bureau pour l'instant, mais seulement les autres dossiers ( retenir alors que ce dossier reste stocké dans la même partition que votre système ).\\
+\\
+//Note : dans un environnement de bureau 100% Gnome ( ≠ Ubuntu ) le dossier ''~/Bureau'' n'existe pas forcément.//\\
+\\
+     * __adaptation des commandes **pour le cas 3**__ :
+On agit depuis la session de //Noubie// et on veut déplacer puis lier les dossiers usuels de //Lairneur// :\\
+on emploie les chemins absolus vers les éléments et surtout plus les variables ( qui seraient relatives à //Noubie// dans ce cas. )
+<code>sudo mv /home/lairneur/{Bureau,Documents,Images,Modèles,Musique,Public,Téléchargements,Vidéos} /media/DATA/lairneur-1001/</code>
+puis
+<code>sudo ln -s /media/DATA/lairneur-1001/{Bureau,Documents,Images,Modèles,Musique,Public,Téléchargements,Vidéos} /home/lairneur/</code>
+→ la commande //mv// ne modifie pas les éléments qu'elle déplace ( les droits et permissions restent intacts ),\\
+→ les //fichiers spéciaux// liens appartiendront certes à //root// mais sans incidence puisque les liens symboliques se conforment aux droits et permissions des éléments qu'ils ciblent,\\
+→ on peut cependant être un peu contrarié que des éléments ( les liens ) dans un ''/home/$USER/'' n'appartiennent pas à **$USER**.\\
+Qu'à cela ne tienne, **changeons donc le propriétaires de ces liens symboliques** ( uniquement eux, et pas les éléments qu'ils ciblent ) via :\\
+<code>sudo chown -h lairneur:lairneur /home/lairneur/{Bureau,Documents,Images,Modèles,Musique,Public,Téléchargements,Vidéos}</code>
+→ avec l'option **-h** la commande //chown// n'appliquera la modification de propriétaire **qu'aux** liens symboliques eux-mêmes et **pas** //à leur cible// ;\\
+→ sans cette option **-h** la commande //chown// agirait **sur** //la cible// des liens et **pas du tout** sur les liens eux-mêmes\\
+( puisqu'un lien symbolique se comporte //comme// l'élément qu'il cible. )\\
+\\
+\\
+     * __adaptation des commandes **pour le cas 4**__ :
+On vise tous les dossiers usuels **sauf** ''Bureau'', et par exemple ''Public'' ( qui se sert de celui-là ? )
+<code>mv /home/$USER/{Documents,Images,Modèles,Musique,Téléchargements,Vidéos}   /media/DATA/$USER-$UID/</code>
+puis
+<code>ln -s /media/DATA/$USER-$UID/{Documents,Images,Modèles,Musique,Téléchargements,Vidéos}   /home/$USER/</code>
+Retenir alors que les dossiers ''Bureau'' et ''Public'' restent stockés dans la même partition que votre système, dans ''/home/$USER''.
+
+<note warning>**1⋅** Les logiciels au format [[snap|snap]] ajoutent un dossier éponyme dans **$HOME**.\\
+**Laisser impérativement ce dossier dans $HOME, ne le déplacez pas** ( un tel déplacement implique //possiblement// de reconfigurer [[apparmor|AppArmor]] ).\\
+Vu la nature des données que contient le dossier ''snap'' ( configurations, paramètres… ), il devrait être caché :\\
+ce sera peut-être le cas un jour… voir [[https://forum.snapcraft.io/t/experimental-flag-for-hiding-snap/28509|cette discussion]].\\
+\\
+Si vous souhaitez cacher le dossier ''snap'' **ne le renommez surtout pas** en ''.snap'' mais\\
+  * créez un fichier nommé ''.hidden'' dans votre **$HOME**,\\
+  * fichier qui contient un nom d'élément à cacher par ligne ( pour notre exemple : snap ).\\
+  * [ Ctrl ] + [ H ] ou [ Alt ] + [ . ] pour afficher les éléments cachés.\\
+
+**2⋅** Les logiciels au format snap ont un fonctionnement confiné, ils n'accèdent pas à la racine du système mais seulement à certains de ses dossiers :\\
+  * **$HOME** soit ''/home/$USER'' pour la plupart par défaut, hors fichiers cachés,\\
+  * ''/mnt'', ''/media/'' et ''/run/media'' pour peu qu'ils soient connecté à l'interface //removable-media//.\\
+  * Ils comprennent les liens symboliques, se conforment aux droit et permissions, voient les fichiers cachés en dehors de **$HOME**.\\
+→ **pour accéder à** ''/media/DATA/$USER-$UID'' **un snap devra impérativement avoir été connecté à l'interface //removable-media//** au préalable\\
+( tous les snap ne proposent pas cette interface, beaucoup y sont connectés par défaut ).
+</note>
+
+
+
+
+
+===== Au quotidien =====
+==== Où sont mes affaires ? ====
+**//Comme d'hab' !//**\\
+Vous y accédez depuis votre répertoire personnel, au premier niveau, au premier coup d'œil dans votre explorateur de fichiers.\\
+Les divers liens symboliques renvoient vers les dossiers dans ''/media/DATA/$USER-$UID/'' qui sont stockés dans la « grosse partition » montée dans ''/media/DATA''.\\
+**Vos logiciels aussi « voient » ces liens.**\\
+Tout est visuellement, en terme de navigation, exactement à la même place que d'habitude.\\
+**Les « automatismes » de votre environnement de bureau sont conservés.**\\
+Et rien ne vous empêche d'utiliser ( vous ou vos logiciels ) ''/home/$USER/'' directement - si ce n'est que cet emplacement se situe dans un support éventuellement plus petit, celui contenant le système.\\
+**Pour stocker vos document et médias divers, privilégiez donc ces liens, qu'on a volontairement positionnés en lieu et place des dossiers usuels initiaux par défaut.**\\
+\\
+**//Comme d'hab'// ou presque…**\\
+À partir de cet emplacement « répertoire personnel » vous avez dorénavant accès à plusieurs stockages ( deux dans cet exemple, mais bien plus si vous le souhaitez ) : à partir du moment où une partition est montée dans votre système et qu'elle comporte des données accessibles par //votre// utilisateur, ces données peuvent faire l'objet de liens //symboliques// placés dans //son// répertoire personnel, ce qui ouvre de nombreuses possibilités ( un disque qui ne contient que vos photos ou vidéos, un autre pour les documents du boulot… )
+
+==== Quoi sauvegarder ? ====
+**//Toutes// les données de //tous// les utilisateurs « humains » du système** :\\
+il faut sauvegarder **2** dossiers, ''/home'' et ''/media/DATA''.\\
+Le premier contient les données //spécifiques// de configuration et paramétrages, le second les données //agnostiques//, documents et médias.\\
+Le second est donc réemployable quasiment n'importe où sans le moindre risque de « compatibilité » ( ce sont des données qui ne modifient pas le fonctionnement du système ou des logiciels ).\\
+Sauvegarder le premier permettra de retrouver des configurations logicielles qu'on voudrait importer et tester, dans un nouveau système, au cas par cas, au fur et à mesure ( un profil de GiMP ou ThunderBird, ce genre de choses… ).\\
+\\
+**//Toutes// les données d'un seul utilisateur** par exemple //Noubie// :\\
+idem, il s'agit de sauvegarder **2** dossiers, ''/home/noubie'' et ''/media/DATA/noubie-1000''.\\
+==== À quoi ça sert… concrètement ? ====
+=== vous avez plusieurs OS en multi-boot ===
+Vos documents et médias ne sont désormais plus stockés « dans » un OS en particulier.
+Cette partition de données agnostiques est complètement indépendante des OS.
+Il suffit dans chaque OS :
+  * d'attribuer un point de montage à cette partition,
+  * puis dans les **$HOME** concernés, virer les dossiers usuels initiaux pour les remplacer par des liens symboliques ciblant les données de votre choix dans cette partition.
+
+→ **Depuis tous vos OS vous accédez aux mêmes données, sans les déplacer ni dupliquer, et sans les attacher //spécifiquement// à un OS.**\\
+→ D'où l'astuce du nom des répertoires personnels //alternatifs// dans la partition DATA sous la forme ''$USER-$UID'' pour toujours repérer quel **$UID** accède à quoi - le nom on s'en fiche ;-) un utilisateur d'//uid// 1234 quel que soit l'OS, aura les mêmes droits d'accès et d'usage dans les éléments portant l'//uid// 1234.
+
+=== partage de données entre utilisateurs ===
+Conséquence ou corollaire des droits et permissions, **une telle partition DATA simplifie grandement le partage de données entre utilisateurs « humains »** :\\
+→ on y stocke des données agnostiques, sans incidence sur le fonctionnement de l'OS ou env. de bureau de l'un ou l'autre utilisateur,\\
+→ ces données sont classées, triées //par// utilisateur,\\
+→ il suffit d'agir sur les droits du groupe d'un dossier ''/media/DATA/$USER-$UID'' pour organiser un partage ( rendre des utilisateurs membres d'un groupe, ajuster les droits du groupe sur ce dossier… )\\
+→ on organise les partages en dehors du ou des systèmes, limitant les risques d'impact de l'un sur l'autre,\\
+→ dans cet emplacement, on ne gère que cela : quels « humains » accèdent à quelles données, quels éléments appartiennent à qui ( utilisateur et groupes propriétaires ), et ce que ces éléments accordent comme droits ( r s t w x ) à ces propriétaires. Sans avoir à se soucier d'éléments cachés qui seraient spécifiques à un OS ou logiciel,\\
+→ une telle partition DATA est aussi d'un grand secours lorsqu'il s'agit d'organiser des partages via [[samba|samba]].\\
+
+=== gérer l'urgence ===
+Vous vous apercevez qu'un de vos supports de stockage montre des signes de faiblesses…\\
+  * un support « système »\\
+     * sauvegardez dare-dare et vite fait **$HOME** - comme il ne contient essentiellement que des données spécifiques, ça sera rapide car peu volumineux,
+     * remplacez votre disque défectueux par un valide, mettez-y le système de votre choix ( pas forcément le même qu'avant ), dans le(s) nouveau(x) **$HOME** concerné(s) remplacer les dossiers usuels par des liens symboliques vers les données utiles,
+     * ne réimportez de votre sauvegarde de l'ancien **$HOME** //que// les données spécifiques vraiment nécessaires ( //certains// profils de //certains// logiciels ).
+  * un support « data agnostique »\\
+     * sauvegardez dare-dare, dès que possible ''/media/DATA/'', là ça prendra plus de temps ( mais un peu moins qu'un **$HOME** « classique » complet ),
+     * à la place de ce disque faiblard, branchez pourquoi pas votre disque de sauvegarde, dans le(s) $HOME concerné(s) créez les liens symboliques ( et bien sûr dans ce cas sauvegardez ce « nouveau » ''/media/DATA'' sans tarder… ) vous voilà reparti.
+
+→ Les supports et leurs données ( ventilées par spécifiques/agnostiques ) sont dorénavant interchangeables quasiment « à la volée » sans incidence les unes sur les autres.\\
+→ Il ne s'agit que de recréer un point de montage ''/media/DATA/'' et des //liens symboliques//.\\
+→ Et notez que derrière un point de montage peuvent se trouver bien des //formes// de stockage ( LVM, RAiD, local ou distant… )\\
+
+=== donner la priorité aux données, non au(x) système(s). ===
+Dans une telle organisation le système est un élément facilement sacrifiable, changeable …ou réparable : on peut complètement le détacher des données //agnostiques//, soit en supprimant les liens symboliques, soit en démontant la partition « data ».\\
+
+Comme les données //spécifiques// restent en place dans les **$HOME** natifs à la racine du système, vous êtes toujours en mesure de démarrer les sessions graphiques utilisateurs - sans leurs document ou médias - ce qui selon les opérations de maintenance à effectuer sera rassurant.\\
+
+Les données //agnostiques// - documents ou médias - deviennent l'élément central et fixe de l'organisation, autour desquelles vous « greffez » des outils : systèmes, applications, machines, réseau, stratégies de sauvegarde…
+
+=== une organisation qui peut s'inclure à plusieurs « échelles » ===
+Ici on a évoqué une machine avec plusieurs stockages internes.\\
+Où séparer données //agnostiques// des //spécifiques// amène déjà des souplesses que n'offrent pas, ou pas sans d'autres difficultés, une « partition /home séparée » qui, bien que séparée, reste un stockage //global// de données aux fonctions //différentes//.\\
+
+Maintenant imaginez plusieurs postes en réseau local, avec quelques utilisateurs sur chaque : un poste sera dédié à héberger les données //agnostiques// des utilisateurs, les autres postes « clients » ne conservent que les nécessaires //spécifiques// à leur système, pendant que leurs utilisateurs humains ne « piochent » dans le poste « serveur » que leurs documents et médias… et cela depuis n'importe quel poste « client. »\\
+
+Imaginons maintenant que ces postes « clients » ne soient pas sédentaires, attachés à ce réseau local, mais nomades :\\
+la même organisation continue de s'appliquer…
+===== Aller plus loin ? =====
+==== Une partition agnostique entre Windows et Linux ? ====
+Et pourquoi pas ? C'est plutôt fréquent comme contexte…\\
+Comme il s'agit de 2 OS avec des principes fondamentaux fort différents, il est vital que ces données **ne** soient **pas** //spécifiques// à l'un ou l'autre.\\
+
+On peut mettre en place une telle partition « data agnostique » qui serait alors partagée entre les utilisateurs des 2 OS.\\
+Il s'agira que cette partition héberge un système de fichiers exploitable en lecture et écriture par les 2 OS : ntfs, fat, exfat…\\
+Côté Windows cette partition montera dans ''D:/'', ''E:/'' ou ''H:/'' ou… selon ce qu'il trouvera comme lettre disponible.\\
+
+Les systèmes de fichiers Windows ne gérant pas nativement les droits et permissions Linux, les données stockées sur de telles partitions ne portent aucune de ces infos pourtant nécessaires à leur traitement sous Linux **et c'est à partir de là que les choses se compliquent**.\\
+
+Côté Linux il s'agira toujours de monter cette « partition data » à un endroit opportun, **montage qui devra utiliser des options adaptées** afin que le système Linux « ajoute » des droits et permissions à ces données.\\
+Évidemment ces options varient selon qu'il s'agit de ntfs ou (ex)fat ( certaines sont abordées dans la doc' [[mount_fstab|fstab]]. )\\
+Sans option de montage adaptée, Linux attribue les systèmes de fichiers « étrangers » à //root:root// avec droits //rwxrwxrwx// ce qui est loin d'être pratique au quotidien…
+
+Dans un tel cas, la stratégie //la moins compliquée// sera sans doute de fabriquer **une telle partition** ( partagée entre Linux et Windows ) **par utilisateur**, les options de montage adéquates de cette partition **attribuant toutes les données contenues à un utilisateur donné** ( sous Linux ), avec les droits suffisants et distincts sur les éléments contenus ( soit par exemple 755 sur les dossiers et 644 sur les fichiers. )\\
+\\
+Suivant l'exemple de cette page, pour //Lairneur//, les options d'une telle ligne de montage ( pour un système de fichiers //ntfs// ) dans //fstab// ressembleraient à
+<code>UUID=<uuid_d'une_partition_ntfs>   /point/de/montage_ntfs   ntfs   uid=1001,gid=1001,dir_mode=755,file_mode=644,utf8,windows_names   0   0</code>
+Pour //Noubie//, les //uid// et //gid// seraient 1000.\\
+Chaque utilisateur ( sous Linux ) **doit** alors disposer de sa propre partition //ntfs//, et chaque partition de son propre point de montage, puisque tout cela est monté dès le démarrage système.\\
+//Noubie// et //Lairneur// peuvent accéder à et lire la partition appartenant à l'autre, par contre seul le propriétaire peut écrire « chez lui ».\\
+Chacune de ces partitions sera cependant accessible indifféremment en lecture + écriture depuis Windows.\\
+\\
+Une fois vérifiée qu'une telle partition est bien en place dans les 2 systèmes concernés, elle s'organise à peu près de la même manière :\\
+  * un dossier ( caché ) nommé ''.Trash-$UID'' si vous le créez depuis Linux.\\ Sinon nommez-le avec l'//uid// adéquate directement si vous le créez depuis Windows, ( par ex. ''.Trash-1000'' ) vous pouvez même donner l'attribut « caché » à ce dossier, Windows ne se servira pas de cette corbeille, et cet attribut est sans influence côté Linux.\\
+  * puisque les données de cette partition sont attribuées par les options de montage à un utilisateur en particulier, la présence d'un dossier principal ''$USER-$UID'' pour celui-ci est moins nécessaire, on pourra placer là directement ses dossiers usuels.\\
+  * créez dans **$HOME** à la place des dossiers usuels, des liens symboliques qui ciblent les données dans la partition //ntfs//.\\
+
+<note important>La plupart des explorateurs de fichiers « graphiques » **commencent par** écrire le lien symbolique **dans** l'emplacement **actuel** pour le **déplacer/renommer ensuite**. De ce fait certaines méthodes graphiques pour créer de tels liens **échoueront** ( à moins d'utiliser l'explorateur de fichiers Dolphin ) car il est **impossible** de créer un lien symbolique //Linux// **dans** un système de fichiers //Windows//, vous gratifiant dans ce cas d'un message d'erreur « le système de fichiers ne prend pas en charge les liens symboliques ».\\
+\\
+Ici préférez donc la ligne de commande, du type :
+<code>ln -s /point/de/montage_ntfs/un_dossier /home/$USER/nom_du_lien</code>
+ou
+<code>ln -s /point/de/montage_ntfs/{plusieurs,dossiers,séparés,par,virgule} /home/$USER/</code>
+…la présence du ''/'' après ''$USER'' est primordiale : elle indique qu'on crée des liens **nommés comme** leur cible **dans** le dossier ''/home/$USER/''.</note>
+C'est ce que propose plus ou moins [[tutoriel:partitions_communes_windows_ubuntu|cette doc']], discutable sur certains points :\\
+  * l'utilisation de //nofail// et la désactivation //de la mise à jour des dossiers xdg// **qui priveront l'utilisateur d'avertissements en cas d'incident**\\
+  * la modification du fichier //user-dirs.dirs// **n'est pas nécessaire** si on utilise //des liens symboliques// de mêmes noms ; telle que proposée là-bas elle **fera « disparaître » du répertoire personnel** les éléments usuels de l'utilisateur,\\
+  * la question des droits : l’exécution sur tous les fichiers engendrera certainement des surprises.\\
+
+==== Ressources communes à plusieurs personnes ? ====
+Plutôt que d'éparpiller un certains types de données « utilisateurs » parmi plusieurs dossiers ''$USER-$UID'' - par exemple Musique ou Images - créer un dossier ''Bibliothèque { Musique ou Images }'' pour regrouper en un seul endroit tous les fichiers de ce type, afin d'éviter les redondances et duplications.\\
+
+Dans les divers **$HOME** faites alors pointer les //liens symboliques// Musique ou Images vers la « Bibliothèque » correspondante. Via les propriétaires et droits des éléments, filtrez qui accède, partage, efface, ce qui est vu ou pas…\\
+
+Et ce principe de « Bibliothèques » est applicable à toutes sortes de données voire d'outils : des brosses, des palettes, des gabarits, modèles de documents, des polices de caractère, ressources diverses et variées…\\
+
+Un ''~/.fonts'' qui devient un lien vers une « Bibliothèque de polices » par exemple.\\
+
+**Mais jamais le profil « entier » de configuration d'une application** - spécifique à l'OS ou une version de logiciel : ces //profils// eux restent bien sagement dans les **$HOME** associés au système adéquat. Par contre dans ces //profils// d'applications, certains éléments peuvent faire l'objet d'une « mise en commun » ( par ex. les 2 dossiers d'un profil de Thunderbird qui contiennent tous les mails… )\\
+
+**Ici c'est juste l'évocation de possibilités** : pour jouer avec cette « granularité » permise par la partition DATA agnostique, il faut impérativement bien connaître le fonctionnement de vos OS, des divers logiciels que vous utilisez, pour savoir évaluer sans risque ce qu'il est pertinent de « sortir » d'un **$HOME**, et classer dans ''/media/DATA/''.\\
+\\
+Une fois qu'on y a goûté…\\
+{{:administration:dossiers_partitions_etc.jpg?400|}} {{:administration:dossiers_partitions_no_symlink.jpg?400|}} {{:administration:dossiers_partitions_one_symlink.jpg?400|}} {{:administration:nemo_data_home_tilix.jpg?400|}}

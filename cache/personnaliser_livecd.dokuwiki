@@ -1,4 +1,5 @@
 
+
 {{tag>personnalisation}}
 ----
 
@@ -13,16 +14,10 @@ mettre dans le /home du liveCD les fichiers dont vous avez besoin, etc.
 ===== Méthodes assistées =====
 
 Il existe plusieurs applications permettant de personnaliser votre liveCD :
-  * [[:UCK]]
   * [[:Remastersys]]
-  *  [[:Respin]]
-  *[[ http://forum.ubuntu-fr.org/viewtopic.php?id=424373|ModCustom]]
-  * [[http://www.le-libriste.fr/2012/03/creer-votre-propre-distribution-avec-ubuntu-builder/|Ubuntu-Builder]] ([[https://launchpad.net/ubuntu-builder/+announcement/12508|Projet abandonné]] 
-  * puis [[https://launchpad.net/~kamilion/+archive/ubuntu/ubuntu-builder|copié récemment par Kamilion]] ) 
-  * [[https://launchpad.net/~nemh/+archive/ubuntu/systemback|SystemBack]]
-  * [[http://linuxiumcomau.blogspot.com/2017/06/customizing-ubuntu-isos-documentation.html |
-  *  Le script "isorespin.sh" (conçu par l'individu "Linuxium")]] permet (aux utilisateurs avancés) de modifier des [[wp>fr:Image disque|images disque]] ISO de Ubuntu afin de les rendre compatibles (démarrables et modification de drivers) avec les CPU Intel Atom (2017)
-  * [[https://ubuntuplace.info/questions/16155/comment-utiliser-cubic-pour-creer-une-image-cd-ubuntu-person|cubic]] (En anglais)
+  * [[:Respin]]
+  * Le script "isorespin.sh" (conçu par l'individu "Linuxium")]] permet (aux utilisateurs avancés) de modifier des [[wp>fr:Image disque|images disque]] ISO de Ubuntu afin de les rendre compatibles (démarrables et modification de drivers) avec les CPU Intel Atom (2017)
+  * [[https://ubuntuplace.info/questions/16155/comment-utiliser-cubic-pour-creer-une-image-cd-ubuntu-person|Cubic]]
 
 
 <note tip>Il est recommandé d'utiliser la méthode manuelle ci-dessous pour des questions de fiabilité.</note>
@@ -33,7 +28,7 @@ Il existe plusieurs applications permettant de personnaliser votre liveCD :
 
   * Posséder une image CD (iso) d'Ubuntu Desktop. (l'[[:cd_ubuntu-fr|Edition Francophone]] par exemple)
   * Disposer d'environ 3Go d'espace libre sur votre Disque Dur.
-  * Installer les outils relatifs au squashfs (format de compression en lecture seule utilisé dans les ISOs Ubuntu) : <code bash>sudo apt-get install squashfs-tools schroot genisoimage</code>
+  * Installer les outils relatifs au squashfs (format de compression en lecture seule utilisé dans les ISOs Ubuntu) : <code bash>sudo apt-get install -y squashfs-tools schroot genisoimage xorriso</code>
 
 ==== Introduction : Généralités sur le liveCD ====
 
@@ -194,7 +189,7 @@ glib-compile-schemas /usr/share/glib-2.0/schemas/</code>
 
   * Il est logique de supprimer les fichiers de cache pour ne pas surcharger le cd :<code bash>apt-get clean</code>
   * Et les logs de crash :<code bash>rm -r /var/crash/*</code>
-  * FIXME On peut supprimer le cache : (http://askubuntu.com/questions/87142/safe-to-remove)<code bash>rm -r /var/cache/*</code>
+  * FIXME On peut supprimer le cache : (https://askubuntu.com/questions/87142/safe-to-remove)<code bash>rm -r /var/cache/*</code>
 
 == Sortie du chroot ==
 
@@ -386,7 +381,7 @@ il suffit de les ajouter au fichier
   * On efface l'ancien squashfs :<code bash>sudo rm iso/casper/filesystem.squashfs</code>
   * On recrée le nouveau : <code bash>
 cd squashfs
-sudo mksquashfs . ../iso/casper/filesystem.squashfs -info
+sudo mksquashfs . ../iso/casper/filesystem.squashfs -comp zstd -Xcompression-level 22 -progress
 cd ..</code>
 
 Comme toute compression, cela prend beaucoup de ressources et peut prendre du temps.\\
@@ -425,6 +420,70 @@ sudo mkisofs -r -V "Nom_personnalisé" -cache-inodes -J -l -b isolinux/isolinux.
 <code bash>
 sudo genisoimage -o "Nom personnalisé.iso" -r -J -no-emul-boot -V "USB_LINUX" -boot-load-size 4 -boot-info-table -b isolinux/isolinux.bin -c isolinux/boot.cat ./ </code>
 Renommer le fichier "nom personnalisé" en "nom personnalisé".iso
+
+<note important>
+généré l'iso a partir d'Ubuntu 22.04 et plus le système des iso semble avoir étais modifier
+
+il faux extraire le mbr et l'efi depuis l'iso original c'est la seul méthode que j'ai pu trouver et qui semble fonctionelle
+
+voici les commandes pour le faire et généré l'iso:</note>
+
+j'ai un peux plus de détail en faite ceci et utiliser pour extraire le système efi
+
+depuis l'image iso d'origine l'exemple ici et pour ubuntu 22.04 desktop amd64
+
+il faux adapter en fonction de votre iso d'origine
+
+<code bash> 
+dd if=ubuntu-22.04-desktop-amd64.iso bs=1 count=432 of=~/livecd/boot_hybrid.img
+</code>
+
+ici si ont liste les partition présente sur l'iso
+
+<code bash>
+/sbin/fdisk -l ubuntu-22.04-desktop-amd64.iso
+
+Disk ubuntu-22.04-desktop-amd64.iso: 3.4 GiB, 3654957056 bytes, 7138588 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: gpt
+Disk identifier: A09DB2B8-B5F6-43AE-AFB3-91E0A90189A1
+
+Device                            Start     End Sectors  Size Type
+ubuntu-22.04-desktop-amd64.iso1      64 7129427 7129364  3.4G Microsoft basic data
+ubuntu-22.04-desktop-amd64.iso2 7129428 7137923    8496  4.2M EFI System
+ubuntu-22.04-desktop-amd64.iso3 7137924 7138523     600  300K Microsoft basic data
+</code>
+
+ici le système efi démarre (start) à 7129428
+
+donc ont définit skip=7129428
+
+et le secteurs (setors) fait 8496
+
+donc count=8496
+
+
+<code bash>
+dd if=ubuntu-22.04-desktop-amd64.iso bs=512 skip=7129428 count=8496 of=~/livecd/efi.img
+
+xorriso -as mkisofs -r \
+  -V 'Ubuntu 22.04 LTS MODIF (EFIBIOS)' \
+  -o ~/livecd/ubuntu-modif.iso \
+  --grub2-mbr ~/livecd/boot_hybrid.img \
+  -partition_offset 16 \
+  --mbr-force-bootable \
+  -append_partition 2 28732ac11ff8d211ba4b00a0c93ec93b ~/livecd/efi.img \
+  -appended_part_as_gpt \
+  -iso_mbr_part_type a2a0d0ebe5b9334487c068b6b72699c7 \
+  -c '/boot.catalog' \
+  -b '/boot/grub/i386-pc/eltorito.img' \
+    -no-emul-boot -boot-load-size 4 -boot-info-table --grub2-boot-info \
+  -eltorito-alt-boot \
+  -e '--interval:appended_partition_2:::' \
+    -no-emul-boot .
+ </code>
 
 * Cette image ne peut être copiée que sur DVD. Si vous souhaitez 
 pouvoir copier cette image sur une clé USB, exécutez la commande suivante sur votre ISO :<code bash>
@@ -467,13 +526,13 @@ seront installés et pris en compte.
   * [[https://help.ubuntu.com/community/LiveCDCustomization]]
   * [[http://liveusb.info/dotclear/|Le script de frafa pour 
   * créer/customiser des liveCD/USB]] discuté sur ce 
-  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=276821|forum]]
-  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=424373 
+  * [[https://forum.ubuntu-fr.org/viewtopic.php?id=276821|forum]]
+  * [[https://forum.ubuntu-fr.org/viewtopic.php?id=424373 
   * |Une solution pour personnaliser facilement viso iso de
   *  liveCD (Ubuntu/Kubuntu/Xubuntu/lubuntu/Edubuntu/...)]]
   * [[:projets:traduction_live_cd#iso_a_creer|Méthodes utilisées
   *  pour la création des Editions Francophones d'Ubuntu]]
-  * [[http://forum.ubuntu-fr.org/viewtopic.php?id=412528&p=1|
+  * [[https://forum.ubuntu-fr.org/viewtopic.php?id=412528&p=1|
   *  script de smo pour créer/customiser/cloner des distribs
   *  avec chroot graphique et export sur usb/iso]]
 

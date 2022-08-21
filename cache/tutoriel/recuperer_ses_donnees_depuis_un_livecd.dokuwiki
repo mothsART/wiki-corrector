@@ -24,7 +24,7 @@ Pour créer un [[:live_cd|Live CD]] ou une [[:live_usb|Live USB]], suivre le tut
 Insérer la Live USB ou le Live CD. Puis démarrer votre ordinateur. Il peut être nécessaire d'appuyer sur Echap, F5 ou F8 juste après le démarrage pour ouvrir le menu du Live Ubuntu.
 
 Choisir la fonctionnalité "essayer ubuntu avant de l'installer".
-==== Étape 4 : ouvrir les partitions contenant les fichiers à récupérer ====
+==== Étape 4 : ouvrir la partition EXT4 contenant les fichiers à récupérer ====
 Une fois que la session live est lancée, ouvrir le [[:gestionnaire_de_fichiers|gestionnaire de fichiers]] (exemple pour [[:nautilus|Nautilus]] : icône en forme de dossier dans le lanceur Ubuntu).
 
 {{ouvrirunmediadepuisnautilus.png?500}}
@@ -82,7 +82,7 @@ sudo    mount   /dev/sdXN     /media/Reception
 
 On peut alors lancer la copie avec la commande:
 <code>
-sudo    rsync   -av   /media/a_sauvegarder/home/votre_login         /media/Reception
+sudo    rsync   -av  --progress /media/a_sauvegarder/home/votre_login         /media/Reception
 </code>
 
 ==== Étape 7 : vérifier que vos données sont sauvegardées ====
@@ -102,7 +102,7 @@ Faites la recherche d'un espace non utilisé d'une taille au moins équivalente.
 
 A noter que cette technique ne fonctionne pas si la partition est en mauvais état. (Secteurs illisibles détectés)
 
-===== Méthode pour partition chiffrée. =====
+===== Méthode pour partition EXT4 chiffrée. =====
   * Monter la partition chiffrée<code bash>sudo cryptsetup luksOpen /dev/sdXN dsk </code>
   * Vérifier ou réparer la partition<code bash>sudo  fsck -y /dev/mapper/dsk</code>
   * Monter la partition déchiffrée<code bash>sudo mount -v /dev/mapper/dsk /mnt</code>
@@ -111,6 +111,36 @@ A noter que cette technique ne fonctionne pas si la partition est en mauvais ét
   * Monter la partition logique <code bash> sudo mount -v /dev/vgubuntu/root   /mnt </code>
   * Se positionner dans le bon répertoire<code bash>cd /mnt/home</code>
   * Faire la recopie des données.<code bash> sudo rsync -av . /media/Reception</code> 
+===== Méthode pour partition ZFS =====
+==== Installation non chiffrée ====
+Déterminer s'il existe des partitions [[utilisateurs/bcag2/zfs|ZFS]]
+<code bash> sudo blkid | grep zfs_member</code>
+Monter la partition en bon état sur le point de montage **/mnt**
+<code bash> sudo zpool import -a -f -l -R /mnt</code>
+Monter aussi la partition en mauvais état sur le point de montage **/mnt**
+<code bash> sudo zpool import -a -f -l -D -R /mnt</code>
+Récupérer les données comme indiqué au paragraphe 2.4 sachant  que les données sont dans /mnt/home/NomUtilisateur
+=== Installation chiffrée ou pas ===
+<code bash> sudo -i
+zpool import  -N -R /mnt rpool  ´&& sleep 10
+if [ -e /dev/zvol/rpool/keystore ]  ; then
+    echo 'Veuillez introduire le mot de passe utilisé pour le chiffremente  des données  en réponse à la question   "Saisissez la phrase secrète pour /dev/zvol/rpool/keystore : " ' Vous avez le droit à trois essais. Pour retenter, il faut relancer le script.
+    cryptsetup -v open /dev/zvol/rpool/keystore keystore-rpool  && sleep 10
+    mkdir -p /run/keystore/rpool
+    mount -v /dev/mapper/keystore-rpool  /run/keystore/rpool && sleep 5
+else
+     echo pas de chiffremnt détecté
+fi 
+zfs set canmount=on  $(zfs list | grep mnt/home |cut -d" " -f1)
+zfs mount -vl $(zfs list | grep mnt/home |cut -d" " -f 1)
+echo Voici la liste des répertoires à sauver
+cd $(zfs list | grep mnt/home | awk ' { print $5 } ')  && ls </code>
+
+
+
+
+
+
 
 
 
