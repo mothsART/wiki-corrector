@@ -8,6 +8,12 @@ from .checker import Checker
 DIR_GRAMMAR_DESTINATION = 'grammar_result'
 
 
+class FakeMessage:
+    def __init__(self, line, message):
+        self.line = line
+        self.message = message
+
+
 class GrammalecteChecker(Checker):
     def __init__(self, full=False):
         super(GrammalecteChecker, self).__init__(DIR_GRAMMAR_DESTINATION, full)
