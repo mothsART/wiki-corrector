@@ -18,10 +18,19 @@ async def get(url, session):
     except Exception as e:
         return f'{pos} HTTP {e.__class__} : {url}\n'
     redirect_url =  str(response.url)
-    if url == redirect_url:
+
+    if url == redirect_url and url.startswith("https:"):
         return ''
+
+    if url == redirect_url and url.startswith("http:"):
+        return f'{pos} Usage of http : {url}\n'
+
     if url.replace('http', 'https') == redirect_url:
         return f'{pos} HTTP redirect to HTTPS : {url} => {redirect_url}\n'
+
+    if url.replace('http', 'https') + "/" == redirect_url:
+        return f'{pos} HTTP redirect to HTTPS : {url} => {redirect_url}\n'
+
     hostname = urlparse(url).hostname.rstrip('/')
     if hostname == redirect_url.split('://')[1].rstrip('/'):
         return f'{pos} Url redirect to root path : {url} => {redirect_url}\n'
@@ -29,6 +38,10 @@ async def get(url, session):
 
     if tldextract.extract(url).domain != tldextract.extract(redirect_url).domain:
         return f'{pos} Url redirect to an other hostname: {url} => {redirect_url}\n'
+
+    if url.startswith("http:"):
+        return f'{pos} Usage of http : {url}\n'
+
     return ''
 
 
