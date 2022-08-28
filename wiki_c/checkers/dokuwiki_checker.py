@@ -33,3 +33,9 @@ class DokuwikiChecker(Checker):
 
         if el_open > 0:
             self.warnings += f'{last_open_pos} extra <note>\n'
+
+        for pos, line in enumerate(content_list):
+            pattern = line.find("''--")
+            suffix_pattern =  line[pattern + 4: pattern + 5]
+            if pattern != -1 and suffix_pattern not in [" ", '-']:
+                self.warnings += f"{pos} ''-- rather than ''​%%--%%\n"
