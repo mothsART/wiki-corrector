@@ -1,147 +1,38 @@
 #!/usr/bin/env python3
 
-import os
-from pathlib import Path
-from os.path import join
-import asyncio
-import fnmatch
-
-import aiohttp
-from aiohttp.client_exceptions import InvalidURL
-from scrapy.selector import Selector
+from wiki_c.auto_correction import BaseDetection, FormatOperation, walk
 
 DIR_URL_DESTINATION = 'url_result'
 
 
-class FormatOperation:
-    def __init__(self, data, page):
-        page_sel = Selector(text=page)
+class HttpToHttpsFormatOperation(FormatOperation):
+    prefix_summary = "Passage de http à https sur les liens externes"
 
-        self.data = data
-        self.dokuwiki = page_sel.css('#wiki__text::text').get()
-        self.sectok = page_sel.xpath('//input[@name="sectok"]').attrib['value']
-        self.date = page_sel.xpath('//input[@name="date"]').attrib['value']
-        self.changecheck = page_sel.xpath('//input[@name="changecheck"]').attrib['value']
-        self.article_changed = False
-
-        self.dokuwiki_updated = self._replace(self.dokuwiki, self.data['https_lines'])
-
-    def _replace(self, doc, https_lines):
-        for line in https_lines:
+    def _replace(self, doc, detected_lines):
+        for line in detected_lines:
             doc = doc.replace(line['http'], line['https'])
         return doc
 
-    def has_changed(self):
-        if self.dokuwiki != self.dokuwiki_updated:
-            self.article_changed = True
-        return self.article_changed
 
-    def payload(self):
+class HttpDetection(BaseDetection):
+    pattern = "HTTP redirect to HTTPS"
+
+    def _extract(self, line):
         return {
-            'sectok': self.sectok,
-            'date': self.date,
-            'changecheck': self.changecheck,
-            'summary': 'passage de http à https sur les liens externes (détecté et corrigé via le bot wiki-corrector (https://forum.ubuntu-fr.org/viewtopic.php?id=2067892)',
-            'do[save]': '',
-            'minor': 1,
-            'wikitext': self.dokuwiki_updated
+            'http': line[line.find('http://'):line.find(' => ')],
+            'https': line[line.find('https://'):]
         }
-
-
-async def update(login, password, datas):
-    async with aiohttp.ClientSession() as session:
-        connection_payload = {
-            'id': 'accueil',
-            'do': 'login',
-            'u': login,
-            'p': password
-        }
-        async with session.post('https://doc.ubuntu-fr.org/accueil?do=login', data=connection_payload):
-            pass
-
-        nb_updated = 0
-
-        for d in datas:
-
-            try:
-                async with session.get(d['url']) as r:
-                    page = await r.text()
-            except InvalidURL:
-                print(f'invalid url : {d["url"]}')
-                continue
-
-            operation = FormatOperation(d, page)
-
-            payload = operation.payload()
-            if not operation.has_changed():
-                continue
-
-            print('Edition de "%s"' % d['path'].replace('.txt', ''))
-
-            async with session.post(d['url'], data=payload):
-                pass
-
-            # update file
-            with open(d['path'], 'w') as f:
-                f.write(d['update_warnings'])
-
-            nb_updated += 1
-        print("Nombres de pages édités : %s" % nb_updated)
-
-
-def extract_link(line):
-    return {
-        'http': line[line.find('http://'):line.find(' => ')],
-        'https': line[line.find('https://'):]
-    }
-
-
-def get_content(root, _file):
-    content = Path(join(root, _file)).read_text(encoding='UTF-8')
-    has_https = 'HTTP redirect to HTTPS'
-    if not has_https in content:
-        return
-    lines = content.split('\n')
-    https_lines = [extract_link(line) for line in lines if has_https in line]
-
-    return {
-        'path': join(root, _file),
-        'url': '%s?do=edit' % join(
-            'https://doc.ubuntu-fr.org/',
-            root.replace(f'{DIR_URL_DESTINATION}', ''),
-            _file.replace('.txt', '')
-        ),
-        'https_lines': https_lines,
-        'update_warnings': '\n'.join([line for line in lines if not has_https in line])
-    }
-
-
-def replace_page(login, password, datas):
-    asyncio.run(update(login, password, datas))
-
-
-def walk(login, password):
-    datas = []
-    for root, _dir, files in os.walk(DIR_URL_DESTINATION):
-        for _file in fnmatch.filter(files, '*'):
-            d = get_content(root, _file)
-            if not d:
-                continue
-            datas.append(d)
-    replace_page(login, password, datas)
 
 
 if __name__ == '__main__':
-    #print('Enter login :')
-    #login = input()
-    #print('Enter password :')
-    #password = input()
-    login = "moths-art"
-    password = "qB3BS04Em7D2"
+    print('Enter login :')
+    login = input()
+    print('Enter password :')
+    password = input()
 
-    replace_page(
+    walk(
         login, password,
-        [get_content(DIR_URL_DESTINATION, 'abuledu.txt')]
+        DIR_URL_DESTINATION,
+        HttpDetection,
+        HttpToHttpsFormatOperation
     )
-
-    #walk(login, password)

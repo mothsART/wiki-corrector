@@ -21,7 +21,7 @@ class FormatOperation:
         self.changecheck = page_sel.xpath('//input[@name="changecheck"]').attrib['value']
         self.article_changed = False
 
-        self.dokuwiki_updated = self._replace(self.dokuwiki, self.data['detected_lines'])
+        self.dokuwiki_updated = self._replace(self.dokuwiki, self.data['detected_lines']).lstrip()
 
     def _replace(self, doc, detected_lines):
         for line in detected_lines:
@@ -73,7 +73,7 @@ async def update(login, password, datas, formatType):
                 continue
 
             print('Edition de "%s"' % d['path'].replace('.txt', ''))
-            
+
             async with session.post(d['url'], data=payload):
                 pass
             
