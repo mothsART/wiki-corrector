@@ -24,8 +24,6 @@ class FormatOperation:
         self.dokuwiki_updated = self._replace(self.dokuwiki, self.data['detected_lines']).lstrip()
 
     def _replace(self, doc, detected_lines):
-        for line in detected_lines:
-            doc = doc.replace("", "")
         return doc
 
     def has_changed(self):

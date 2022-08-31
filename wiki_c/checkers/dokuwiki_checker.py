@@ -36,6 +36,8 @@ class DokuwikiChecker(Checker):
 
         for pos, line in enumerate(content_list):
             pattern = line.find("''--")
+            if pattern == -1:
+                pattern = line.find("**--")
             suffix_pattern =  line[pattern + 4: pattern + 5]
             if pattern != -1 and suffix_pattern not in [" ", '-']:
-                self.warnings += f"{pos} ''-- rather than ''​%%--%%\n"
+                self.warnings += f"{pos} -- rather than %%--%%\n"
