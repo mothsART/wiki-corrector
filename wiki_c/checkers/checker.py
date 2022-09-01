@@ -25,8 +25,14 @@ class Checker:
             content = Path(self.path).read_text(encoding="UTF-8")
             if content == self.warnings:
                 return
+            if self.warnings.strip():
+                print(self.path, '[deleted]')
+                os.remove(file_path)
+                return
             print(self.path, '[updated]')
         else:
+            if self.warnings.strip():
+                return
             print(self.path, '[created]')
         with open(self.path, 'w') as f:
             f.write(self.warnings)
