@@ -1,9 +1,14 @@
 # Statistiques
 
+## Articles sur le wiki :
+
+  * Nombres d'articles : 5943
+  * Nombres de lignes : 607347
+
 ## Urls non conformes :
 
-  * Nombres de fichiers : 3530
-  * Nombres de remontées : 16728
+  * Nombres de fichiers : 3167
+  * Nombres de remontées : 14279
 
 ## Soucis de grammaire :
 
