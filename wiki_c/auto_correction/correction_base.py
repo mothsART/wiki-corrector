@@ -15,10 +15,14 @@ class FormatOperation:
         page_sel = Selector(text=page)
 
         self.data = data
-        self.dokuwiki = page_sel.css('#wiki__text::text').get()
-        self.sectok = page_sel.xpath('//input[@name="sectok"]').attrib['value']
-        self.date = page_sel.xpath('//input[@name="date"]').attrib['value']
-        self.changecheck = page_sel.xpath('//input[@name="changecheck"]').attrib['value']
+
+        try:
+            self.dokuwiki = page_sel.css('#wiki__text::text').get()
+            self.sectok = page_sel.xpath('//input[@name="sectok"]').attrib['value']
+            self.date = page_sel.xpath('//input[@name="date"]').attrib['value']
+            self.changecheck = page_sel.xpath('//input[@name="changecheck"]').attrib['value']
+        except:
+            print(d['path'])
         self.article_changed = False
 
         self.dokuwiki_updated = self._replace(self.dokuwiki, self.data['detected_lines']).lstrip()
@@ -112,9 +116,11 @@ def replace_page(login, password, datas, formatType):
     asyncio.run(update(login, password, datas, formatType))
 
 
-def walk(login, password, dir_url_destination, detectionType, formatType):
+def walk(login, password, dir_url_destination, detectionType, formatType, exclude_dirs):
     datas = []
     for root, _dir, files in os.walk(dir_url_destination):
+        if _dir in exclude_dirs:
+            continue
         for _file in fnmatch.filter(files, '*'):
             detection = detectionType()
             d = detection.get(root, _file, dir_url_destination)
