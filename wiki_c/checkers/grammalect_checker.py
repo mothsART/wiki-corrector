@@ -64,12 +64,11 @@ class GrammalecteChecker(Checker):
             warnings += self._set_warn(message, content_list)
         return warnings
 
-    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les tags de la page'''
-    def __in_tag(self, target_line, word):
-        start_index = target_line.find('{{tag>')
+    def __in_tag(self, target_line, word, start_tag, end_tag):
+        start_index = target_line.find(start_tag)
         if start_index == -1:
             return False
-        end_index = target_line[start_index].find('}}')
+        end_index = target_line[start_index].find(end_tag)
         if end_index == -1:
             return True
         word_index = target_line[start_index, end_index].find(word)
@@ -77,18 +76,17 @@ class GrammalecteChecker(Checker):
             return False
         return True
 
+    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les tags de la page'''
+    def __in_header_tags(self, target_line, word):
+        return self.__in_tag(target_line, word, '{{tag>', '}}')
+
     '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les balises d'images internes'''
     def __in_img(self, target_line, word):
-        start_index = target_line.find('{{::')
-        if start_index == -1:
-            return False
-        end_index = target_line[start_index].find('|')
-        if end_index == -1:
-            return True
-        word_index = target_line[start_index, end_index].find(word)
-        if word_index == -1:
-            return False
-        return True
+        return self.__in_tag(target_line, word, '{::', '|')
+
+    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les liens wikipédia'''
+    def __in_wikipedia_link(self, target_line, word):
+        return self.__in_tag(target_line, word, '[[wpfr>', '|')
 
     def _set_warn(self, message, content_list):
         cr = ''
@@ -116,9 +114,11 @@ class GrammalecteChecker(Checker):
             word = str(message.word)
             word_l = word.lower()
 
-            if self.__in_tag(target_line, word_l):
+            if self.__in_header_tags(target_line, word_l):
                 return ''
             if self.__in_img(target_line, word_l):
+                return ''
+            if self.__in_wikipedia_link(target_line, word_l):
                 return ''
 
             if word_l in self.personal_dict:
