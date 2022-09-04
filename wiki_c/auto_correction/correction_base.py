@@ -1,13 +1,13 @@
 import os
 import fnmatch
 from pathlib import Path
-from os.path import join
+from os.path import join, isfile
 import asyncio
 
 import aiohttp
 from aiohttp.client_exceptions import InvalidURL
 from scrapy.selector import Selector
-
+import toml
 
 class FormatOperation:
     prefix_summary = ""
@@ -131,3 +131,18 @@ def walk(login, password, dir_url_destination, detectionType, formatType, exclud
                 continue
             datas.append(d)
     replace_page(login, password, datas, formatType)
+
+
+def authenticate():
+    path = "credentials.toml"
+    if isfile(path):
+        content = Path(path).read_text(encoding='UTF-8')
+        credentials = toml.loads(content)
+        return ( credentials['login'], credentials['password'] )
+
+    print('Enter login :')
+    login = input()
+    print('Enter password :')
+    password = input()
+
+    return ( login, password )
