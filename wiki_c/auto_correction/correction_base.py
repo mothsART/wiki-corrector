@@ -95,7 +95,10 @@ class BaseDetection:
         return {}
 
     def get(self, root, _file, dir_url_destination):
-        content = Path(join(root, _file)).read_text(encoding='UTF-8')
+        try:
+            content = Path(join(root, _file)).read_text(encoding='UTF-8')
+        except:
+            return
         if not self.pattern in content:
             return
         lines = content.split('\n')
@@ -116,7 +119,7 @@ def replace_page(login, password, datas, formatType):
     asyncio.run(update(login, password, datas, formatType))
 
 
-def walk(login, password, dir_url_destination, detectionType, formatType, exclude_dirs):
+def walk(login, password, dir_url_destination, detectionType, formatType, exclude_dirs=[]):
     datas = []
     for root, _dir, files in os.walk(dir_url_destination):
         if _dir in exclude_dirs:
