@@ -64,6 +64,19 @@ class GrammalecteChecker(Checker):
             warnings += self._set_warn(message, content_list)
         return warnings
 
+    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les tags de la page'''
+    def __in_tag(self, target_line, word):
+        start_index = target_line.find('{{tag>')
+        if start_index == -1:
+            return False
+        end_index = target_line[start_index].find('}}')
+        if end_index == -1:
+            return True
+        word_index = target_line[start_index, end_index].find(word)
+        if word_index == -1:
+            return False
+        return True
+
     def _set_warn(self, message, content_list):
         cr = ''
         suggestions = ''
@@ -89,6 +102,9 @@ class GrammalecteChecker(Checker):
         if type(message) == GrammalecteSpellingMessage:
             word = str(message.word)
             word_l = word.lower()
+
+            if self.__in_tag(target_line, word_l):
+                return ''
             if word_l in self.personal_dict:
                 return ''
             if '[[utilisateurs:{0}'.format(word) in target_line:
