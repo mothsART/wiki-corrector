@@ -82,7 +82,7 @@ class GrammalecteChecker(Checker):
 
     '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les balises d'images internes'''
     def __in_img(self, target_line, word):
-        return self.__in_tag(target_line, word, '{::', '|')
+        return self.__in_tag(target_line, word, '{{', '|')
 
     '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les liens wikipédia'''
     def __in_wikipedia_link(self, target_line, word):
@@ -147,6 +147,10 @@ class GrammalecteChecker(Checker):
                     return ''
 
         if type(message) == GrammalecteGrammarMessage:
+            word_l = target_line[message.start:message.end].lower()
+
+            if self.__in_img(target_line, word_l):
+                return ''
             suggestions = '' + str(message.suggestions)
 
         self.first_warn = True
