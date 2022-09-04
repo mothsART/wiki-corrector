@@ -77,6 +77,19 @@ class GrammalecteChecker(Checker):
             return False
         return True
 
+    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les balises d'images internes'''
+    def __in_img(self, target_line, word):
+        start_index = target_line.find('{{::')
+        if start_index == -1:
+            return False
+        end_index = target_line[start_index].find('|')
+        if end_index == -1:
+            return True
+        word_index = target_line[start_index, end_index].find(word)
+        if word_index == -1:
+            return False
+        return True
+
     def _set_warn(self, message, content_list):
         cr = ''
         suggestions = ''
@@ -105,6 +118,9 @@ class GrammalecteChecker(Checker):
 
             if self.__in_tag(target_line, word_l):
                 return ''
+            if self.__in_img(target_line, word_l):
+                return ''
+
             if word_l in self.personal_dict:
                 return ''
             if '[[utilisateurs:{0}'.format(word) in target_line:
