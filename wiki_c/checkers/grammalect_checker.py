@@ -88,6 +88,10 @@ class GrammalecteChecker(Checker):
     def __in_wikipedia_link(self, target_line, word):
         return self.__in_tag(target_line, word, '[[wpfr>', '|')
 
+    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les liens internes'''
+    def __in_internal_link(self, target_line, word):
+        return self.__in_tag(target_line, word, '[[:', '|')
+
     def _set_warn(self, message, content_list):
         cr = ''
         suggestions = ''
@@ -113,13 +117,6 @@ class GrammalecteChecker(Checker):
         if type(message) == GrammalecteSpellingMessage:
             word = str(message.word)
             word_l = word.lower()
-
-            if self.__in_header_tags(target_line, word_l):
-                return ''
-            if self.__in_img(target_line, word_l):
-                return ''
-            if self.__in_wikipedia_link(target_line, word_l):
-                return ''
 
             if word_l in self.personal_dict:
                 return ''
@@ -148,10 +145,16 @@ class GrammalecteChecker(Checker):
 
         if type(message) == GrammalecteGrammarMessage:
             word_l = target_line[message.start:message.end].lower()
+            suggestions = ' => suggestions : ' + str(message.suggestions)
 
-            if self.__in_img(target_line, word_l):
-                return ''
-            suggestions = '' + str(message.suggestions)
+        if self.__in_header_tags(target_line, word_l):
+            return ''
+        if self.__in_img(target_line, word_l):
+            return ''
+        if self.__in_wikipedia_link(target_line, word_l):
+            return ''
+        if self.__in_internal_link(target_line, word_l):
+            return ''
 
         self.first_warn = True
 
@@ -159,5 +162,6 @@ class GrammalecteChecker(Checker):
         if message.message == 'Il manque un espace insécable.':
             return ''
 
-        warning = f"{cr}{message.line} {message.message} => {target_line}{suggestions}\n"
+        print(word_l)
+        warning = f"{cr}{message.line} {message.message} => {target_line} | {word_l}{suggestions}\n"
         return warning
