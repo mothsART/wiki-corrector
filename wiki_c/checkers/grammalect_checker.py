@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from pygrammalecte import grammalecte_text
-from pygrammalecte.pygrammalecte import GrammalecteSpellingMessage
+from pygrammalecte.pygrammalecte import GrammalecteSpellingMessage, GrammalecteGrammarMessage
 
 from .checker import Checker
 
@@ -29,8 +29,9 @@ class GrammalecteChecker(Checker):
             self.personal_dict.add(word.title().lower())
 
     def parse(self, content):
+        self.warnings = self._parse(content)
         try:
-            self._parse(content)
+            self.warnings = self._parse(content)
         except Exception as e:
             self.write_error(e, content)
             return
@@ -41,7 +42,10 @@ class GrammalecteChecker(Checker):
         self.last_line = 0
 
         g_lines = grammalecte_text(content)
-        warn = next(g_lines)
+        try:
+            warn = next(g_lines)
+        except:
+            return ''
         for key, line in enumerate(content_list):
             if warn.line == key + 1:
                 warnings += self._set_warn(warn, content_list)
@@ -62,6 +66,8 @@ class GrammalecteChecker(Checker):
 
     def _set_warn(self, message, content_list):
         cr = ''
+        suggestions = ''
+
         target_line = content_list[message.line - 1]
         if type(message) == FakeMessage:
             target_line = content_list[message.line]
@@ -108,11 +114,14 @@ class GrammalecteChecker(Checker):
                 if word in sub_str:
                     return ''
 
+        if type(message) == GrammalecteGrammarMessage:
+            suggestions = '' + str(message.suggestions)
+
         self.first_warn = True
-        warning = "{0}{1} {2} => {3}\n".format(
-            cr,
-            message.line,
-            message.message,
-            target_line
-        )
+
+        # TODO : à supprimer le jour ou dokuwiki supportera les espaces insécables
+        if message.message == 'Il manque un espace insécable.':
+            return ''
+
+        warning = f"{cr}{message.line} {message.message} => {target_line}{suggestions}\n"
         return warning
