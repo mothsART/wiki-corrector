@@ -111,6 +111,10 @@ class GrammalecteChecker(Checker):
     def __in_inline_code_tag(self, target_line, word):
         return self.__in_tag(target_line, word, "''", "''")
 
+    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les suggestions de dépôts ppa'''
+    def __in_ppa_repo(self, target_line, word):
+        return self.__in_tag(target_line, word, "**ppa:", "**")
+
     def _set_warn(self, message, content_list):
         cr = ''
         suggestions = ''
@@ -137,33 +141,9 @@ class GrammalecteChecker(Checker):
             word = str(message.word)
             word_l = word.lower()
 
-            if word_l in self.personal_dict:
-                return ''
-            if '[[utilisateurs:{0}'.format(word) in target_line:
-                return ''
-            if '[[:utilisateurs:{0}'.format(word) in target_line:
-                return ''
-            if '[[:tutoriel:{0}'.format(word) in target_line:
-                return ''
-            if '[[{0}>'.format(word) in target_line:
-                return ''
-            if '[[:{0}'.format(word) in target_line:
-                return ''
-            if '[[apt>{0}|'.format(word) in target_line:
-                return ''
-            if '|{0}]]'.format(word) in target_line:
-                return ''
-            if ':{0}]]'.format(word) in target_line:
-                return ''
-            index_start = target_line.find('<code')
-            index_end = target_line.find('</code>')
-            if index_start != -1 and index_end != -1:
-                sub_str = target_line[index_start + 6:index_end]
-                if word in sub_str:
-                    return ''
-
         if type(message) == GrammalecteGrammarMessage:
-            word_l = target_line[message.start:message.end].lower()
+            word = target_line[message.start:message.end]
+            word_l = word.lower()
 
             if (
                 message.message == 'Il manque un espace.'
@@ -173,6 +153,31 @@ class GrammalecteChecker(Checker):
                 return ''
 
             suggestions = ' => suggestions : ' + str(message.suggestions)
+
+        if word_l in self.personal_dict:
+            return ''
+        if '[[utilisateurs:{0}'.format(word) in target_line:
+            return ''
+        if '[[:utilisateurs:{0}'.format(word) in target_line:
+            return ''
+        if '[[:tutoriel:{0}'.format(word) in target_line:
+            return ''
+        if '[[{0}>'.format(word) in target_line:
+            return ''
+        if '[[:{0}'.format(word) in target_line:
+            return ''
+        if '[[apt>{0}|'.format(word) in target_line:
+            return ''
+        if '|{0}]]'.format(word) in target_line:
+            return ''
+        if ':{0}]]'.format(word) in target_line:
+            return ''
+        index_start = target_line.find('<code')
+        index_end = target_line.find('</code>')
+        if index_start != -1 and index_end != -1:
+            sub_str = target_line[index_start + 6:index_end]
+            if word in sub_str:
+                return ''
 
         if self.__in_header_tags(target_line, word_l):
             return ''
@@ -186,11 +191,17 @@ class GrammalecteChecker(Checker):
             return ''
         if self.__in_inline_code_tag(target_line, word_l):
             return ''
+        if self.__in_ppa_repo(target_line, word_l):
+            return ''
 
         self.first_warn = True
 
         # TODO : à supprimer le jour ou dokuwiki supportera les espaces insécables
-        if message.message == 'Il manque un espace insécable.':
+        if (
+            message.message == 'Il manque un espace insécable.'
+            or message.message == 'Avec une unité de mesure, mettez un espace insécable.'
+            or message.message == 'Si “Go” est une unité de mesure, il manque un espace insécable. Si le nombre se rapporte au mot suivant, c’est aussi valable.'
+        ):
             return ''
 
         warning = f"{cr}{message.line} {message.message} => {target_line} | {word_l}{suggestions}\n"

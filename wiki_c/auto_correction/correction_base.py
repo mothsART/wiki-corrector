@@ -9,6 +9,9 @@ from aiohttp.client_exceptions import InvalidURL
 from scrapy.selector import Selector
 import toml
 
+from wiki_c.cli_message import success_message, error_message
+
+
 class FormatOperation:
     prefix_summary = ""
     def __init__(self, data, page):
@@ -22,7 +25,7 @@ class FormatOperation:
             self.date = page_sel.xpath('//input[@name="date"]').attrib['value']
             self.changecheck = page_sel.xpath('//input[@name="changecheck"]').attrib['value']
         except:
-            print(d['path'])
+            error_message(d['path'])
         self.article_changed = False
 
         self.dokuwiki_updated = self._replace(self.dokuwiki, self.data['detected_lines']).lstrip()
@@ -65,7 +68,7 @@ async def update(login, password, datas, formatType):
                 async with session.get(d['url']) as r:
                     page = await r.text()
             except InvalidURL:
-                print(f'invalid url : {d["url"]}')
+                error_message(f'invalid url : {d["url"]}')
                 continue
 
             operation = formatType(d, page)
@@ -76,8 +79,8 @@ async def update(login, password, datas, formatType):
 
             print('Edition de "%s"' % d['path'].replace('.txt', ''))
 
-            async with session.post(d['url'], data=payload):
-                pass
+            #async with session.post(d['url'], data=payload):
+            #    pass
             
             # update file
             with open(d['path'], 'w') as f:
@@ -98,6 +101,7 @@ class BaseDetection:
         try:
             content = Path(join(root, _file)).read_text(encoding='UTF-8')
         except:
+            error_message(f"get content : {join(root, _file)}")
             return
         if not self.pattern in content:
             return
