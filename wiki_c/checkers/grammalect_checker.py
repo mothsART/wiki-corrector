@@ -1,3 +1,4 @@
+from os.path import join, isfile
 from pathlib import Path
 
 from pygrammalecte import grammalecte_text
@@ -6,6 +7,7 @@ from pygrammalecte.pygrammalecte import GrammalecteSpellingMessage, GrammalecteG
 from .checker import Checker
 
 DIR_GRAMMAR_DESTINATION = 'grammar_result'
+DIR_GRAMMAR_DICT = 'grammar_dict'
 
 
 class FakeMessage:
@@ -21,14 +23,23 @@ class GrammalecteChecker(Checker):
         self.personal_dict: Set[str] = set()
         self.code_open = False
         self.first_warn = False
+
+    def parse(self, content):
         lines = Path('dict').read_text(encoding='UTF-8')
+
+        specific_dict_path = join(
+            DIR_GRAMMAR_DICT,
+            self.root.replace('cache', ''),
+            self._file.replace('.dokuwiki', '.txt')
+        )
+        if isfile(specific_dict_path):
+            lines += Path(specific_dict_path).read_text(encoding='UTF-8')
 
         for line in lines.splitlines():
             word = line.strip()
             self.personal_dict.add(word.lower())
             self.personal_dict.add(word.title().lower())
 
-    def parse(self, content):
         self.warnings = self._parse(content)
         try:
             self.warnings = self._parse(content)
@@ -92,6 +103,14 @@ class GrammalecteChecker(Checker):
     def __in_internal_link(self, target_line, word):
         return self.__in_tag(target_line, word, '[[:', '|')
 
+    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les lignes de code'''
+    def __in_code_tag(self, target_line, word):
+        return self.__in_tag(target_line, word, '<code>', '</code>')
+
+    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les lignes de code en ligne'''
+    def __in_inline_code_tag(self, target_line, word):
+        return self.__in_tag(target_line, word, "''", "''")
+
     def _set_warn(self, message, content_list):
         cr = ''
         suggestions = ''
@@ -145,6 +164,14 @@ class GrammalecteChecker(Checker):
 
         if type(message) == GrammalecteGrammarMessage:
             word_l = target_line[message.start:message.end].lower()
+
+            if (
+                message.message == 'Il manque un espace.'
+                and message.suggestions == [' (']
+                and target_line[message.start + 1] == '('
+            ):
+                return ''
+
             suggestions = ' => suggestions : ' + str(message.suggestions)
 
         if self.__in_header_tags(target_line, word_l):
@@ -155,6 +182,10 @@ class GrammalecteChecker(Checker):
             return ''
         if self.__in_internal_link(target_line, word_l):
             return ''
+        if self.__in_code_tag(target_line, word_l):
+            return ''
+        if self.__in_inline_code_tag(target_line, word_l):
+            return ''
 
         self.first_warn = True
 
@@ -162,6 +193,5 @@ class GrammalecteChecker(Checker):
         if message.message == 'Il manque un espace insécable.':
             return ''
 
-        print(word_l)
         warning = f"{cr}{message.line} {message.message} => {target_line} | {word_l}{suggestions}\n"
         return warning

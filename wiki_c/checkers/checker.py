@@ -16,6 +16,8 @@ class Checker:
 
     def set_path(self, root, _file, len_dir_cache):
         self.warnings = ''
+        self.root = root
+        self._file = _file
         self.path = self.dir + root[len_dir_cache:] + '/' + _file.replace('.dokuwiki', '.txt')
         self.root = root
         self.len_dir_cache = len_dir_cache
