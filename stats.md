@@ -3,7 +3,7 @@
 ## Articles sur le wiki :
 
   * Nombres d'articles : 5936
-  * Nombres de lignes : 600032
+  * Nombres de lignes : 600037
 
 ## Urls non conformes :
 
@@ -12,11 +12,11 @@
 
 ## Soucis de grammaire :
 
-  * Nombres de fichiers : 5846
-  * Nombres de remontées : 764892
+  * Nombres de fichiers : 5772
+  * Nombres de remontées : 432465
 
 ## Soucis de balises Dokuwiki :
 
-  * Nombres de fichiers : 0
-  * Nombres de remontées : 0
+  * Nombres de fichiers : 1
+  * Nombres de remontées : 1
 

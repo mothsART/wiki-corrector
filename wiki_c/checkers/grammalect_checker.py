@@ -127,11 +127,16 @@ class GrammalecteChecker(Checker):
             cr = '\n'
         self.last_line = message.line
 
+        # open an close <code> on multi lines
         if target_line.find('<code') != -1:
             self.code_open = True
         if target_line.find('</code>') != -1:
             self.code_open = False
-        if self.code_open:
+        if self.code_open or target_line.rstrip().endswith('</code>'):
+            return ''
+
+        # dokuwiki rule : if a line start with 2 or more spaces, there is an equivalent of <code>
+        if target_line.startswith('  '):
             return ''
 
         if type(message) == FakeMessage:
@@ -154,8 +159,10 @@ class GrammalecteChecker(Checker):
 
             suggestions = ' => suggestions : ' + str(message.suggestions)
 
+
         if word_l in self.personal_dict:
             return ''
+
         if '[[utilisateurs:{0}'.format(word) in target_line:
             return ''
         if '[[:utilisateurs:{0}'.format(word) in target_line:
@@ -172,6 +179,8 @@ class GrammalecteChecker(Checker):
             return ''
         if ':{0}]]'.format(word) in target_line:
             return ''
+
+        # open an close <code> on same line
         index_start = target_line.find('<code')
         index_end = target_line.find('</code>')
         if index_start != -1 and index_end != -1:
