@@ -41,3 +41,13 @@ class DokuwikiChecker(Checker):
             suffix_pattern =  line[pattern + 4: pattern + 5]
             if pattern != -1 and suffix_pattern not in [" ", '-']:
                 self.warnings += f"{pos} -- rather than %%--%%\n"
+
+        nb_of_code_open = content.count('<code>') + content.count('<code/')
+        nb_of_code_open += content.count('<code ') + content.count('<code|')
+        nb_of_code_open += content.count('<code=')
+        nb_of_code_open -= content.count('%%<code>%%')
+
+        nb_of_code_close = content.count('</code>')
+
+        if nb_of_code_open != nb_of_code_close:
+            self.warnings += f"number of <code ({nb_of_code_open}) and </code> ({nb_of_code_close}) is different"
