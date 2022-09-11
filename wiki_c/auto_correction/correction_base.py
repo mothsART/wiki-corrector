@@ -31,6 +31,10 @@ class FormatOperation:
                 warning_message(f'La page : "{data["path"]}" est actuellement bloquée pour modification par un autre utilisateur.')
                 self.has_warning = True
                 return
+            if page.find('<h1 class="sectionedit1 page-header" id="autorisation_refusee">Autorisation refusée</h1>'):
+                warning_message(f'La page : "{data["path"]}" n\'est pas autorisé à être édité.')
+                self.has_warning = True
+                return
             error_message(data)
             error_message(page)
         self.article_changed = False
