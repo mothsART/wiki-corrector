@@ -39,7 +39,10 @@ class FormatOperation:
             error_message(page)
         self.article_changed = False
 
-        self.dokuwiki_updated = self._replace(self.dokuwiki, self.data['detected_lines']).lstrip()
+        self.dokuwiki_updated = self._replace(self.dokuwiki, self.data['detected_lines'])
+        if self.dokuwiki_updated.lstrip().startswith('*'):
+            return
+        self.dokuwiki_updated = self.dokuwiki_updated.lstrip()
 
     def _replace(self, doc, detected_lines):
         return doc
