@@ -79,8 +79,8 @@ async def update(login, password, datas, formatType):
 
             print('Edition de "%s"' % d['path'].replace('.txt', ''))
 
-            #async with session.post(d['url'], data=payload):
-            #    pass
+            async with session.post(d['url'], data=payload):
+                pass
             
             # update file
             with open(d['path'], 'w') as f:

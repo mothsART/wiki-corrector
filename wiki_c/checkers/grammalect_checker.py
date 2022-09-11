@@ -136,7 +136,12 @@ class GrammalecteChecker(Checker):
             return ''
 
         # dokuwiki rule : if a line start with 2 or more spaces, there is an equivalent of <code>
-        if target_line.startswith('  '):
+        if target_line.startswith('  ') and not target_line.startswith('  *'):
+            return ''
+        if (
+            message.message == 'Espace(s) en début de ligne à supprimer : utilisez les retraits de paragraphe (ou les tabulations à la rigueur).'
+            and target_line.startswith('  *')
+        ):
             return ''
 
         if type(message) == FakeMessage:
@@ -213,5 +218,5 @@ class GrammalecteChecker(Checker):
         ):
             return ''
 
-        warning = f"{cr}{message.line} {message.message} => {target_line} | {word_l}{suggestions}\n"
+        warning = f"{cr}{message.line} {message.message} => {target_line} <|> {word_l}{suggestions}\n"
         return warning

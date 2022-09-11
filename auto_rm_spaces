@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+
+from wiki_c.auto_correction import BaseDetection, FormatOperation, walk, replace_page, authenticate
+
+DIR_URL_DESTINATION = 'grammar_result'
+
+
+class SpacesFormatOperation(FormatOperation):
+    prefix_summary = "Suppression des espaces en fin de ligne"
+
+    def _replace(self, doc, detected_lines):
+        for line in detected_lines:
+            doc = doc.replace(line['before'], line['after'])
+        return doc
+
+
+class SpacesDetection(BaseDetection):
+    pattern = "Espace(s) en fin de ligne à supprimer. => "
+
+    def _extract(self, line):      
+        start_line = line.find(self.pattern) + len(self.pattern)
+        before_line = line[start_line:line.find("<|>") - 1]
+
+        after_line = before_line.rstrip()
+        if after_line.endswith('\\'):
+            after_line = after_line[:len(after_line) - 2].rstrip()
+
+        return {
+            'before': before_line,
+            'after': after_line
+        }
+
+
+if __name__ == '__main__':
+    login, password = authenticate()
+
+    detection = SpacesDetection()
+    d = detection.get(DIR_URL_DESTINATION, 'zsync.txt', DIR_URL_DESTINATION)
+    datas = [ d ]
+    replace_page(login, password, datas, SpacesFormatOperation)
+
+    #walk(
+    #    login, password,
+    #    DIR_URL_DESTINATION,
+    #    SpacesDetection,
+    #    SpacesFormatOperation
+    #)
