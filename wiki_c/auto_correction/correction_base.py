@@ -57,7 +57,7 @@ class FormatOperation:
             'sectok': self.sectok,
             'date': self.date,
             'changecheck': self.changecheck,
-            'summary': f"{self.prefix_summary} (détecté et corrigé via le bot wiki-corrector (https://forum.ubuntu-fr.org/viewtopic.php?id=2067892)",
+            'summary': f"{self.prefix_summary} (détecté et corrigé via le bot wiki-corrector : https://forum.ubuntu-fr.org/viewtopic.php?id=2067892)",
             'do[save]': '',
             'minor': 1,
             'wikitext': self.dokuwiki_updated
