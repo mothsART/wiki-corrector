@@ -9,12 +9,14 @@ from aiohttp.client_exceptions import InvalidURL
 from scrapy.selector import Selector
 import toml
 
-from wiki_c.cli_message import success_message, error_message
+from wiki_c.cli_message import success_message, warning_message, error_message
 
 
 class FormatOperation:
     prefix_summary = ""
+
     def __init__(self, data, page):
+        self.has_warning = False
         page_sel = Selector(text=page)
 
         self.data = data
@@ -25,7 +27,12 @@ class FormatOperation:
             self.date = page_sel.xpath('//input[@name="date"]').attrib['value']
             self.changecheck = page_sel.xpath('//input[@name="changecheck"]').attrib['value']
         except:
-            error_message(d['path'])
+            if page.find('<h1 class="sectionedit1 page-header" id="page_bloquee">Page bloquée</h1>') != -1:
+                warning_message(f'La page : "{data["path"]}" est actuellement bloquée pour modification par un autre utilisateur.')
+                self.has_warning = True
+                return
+            error_message(data)
+            error_message(page)
         self.article_changed = False
 
         self.dokuwiki_updated = self._replace(self.dokuwiki, self.data['detected_lines']).lstrip()
@@ -72,6 +79,8 @@ async def update(login, password, datas, formatType):
                 continue
 
             operation = formatType(d, page)
+            if operation.has_warning:
+                continue
 
             payload = operation.payload()
             if not operation.has_changed():

@@ -8,6 +8,13 @@ def success_message(message):
         )
     )
 
+def warning_message(message):
+    print (
+        '%s%s %s %s' % (
+            fg('white'), bg('dark_orange_3a'), message, attr('reset')
+        )
+    )
+
 def error_message(message):
     print (
         '%s%s %s %s' % (
