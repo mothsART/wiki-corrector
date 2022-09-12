@@ -49,11 +49,10 @@ class Checker:
         return False
 
     def write(self):
-        if self.warnings == '':
-            os.makedirs(
-                self.dir + '/' + self.root[self.len_dir_cache:],
-                exist_ok=True
-            )
+        os.makedirs(
+            self.dir + '/' + self.root[self.len_dir_cache:],
+            exist_ok=True
+        )
         self.create_file()
 
     def write_error(self, e, content):
