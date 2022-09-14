@@ -115,6 +115,10 @@ class GrammalecteChecker(Checker):
     def __in_ppa_repo(self, target_line, word):
         return self.__in_tag(target_line, word, "**ppa:", "**")
 
+    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les balises <file>...</file>'''
+    def __in_file_tag(self, target_line, word):
+        return self.__in_tag(target_line, word, "<file>", "</file>")
+
     def _set_warn(self, message, content_list):
         cr = ''
         suggestions = ''
@@ -207,6 +211,8 @@ class GrammalecteChecker(Checker):
             return ''
         if self.__in_ppa_repo(target_line, word_l):
             return ''
+        if self.__in_file_tag(target_line, word_l):
+            return ''
 
         self.first_warn = True
 
@@ -218,5 +224,5 @@ class GrammalecteChecker(Checker):
         ):
             return ''
 
-        warning = f"{cr}{message.line} {message.message} => {target_line} <|> {word_l}{suggestions}\n"
+        warning = f"{cr}{message.line} {message.message} [[{message.start}:{message.end}]] => {target_line} <|> {word_l}{suggestions}\n"
         return warning

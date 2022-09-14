@@ -97,7 +97,7 @@ async def update(login, password, datas, formatType):
 
             async with session.post(d['url'], data=payload):
                 pass
-            
+
             # update file
             with open(d['path'], 'w') as f:
                 f.write(d['update_warnings'])
@@ -119,10 +119,32 @@ class BaseDetection:
         except:
             error_message(f"get content : {join(root, _file)}")
             return
-        if not self.pattern in content:
-            return
-        lines = content.split('\n')
-        detected_lines = [self._extract(line) for line in lines if self.pattern in line]
+
+        if type(self.pattern) == str:
+            if self.pattern in content:
+                return
+            lines = content.split('\n')
+            detected_lines = [self._extract(line) for line in lines if self.pattern in line]
+            update_warnings = '\n'.join([line for line in lines if not self.pattern in line])
+        else:
+            in_content = False
+            for p in self.pattern:
+                if p in content:
+                    in_content = True
+            if not in_content:
+                return
+            lines = content.split('\n')
+
+            detected_lines = []
+            update_warnings_list = []
+
+            for line in lines:
+                for p in self.pattern:
+                    if p in line:
+                        detected_lines.append(self._extract(line))
+                        continue
+                    update_warnings_list.append(line)
+            update_warnings = '\n'.join(update_warnings_list)
 
         return {
             'path': join(root, _file),
@@ -131,7 +153,7 @@ class BaseDetection:
                 _file.replace('.txt', '')
             ),
             'detected_lines': detected_lines,
-            'update_warnings': '\n'.join([line for line in lines if not self.pattern in line])
+            'update_warnings': update_warnings
         }
 
 

@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+
+from wiki_c.auto_correction import BaseDetection, FormatOperation, walk, replace_page, authenticate
+from wiki_c.cli_message import error_message
+
+DIR_URL_DESTINATION = 'grammar_result'
+
+
+class GuillemetsFormatOperation(FormatOperation):
+    prefix_summary = "Correction des guillemets"
+
+    def _replace(self, doc, detected_lines):
+        for line in detected_lines:
+            doc = doc.replace(line['before'], line['after'])
+        return doc
+
+
+class GuillemetsDetection(BaseDetection):
+    pattern = [
+        "Guillemets typographiques ouvrants. [[",
+        "Guillemets typographiques fermants. [["
+    ]
+
+    def _extract(self, line):
+        is_open = False
+        start_match = line.find(self.pattern[1]) + len(self.pattern[1])
+        if line.find(self.pattern[0]) != -1:
+            start_match = line.find(self.pattern[0]) + len(self.pattern[0])
+            is_open = True
+
+        length_match = line[start_match:].find(':')
+        start_index = int(line[start_match:start_match + length_match])
+        end_index = int(line[start_match + length_match + 1:length_match + line[length_match + 1:].find(']]') + 1])
+
+        if end_index != start_index + 1:
+            error_message(start_index, end_index)
+            error_message(line)
+            exit(0)
+        
+        guillemet = " »"
+        if is_open:
+            guillemet = "« "
+        
+        index = start_match + length_match + len(str(start_index)) + len(str(end_index)) + 5 + start_index
+        new_line = line[:index] + guillemet + line[index + 1:]
+
+        return {
+            'before': line,
+            'after': new_line
+        }
+
+
+if __name__ == '__main__':
+    login, password = authenticate()
+
+    #detection = GuillemetsDetection()
+    #d = detection.get(DIR_URL_DESTINATION, 'xsane.txt', DIR_URL_DESTINATION)
+    #datas = [ d ]
+    #replace_page(login, password, datas, GuillemetsFormatOperation)
+
+    walk(
+        login, password,
+        DIR_URL_DESTINATION,
+        GuillemetsDetection,
+        GuillemetsFormatOperation
+    )
