@@ -26,17 +26,20 @@ class ShellCodeChecker(Checker):
     
     # surtout pour factoriser ;)
     def keep_only_shellcode_then_run_checker(self, matched_balise_content, balise_ouvrante, balise_fermante):
-        if matched_balise_content:
-            for balise_found_content in matched_balise_content:
-                # on ne prend que le code bash depuis le shebang jusqu'à la balise fermante
-                match = re.search(balise_ouvrante + r'.*?(#!/.*?)' + balise_fermante, balise_found_content, re.DOTALL)
-                if match:
-                    shellcode_content = match.group(1)
-                    # un script shell débute avec shebang et fini par sh (pas python ou ruby)
-                    if shellcode_content.startswith("#!/") and shellcode_content.partition('\n')[0].endswith("sh"):
-                        #print(shellcode_content)
-                        self.create_temp_file_to_run_shellcheck(shellcode_content)
-                        self.warnings += f"{self.run_shellcheck_and_return_output()}\n\n"
+        if not matched_balise_content:
+            return
+    
+        for balise_found_content in matched_balise_content:
+            # on ne prend que le code bash depuis le shebang jusqu'à la balise fermante
+            match = re.search(balise_ouvrante + r'.*?(#!/.*?)' + balise_fermante, balise_found_content, re.DOTALL)
+            if not match:
+                continue
+            shellcode_content = match.group(1)
+            # un script shell débute avec shebang et fini par sh (pas python ou ruby)
+            if shellcode_content.startswith("#!/") and shellcode_content.partition('\n')[0].endswith("sh"):
+                #print(shellcode_content)
+                self.create_temp_file_to_run_shellcheck(shellcode_content)
+                self.warnings += f"{self.run_shellcheck_and_return_output()}\n\n"
 
     def parse(self, content):
         # le re.DOTALL permet que '.' match plusieurs lignes
