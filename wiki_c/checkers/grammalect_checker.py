@@ -22,6 +22,7 @@ class GrammalecteChecker(Checker):
 
         self.personal_dict: Set[str] = set()
         self.code_open = False
+        self.file_tag_open = False
         self.first_warn = False
 
     def parse(self, content):
@@ -105,7 +106,7 @@ class GrammalecteChecker(Checker):
 
     '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les lignes de code'''
     def __in_code_tag(self, target_line, word):
-        return self.__in_tag(target_line, word, '<code>', '</code>')
+        return self.__in_tag(target_line, word, '<code ', '</code>')
 
     '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les lignes de code en ligne'''
     def __in_inline_code_tag(self, target_line, word):
@@ -137,6 +138,14 @@ class GrammalecteChecker(Checker):
         if target_line.find('</code>') != -1:
             self.code_open = False
         if self.code_open or target_line.rstrip().endswith('</code>'):
+            return ''
+
+        # open an close <file> on multi lines
+        if target_line.find('<file>') != -1:
+            self.file_tag_open = True
+        if target_line.find('</file>') != -1:
+            self.file_tag_open = False
+        if self.file_tag_open or target_line.rstrip().endswith('</file>'):
             return ''
 
         # dokuwiki rule : if a line start with 2 or more spaces, there is an equivalent of <code>
@@ -188,14 +197,6 @@ class GrammalecteChecker(Checker):
             return ''
         if ':{0}]]'.format(word) in target_line:
             return ''
-
-        # open an close <code> on same line
-        index_start = target_line.find('<code')
-        index_end = target_line.find('</code>')
-        if index_start != -1 and index_end != -1:
-            sub_str = target_line[index_start + 6:index_end]
-            if word in sub_str:
-                return ''
 
         if self.__in_header_tags(target_line, word_l):
             return ''
