@@ -12,8 +12,8 @@
 
 ## Soucis de grammaire :
 
-  * Nombres de fichiers : 5814
-  * Nombres de remontées : 430994
+  * Nombres de fichiers : 5740
+  * Nombres de remontées : 340777
 
 ## Soucis de balises Dokuwiki :
 
