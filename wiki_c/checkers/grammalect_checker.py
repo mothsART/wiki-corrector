@@ -102,23 +102,38 @@ class GrammalecteChecker(Checker):
 
     '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les liens internes'''
     def __in_internal_link(self, target_line, word):
-        return self.__in_tag(target_line, word, '[[:', '|')
-
-    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les lignes de code'''
-    def __in_code_tag(self, target_line, word):
-        return self.__in_tag(target_line, word, '<code ', '</code>')
+        return self.__in_tag(target_line, word, '[[:', '|') or self.__in_tag(target_line, word, '[[', '|')
 
     '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les lignes de code en ligne'''
     def __in_inline_code_tag(self, target_line, word):
-        return self.__in_tag(target_line, word, "''", "''")
+        if self.__in_tag(target_line, word, "''", "''"):
+            return True
 
     '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les suggestions de dépôts ppa'''
     def __in_ppa_repo(self, target_line, word):
         return self.__in_tag(target_line, word, "**ppa:", "**")
 
+
+
+    def __in_inline_tag(self, target_line, word, start_tag, end_tag):
+        while True:
+            index_start = target_line.find(start_tag)
+            index_end = target_line.find(end_tag)
+            if index_start == -1 or index_end == -1:
+                return False
+
+            sub_str = target_line[index_start +  target_line[index_start:].find('>') + 1:index_end]
+            if word in sub_str:
+                return True
+            target_line = target_line[index_end + 7:]
+
     '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les balises <file>...</file>'''
     def __in_file_tag(self, target_line, word):
-        return self.__in_tag(target_line, word, "<file>", "</file>")
+        return self.__in_inline_tag(target_line, word, '<file', '</file>')
+
+    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les lignes de code en ligne'''
+    def __in_code_tag(self, target_line, word):
+        return self.__in_inline_tag(target_line, word, '<code', '</code>')
 
     def _set_warn(self, message, content_list):
         cr = ''
@@ -177,7 +192,6 @@ class GrammalecteChecker(Checker):
 
             suggestions = ' => suggestions : ' + str(message.suggestions)
 
-
         if word_l in self.personal_dict:
             return ''
 
@@ -198,22 +212,6 @@ class GrammalecteChecker(Checker):
         if ':{0}]]'.format(word) in target_line:
             return ''
 
-        # open an close <code> on same line
-        index_start = target_line.find('<code')
-        index_end = target_line.find('</code>')
-        if index_start != -1 and index_end != -1:
-            sub_str = target_line[index_start + 6:index_end]
-            if word in sub_str:
-                return ''
-
-        # open an close <file> on same line
-        index_start = target_line.find('<file')
-        index_end = target_line.find('</file>')
-        if index_start != -1 and index_end != -1:
-            sub_str = target_line[index_start + 6:index_end]
-            if word in sub_str:
-                return ''
-
         if self.__in_header_tags(target_line, word_l):
             return ''
         if self.__in_img(target_line, word_l):
@@ -222,11 +220,12 @@ class GrammalecteChecker(Checker):
             return ''
         if self.__in_internal_link(target_line, word_l):
             return ''
-        if self.__in_code_tag(target_line, word_l):
+        if self.__in_ppa_repo(target_line, word_l):
             return ''
         if self.__in_inline_code_tag(target_line, word_l):
             return ''
-        if self.__in_ppa_repo(target_line, word_l):
+
+        if self.__in_code_tag(target_line, word_l):
             return ''
         if self.__in_file_tag(target_line, word_l):
             return ''
