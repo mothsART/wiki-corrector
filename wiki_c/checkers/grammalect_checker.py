@@ -198,6 +198,22 @@ class GrammalecteChecker(Checker):
         if ':{0}]]'.format(word) in target_line:
             return ''
 
+        # open an close <code> on same line
+        index_start = target_line.find('<code')
+        index_end = target_line.find('</code>')
+        if index_start != -1 and index_end != -1:
+            sub_str = target_line[index_start + 6:index_end]
+            if word in sub_str:
+                return ''
+
+        # open an close <file> on same line
+        index_start = target_line.find('<file')
+        index_end = target_line.find('</file>')
+        if index_start != -1 and index_end != -1:
+            sub_str = target_line[index_start + 6:index_end]
+            if word in sub_str:
+                return ''
+
         if self.__in_header_tags(target_line, word_l):
             return ''
         if self.__in_img(target_line, word_l):
