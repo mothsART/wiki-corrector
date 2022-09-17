@@ -10,9 +10,16 @@ class GuillemetsFormatOperation(FormatOperation):
     prefix_summary = "Correction des guillemets"
 
     def _replace(self, doc, detected_lines):
-        for line in detected_lines:
-            doc = doc.replace(line['before'], line['after'])
-        return doc
+        lines = doc.split('\n')
+        new_lines = []
+        for inc, l in enumerate(lines):
+            for line in detected_lines:
+                if not line['line_index'] == inc:
+                    continue
+                l = l[:line['index']] + line['guillemet'] + l[line['index'] + 1:]
+            new_lines.append(l)
+
+        return "\n".join(new_lines).replace('»', ' »').replace('«', '« ').replace('  »', ' »').replace('«  ', '« ')
 
 
 class GuillemetsDetection(BaseDetection):
@@ -36,17 +43,21 @@ class GuillemetsDetection(BaseDetection):
             error_message(start_index, end_index)
             error_message(line)
             exit(0)
-        
-        guillemet = " »"
+
+        guillemet = "»"
         if is_open:
-            guillemet = "« "
+            guillemet = "«"
         
         index = start_match + length_match + len(str(start_index)) + len(str(end_index)) + 5 + start_index
         new_line = line[:index] + guillemet + line[index + 1:]
 
+        before = line[length_match + line[length_match + 1:].find(']]') + 7:line.find('<|>') - 1]
+
         return {
-            'before': line,
-            'after': new_line
+            'line_index': int(line[:line.find(' ')]),
+            'before': before,
+            'index': start_index,
+            'guillemet': guillemet
         }
 
 
@@ -57,6 +68,7 @@ if __name__ == '__main__':
     #d = detection.get(DIR_URL_DESTINATION, 'xsane.txt', DIR_URL_DESTINATION)
     #datas = [ d ]
     #replace_page(login, password, datas, GuillemetsFormatOperation)
+    #exit(0)
 
     walk(
         login, password,
