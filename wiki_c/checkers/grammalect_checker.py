@@ -1,3 +1,5 @@
+import toml
+
 from os.path import join, isfile
 from pathlib import Path
 
@@ -8,7 +10,7 @@ from .checker import Checker
 
 DIR_GRAMMAR_DESTINATION = 'grammar_result'
 DIR_GRAMMAR_DICT = 'grammar_dict'
-
+DIR_GRAMMAR_BLACKLIST = 'grammar_blacklist'
 
 class FakeMessage:
     def __init__(self, line, message):
@@ -24,6 +26,7 @@ class GrammalecteChecker(Checker):
         self.code_open = False
         self.file_tag_open = False
         self.first_warn = False
+        self.blacklist = {}
 
     def parse(self, content):
         lines = Path('dict').read_text(encoding='UTF-8')
@@ -31,7 +34,7 @@ class GrammalecteChecker(Checker):
         specific_dict_path = join(
             DIR_GRAMMAR_DICT,
             self.root.replace('cache', ''),
-            self._file.replace('.dokuwiki', '.txt')
+            self._file.replace('.dokuwiki', '.txt'),
         )
         if isfile(specific_dict_path):
             lines += Path(specific_dict_path).read_text(encoding='UTF-8')
@@ -41,12 +44,23 @@ class GrammalecteChecker(Checker):
             self.personal_dict.add(word.lower())
             self.personal_dict.add(word.title().lower())
 
+        blacklist_path = join(
+            DIR_GRAMMAR_BLACKLIST,
+            self.root.replace('cache', ''),
+            self._file.replace('.dokuwiki', '.toml'),
+        )
+        if not isfile(blacklist_path):
+            return
+        with open(blacklist_path, 'r') as f:
+            self.blacklist = toml.loads(f.read())
+
         self.warnings = self._parse(content)
         try:
             self.warnings = self._parse(content)
         except Exception as e:
             self.write_error(e, content)
             return
+
 
     def _parse(self, content):
         warnings = ''
@@ -135,6 +149,19 @@ class GrammalecteChecker(Checker):
     def __in_code_tag(self, target_line, word):
         return self.__in_inline_tag(target_line, word, '<code', '</code>')
 
+    def is_blacklisted(self, message):
+        for inc in self.blacklist['falsepositive']:
+            if message.line != int(self.blacklist['falsepositive'][inc]['line']):
+                continue
+            if message.start != int(self.blacklist['falsepositive'][inc]['col_start']):
+                continue
+            if message.end != int(self.blacklist['falsepositive'][inc]['col_end']):
+                continue
+            if message.message != self.blacklist['falsepositive'][inc]['message']:
+                continue
+            return True
+        return False
+
     def _set_warn(self, message, content_list):
         cr = ''
         suggestions = ''
@@ -173,6 +200,9 @@ class GrammalecteChecker(Checker):
             return ''
 
         if type(message) == FakeMessage:
+            return ''
+
+        if self.is_blacklisted(message):
             return ''
 
         if type(message) == GrammalecteSpellingMessage:
