@@ -49,10 +49,9 @@ class GrammalecteChecker(Checker):
             self.root.replace('cache', ''),
             self._file.replace('.dokuwiki', '.toml'),
         )
-        if not isfile(blacklist_path):
-            return
-        with open(blacklist_path, 'r') as f:
-            self.blacklist = toml.loads(f.read())
+        if isfile(blacklist_path):
+            with open(blacklist_path, 'r') as f:
+                self.blacklist = toml.loads(f.read())
 
         self.warnings = self._parse(content)
         try:
@@ -150,6 +149,9 @@ class GrammalecteChecker(Checker):
         return self.__in_inline_tag(target_line, word, '<code', '</code>')
 
     def is_blacklisted(self, message):
+        if self.blacklist == {}:
+            return False
+
         for inc in self.blacklist['falsepositive']:
             if message.line != int(self.blacklist['falsepositive'][inc]['line']):
                 continue
