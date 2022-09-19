@@ -221,7 +221,6 @@ unconfigured : 1
 ZimbraDesktop : 1
 YahooMail : 1
 Brasero__ : 1
-Lts : 1
 Pidgin-OTR : 1
 toolbar : 1
 Kopete-OTR : 1
@@ -307,7 +306,6 @@ Nom_du_jeu : 1
 reécrite : 1
 Kuser : 1
 zorglub : 1
-Exe : 1
 parse_depend_manifests : 1
 xécutables : 1
 executables : 1
@@ -599,7 +597,6 @@ redtube : 1
 sapo : 1
 senat : 1
 sevenload : 1
-soundcloud : 1
 spankwire : 1
 spiegel : 1
 tagtele : 1
@@ -1420,7 +1417,6 @@ ServerTokens : 1
 menera : 1
 SecRule : 1
 severity : 1
-redirect : 1
 SecDefaultAction : 1
 modsecurity : 1
 Antispam : 1
@@ -1877,7 +1873,6 @@ VDSL : 1
 Miredo : 1
 looser : 1
 Boulay : 1
-Ipv6 : 1
 charlybozo : 1
 Ballistics : 1
 BeaconStrike : 1
@@ -3133,7 +3128,6 @@ birthdays : 1
 csv-file : 1
 libreoffice_calc : 1
 Days : 1
-LateX : 1
 VanDale : 1
 Nederlands : 1
 als : 1
@@ -3160,7 +3154,6 @@ xplanetFX : 1
 GLFW : 1
 EFL : 1
 xlsclients : 1
-UpnP : 1
 Cifs : 1
 stamps : 1
 Tuxy : 1
@@ -3303,7 +3296,6 @@ bt_audio_service_open : 1
 RTP1 : 1
 LW : 1
 RPT1 : 1
-Redirect : 1
 gsprint : 1
 Generique : 1
 DTSSSE : 1
@@ -3588,7 +3580,6 @@ mailhub : 1
 rewriteDomain : 1
 FromLineOverride : 1
 UseSTARTTLS : 1
-GMAIL : 1
 bsd-mailx : 1
 xmail : 1
 mailrc : 1
@@ -4387,7 +4378,6 @@ device_missing : 1
 no_ : 1
 no_device_missing : 1
 missing_status_code : 1
-XORG : 1
 Rayman3640 : 1
 Transfig : 1
 XFig-doc : 1
@@ -4869,7 +4859,6 @@ TrueCombat : 1
 flashbang : 1
 Bodycount : 1
 activator : 1
-COMPIZ : 1
 W2V : 1
 démutter : 1
 slider : 1
@@ -5840,7 +5829,6 @@ nameservers : 1
 attributer : 1
 Resolv : 1
 LiveBOX : 1
-freeBOX : 1
 aliceBOX : 1
 boxs : 1
 Xmorph : 1
@@ -6206,7 +6194,6 @@ __Désactivé : 1
 ZyXEL : 1
 __aussi : 1
 numéricable : 1
-FREEBOX : 1
 __NB : 1
 full-hd : 1
 Defaultdepth : 1
@@ -6466,7 +6453,6 @@ createuser : 1
 SUPERUSER : 1
 CREATEDB : 1
 CREATEROLE : 1
-PostgreSQl : 1
 PGHOST : 1
 défionir : 1
 PGDATABASE : 1
@@ -6815,7 +6801,6 @@ forcant : 1
 trialboot : 1
 bootcamp : 1
 xc00006e : 1
-DVd : 1
 UTILITIES : 1
 setBoot : 1
 partion : 1
@@ -6865,7 +6850,6 @@ menuK : 1
 Holdem : 1
 pokerth : 1
 serverlist : 1
-IPTables : 1
 emerging-all : 1
 Null : 1
 Forensics : 1
@@ -7149,7 +7133,6 @@ J7 : 1
 AuthInfoRequired : 1
 Photosmart-C4100-series-2 : 1
 virtualbox-guest-utils : 1
-virtualBox : 1
 executing : 1
 __possibilité__ : 1
 SVM : 1
@@ -8172,7 +8155,6 @@ __Fonctionnel : 1
 VmWare : 1
 action-RPG : 1
 Shepard : 1
-PlayonLinux : 1
 nomovies : 1
 cut-scenes : 1
 Biogame : 1
@@ -8404,7 +8386,6 @@ WUSB6300 : 1
 Rosewill : 1
 AC1200UBE : 1
 BCM43 : 1
-uEFI : 1
 STA : 1
 pol : 1
 playonlinux-url_handler : 1
@@ -8489,7 +8470,6 @@ Napoléon's : 1
 Campaigns : 1
 NCP : 1
 AGEOD's : 1
-Mp4 : 1
 python-is-python3 : 1
 update-alternatives : 1
 alrt : 1
@@ -9189,7 +9169,6 @@ Meteoblue : 1
 FNMOC : 1
 Actimar : 1
 ide-core : 1
-Dvd : 1
 linux-source-2 : 1
 Googler : 1
 command_line : 1
@@ -11103,7 +11082,6 @@ HD576p : 1
 evitera : 1
 enerver : 1
 capacite : 1
-Vga : 1
 démuté : 1
 contôle : 1
 GeForce6200 : 1
@@ -11134,7 +11112,6 @@ nécesssite : 1
 postfix-tls : 1
 courier-authmysql : 1
 sebtiz13 : 1
-Pop3 : 1
 authpam : 1
 authmysql : 1
 Amavis : 1
@@ -12059,7 +12036,6 @@ VIDEOS_TS : 1
 OGG-Vorbis : 1
 UHD86 : 1
 UHD87 : 1
-IPHONE : 1
 IPAD : 1
 DP1B : 1
 disc3D : 1
@@ -12939,7 +12915,6 @@ ImagePRESS : 1
 ImagePASS : 1
 ImageRUNNER : 1
 iR : 1
-iRC : 1
 LaserBase : 1
 LaserShot : 1
 LBP-4i : 1
@@ -13020,7 +12995,6 @@ window-y : 1
 GKsu : 1
 Massively : 1
 DNA : 1
-PlayOnlinux : 1
 lp-l10n-fr-community : 1
 lp-l10n-fr : 1
 Communitheme : 1
@@ -13125,7 +13099,6 @@ senethri1 : 1
 reloguer : 1
 le_biloute : 1
 Musashimaru : 1
-IPod : 1
 sip-4 : 1
 imprimnante : 1
 RP-E10 : 1
@@ -13290,7 +13263,6 @@ xff : 1
 rows : 1
 valeurflux1 : 1
 valeurflux2 : 1
-DEF : 1
 LINE3 : 1
 release-notes : 1
 OpenErp : 1
@@ -14290,6 +14262,7 @@ TerminatorX : 1
 djing : 1
 PodGet : 1
 PodRacer : 1
+Clementine : 1
 Noatun : 1
 caleb : 1
 Gloobus-Flow : 1
@@ -14999,7 +14972,6 @@ KeepassX : 1
 Keepass : 1
 ctrl-x : 1
 no-opengl-libs : 1
-Cuda : 1
 domain-needed : 1
 bogus-priv : 1
 filterwin2k : 1
@@ -15416,11 +15388,9 @@ Kmplayer : 1
 Acetone-Mounted : 1
 bureau__ : 1
 Paliatif : 1
-POSTFIX : 1
 DBMAIL : 1
 smtp_generic_maps : 1
 canonical_maps : 1
-PostFix : 1
 mailname : 1
 dnsdomainname : 1
 SUBSTRING_INDEX : 1
@@ -15518,7 +15488,6 @@ QUELQUE_CHOSE : 1
 QUELQUE_COMMANDE : 1
 QUELQUE_CHOSE_IMPORTANT : 1
 votreidentifiant : 1
-NAUTILUS : 1
 Forkbomb : 1
 Tarbomb : 1
 tar-gz : 1
@@ -16533,7 +16502,6 @@ laucher : 1
 Failure : 1
 libgcrypt20 : 1
 rads_user_kernel : 1
-WIne : 1
 splat : 1
 Reouvrir : 1
 self-cast : 1
@@ -16611,7 +16579,6 @@ morphose : 1
 JavaMorph : 1
 Indefero : 1
 idf : 1
-Svn : 1
 écrit__ : 1
 relâché__ : 1
 ʁoˈdɛs : 1
@@ -17155,7 +17122,6 @@ mesh : 1
 ENet : 1
 sprite : 1
 JAVASCRIPT : 1
-Opengl : 1
 PyGame : 1
 bayesien : 1
 Apress : 1
@@ -17349,7 +17315,6 @@ Zephyr : 1
 NateOn : 1
 Rediffbol : 1
 XFire : 1
-Libnotify : 1
 blist : 1
 libpurple0 : 1
 pidgin-toolbar-shrink : 1
@@ -18197,7 +18162,6 @@ back-end : 1
 ProxyRequests : 1
 ProxyPreserveHost : 1
 apache2ctl : 1
-EDUBUNTU : 1
 MenuEditor : 1
 Monmenu : 1
 __Deuxième : 1
@@ -18470,7 +18434,6 @@ Gravables : 1
 LXDM : 1
 install-readme-fr : 1
 Screenshoot : 1
-TAR : 1
 ØMQ : 1
 uuid-dev : 1
 psenvpub : 1
@@ -18538,7 +18501,6 @@ ancrables : 1
 Minilyrics : 1
 DCOPserver__ : 1
 Mixer1 : 1
-amaroK : 1
 Kalarm : 1
 iTune : 1
 HCDPD : 1
@@ -20276,9 +20238,6 @@ sauvegarde_windows : 1
 tartuf : 1
 PING-1 : 1
 PING : 1
-Xspf : 1
-M3U : 1
-M3u : 1
 kerebos : 1
 dhcp-options : 1
 ip-adress : 1
@@ -21366,7 +21325,6 @@ SECONDARY : 1
 WKS : 1
 VSWITCH1 : 1
 VSWITCH2 : 1
-VIRTUALBOX : 1
 virtualiseurs : 1
 Controleur : 1
 VSWITCH-2 : 1
@@ -21847,7 +21805,6 @@ friends : 1
 Roozeec : 1
 annees : 1
 GEM : 1
-MANDRIVA : 1
 Mediator : 1
 décoher : 1
 Luci : 1
@@ -22244,7 +22201,6 @@ testées__ : 1
 Knoppic : 1
 Intrépid : 1
 Jacalope : 1
-EMail : 1
 E4300 : 1
 Gibioctects : 1
 Altec : 1
@@ -22627,7 +22583,6 @@ obKey : 1
 itune : 1
 O_o : 1
 NumlockX : 1
-pulseAudio : 1
 SOG : 1
 VoiceChanger : 1
 PyVoiceChanger : 1
@@ -23928,7 +23883,6 @@ xbindkey-config : 1
 gnome-session-properties : 1
 analog-surround-21 : 1
 Nfs : 1
-Ssh : 1
 Hebergeur : 1
 powa : 1
 rungp : 1
@@ -24224,7 +24178,6 @@ N53JF : 1
 CyanogenMod : 1
 légé : 1
 twiX : 1
-VISTA : 1
 thême : 1
 Bmwe21 : 1
 MDP : 1
@@ -24826,7 +24779,6 @@ nux : 1
 pygmee : 1
 Pecky : 1
 Sql : 1
-PostGreSql : 1
 AVLinux : 1
 KX-Studio : 1
 powerPC : 1
@@ -24912,7 +24864,6 @@ _LTS : 1
 disque_dur : 1
 carte_son : 1
 taggés : 1
-XFce : 1
 Hardy__ : 1
 carte_mémoire : 1
 Aptitude__ : 1
@@ -25240,7 +25191,6 @@ parttion : 1
 nom_symbolique : 1
 ClubInternet : 1
 caractere : 1
-Localhost : 1
 httpd-xampp : 1
 delivery : 1
 mysql-serveur : 1
@@ -27714,7 +27664,6 @@ manoeuvre : 2
 Traceback : 2
 Queuing : 2
 ushare : 2
-uPnP : 2
 LPCM : 2
 rvf : 2
 __un : 2
@@ -27837,7 +27786,6 @@ qwbfs : 2
 glade2 : 2
 Gnome15 : 2
 G18 : 2
-logitech : 2
 CFD : 2
 PyOpenCL : 2
 Paragon : 2
@@ -27984,7 +27932,6 @@ EiffelBuild : 2
 PyQt5 : 2
 PyQT : 2
 conference : 2
-Ldap : 2
 Quickhash : 2
 DirectMedia : 2
 mame : 2
@@ -28028,6 +27975,7 @@ NodeJs : 2
 unsupported : 2
 gen : 2
 NoSQL : 2
+PLS : 2
 sata : 2
 Tangram : 2
 GFS : 2
@@ -28076,7 +28024,6 @@ AHA1505 : 2
 OPL3-SAX : 2
 sg : 2
 Irrlicht : 2
-Xml : 2
 CP1252 : 2
 chardet : 2
 openwith : 2
@@ -28357,6 +28304,7 @@ defense : 2
 configue : 2
 Backend : 2
 Frontend : 2
+XSPF : 2
 enricolai : 2
 _name : 2
 bracket-match : 2
@@ -28550,7 +28498,6 @@ oeuf : 2
 DefUser : 2
 DeusEx : 2
 OpenGLDrv : 2
-nVIDIA : 2
 kdeapps : 2
 PulseEffects : 2
 Butterworth : 2
@@ -28656,7 +28603,6 @@ overflow : 2
 recommendé : 2
 NetBoot : 2
 tftpd-hpa : 2
-KERNEL : 2
 failure : 2
 portmapper : 2
 gdesklets : 2
@@ -29974,6 +29920,7 @@ QtCurve : 2
 Molecule : 2
 Multithreading : 2
 Threading : 2
+Jamendo : 2
 Snappy : 2
 TPM : 2
 amdgpu : 2
@@ -30077,7 +30024,6 @@ oac : 2
 ovc : 2
 ofps : 2
 Per : 2
-Mkv : 2
 RES : 2
 TinyERP : 2
 Addresse : 2
@@ -30239,7 +30185,6 @@ OpenGoo : 2
 utilie : 2
 personel : 2
 asi : 2
-PlayOnLInux : 2
 Ducon : 2
 fate : 2
 tribes : 2
@@ -31115,7 +31060,7 @@ Choississez : 2
 msvcp100 : 2
 Webstrict : 2
 DOCTYPE : 2
-Clementine : 2
+MPRIS : 2
 commons : 2
 taggage : 2
 aries : 2
@@ -31265,7 +31210,6 @@ r7 : 2
 ryzen1700x : 2
 igor : 2
 X8 : 2
-geforce : 2
 Quadcore : 2
 Q9300 : 2
 mibu : 2
@@ -31530,6 +31474,7 @@ nécéssités : 2
 métodologie : 2
 appuye : 2
 Emulateurs : 2
+icecast : 2
 Audacious2 : 2
 revolution : 2
 pgld : 2
@@ -32104,7 +32049,6 @@ Punctuation : 2
 Translated : 2
 ubuntu-translators : 2
 accepted : 2
-imported : 2
 obvious : 2
 validating : 2
 previous : 2
@@ -32196,7 +32140,6 @@ url_rewrite_program : 2
 url_rewrite_children : 2
 porn : 2
 helpers : 2
-IPTABLES : 2
 Linux-Secure-Remix : 2
 deezer : 2
 Likewise : 2
@@ -32352,7 +32295,6 @@ RAIDs : 2
 racine__ : 2
 framakey_ubuntu_remix : 2
 PartImage : 2
-xspf : 2
 prefork : 2
 local_root : 2
 lnj : 2
@@ -32726,7 +32668,6 @@ Merkat : 2
 Mepis : 2
 vtt : 2
 ikthus : 2
-MANDRAKE : 2
 communautée : 2
 vincent : 2
 fl0rent : 2
@@ -32809,7 +32750,6 @@ mled : 2
 ubuntu-6 : 2
 envy : 2
 LoX : 2
-xUbuntu : 2
 tps : 2
 Kévin : 2
 DECLERCQ : 2
@@ -34114,7 +34054,6 @@ YakYak : 3
 Performous : 3
 performous : 3
 Synchronize : 3
-PLAYONLINUX : 3
 PREFIX : 3
 eval_gettext : 3
 xres : 3
@@ -34125,7 +34064,6 @@ sancho : 3
 exiting : 3
 ipfilter : 3
 placant : 3
-X86 : 3
 Coova : 3
 HS_WANIF : 3
 HS_LANIF : 3
@@ -34166,7 +34104,6 @@ Clutter : 3
 xhost : 3
 DSM : 3
 cifs-utils : 3
-Nas : 3
 TuxPaint : 3
 ASRock : 3
 staging : 3
@@ -34223,7 +34160,6 @@ NouveauNom : 3
 filetype_extensions : 3
 Dreams : 3
 mongodb : 3
-PLS : 3
 votre_identifiant : 3
 PVP : 3
 Korben : 3
@@ -34269,7 +34205,6 @@ k610i : 3
 MSDCF : 3
 IPTC : 3
 bibtex : 3
-LOGITECH : 3
 GoalBit : 3
 Mahjongg : 3
 Quadrapassel : 3
@@ -34283,7 +34218,6 @@ eset : 3
 Nostromo : 3
 nostromo_n50-1 : 3
 KDiskFree : 3
-upnp : 3
 GPRename : 3
 rclone : 3
 Rancid : 3
@@ -34399,12 +34333,10 @@ sf : 3
 Dual-Core : 3
 Chicony : 3
 Semiconductor : 3
-TouchPad : 3
 pcs : 3
 recurseur : 3
 LiveWallpaper : 3
 Livewallpaper : 3
-LaTex : 3
 glChess : 3
 WebRTC : 3
 __Avantage : 3
@@ -34599,7 +34531,6 @@ __par : 3
 Configuer : 3
 cyrus : 3
 Brainstorm : 3
-TOR : 3
 numlock : 3
 monimage : 3
 Fbdesk : 3
@@ -34691,7 +34622,6 @@ playing : 3
 Better : 3
 finger : 3
 EnterpriseDB : 3
-postgreSQL : 3
 nom_vue : 3
 ident : 3
 SuperNode : 3
@@ -34733,7 +34663,6 @@ Gdm : 3
 Snow : 3
 Bootcamp : 3
 trices : 3
-RADEON : 3
 intl : 3
 Apple-Macintosh : 3
 ColorSync : 3
@@ -34784,7 +34713,6 @@ aptana : 3
 RadRails : 3
 Projects : 3
 internal : 3
-Cups : 3
 WHEN : 3
 MakeModel : 3
 Photosmart_C4100_series : 3
@@ -34810,7 +34738,6 @@ __Appimaged__ : 3
 ihm : 3
 Ulteo : 3
 RCP : 3
-Deb : 3
 __Ajout : 3
 WindowBuilder : 3
 gràce : 3
@@ -34993,7 +34920,6 @@ youtube-dl : 3
 lrwxrwxrwx : 3
 dnla : 3
 Me-Tv : 3
-Vlc : 3
 realtime : 3
 EFreverb : 3
 effect : 3
@@ -35302,7 +35228,6 @@ quake4 : 3
 debarchiver : 3
 build-dep : 3
 Fabux : 3
-LUA : 3
 Ë : 3
 AltGR : 3
 ÿ : 3
@@ -35484,7 +35409,6 @@ PSS : 3
 VFPU : 3
 Polygon : 3
 Level3 : 3
-psp : 3
 CSO : 3
 Swac-Explore : 3
 swac-get : 3
@@ -35708,7 +35632,6 @@ WebExtension : 3
 Lubix__ : 3
 Zenoss : 3
 childsplay : 3
-CUDA : 3
 SOA : 3
 dhcp-range : 3
 Alone : 3
@@ -35768,7 +35691,6 @@ MBOX : 3
 ath_pci : 3
 settings-daemon : 3
 xdg-utils : 3
-gEdit : 3
 gramps : 3
 filtre1 : 3
 filtre3 : 3
@@ -35789,7 +35711,6 @@ UltraVNC : 3
 apple : 3
 Templates : 3
 totalment : 3
-icecast : 3
 Parefeu : 3
 Username =>   * Username : pikachubuntu (remplacez par l'utilisateur que vous avez précédemment créé dans le module d'administration) : 3
 pikachubuntu =>   * Username : pikachubuntu (remplacez par l'utilisateur que vous avez précédemment créé dans le module d'administration) : 3
@@ -35851,7 +35772,6 @@ dav_svn : 3
 RabbitVCS : 3
 Télio : 3
 gaming : 3
-EMAIL : 3
 UBUARC_DIR : 3
 UBNxxx_DIR : 3
 LaCie : 3
@@ -36119,7 +36039,6 @@ rockbox-sansaclipplus-3 : 3
 rockbox : 3
 toujour : 3
 codetruc : 3
-Ntfs : 3
 smbmnt : 3
 hd2 : 3
 Propel : 3
@@ -36205,7 +36124,6 @@ Didrocks : 3
 ATHEROS : 3
 WAP : 3
 FNCT : 3
-Html : 3
 Reseaux : 3
 Fédora : 3
 S-ATA : 3
@@ -36503,7 +36421,6 @@ completer : 4
 MICRO'CO : 4
 imp : 4
 xcompmgr : 4
-chromium : 4
 CVSROOT : 4
 aborted : 4
 mupen64plus-qt : 4
@@ -36660,10 +36577,8 @@ sounds : 4
 uz : 4
 uz2 : 4
 X600 : 4
-Tar : 4
 apt-offline : 4
 acpi_backlight : 4
-UNITY : 4
 Throne : 4
 EasyNote : 4
 IGI : 4
@@ -36767,7 +36682,6 @@ Sébastian : 4
 Mercatante : 4
 Mantha : 4
 Bomberclone : 4
-SystemD : 4
 Before : 4
 TimeoutSec : 4
 ExecReload : 4
@@ -36974,7 +36888,6 @@ qet : 4
 jail : 4
 layouts : 4
 virtual-host : 4
-XSPF : 4
 iable : 4
 Mc : 4
 renvoit : 4
@@ -37029,7 +36942,6 @@ Mabase : 4
 INTEGER : 4
 except : 4
 Rip : 4
-dvds : 4
 Kibits : 4
 qϵ : 4
 vf : 4
@@ -37096,7 +37008,6 @@ Idesk : 4
 Rox : 4
 fbdesk : 4
 RX : 4
-STEAM : 4
 picture : 4
 SteamApps : 4
 Duty : 4
@@ -37124,10 +37035,8 @@ MediaTomb : 4
 Neufbox : 4
 DynDNS : 4
 FreeDNS : 4
-XOrg : 4
 Choose : 4
 p3scan : 4
-WiFI : 4
 Depth : 4
 Lighttpd : 4
 thin : 4
@@ -37291,6 +37200,7 @@ Komodo : 4
 Leafpad : 4
 Murrine : 4
 lenny : 4
+wiimote : 4
 PowerShell : 4
 x32 : 4
 SSV : 4
@@ -37321,11 +37231,9 @@ python2 : 4
 Ubiquity : 4
 Godot : 4
 multiplayer : 4
-Vnc : 4
 RealVNC : 4
 parition : 4
 Directories : 4
-Upnp : 4
 Norm : 4
 sf2 : 4
 aiff : 4
@@ -37452,7 +37360,6 @@ Testdisk : 4
 logical : 4
 Write : 4
 x200 : 4
-tls : 4
 Great : 4
 SDR : 4
 UbuntuWeeklyNewsletter : 4
@@ -37462,7 +37369,6 @@ clicks : 4
 Announcement : 4
 remember : 4
 reading : 4
-eMail : 4
 fvwm : 4
 DSN : 4
 east : 4
@@ -37661,7 +37567,6 @@ Gestikk : 4
 Régles : 4
 warez : 4
 dbghelp : 4
-MPRIS : 4
 Gloobus : 4
 play-movie : 4
 subcp : 4
@@ -38012,7 +37917,6 @@ ingenieur : 4
 E1-572 : 4
 EEE : 4
 distri : 4
-Irc : 4
 tot : 4
 reseaux : 4
 ofile : 4
@@ -38260,7 +38164,6 @@ hud : 5
 ID3v2 : 5
 Regnum : 5
 acceleration : 5
-optimus : 5
 PVE : 5
 ez : 5
 GoogleTalk : 5
@@ -38271,6 +38174,7 @@ slideshow : 5
 Hide : 5
 ENT : 5
 LT : 5
+Icecast : 5
 ubuntu-installer : 5
 PDF-Mod : 5
 routers : 5
@@ -38302,7 +38206,6 @@ lsb_release : 5
 Crusade : 5
 dow : 5
 war : 5
-lxde : 5
 poweroff : 5
 graphical : 5
 CHROOT : 5
@@ -38341,7 +38244,6 @@ FollowSymLinks : 5
 AllowOverride : 5
 Require : 5
 granted : 5
-nas : 5
 synology : 5
 Streamlink : 5
 line-in : 5
@@ -38360,7 +38262,6 @@ Sweet : 5
 Just : 5
 University : 5
 Analytics : 5
-gpu : 5
 MacIntel : 5
 utility : 5
 bootables : 5
@@ -38519,7 +38420,6 @@ sympatique : 5
 vaapi : 5
 Metamask : 5
 EOL : 5
-UPNP : 5
 Nodejs : 5
 Plex : 5
 acd-sorted : 5
@@ -38693,7 +38593,6 @@ Adblock : 5
 Whatever : 5
 Misc : 5
 SeatDefaults : 5
-Lxde : 5
 redemarrer : 5
 DP-2 : 5
 set-int-prop : 5
@@ -38759,7 +38658,6 @@ Attack : 5
 Jami : 5
 httpd : 5
 going : 5
-DOOM : 5
 heretic : 5
 ubndc01 : 5
 libflashplayer : 5
@@ -38789,7 +38687,6 @@ gSpeech : 5
 Bioware : 5
 Midori : 5
 TBI : 5
-wiimote : 5
 TNI : 5
 Ext2IFS : 5
 gdm3setup-utils : 5
@@ -38856,7 +38753,6 @@ sysrq : 5
 SIGKILL : 5
 GRIB : 5
 async : 5
-Rsync : 5
 chrooter : 5
 irb : 5
 VSCodium : 5
@@ -39197,7 +39093,6 @@ christophe : 5
 irl : 5
 Puppy : 5
 lyon : 5
-Gpu : 5
 idiocratie : 5
 _Enchained : 5
 ubuntu-lyon : 5
@@ -39368,7 +39263,6 @@ TravelMate : 6
 Tablet : 6
 Dedibox : 6
 SpamAssassin : 6
-RSYNC : 6
 __Méthode : 6
 slapd : 6
 ldif : 6
@@ -39408,7 +39302,6 @@ manually : 6
 swf : 6
 vmware : 6
 OSRM : 6
-DVDs : 6
 Tetris : 6
 clear : 6
 openssh : 6
@@ -39488,7 +39381,6 @@ cupsd : 6
 Beats : 6
 Proftpd : 6
 adm : 6
-mySQL : 6
 nb : 6
 zero : 6
 Found : 6
@@ -39696,7 +39588,6 @@ remount : 6
 awstats : 6
 iso-8859-15 : 6
 SHA1 : 6
-OpenGl : 6
 kdetv : 6
 d1 : 6
 LuaLaTeX : 6
@@ -39786,7 +39677,6 @@ wmii : 6
 nicolas : 6
 phenix : 6
 Xgl : 6
-gpt : 6
 eeePC : 6
 Lmfab : 6
 helix : 6
@@ -39818,7 +39708,6 @@ GEGL : 6
 Etherboot : 6
 mod_php : 6
 worker : 6
-Jamendo : 6
 QTI_ROOT : 6
 SSO : 6
 bookmarklet : 6
@@ -39947,7 +39836,6 @@ REG_SZ : 6
 NULL : 6
 GALSS : 6
 Shotcut : 6
-cuda : 6
 GalleryRemote =>   mv GalleryRemote.1.5.Linux.VM.bin GalleryRemote.1.5.Linux.VM.bin.bak; cat GalleryRemote.1.5.Linux.VM.bin.bak | sed "s/export LD_ASSUME_KERNEL/#xport LD_ASSUME_KERNEL/" > GalleryRemote.1.5.Linux.VM.bin; chmod a+x GalleryRemote.1.5.Linux.VM.bin; ./GalleryRemote.1.5.Linux.VM.bin : 6
 sopcast : 6
 ISOs : 6
@@ -40096,13 +39984,11 @@ WD : 7
 P1 : 7
 lilo : 7
 rtf : 7
-Fat32 : 7
 Fire : 7
 nc : 7
 mydomain : 7
 relayhost : 7
 waypoints : 7
-IPV6 : 7
 JAVA_HOME : 7
 Stream : 7
 quelquechose : 7
@@ -40121,7 +40007,6 @@ Compiz-fusion : 7
 tty1 : 7
 tty2 : 7
 dæmon : 7
-Lirc : 7
 Sword : 7
 Assault : 7
 mixed : 7
@@ -40175,7 +40060,6 @@ dell : 7
 mic : 7
 AIM : 7
 Malone : 7
-Icecast : 7
 screens : 7
 LOGFILE : 7
 a2enmod : 7
@@ -40200,14 +40084,12 @@ Target : 7
 x360 : 7
 grub2 : 7
 Winetricks : 7
-Imap : 7
 choose : 7
 repair : 7
 LS : 7
 sector : 7
 ready : 7
 Leopard : 7
-Iptables : 7
 WMV : 7
 CLUF : 7
 i686 : 7
@@ -40240,7 +40122,6 @@ ccsm : 7
 external : 7
 python3 : 7
 Matrox : 7
-FlatPak : 7
 Gthumb : 7
 ss : 7
 ASP : 7
@@ -40374,7 +40255,6 @@ DRAFT : 7
 Gadmin : 7
 vob : 7
 deinterlace : 7
-FFMpeg : 7
 É : 7
 Gwibber : 7
 Programming : 7
@@ -40403,7 +40283,6 @@ known_hosts : 7
 S-video : 7
 __Si : 7
 ati_remote : 7
-MYSQL : 7
 SETUP : 7
 Yabause : 7
 béta : 7
@@ -40542,7 +40421,6 @@ GPP : 7
 H10 : 7
 Linuxium : 7
 reported : 7
-Avi : 7
 Compal : 7
 pcsxr : 7
 Eternal : 7
@@ -40569,8 +40447,6 @@ Kgpg : 7
 relay : 7
 NSS : 7
 CGoban : 7
-Ipod : 7
-AmaroK : 7
 VariCAD : 7
 MicroSD : 7
 fsport : 7
@@ -40751,7 +40627,6 @@ UMask : 8
 ù : 8
 Freeradius : 8
 Glade : 8
-FFMPEG : 8
 Monoses : 8
 ubuntu2 : 8
 Little : 8
@@ -40815,7 +40690,6 @@ Mercurial : 8
 monthly : 8
 symbol : 8
 hellanzb : 8
-iphone : 8
 call : 8
 NCQ : 8
 AC3 : 8
@@ -40839,7 +40713,6 @@ G15 : 8
 Freenx : 8
 Call : 8
 gEDA : 8
-ascii : 8
 _i386 : 8
 xxxxxxxxxxxx : 8
 Node : 8
@@ -40852,7 +40725,6 @@ Binance : 8
 geany : 8
 mockup : 8
 Phoronix : 8
-CRON : 8
 Lvl : 8
 PvP : 8
 Block : 8
@@ -40865,7 +40737,6 @@ completion : 8
 Gitolite : 8
 amazon : 8
 Rclone : 8
-XUbuntu : 8
 __en : 8
 hid : 8
 where : 8
@@ -40887,7 +40758,6 @@ utils : 8
 TFT : 8
 icc : 8
 selection : 8
-GMail : 8
 Ringtail : 8
 Hash : 8
 KEY : 8
@@ -40933,7 +40803,6 @@ Member : 8
 Prosody : 8
 Megabook : 8
 N95 : 8
-gutsy : 8
 XDMCP : 8
 usepackage : 8
 tune2fs : 8
@@ -41024,7 +40893,6 @@ Glgo : 8
 Duke : 8
 Nukem : 8
 Lilypond : 8
-directx : 8
 groups : 8
 Laposte : 8
 FSPort : 8
@@ -41115,12 +40983,10 @@ lz : 9
 Stacer : 9
 Gajim : 9
 FreeMi : 9
-FreeBox : 9
 compress : 9
 oot : 9
 Kad : 9
 Dynacase : 9
-Postgresql : 9
 DAR : 9
 ere : 9
 dialog : 9
@@ -41128,7 +40994,6 @@ Transfer : 9
 subnet : 9
 __À : 9
 KDM : 9
-SERVER : 9
 debfoster : 9
 Wheel : 9
 MacOs : 9
@@ -41136,7 +41001,6 @@ editer : 9
 Fortress : 9
 screenlets : 9
 numero : 9
-uefi : 9
 ONE : 9
 Listen : 9
 hote : 9
@@ -41164,7 +41028,6 @@ fw : 9
 Hippo : 9
 LinuxMint : 9
 deny : 9
-pop3 : 9
 writable : 9
 OBS : 9
 Jani : 9
@@ -41178,7 +41041,6 @@ JDownloader : 9
 nx : 9
 GPX : 9
 Xine : 9
-EXE : 9
 SuSE : 9
 CMake : 9
 gt : 9
@@ -41188,7 +41050,6 @@ Celà : 9
 automount : 9
 DMZ : 9
 chgrp : 9
-opengl : 9
 libstdc : 9
 XGL : 9
 Wheezy : 9
@@ -41216,7 +41077,6 @@ Theora : 9
 ts : 9
 Handbrake : 9
 FCron : 9
-Iphone : 9
 Syslog : 9
 Apres : 9
 Wave : 9
@@ -41260,7 +41120,6 @@ tpl : 9
 txt2tags : 9
 Eye : 9
 Prophécie : 9
-Xp : 9
 non-PAE : 9
 intel64 : 9
 timestamp : 9
@@ -41335,7 +41194,6 @@ H2 : 9
 GDI : 9
 gnumeric : 9
 Creatures : 9
-lvm : 9
 spécifiques__ : 9
 WS : 9
 NOTOC : 9
@@ -41386,7 +41244,6 @@ FLAVOUR : 9
 intallé : 9
 ncurses : 9
 gnuplot : 9
-ATi : 9
 deja : 9
 gdebi : 9
 nagios : 9
@@ -41399,7 +41256,6 @@ CellWriter : 9
 Bugzilla : 9
 Intuos5 : 9
 OpenERP : 9
-DAEMON : 9
 Sozi : 9
 nfs4 : 9
 uim : 9
@@ -41502,7 +41358,6 @@ Guest : 10
 sshfs : 10
 userid : 10
 peer : 10
-openGL : 10
 MMORPG : 10
 er : 10
 xdm : 10
@@ -41544,7 +41399,6 @@ loading : 10
 LXD : 10
 Bind9 : 10
 OpenDocument : 10
-Usb : 10
 Calligra : 10
 cores : 10
 Narwhal : 10
@@ -41556,7 +41410,6 @@ Tray : 10
 Rebootez : 10
 __Sous : 10
 DTS : 10
-tor : 10
 lshw : 10
 IronHide : 10
 acpi_call : 10
@@ -41583,7 +41436,6 @@ under : 10
 Sancho : 10
 dotclear : 10
 WBFS : 10
-FireFox : 10
 minicom : 10
 ccpd : 10
 wc : 10
@@ -41605,7 +41457,6 @@ trackers : 10
 Kaella : 10
 Up : 10
 systray : 10
-Lua : 10
 tomcat : 10
 tile : 10
 With : 10
@@ -41737,7 +41588,6 @@ Asso : 10
 yann2 : 10
 Adept : 11
 Unknown : 11
-imap : 11
 bogofilter : 11
 JetDirect : 11
 world : 11
@@ -41824,7 +41674,6 @@ ZeroConf : 11
 iX : 11
 UI : 11
 XawTV : 11
-ipod : 11
 tutoriaux : 11
 OpenSSH : 11
 most : 11
@@ -41895,7 +41744,6 @@ Partimage : 11
 Tremulous : 11
 synergy : 11
 pgadmin3 : 11
-PostGreSQL : 11
 N2N : 11
 Mageia : 11
 Tomtom : 11
@@ -42000,14 +41848,12 @@ my : 12
 PGI : 12
 Inbox : 12
 Beta : 12
-FFmpeg : 12
 Freenet : 12
 icons : 12
 Flickr : 12
 BIN : 12
 Etch : 12
 vendor : 12
-ipv6 : 12
 IOS : 12
 booté : 12
 Multimedia : 12
@@ -42032,13 +41878,10 @@ weekly : 12
 microsoft : 12
 deamon : 12
 Krita : 12
-vista : 12
 Sync : 12
 Kademlia : 12
 js : 12
-Root : 12
 Try : 12
-sd : 12
 aliases : 12
 XFS : 12
 executer : 12
@@ -42066,8 +41909,6 @@ Released : 12
 just : 12
 Apps : 12
 Konsole : 12
-edubuntu : 12
-ROOT : 12
 cursor : 12
 Converter : 12
 bootloader : 12
@@ -42089,7 +41930,6 @@ syslog-ng : 12
 extern : 12
 glxgears : 12
 OSM : 12
-Ati : 12
 Mapping : 12
 XeLaTeX : 12
 Hedgehog : 12
@@ -42182,7 +42022,6 @@ general : 13
 LoCo : 13
 Updates : 13
 were : 13
-Systemd : 13
 checkinstall : 13
 Check : 13
 Enlightenment : 13
@@ -42208,8 +42047,6 @@ Ardour : 13
 cifs : 13
 raw : 13
 OpenPGP : 13
-Php : 13
-lts : 13
 Onboard : 13
 Groff : 13
 fps : 13
@@ -42318,7 +42155,6 @@ common : 14
 Username : 14
 Platform : 14
 packet : 14
-skype : 14
 dar : 14
 probleme : 14
 Ralink : 14
@@ -42361,7 +42197,6 @@ Mount : 14
 cpp : 14
 v5 : 14
 G5 : 14
-konqueror : 14
 App : 14
 Other : 14
 Territory : 14
@@ -42378,7 +42213,6 @@ isos : 14
 geometry : 14
 thinkpad : 14
 take : 14
-Playonlinux : 14
 G3 : 14
 deluge : 14
 bmp : 14
@@ -42467,7 +42301,6 @@ pas__ : 15
 Time : 15
 working : 15
 Analog : 15
-amarok : 15
 curl : 15
 x800 : 15
 icones : 15
@@ -42491,7 +42324,6 @@ mask : 15
 Novell : 15
 V4 : 15
 Standalone : 15
-BOOT : 15
 VFIO : 15
 décommentez : 15
 ppd : 15
@@ -42527,7 +42359,6 @@ WINEPREFIX : 15
 Wind : 15
 link : 15
 convert : 15
-breezy : 15
 uploader : 15
 AND : 15
 Phenix : 15
@@ -42568,7 +42399,6 @@ subigente : 15
 adiri : 15
 Huats : 15
 Redshift : 16
-Daemon : 16
 iwconfig : 16
 AES : 16
 stats : 16
@@ -42602,7 +42432,6 @@ void : 16
 Gnu : 16
 hw : 16
 See : 16
-ati : 16
 OpenStack : 16
 diff : 16
 UC : 16
@@ -42614,7 +42443,6 @@ ubuntu1 : 16
 AppArmor : 16
 e17 : 16
 fglrx : 16
-karmic : 16
 laposte : 16
 ut2004 : 16
 sda5 : 16
@@ -42628,10 +42456,8 @@ MPEG : 16
 mms : 16
 mbox : 16
 always : 16
-pci : 16
 ème : 16
 begin : 16
-lucid : 16
 Unetbootin : 16
 zabbix : 16
 snort : 16
@@ -42644,7 +42470,6 @@ ZFS : 16
 UP : 16
 ssmtp : 16
 ufw : 16
-ubunteros : 16
 tutorial : 16
 Deluge : 16
 method : 16
@@ -42708,8 +42533,8 @@ USB3 : 17
 license : 17
 Search : 17
 distro : 17
+m3u : 17
 Banshee : 17
-xp : 17
 scale : 17
 i7 : 17
 Letter : 17
@@ -42773,7 +42598,6 @@ Mobility : 17
 evdev : 17
 wtf : 17
 Remastersys : 17
-doom : 17
 Oneiric : 17
 fra : 17
 multiverse : 17
@@ -42798,7 +42622,6 @@ dir : 18
 button : 18
 Empathy : 18
 forwarding : 18
-Cron : 18
 blkid : 18
 OpenDNS : 18
 Make : 18
@@ -42811,8 +42634,6 @@ Libreoffice : 18
 POSIX : 18
 V5 : 18
 Archos : 18
-edgy : 18
-feisty : 18
 foo : 18
 Model : 18
 vulnerabilities : 18
@@ -42830,7 +42651,6 @@ Zenity : 18
 led : 18
 snapshots : 18
 Release : 18
-xfce : 18
 x1080 : 18
 Audigy : 18
 without : 18
@@ -42849,7 +42669,6 @@ LANG : 18
 Metacity : 18
 ROMs : 18
 kvm : 18
-jaunty : 18
 filename : 18
 Tracker : 18
 primary : 18
@@ -42859,7 +42678,6 @@ Effect : 18
 L2 : 18
 adb : 18
 Administrator : 18
-emacs : 18
 netboot : 18
 PE : 18
 backup-manager : 18
@@ -42898,9 +42716,7 @@ Map : 19
 lightdm : 19
 write : 19
 left : 19
-vga : 19
 grace : 19
-m3u : 19
 ESC : 19
 github : 19
 eMMC : 19
@@ -42969,7 +42785,6 @@ Bold : 20
 Tahr : 20
 tmp : 20
 Counter-Strike : 20
-dapper : 20
 x240 : 20
 Blue : 20
 into : 20
@@ -43003,7 +42818,6 @@ UML : 20
 Money : 20
 chaîne_de_caractères : 20
 DD : 20
-WINE : 20
 xterm : 20
 Borg : 20
 Clevo : 20
@@ -43030,8 +42844,6 @@ before : 21
 Teamspeak : 21
 VoIP : 21
 partimage : 21
-cups : 21
-cvs : 21
 we : 21
 fix : 21
 end : 21
@@ -43041,8 +42853,6 @@ gksudo : 21
 RJ45 : 21
 AppImage : 21
 layout : 21
-ldap : 21
-fat32 : 21
 LV : 21
 Labs : 21
 kernels : 21
@@ -43065,7 +42875,6 @@ tty : 21
 NOD32 : 21
 france : 21
 Mass : 21
-Kde : 21
 eeepc : 21
 i2p : 21
 stdout : 21
@@ -43084,7 +42893,6 @@ DokuWiki : 21
 Stereo : 22
 libreoffice : 22
 Printer : 22
-Pulseaudio : 22
 Laptop : 22
 PCMCIA : 22
 UFW : 22
@@ -43127,19 +42935,16 @@ bumblebee : 22
 Grsync : 22
 modprobe : 22
 cmd : 22
-radeon : 22
 copy : 22
 Diablo : 22
 BIND9 : 22
 fmt_ary : 22
 NTSC : 22
 ruby : 22
-virtualbox : 22
 Pushbullet : 22
 bs : 22
 cut : 22
 Life : 22
-mandrake : 22
 Minolta : 22
 SparkleShare : 22
 SketchUp : 22
@@ -43155,13 +42960,10 @@ executable : 23
 perl : 23
 RAID1 : 23
 Grub2 : 23
-tcp : 23
-udp : 23
 CrossOver : 23
 display : 23
 Update : 23
 dmesg : 23
-Firewall : 23
 NX : 23
 timeout : 23
 umount : 23
@@ -43202,7 +43004,6 @@ Laurux : 23
 mom : 23
 hx4700 : 23
 Wikipedia : 24
-android : 24
 Booter : 24
 oeuvre : 24
 anacron : 24
@@ -43211,7 +43012,6 @@ TAB : 24
 edit : 24
 NetworkManager : 24
 dispo : 24
-lirc : 24
 Dash : 24
 there : 24
 project : 24
@@ -43230,7 +43030,6 @@ Bauh : 24
 Exchange : 24
 Razer : 24
 appimage : 24
-Geforce : 24
 inode : 24
 filesystem : 24
 Asterisk : 24
@@ -43239,7 +43038,6 @@ lvl : 24
 Next : 24
 Database : 24
 False : 24
-mandriva : 24
 systeme : 24
 Warty : 24
 ThinkPad : 24
@@ -43281,13 +43079,10 @@ tm : 25
 Knoppix : 25
 javascript : 25
 DMA : 25
-uuid : 25
 app : 25
-Ext4 : 25
 tput : 25
 vpn : 25
 MPD : 25
-ssl : 25
 pxelinux : 25
 deb-src : 25
 iMule : 25
@@ -43309,7 +43104,6 @@ Reader : 26
 dash : 26
 bashrc : 26
 Connection : 26
-DEB : 26
 DRM : 26
 first : 26
 vulnerability : 26
@@ -43331,10 +43125,7 @@ iMac : 26
 xbmc : 26
 emails : 26
 fluxbox : 26
-vnc : 26
 syslinux : 26
-postgresql : 26
-DLL : 26
 ALL : 26
 acpi : 26
 Restricted : 26
@@ -43397,14 +43188,13 @@ Budgie : 28
 beta : 28
 Échap : 28
 Celeron : 28
-unity : 28
 NIS : 28
 END : 28
-MP4 : 28
 Text : 28
 oeil : 28
 devilspie : 28
 freenode : 28
+Wiimote : 28
 Remote : 28
 refind : 28
 multicast : 28
@@ -43432,12 +43222,10 @@ Plank : 29
 Magic : 29
 laptop : 29
 IR : 29
-Kaffeine : 29
 NTP : 29
 ICH8 : 29
 S3 : 29
 Music : 29
-MySql : 29
 Tools : 29
 netbook : 29
 Thunar : 29
@@ -43458,7 +43246,6 @@ TODO : 30
 SMB : 30
 dat : 30
 Revolution : 30
-svn : 30
 telnet : 30
 generic : 30
 GPG : 30
@@ -43479,7 +43266,6 @@ rebooter : 30
 rw : 30
 Makefile : 30
 Graphics : 30
-steam : 30
 delete : 30
 Bazaar : 30
 coeur : 30
@@ -43523,7 +43309,6 @@ Inc : 31
 sub : 31
 __Exemple : 31
 VMware : 31
-xubuntu : 31
 Matlab : 31
 Appimage : 31
 casper : 31
@@ -43540,11 +43325,10 @@ F6 : 32
 gps : 32
 winecfg : 32
 bind : 32
-Email : 32
+pls : 32
 Quake : 32
 Mplayer : 32
 sda2 : 32
-AMD64 : 32
 Legacy : 32
 exec : 32
 View : 32
@@ -43573,7 +43357,6 @@ LG : 33
 NAME : 33
 It : 33
 Fullscreen : 33
-MKV : 33
 gpg : 33
 one : 33
 css : 33
@@ -43587,7 +43370,6 @@ Password : 34
 ARM : 34
 Disk : 34
 shutdown : 34
-pls : 34
 IPv4 : 34
 Audacious : 34
 Hat : 34
@@ -43598,6 +43380,7 @@ idVendor : 34
 Scribus : 34
 alternate : 34
 mo : 34
+AAC : 34
 channels : 34
 MacBook : 34
 Wireless : 34
@@ -43646,13 +43429,10 @@ svg : 36
 using : 36
 MSN : 36
 should : 36
-AAC : 36
 sda3 : 36
-Virtualbox : 36
 x11vnc : 36
 Github : 36
 fdisk : 36
-def : 36
 tshirtman : 36
 remove : 37
 superutilisateur : 37
@@ -43671,7 +43451,6 @@ Setup : 37
 You : 37
 gparted : 37
 repository : 37
-NVidia : 37
 Maverick : 37
 acl : 37
 Eee : 37
@@ -43687,7 +43466,6 @@ nfs : 38
 Domain : 38
 load : 38
 Creative : 38
-Wiimote : 38
 Group : 38
 distrib : 38
 error : 39
@@ -43717,17 +43495,13 @@ dpkg : 40
 Yahoo : 40
 ifconfig : 40
 Webmin : 40
-freebox : 40
 legacy : 40
-alsa : 40
-touchpad : 40
 last : 40
 Ca : 40
 passwd : 40
 __Pour : 40
 pad : 40
 Network-Manager : 40
-ntfs : 40
 installed : 40
 exclude : 40
 program : 40
@@ -43753,7 +43527,6 @@ conky : 42
 Access : 42
 was : 42
 Garmin : 42
-vlc : 42
 Kontact : 42
 General : 42
 command : 42
@@ -43769,13 +43542,11 @@ following : 43
 function : 43
 print : 43
 Virtual : 43
-Alsa : 43
 Online : 43
 Realtek : 43
 control : 43
 Apache2 : 43
 Default : 43
-Emacs : 43
 Nagios : 43
 wget : 43
 title : 43
@@ -43789,7 +43560,6 @@ db : 44
 PDA : 44
 liveCD : 44
 Athlon : 44
-Mysql : 44
 sda : 44
 vim : 44
 Advanced : 44
@@ -43807,7 +43577,6 @@ hostname : 45
 Ekiga : 45
 Xbox : 45
 any : 45
-dvd : 45
 apache2 : 45
 recovery : 45
 rev : 45
@@ -43834,7 +43603,6 @@ XMPP : 47
 img : 47
 ram : 47
 UID : 47
-efi : 47
 PXE : 47
 other : 48
 disk : 48
@@ -43847,19 +43615,16 @@ fsck : 48
 F5 : 49
 OpenVPN : 49
 group : 49
-AVI : 49
 only : 49
 Pavilion : 49
 iTunes : 49
 HDD : 49
-EXT4 : 49
 Visual : 49
 Opera : 49
 Family : 49
 Dropbox : 49
 CDs : 49
 touch : 49
-Gedit : 49
 Wubi : 49
 ipxe : 49
 MB : 50
@@ -43872,51 +43637,37 @@ rules : 50
 Epson : 50
 XBMC : 50
 Palm : 50
-PulseAudio : 50
 Inspiron : 50
 grossssse : 50
 sys : 51
 sleep : 51
-WiFi : 51
 rc : 51
 time : 51
 PGP : 51
 udev : 51
 init : 51
 shift : 51
-irc : 51
 dokuwiki : 51
 Dolphin : 52
-firewall : 52
-Chromium : 52
 Ok : 52
 Zope : 52
 false : 53
-CVS : 53
 SDK : 53
 Start : 53
 sda1 : 53
 __2__ : 53
 ZPanel : 53
 McPeter : 53
-POP3 : 54
-LaTeX : 54
-flatpak : 54
 lsusb : 54
 launcher : 54
-mbr : 54
-Amarok : 55
 Directory : 55
 nano : 55
 team : 55
 Eft : 55
 template : 55
 hosts : 56
-Kernel : 56
 PAM : 56
 This : 56
-LXDE : 56
-playonlinux : 56
 Ghz : 56
 Heron : 56
 VM : 56
@@ -43926,15 +43677,12 @@ up : 57
 can : 57
 Classic : 57
 setup : 57
-VGA : 57
 MSC : 57
 Editez : 58
-amd64 : 58
 Sound : 58
 Editer : 58
 SATA : 58
 MSI : 58
-pulseaudio : 59
 Universe : 59
 add : 59
 GB : 59
@@ -43945,7 +43693,6 @@ Add : 60
 find : 60
 icone : 60
 Etape : 60
-Ericsson : 60
 kbps : 60
 ratus : 60
 reboot : 61
@@ -43956,56 +43703,28 @@ eth1 : 62
 network : 62
 cp : 62
 screen : 62
-avi : 62
 cat : 62
 MTP : 62
-GeForce : 63
-compiz : 63
 Language : 63
-Touchpad : 63
-PSP : 63
-jabber : 63
-Tor : 63
 Intrepid : 63
-LIRC : 63
-NAS : 64
 py : 64
 position_fix : 64
 users : 65
 connection : 65
-ffmpeg : 65
 ping : 66
 passphrase : 66
-postfix : 66
-initrd : 67
-UPnP : 68
-iptables : 68
-TLS : 68
-systemd : 68
 found : 69
 Project : 69
-Logitech : 69
-Optimus : 69
-SVN : 69
 Sp4rKy : 69
-ethernet : 70
 core : 70
 DC : 70
-Party : 70
-Feisty : 70
 restart : 71
 Control : 71
-PostgreSQL : 71
 dd : 71
 null : 71
 Planet : 71
-cron : 72
 url : 72
-x86 : 72
-Radeon : 72
-PCI : 73
 text : 73
-kaffeine : 73
 map : 74
 run : 74
 uid : 74
@@ -44015,49 +43734,28 @@ Settings : 75
 Player : 75
 your : 75
 help : 75
-IPv6 : 75
 Video : 75
-dll : 76
 Device : 76
 backup : 77
 rm : 77
-rsync : 77
-Jabber : 77
 mplayer : 77
 Mint : 78
-Flatpak : 79
 chmod : 79
-Doom : 79
 will : 80
-mkv : 80
 that : 80
-SD : 80
-party : 80
 bootable : 80
 dual-boot : 81
 target : 81
-mp4 : 81
 One : 82
 host : 82
 planet : 82
-Skype : 82
-lua : 82
 directory : 82
 Rhythmbox : 83
-GPU : 83
-DirectX : 84
-Breezy : 84
-Xorg : 84
-nvidia : 84
 LTSP : 85
 xxx : 85
 alt : 86
 Squid : 87
-nautilus : 88
-Gmail : 88
-Mandrake : 88
 xx : 89
-Gutsy : 90
 fstab : 91
 name : 92
 start : 92
@@ -44065,9 +43763,7 @@ ls : 92
 asso : 92
 i386 : 92
 gz : 92
-Compiz : 93
 PageSize : 93
-firefox : 94
 release : 94
 then : 94
 ext3 : 94
@@ -44075,151 +43771,70 @@ Kerberos : 94
 password : 95
 FreeSpace : 95
 device : 96
-iPhone : 96
-Konqueror : 97
-XFCE : 97
-CUPS : 97
-localhost : 97
 Evolution : 97
 ctrl : 98
-Chipset : 98
-UDP : 98
 Synaptic : 98
-Xfce : 98
-kde : 98
-GPT : 98
 dev : 99
 grep : 99
-daemon : 100
 yes : 100
 booter : 100
 Install : 101
 true : 101
 update : 101
-xorg : 102
 Network : 102
 NB : 102
 system : 103
 it : 103
-gedit : 104
-UEFI : 104
 Shift : 105
 chroot : 106
 SIP : 106
 kinouchou : 106
 free : 107
-Jaunty : 109
-LVM : 110
-Vista : 110
-VNC : 110
-Mandriva : 110
-ALSA : 111
 eth0 : 112
 mount : 112
-nVidia : 112
-Karmic : 112
-mysql : 113
-Postfix : 113
 Name : 114
-FAT32 : 114
 all : 114
-OpenGL : 115
-ext4 : 115
-Edubuntu : 115
 key : 118
-PlayOnLinux : 118
-html : 119
 make : 120
 txt : 121
 this : 121
-Lucid : 122
 Edition : 124
 with : 125
-VirtualBox : 125
 apps : 125
 from : 126
 System : 126
 so : 127
-Boot : 127
-LDAP : 128
-iPod : 129
 ini : 129
 cfg : 130
 by : 132
-Dapper : 132
-email : 133
-chipset : 134
 huats : 134
-ATI : 136
-UUID : 136
-NTFS : 136
 Core : 138
-TCP : 139
 Desktop : 140
 ca : 141
 default : 141
-Steam : 141
-xml : 142
 apt-get : 142
 YoBoY : 142
 bin : 143
-SSL : 146
 you : 146
-tar : 155
 ok : 156
 desktop : 158
-bluetooth : 162
 share : 163
 list : 167
-VLC : 167
-MBR : 169
-Freebox : 170
-server : 174
-Server : 180
 F2 : 181
-Edgy : 182
-gmail : 185
-php : 186
-Grub : 187
-exe : 193
 NFS : 195
-debian : 195
-kernel : 200
 echo : 205
-Nautilus : 211
-ssh : 218
-usb : 221
 not : 225
-IRC : 225
 iso : 228
-REDIRECT : 232
 video : 238
 at : 240
-grub : 244
-Ubunteros : 247
-XP : 248
-GRUB : 252
 is : 276
 install : 288
-SSH : 300
 sh : 303
-EFI : 305
-MySQL : 306
-deb : 310
-Unity : 318
 The : 322
-wine : 324
 model : 335
-Xubuntu : 340
 snd-hda-intel : 349
-ubuntu-fr : 360
 and : 453
 of : 455
-KDE : 527
-LTS : 587
-Wine : 597
-boot : 623
-root : 651
 to : 657
 the : 796
 sudo : 818
