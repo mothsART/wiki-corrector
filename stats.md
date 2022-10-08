@@ -3,7 +3,7 @@
 ## Articles sur le wiki :
 
   * Nombres d'articles : 5936
-  * Nombres de lignes : 422312
+  * Nombres de lignes : 422448
 
 ## Urls non conformes :
 
@@ -22,4 +22,10 @@
 
 ## Soucis sur des scripts shell :
 
-  * Nombres de fichiers : 91
+  * Nombres de fichiers : 88
+
+## Détection de mots interdits :
+
+  * Nombres de fichiers : 1685
+  * Nombres de remontées : 3264
+
