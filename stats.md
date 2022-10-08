@@ -26,6 +26,6 @@
 
 ## Détection de mots interdits :
 
-  * Nombres de fichiers : 1685
-  * Nombres de remontées : 3264
+  * Nombres de fichiers : 1113
+  * Nombres de remontées : 1917
 
