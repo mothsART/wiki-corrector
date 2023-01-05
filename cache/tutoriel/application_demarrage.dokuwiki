@@ -2,7 +2,7 @@
 
 ----
 
-====== Lancement des applications en fin du lancement de l’environnement de bureau ======
+====== Lancement des applications (ou commandes ou scripts) en fin du lancement de l’environnement de bureau ======
 Ce tutoriel présente les méthodes pour  **lancer automatiquement des applications au démarrage** d'une [[:sessions|session]] graphique.
 
 La procédure s'applique seulement à l'[[:utilisateur]] courant.
@@ -101,7 +101,7 @@ La même chose, en une seule ligne de commande :
 Nom="Le nom de l'application à lancer" ; Cde="ligne de commande à lancer" ; Rep="si nécessaire, répertoire de la commande à lancer" ; Commentaire="le commentaire à votre convenance" ; Icone="chemin complet vers l'icône"; printf "[Desktop Entry]\nType=Application\nExec=%s%s\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nName[fr_FR]=%s\nName=%s\nComment[fr_FR]=%s\nComment=%s\nIcon=%s" "$Rep" "$Cde" "$Nom" "$Nom" "$Commentaire" "$Commentaire" "$Icone" > "$HOME/.config/autostart/""$Cde"".desktop"
 </code>
 
-ou alors (sans icône) : 
+ou alors (sans icône) :
 <code>
 Nom="Le nom de l'application à lancer" ; Cde="ligne de commande à lancer" ; Rep="si nécessaire, répertoire de la commande à lancer" ; Commentaire="le commentaire à votre convenance" ; printf "[Desktop Entry]\nType=Application\nExec=%s%s\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nName[fr_FR]=%s\nName=%s\nComment[fr_FR]=%s\nComment=%s\nIcon=%s" "$Rep" "$Cde" "$Nom" "$Nom" "$Commentaire" "$Commentaire" > "$HOME/.config/autostart/""$Cde"".desktop"
 </code>
@@ -110,10 +110,21 @@ Nom="Le nom de l'application à lancer" ; Cde="ligne de commande à lancer" ; Re
 ===== Lancement en mode administrateur, en mode root=====
 <note important>La section qui suit est destinée aux utilisateurs et utilisatrices avancé(e)s, prenez toutes les précautions qui s'imposent avant d'aller plus loin.</note>
 ==== Méthode rc.local ====
-Une méthode simple est d'ajouter les commandes dans le fichier **/etc/rc.local**
+Une méthode simple (mais pas très propre) est d'ajouter les commandes dans le fichier **/etc/rc.local**
 
 Le script /etc/rc.local est destiné à être utilisé par l'administrateur système. Il est généralement exécuté après le démarrage de tous les services système normaux, à la fin du processus de basculement vers un [[https://fr.wikipedia.org/wiki/Run_level|niveau d'exécution]] multi-utilisateur. Vous pouvez l’utiliser pour démarrer un service personnalisé, par exemple un serveur installé dans /usr/local. La plupart des installations n'en ont pas besoin /etc/rc.local, elles sont fournies pour la minorité des cas où cela est nécessaire.
 
+==== Méthode Debian ====
+<note important>J'ai lu cette méthode que je n'ai pas testé (désolé). Je vous invite à la tester, la corriger au besoin ou la supprimer si elle est obsolete. (Enfin, supprimer cette note). Merci. 
+Sangorys</note>
+  - Créer un script dans :
+  /etc/init.d/monScript.sh
+  (imaginons que le script s'appelle monScript.sh)
+  - Donner les droits d'execution avec :
+  chmod +x /etc/init.d/monScript.sh
+  - Referencer le script :
+  update-rc.d monScript.sh defaults
+  
 
 ==== Méthode crontab ====
 Le principe ici est d'utiliser le démon [[:cron|cron]] qui sert normalement à lancer des commandes / scripts sur évenements (principalement basée sur le temps).
@@ -134,19 +145,24 @@ On va donc simplement editer la configuration cron et lancer la commande /script
 <note important>A vérifier puis supprimer ce commentaire</note>
 Systemd est le gestionnaire de système qui remplace [[:upstart]] et son prédécesseur ([[:script_sysV|les scripts system V]]) depuis [[:xenial|Ubuntu 16.04 LTS Xenial]].
 
-
-1. Créer un fichier monService dans /etc/systemd/system/  
+1. Créer un fichier UnService.service dans /etc/systemd/system/
   [Unit]
   Description=<Mettre une description>
   [Service]
   Type=oneshot 
-  ExecStart=<Ma commande>
+  ExecStart=<Une commande>
   [Install]
   WantedBy=multi-user.target
+  
+2. Vérifier que le contenu du fichier est vraisemblable :
+    sudo systemd-analyze  verify UnService
 
-2. Activer le fichier :
-  sudo systemctl enable monService
-  sudo systemctl start monService
+3. Faire une première exécution :
+  sudo systemctl start UnService
+
+4. Valider cette exécution pour le prochain démarrage de l'ordinateur :
+  sudo systemctl enable UnService
+
 
 
 
@@ -175,7 +191,7 @@ Dans cet exemple le //10// après //sleep// est le nombre de secondes à attendr
 
 ==== Lancer sa propre séquence grâce à un script ====
 
-Voici un exemple de [[script_shell|script]] de démarrage pour lancer une séquence de programmes. 
+Voici un exemple de [[script_shell|script]] de démarrage pour lancer une séquence de programmes.
 <code>
   #!/bin/bash
   clipit     #se lance dès l'ouverture de session
@@ -187,6 +203,45 @@ Voici un exemple de [[script_shell|script]] de démarrage pour lancer une séque
 </code>
 
 Une autre méthode est de lancer un fichier .desktop existant via l'une des méthodes de cette page : [[https://ubuntuplace.info/questions/290/executer-un-fichier-desktop-dans-le-terminal|Exécution d'un fichier .desktop dans le terminal]]
+==== Méthode system D ====
+
+<note important>A vérifier puis supprimer ce commentaire</note>
+Systemd est le gestionnaire de système qui remplace [[:upstart]] et son prédécesseur ([[:script_sysV|les scripts system V]]) depuis [[:xenial|Ubuntu 16.04 LTS Xenial]].
+
+1. Créer un fichier <MonService>.service dans  $HOME/.config/systemd/user avec cette commande
+<code bash>systemctl --user edit <MonService> --full --force </code>
+qui ouvrira l'application [[https:nano|nano]] et y insérer  les directives
+  [Unit]
+  Description=<Mettre une description>
+  [Service]
+  Type=oneshot 
+  ExecStart=<Un fichier exécutable stocké dans mon $HOME>
+  [Install]
+  WantedBy=multi-user.target
+  
+Au besoin modifier le fichier avec l'une de ces commandes
+<code bash>systemctl --user edit  <MonService> --full
+systemctl --user edit  <MonService> </code>
+
+2. Vérifier que le contenu du fichier est vraisemblable :
+<code bash>systemd-analyze  verify <Monservice> $HOME/.config/systemd/user/<MonService>.service></code>
+
+3. Faire une première exécution :
+<code bash>systemctl --user start <MonService></code>
+
+4. Valider cette exécution pour le prochain démarrage de l'ordinateur :
+<code bash>systemctl --user enable <MonService></code>
+
+Voici un autre exemple du contenu de <Un fichier exécutable stocké dans mon $HOME> qui doit avoir la permission d'exécution
+<code bash>#!/bin/bash
+echo Début de suivi de connexion au $(date +"%Y-%m-%d %H:%M") >> Bonjour.txt
+for ((i=0;i=12;i++));do sleep 300; A=$(ping -c 1 8.8.8.8  | head -2|tail -1) ; if [[ $A =~ Destination ]]; then echo $(date +"%Y-%m-%d %H:%M") Erreur de connectique $A  >> Bonjour.txt ; else  echo $(date +"%Y-%m-%d %H:%M") Vitesse de connexion  $A  >> /Bonjour.txt ; fi; done
+echo Fin de suivi de connexion au $(date +"%Y-%m-%d %H:%M") >> Bonjour.txt</code>
+
+
+
+
+
 ===== Liste des applications démarrées par défaut (Unity) =====
 
 Cette liste permet de savoir à quoi sert chaque application. Vous pourrez ainsi désactiver celles qui vous sont inutiles.
@@ -231,6 +286,7 @@ Sources : [[https://askubuntu.com/questions/11415/which-startup-applications-can
    * Discussion [[https://forum.ubuntu-fr.org/viewtopic.php?id=820|Lancer un programme au démarrage d'Ubuntu]] sur le forum ubuntu-fr.
    * La page de documentation sur les [[:services]] qui permet d'aller beaucoup plus loin et de gérer les services lancés avant même l'ouverture d'une session (utilisateurs avancés seulement).
    * [[https://forum.ubuntu-fr.org/viewtopic.php?id=415701|Lancer application au démarrage avec une temporisation]]
+   * [[https://papy-tux.legtux.org/doc1367/index.html|Description des services]]
 
 ----
 //Contributeurs principaux : [[utilisateurs:mydjey]], [[utilisateurs:Vincent85]]//

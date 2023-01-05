@@ -24,17 +24,31 @@ Ceci a pour effet de :
   * puis remplacer ces données par des zéros (''-z'') pour masquer le déchiquettage
   * puis tronquer et supprimer le fichier (''-u'')
 
-Cette méthode est déjà plus efficace. 
+Cette méthode est déjà plus efficace.
 
 **Attention** : Il reste encore des informations sur le fichier permettant de le retrouver, notamment si vous utilisez un système de fichier journalisé comme ''ext3'', ''ReiserFS'', ''XFS'', ''JFS'', un système d'écriture, de compression ou de sauvegarde, sur disque (ex : RAID) ou via un réseau.
 Pour plus d'informations, entrez la commande ci-dessous :
 
   man shred
 
+Pour supprimer rapidement tous les fichiers et sous-répertoires  et le répertoire.
+<code bash> find répertoire -type f -print0 | xargs -0 shred -fvzun0 && rm -rv répertoire</code>
+
 ===== Configuration =====
 
 ==== Intégrer Shred à Nautilus ====
-<note warning>Ne fonctionne plus sur les versions récentes d'Ubuntu.</note>
+=== Version simple ===
+Installer **[[apt>nautilus-wipe]]**. vous pouvez aussi l'installer en ligne de commande depuis un [[:terminal]].
+  sudo apt install nautilus-wipe
+
+Ensuite rentrez la commande suivante pour quitter nautilus s'il est lancé.
+  nautilus -q
+
+par la suite, avec un clic droit, vous verrez l'option **"Écraser"** dessous l'option **"Mettre à la corbeille"**.
+
+//Voir [[https://askubuntu.com/questions/523570/is-there-a-way-to-add-shred-to-right-click-menu|Is there a way to add shred to right-click menu?]]//
+=== Version avec configuration manuelle ===
+
   * Libellé : Supprimer avec shred
   * Information : Suppression sécurisée
   * Chemin : shred
@@ -66,41 +80,38 @@ Exec=shred -n 35 -z -u %U
 </file>
 ==== Intégrer Shred à Nautilus Script ====
 
-Voici un script pour shred à placer dans le dossier "nautilus scripts" :
+Voici un script pour shred à placer dans le dossier ''$HOME/.local/share/nautilus/scripts'', vous pourrez le lancer depuis [[nautilus#menu_contextuel|le menu contextuel de nautilus]] :
 <file bash>
 #!/bin/bash
 
-if [[ -a /dev/urandom ]]; then
-  randomizer=/dev/urandom;
-fi
+nb_file=$(echo "$NAUTILUS_SCRIPT_SELECTED_FILE_PATHS" | wc -l)
+nb_file=$((nb_file-1))
 
-SHRED="shred --remove=wipesync --zero --iterations=99 ${randomizer}"
+(
 
-echo ${NAUTILUS_SCRIPT_SELECTED_URIS} > ~/.gnome2/temp_shred_list
+i=0
+IFS='
+'
+printf %s "$NAUTILUS_SCRIPT_SELECTED_FILE_PATHS" |
+while read -r file
+do
+	echo "# suppression de \"${file##*/}\""
+	if shred --remove=wipesync --zero --iterations=99 "${file}"
+	then
+		echo "# suppression de \"${file##*/}\" réussi !"
+		i=$((i+1))
+		echo "$((i* 100 / nb_file))"
+	else
+		zenity --error --text="${file} Suppression impossible" --title "Opération annulée"
+	fi
+done
 
-zenity --question --title "Destruction de fichier" --text "Voulez-vous vraiment supprimer ce fichier ?"
+) | zenity --progress \
+  --title="Suppression des fichiers" \
+  --text="Suppression en cours..." \
+  --width=600 \
+  --percentage=0
 
-if (( $? == 0 )); then
-
-  for file in $(cat ~/.gnome2/temp_shred_list); do
-
-    shortfile=$(echo $file | sed -e 's/\%20/\ /g' -e 's/.*\///g')
-
-    file_name=$(echo $file | sed -e 's/file:\/\///g' -e 's/\%20/\ /g')
-
-    ${SHRED} "${file_name}"
-
-    if (( $? == 0 )); then
-      zenity --info --text="${shortfile} Suppression définitive terminée" --title "Opération réussite"
-    else
-      zenity --info --text="${shortfile} Suppression impossible" --title "Opération annulée"
-    fi
-
-  done
-
-fi
-
-${SHRED} ~/.gnome2/temp_shred_list
 </file>
 ===== Voir aussi =====
 
