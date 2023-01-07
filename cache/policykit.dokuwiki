@@ -16,12 +16,13 @@ Cela évite donc de lancer des programmes graphiques en tant que super-utilisate
 
 Parmi les programmes capables d'utiliser PolKit, on peut citer :
   * [[:gnome-packagekit|GNOME Paquets]]
-  * [[:flatpak]]
   * [[:gnome-software|GNOME Logiciels]]
+  * [[:gnome-disk-utility|GNOME Disques]]
+  * [[gparted|GParted : éditeur de partitions]]
+  * [[:flatpak]]
   * [[:plasma-discover|Plasma Discover]]
   * [[:Nautilus]]
   * Les paramètres système (concernant l'ajout d'utilisateur par exemple)
-  * [[:gnome-disk-utility|GNOME Disques]]
   * etc.
 
 Si votre compte est paramétré correctement, l'action demandée pourra alors s'effectuer sans problème (sinon, référez-vous à [[:sudo#ajouter_les_privileges_a_des_utilisateurs|ceci]] ou **[[#utilisation|ceci]]**).
@@ -34,13 +35,19 @@ Pourtant, remarquez que Nautilus conserve la configuration de l'utilisateur cour
 
 ===== Installation =====
 
-Le paquet qui installe PolKit est [[apt>policykit-1]], **il est déjà installé** par défaut sur Ubuntu Gnome, Mate et Xfce 
+Le paquet qui installe PolKit est [[apt>policykit-1]], **il est déjà installé** par défaut sur Ubuntu Gnome, Mate, Xfce et Cinnamon
 
+Pour voir la configuration à partir d'une interface graphique, installer [[https://github.com/scarygliders/Polkit-Explorer|polkit-explorer]]
 ===== Utilisation =====
 
 ==== Créer ou modifier des "policy" ====
 
-Pour gérer les règles il faut donc [[:tutoriel:comment_modifier_un_fichier|éditer les fichiers]] de configuration à la main avec [[:sudo|les droits d'administration]] présent dans le dossier **/var/lib/polkit-1/**
+Pour gérer les règles il faut donc [[:tutoriel:comment_modifier_un_fichier|éditer les fichiers]] de configuration à la main avec [[:sudo|les droits d'administration]]. La configuration se fait avec des règles et des actions :
+  * Les Actions sont définies dans des fichiers XML .policy situés dans **/usr/share/polkit-1/actions**
+  * Les règles d'autorisation sont définies dans les fichiers .rules JavaScript. On les trouve à deux endroits :
+    * **/usr/share/polkit-1/rules.d** pour les paquets tiers peuvent utiliser (bien que peu, voire aucun, ne le fasse)
+    * **/etc/polkit-1/rules.d** pour la configuration locale.
+
 
 La documentation vous aidant à écrire les jolies règles personnalisées pour donner "juste ce qu'il faut" de droits à vos utilisateurs, tapez dans un [[:terminal]] :
   man pklocalauthority
@@ -48,6 +55,48 @@ La documentation vous aidant à écrire les jolies règles personnalisées pour 
 Ou consultez la [[https://www.freedesktop.org/software/polkit/docs/latest/manpages.html|documentation en ligne]]
 
 
+La page [[https://askubuntu.com/questions/383747/how-to-configure-pkexec-to-not-ask-for-password|How to configure pkexec to not ask for password ?]] donne également un exemple intéressant de comment demander à pkexec d'arreter de demander un mot de passe. A configurer avec prudence pour des raisons de sécurité !
+
+
+==== Exemple simple ====
+
+=== /etc/polkit-1/rules.d/MaRegle.rules ===
+<code>
+[Allow monApplication]
+Identity=unix-group:sudo
+Action=org.freedesktop.policykit.exec
+ResultActive=yes
+</code>
+
+
+=== /usr/share/polkit-1/actions ===
+<code>
+
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+
+  <action id="com.ubuntu.pkexec.monApplication">
+    <message gettext-domain="monApplication">Authentication is required to execute actions</message>
+    <icon_name>configurator</icon_name>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">maCommandeALaquelleJeVeuxDesAutorisationsSpeciales</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+
+</policyconfig>
+</code>
+
+Ici, vous remplacerez monApplication et maCommandeALaquelleJeVeuxDesAutorisationsSpeciales
+Ex :
+  * monApplication = gparted
+  * maCommandeALaquelleJeVeuxDesAutorisationsSpeciales = /usr/sbin/gparted
 
 ===== La commande pkexec =====
 
@@ -69,5 +118,5 @@ Une boîte de dialogue apparaît alors pour demander votre mot de passe ; après
 
 ----
 
-//Contributeurs : [[utilisateurs:Tshirtman]], [[utilisateurs:l_africain|L'Africain]], [[utilisateurs/roschan]], 
+//Contributeurs : [[utilisateurs:Tshirtman]], [[utilisateurs:l_africain|L'Africain]], [[utilisateurs/roschan]],
 , ...//

@@ -1,0 +1,143 @@
+{{tag>Bionic Xenial Nextcloud BROUILLON}}
+
+====== Vdirsyncer ======
+
+Le logiciel **Vdirsyncer**, sous licence 3-clause BSD ([[https://opensource.org/licenses/BSD-3-Clause|BSD-3-Clause]]), est un outil de ligne de commande pour la synchronisation de calendriers et de carnets d’adresses entre différents serveurs et le système de fichiers local((Basé sur [[https://vdirsyncer.pimutils.org/en/stable/|« Documentation de vdirsyncer »]] par Markus Unterwaditzer & contributors.)). Le cas d’utilisation le plus populaire est de synchroniser un serveur avec un dossier local et d’utiliser un ensemble d’autres programmes pour modifier les événements et les contacts locaux. Vdirsyncer peut ensuite synchroniser ces modifications sur le serveur.
+
+Cependant, vdirsyncer ne se limite pas à la synchronisation entre les clients et les serveurs. Il peut également être utilisé pour synchroniser des calendriers et/ou des carnets d’adresses entre deux serveurs directement.
+
+Il vise à être pour les calendriers et les contacts ce que OfflineIMAP est pour les courriels.
+
+===== Installation =====
+
+Pour installer ce logiciel, il suffit d'[[:tutoriel:comment_installer_un_paquet|installer les paquets]] **[[apt>vdirsyncer|vdirsyncer]]**.\\
+Cependant au cas où la version de la distribution n'est pas assez à jour, il est possible de trouver des version plus rapidement mise à jour [[https://packagecloud.io/pimutils/vdirsyncer|sur le serveur]].
+
+===== Configuration =====
+
+[[:tutoriel:comment_modifier_un_fichier|Ouvrez le fichier]] **~/.vdirsyncer/config** en modification. 
+
+<note warning>S'il n'existe pas, il faut créer le dossier (soit directement graphiquement à partir de votre dossier personnel soit en [[:tutoriel:console_ligne_de_commande#mkdir|dans un terminal]]) **~/.vdirsyncer** avant d'ouvrir le fichier.</note>
+
+Le fichier **~/.vdirsyncer/config** n'existant pas forcément cela peut ouvrir un fichier vierge. Vous pouvez, dans ce cas, partir [[https://github.com/pimutils/vdirsyncer/blob/main/config.example|de cet exemple de configuration]]
+
+Le fichier de configuration doit commencer par une section générale. Ensuite, on peut définir une ou plusieurs paires à synchroniser et les stockages correspondants. 
+
+==== Section Général====
+Le seul paramètre requis est //status_path//. Il permet de spécifier un dossier où vdirsyncer peut stocker des métadonnées sur chaque paire de stockage.
+Par default, nous avons :
+<code>
+status_path = "~/.vdirsyncer/status/"
+</code>
+
+==== Section Paire====
+Dans cette section, on va définir le nom de la paire, les noms des deux stockages utilisés et les collections à synchroniser et éventuellement le mode de résolution des conflits et les metadatas à synchroniser:
+<code>
+[pair nom_paire]
+a = "nom_stockage_a"
+b = "nom_stockage_b"
+collections = ["nom_config", "nom_a", "nom_b"]
+#conflict_resolution = null
+#metadata = ["color", "displayname"]
+</code>
+<note tip>Le terme « collection » est utiliser pour désigner les adresses et les calendriers. Chaque collection provenant d’un stockage a un « nom de collection », un identificateur unique pour chaque collection. 
+Dans le cas de fichier locaux, c’est le nom du répertoire qui représente la collection, dans le cas des stockages DAV c’est le dernier segment de l’URL.</note>
+
+
+==== Section Stockage====
+Dans cette section, on va définir les stockages utilisés. Un stockage fait référence à des données réelles sur un serveur distant ou sur le disque local.
+
+Voici la syntaxe de base :
+<code>
+[storage nom_stockage]
+type = "TYPE"
+</code>
+Liste des stockages supportés et leur différents paramétrages :
+  * [[https://vdirsyncer.pimutils.org/en/stable/config.html#caldav-and-carddav|CalDAV and CardDAV]]
+  * [[https://vdirsyncer.pimutils.org/en/stable/config.html#google|Google]]
+  * [[https://vdirsyncer.pimutils.org/en/stable/config.html#etesync|EteSync]]
+  * [[https://vdirsyncer.pimutils.org/en/stable/config.html#local|Local]]
+===Google===
+Vdirsyncer prend en charge la synchronisation avec les calendriers Google avec quelques restrictions. La synchronisation avec les contacts Google est moins fiable, pensez à toujours sauvegarder vos données.
+
+Il faut tout d'abord [[:tutoriel:comment_installer_un_paquet|installer le paquet]] **[[apt>python3-pip|python3-pip]]**.\\
+Puis installer des dépendances supplémentaires :
+<code>pip install vdirsyncer[google]</code>
+
+Enfin, vous devez enregistrer vdirsyncer en tant qu’application vous-même pour obtenir client_id et client_secret afin de respecter les Conditions d’utilisation de Google :
+  -  Accédez à [[https://console.cloud.google.com/apis/dashboard|Google API Manager]] et créez un nouveau projet sous n’importe quel nom. Il faut cliquer sur la liste déroulante en haut à gauche à droite de "Google Cloud"{{:screenshot_2022-11-03_at_13-03-38_parametres_iam_et_administrati_go-next_google_cloud_console.png?direct&200|}} Puis sur nouveau projet en haut à droite de la fenêtre qui s'ouvre{{:screenshot_2022-11-03_at_13-04-06_parametres_iam_et_administrati_go-next_google_cloud_console.png?direct&200|}}
+  - Dans ce projet, activez les API « CalDAV » (pour les calendrier) et/ou « CardDAV » (pour les contacts). Il devrait y avoir une boîte de recherche où vous pouvez simplement entrer ces termes. {{::caldav.png?direct&200|}}
+  - Dans la barre latérale, sélectionnez « Identifiants » puis sur configurer l'écran d'autorisation. Vous pouvez choisir externe 
+  - Créez un nouveau « OAuth Client ID ». Vous serez invité à créer d’abord un écran de consentement OAuth. Remplissez ce formulaire comme vous le souhaitez. En ajoutant dans les utilisateur autorisés votre compte Google. Enfin, vous devriez avoir un code de client et un secret de client. Fournissez-les dans votre config de stockage.
+
+Exemple de configuration de stockage pour les calendriers Google :
+<code>
+[storage calendrier_google]
+type = "google_calendar"
+token_file = "~/.vdirsyncer/google"
+client_id = "ID_CLIENT_SUR_API"
+client_secret = "CODE_SECRET_DU_CLIENT_SUR_API"
+</code>
+
+Lors du premier lancement de vdirsyncer, il faudra se connecter à Google puis copier dans le terminal le code d'autorisation qui s'affiche. Ensuite, la connexion est automatique.
+===Nextcloud===
+Exemple de configuration de stockage pour les calendriers Nextcloud :
+<code>
+[storage calendrier_nextcloud]
+type = "caldav"
+url = "URL_SERVEUR_NEXTCLOUD"
+username = "UTILISATEUR"
+password = "MOT_DE_PASSE"
+</code>
+====Configuration avancée====
+Pour plus de détails, vous pouvez consulter la [[https://vdirsyncer.pimutils.org/en/stable/tutorial.html|configuration avancée
+]]
+===Synchronisation Google et Nextcloud===
+Exemple de configuration pour synchroniser deux calendriers entre Google et Nextcloud :
+<code>
+[pair google_nextcloud]
+a = "calendrier_google"
+b = "calendrier_nextcloud"
+collections = [["CALENDRIER_1","ID_CALENDRIER_1_GOOGLE","ID_CALENDRIER_1_NEXTCLOUD"], ["CALENDRIER_2","ID_CALENDRIER_2_GOOGLE","ID_CALENDRIER_2_NEXTCLOUD"]]
+</code>
+<note tip>Si vous ne connaissez pas les identifiants de vos calendriers, vous pouvez mettre n'importe quoi pour les identifiants puis lancer <code>vdirsyncer discover</code>
+Vous verrez alors apparaître la liste des calendriers sur les serveurs sous ce format :
+<code>
+calendrier_google:
+  - "ID_CALENDRIER_1_GOOGLE" ("NOM_CALENDRIER_1_GOOGLE")
+  - "ID_CALENDRIER_2_GOOGLE" ("NOM_CALENDRIER_2_GOOGLE")
+calendrier_nextcloud:
+  - "ID_CALENDRIER_1_NEXTCLOUD" ("NOM_CALENDRIER_1_NEXTCLOUD")
+  - "ID_CALENDRIER_2_NEXTCLOUD" ("NOM_CALENDRIER_2_NEXTCLOUD")
+</code>
+Pensez à mettre non quand l'application vous demande si vous souhaitez créer les collections non trouvées.
+</note>
+===== Utilisation=====
+
+Lancez la découverte des listes (de contacts ou de calendrier via le [[:terminal]] avec la [[:commande_shell|commande]] suivante : 
+<code bash>
+vdirsyncer discover
+</code>
+
+Puis la synchronisation avec la [[:commande_shell|commande]] suivante : 
+<code bash>
+vdirsyncer sync
+</code>
+====Automatisation====
+En utilisant systemd.timer, vdirsyncer peut s'exécuter à un intervalle régulier (par défaut toutes les 15 minutes). Pour activer la minuterie, lancez 
+<code bash>systemctl --user enable vdirsyncer.timer</code>
+Pour voir les journaux des analyses précédentes, utilisez <code bash>journalctl --user -u vdirsyncer</code>
+
+===== Désinstallation =====
+
+Pour supprimer cette application, il suffit de [[:tutoriel:comment_supprimer_un_paquet|supprimer son paquet]]. Selon la méthode choisie, la configuration globale de l'application est conservée ou supprimée. Les journaux du système, et les fichiers de préférence des utilisateurs dans leurs dossiers personnels sont toujours conservés.
+
+===== Voir aussi =====
+
+  * **(en)** [[https://vdirsyncer.pimutils.org/en/stable/|Site de documentation du logiciel vdirsyncer]]
+  * **(en)** [[https://github.com/pimutils/vdirsyncer|Github du logiciel vdirsyncer]]
+
+----
+
+
+//Contributeurs principaux : [[utilisateurs:AdeDidou|AdeDidou]]

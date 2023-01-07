@@ -16,14 +16,14 @@ La configuration d'un serveur Asterisk n'est pas relativement aisée, surtout po
 
 
 ===== Installation =====
-Tout d'abord, veillez à avoir une distribution à jour : 
+Tout d'abord, veillez à avoir une distribution à jour :
 <code>sudo apt update
 sudo apt upgrade </code>
 
 Nous procédons ensuite à l'[[:tutoriel:comment_installer_un_paquet|installation]] des dépendances : 
 <code>sudo apt install build-essential libxml2-dev libncurses5-dev linux-headers-`uname -r` libsqlite3-dev libssl-dev libedit-dev uuid-dev libjansson-dev</code>
 
-On télécharge la dernière version d’Asterisk et on l’installe : 
+On télécharge la dernière version d’Asterisk et on l’installe :
 
 1 - Auparavant vérifier la version à utiliser et modifiez les trois lignes (3, 4, 5) en fonction de la version d'Asterisk
 
@@ -54,11 +54,11 @@ make install
 make samples
 make config</code>
 
-Enfin, lancez Asterisk avec la commande suivante : 
+Enfin, lancez Asterisk avec la commande suivante :
 
 <code>/etc/init.d/asterisk start</code>
 
-Lancez la console Asterisk avec la commande suivante : 
+Lancez la console Asterisk avec la commande suivante :
 
 <code>sudo asterisk -rvvvv</code>
 
@@ -97,7 +97,7 @@ Pour installer les paquets français de Asterisk, vous devez lancer cette comman
 <code>sudo apt-get install asterisk-prompt-fr</code>
 
 ===== Configuration =====
-La configuration d'Asterisk s'articule sur les fichiers de configuration suivants : 
+La configuration d'Asterisk s'articule sur les fichiers de configuration suivants :
 
   * **''/etc/asterisk/sip.conf''** : Configuration globale d'Asterisk
   * **''/etc/asterisk/users.conf''** : Configuration des utilisateurs
@@ -138,7 +138,7 @@ pickupgroup = 1
 nat = yes</code>
 
 === Méthode sans template ===
-Pour chaque utilisateur, ajoutez le code suivant (avec les modifications nécessaires) : 
+Pour chaque utilisateur, ajoutez le code suivant (avec les modifications nécessaires) :
 
 <code>[6001]				; Numéro SIP
 type=friend			; Type d'objet SIP (friend = utilisateur)
@@ -152,7 +152,7 @@ secret=secret			; Mot de passe
 context = work			; Contexte (exploité par le fichier extensions.conf)</code>
 
 === Méthode avec template ===
-Pour chaque template, ajoutez le code suivant (avec les modifications nécessaires) : 
+Pour chaque template, ajoutez le code suivant (avec les modifications nécessaires) :
 <code>
 [template](!)			; Nom du template (ici template)
 type=friend			; Type d'objet SIP (friend = utilisateur)
@@ -163,7 +163,7 @@ allow=ulaw			; Activer les codecs µlaw
 context = work			; Contexte (exploité par le fichier extensions.conf)
 </code>
 
-Pour chaque utilisateur, ajoutez le code suivant (avec les modifications nécessaires) : 
+Pour chaque utilisateur, ajoutez le code suivant (avec les modifications nécessaires) :
 <code>[6001](template)		; Numéro SIP et template utilisé
 fullname = John DOE		; Nom complet de l'utilisateur (ce qui s'affichera sur le téléphone)
 username = jdoe			; Nom d'utilisateur
@@ -216,6 +216,58 @@ Le nom qui apparaîtra sur le téléphone appelé (Displayname en général)
 Éventuellement une IP d'un proxy ou passerelle si le réseau VOIP interne peut communiquer avec l'extérieur
 des sonneries et messages personnalisés, etc.
 
+=== Exemple d'AGI : allumer la lumière ===
+AGI permet à Asterisk d’exécuter des scripts. L'exemple ci-dessous ouvre la piste vers toute sorte de solutions domotiques.
+
+L'idée est la suivante: Asterisk modifie à distance un fichier sur le Raspberry. Sur celui-ci un script python analyse le fichier et active le GPIO en fonction.
+
+== Du côté du serveur Raspberry ==
+
+Installer un raspberry avec Pi Os Lite. Activer le ssh. Pour l'exemple, l'utilisateur sera info, l'adresse IP du Raspberry 192.168.1.111.
+
+Dans /home/info créer le script python command.py:
+
+<code>import RPi.GPIO as GPIO 
+import time 
+GPIO.setmode(GPIO.BCM) 
+GPIO.setup(24, GPIO.OUT)
+
+while True: 
+ with open('command.txt', 'r') as fichier: 
+ contenu = fichier.read()
+
+ if "on" in contenu: 
+  # Turn on 
+  print('on') 
+  GPIO.output(24, GPIO.HIGH) 
+ else: 
+  # Turn off 
+  print('off') 
+  GPIO.output(24, GPIO.LOW)</code>
+
+== Du côté d'Asterisk ==
+
+Il faut d'abord autoriser du ssh sans mot de passe. Dans la console (ne rien entrer comme nom de fichier et comme passphrase):
+
+<code>ssh-keygen -t rsa</code>
+
+Partager la clé avec le raspberry:
+
+<code>ssh-copy-id info@192.168.1.111</code>
+
+Configurer ensuite l'AGI, en ajoutant ces lignes dans extensions.conf:
+
+<code>exten => 801,n,AGI(allumer.agi)
+exten => 800,n,AGI(eteindre.agi)</code>
+
+On crée ensuite les scripts correspondant. Créer le fichier /var/lib/asterisk/agi-bin/allumer.agi et le rendre éxécutable:
+
+<code>#!/bin/bash
+scp /root/on.txt info@192.168.1.111:/home/info/command.txt</code>
+
+Faire de même pour eteindre.agi. Il faut aussi créer un fichier /root/on.txt contenant uniquement le mot on, et son équivalent off.
+
+Recharger Asterisk. C'est sensé fonctionner!
 ===== Matériel compatible =====
 
 ==== Passerelle FXO ====
@@ -258,11 +310,11 @@ Une passerelle RNIS est un boîtier indépendant se branchant d'une part sur un 
 === Patton Smartnode 4120 ===
 
 Cette passerelle compte 2 port T0. Mais la programmation Smartnode semble identique sur toutes les passerelles Patton RNIS.
-L'interface web est acceptable mais le langage du fichier de configuration est mieux. J'ai donc préféré travailler sur le fichier ce qui est simplifié par l'usage du wizard, comme indiqué ci-dessous. 
+L'interface web est acceptable mais le langage du fichier de configuration est mieux. J'ai donc préféré travailler sur le fichier ce qui est simplifié par l'usage du wizard, comme indiqué ci-dessous.
 
 On trouve beaucoup de documentation, mais le meilleur guide est sans doute [[https://www.patton.com/manuals/snfrench-gs.pdf|le manuel de configuration simplifié]]
 == Configuration de la passerelle ==
-Pour se connecter à la passerelle, il faut en connaître l'adresse IP. 
+Pour se connecter à la passerelle, il faut en connaître l'adresse IP.
 Deux solutions: le logiciel de Patton, ou bien repérer l'adresse MAC sur votre routeur.
 
 Par défaut aucune route n'est définie. Il n'est donc pas possible de se connecter depuis un autre sous-réseau.
@@ -276,7 +328,7 @@ Ce wizard a trois défauts:
    * Il ne crée pas de route.
    * La passerelle enverra en DTMF le joli nom de "patton" et non pas le numéro de l'appelant.
 
-Ci dessous, un fichier de config sans la ligne de login et avec correction des deux derniers points. 
+Ci dessous, un fichier de config sans la ligne de login et avec correction des deux derniers points.
 Il faut penser à modifier les adresses IP selon vos besoins.
 
 <code>
@@ -435,7 +487,7 @@ port bri 0 1
 </code>
 
 == Configuration d'Asterisk ==
-Si les adresses IP sont fixes, il n'y a pas besoin d'authentification. 
+Si les adresses IP sont fixes, il n'y a pas besoin d'authentification.
 
 Il suffit donc d'ajouter ces lignes dans sip.conf:
 <code>

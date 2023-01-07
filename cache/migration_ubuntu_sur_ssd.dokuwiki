@@ -1,4 +1,4 @@
-====== Comment assurer la Migration d'Ubuntu vers un SSD ? =====
+===== Comment assurer la migration d'Ubuntu vers un SSD ? ====
 {{tag> migration système ssd }}
 
 <note tip>La migration de vers un SSD revient à copier le root du disque dur vers le SSD. La page [[deplacer_root|Déplacer sa racine(ou root (/))]] traite de ce point. Elle parait mieux finalisée, plus claire. </note>
@@ -6,9 +6,11 @@
 Situation : ubuntu installé sur un HDD, et vous n'avez pas envie de réinstaller toute la configuration !
 
 Le principe est le suivant :
-    * Partitionner le SSD : avec Gparted
-      * Créer une nouvelle partition au moins aussi grande que l'ancienne (sinon clonezilla ne sera pas content) type ext4
-      * Ne pas créer de partition de swap, pour utiliser celle existante du HDD. Swapper sur un SSD va diminuer sa durée de vie par un nombre d'écriture trop important. En même temps, les machines récentes n'ont souvent que des SSD. Question ouverte sur ce problème qui est peut etre plus théorique que pratique. Si vous souhaitez vous assurer de la durée de vie de votre SSD, conserver la partition swap sur le disque dur classique.
+    * Partitionner le SSD : avec Gparted 
+      * Créer une table de partition GPT (Onglet **Périphérique**).
+      * Créer une partition FAT32 destinée à contenir les fichiers de boot EFI même si vous n'utilisez pas l'EFI. La taille officielle est 512 Mo mais 36 Mo suffisent. Mettre une étiquette **FATSSD** __et un drapeau **ESP**__. Cependant si l'ordinateur boote en LEGACY,  remplacer le drapeau ESP par le drapeau **bios_grub**.
+      * Créer une nouvelle partition au moins aussi grande que l'ancienne (sinon clonezilla ne sera pas content) type ext4 ou rétrécissez au maxima la taille de la partition du disque dur pour que cela soit compatible avec la taille du SSD. 
+      * Ne pas créer de partition de swap, pour utiliser celle existante du HDD. Swapper sur un SSD va diminuer sa durée de vie par un nombre d'écriture trop important. En même temps, les machines récentes n'ont souvent que des SSD. Question ouverte sur ce problème qui est peut-être plus théorique que pratique. Si vous souhaitez vous assurer de la durée de vie de votre SSD, conserver la partition swap sur le disque dur classique.
     * Créer un bootCD/usb clonezilla (Utiliser multisystem ).
     * Booter sur le CD/USB clonezilla et dupliquer la partition système du HDD vers la nouvelle partition du SSD. À ce stade la nouvelle partition reçoit UUID de la vieille : Nous allons corriger cela pour éviter tous problèmes.
     * Redémarrer sur l'ancien système, puis avec gparted créer un nouvel UUID pour la nouvelle partition système sur le SSD.
@@ -31,11 +33,11 @@ l'argument "--bind" fait en sorte de monter toute l'arborescence.
 
 <code>$ sudo chroot  /mnt/ssd</code>
 
-Ceci étant fait, il faut savoir qu'à présent, c'est comme si nous avions booter sur cette partition. 
+Ceci étant fait, il faut savoir qu'à présent, c'est comme si nous avions booté sur cette partition.
 
 3. Enfin, Réinstallation de GRUB
 
-<code>$ sudo grub-install /dev/sda</code>
+<code>$ sudo grub-install /dev/sda #### ou sudo grub-install si boot EFI</code>
 
 Une dernière petite chose à faire avant d'en avoir terminé, mettre à jour la configuration de GRUB par:
 
@@ -46,13 +48,122 @@ Vous pouvez à présent quitter le chroot par
 
 <code>$ exit</code>
 
-Voilà, c'est fini! 
-
-4. Redémarrer en Bootant sur le SSD (en désactivant l'ancien disque). 
+Voilà, c'est fini!
+===== Comment rebooter avec un SSD =====
+==== Contexte LEGACY ====
+Penser à modifier le Bios LEGACY pour lui dire de booter prioritairement sur le NVME au lieu du disque dur. En effet le boot peut se faire directement  sur le SSD
+1. Redémarrer en Bootant sur le SSD (en désactivant l'ancien disque si boot LEGACY et si pas de partition de swap et si pas de partition  home ou de données).
     * Une fois redémarré sur le SSD, relancer :
-<code>$ sudo grub-install /dev/sda
-$ sudo update-grub</code>
-5. Rebooter une dernière fois le PC.
-
+<code>sudo grub-install /dev/sda
+sudo update-grub</code>
+2. Rebooter une dernière fois le PC.
 Voilà, c'est fini !
+==== Contexte UEFI ====
+La solution retenue est de continuer à booter avec la partition EFI du disque dur. Cependant, il semble préférable que la structure de boot soit dans le même disque que le logiciel. Pour résoudre ce problème, [[:boot-repair|boot-repair]] est utilisable ainsi que la ligne de commande.
+
+
+  * Modifier le fichier /etc/fstab pour décrire la nouvelle partition de boot afin d'utiliser celle du SSD et plus celle du disque dur.<code bash>sed -i '/boot\/efi/d' /etc/fstab && echo UUID=$(lsblk -o UUID,NAME,LABEL  | grep FATSSD | cut -c-9) /boot/efi       vfat umask=0077 0 1| sudo tee -a /etc/fstab</code>
+  * Monter la partition EFI nouvelle.<code bash>sudo umount -v /boot/efi && sudo mount -av </code>
+  * Rebâtir le grub. <code bash>sudo grub-install && sudo update-grub</code>
+  * Informer le bios EFI.<code bash>sudo efibootmgr --create --disk /dev/$(lsblk -l -o NAME,LABEL|grep FATSSD |cut -c-3) --part 1 --label "ubuntu" --loader "\EFI\ubuntu\shimx64.efi"   ### Si SSD standard 
+sudo efibootmgr --create --disk /dev/$(lsblk -l -o NAME,LABEL|grep FATSSD |cut -c-7) --part 1 --label "ubuntu" --loader "\EFI\ubuntu\shimx64.efi"   ### Si NVME  </code>
+
+A faire avant d'avoir oublié que le disque dur est resté la référence de boot. Voici c'est terminé. 
+===== Comment déplacer uniquement le logiciel du disque dur dans un SSD =====
+Lorsque la partition logicielle de ubuntu dans le disque dur est plus volumineuse que le  futur SSD, la situation n'est pas bloquée.
+
+Il faut d'abord identifier la cause. Il y a toutes les chances que les données personnelles soient stockées dans  la partition logicielle.  Il n'y a pas d'avantages particuliers à stocker les données personnelles dans le SSD. 
+
+La proposition est alors de conserver les données personnelles dans le disque dur et de dupliquer le logiciel. Le logiciel du disque dur pourra être supprimé ultérieurement lorsque le manque de place sur  le disque dur sera détecté. 
+
+Le transfert du logiciel ne se fera pas par clonezilla mais en lignes de commandes afin de pouvoir sélectionner.
+==== Travail préparatoire ====
+Avec le ubuntu fonctionnant, installer l'application gparted afin de pouvoir formater le SSD.  Créer: 
+  *   Une table de partition GPT en utilisant l'onglet **Périphérique**.
+  *   Une partition de boot EFI.   Soit 36 Mo. Soit 512 Mo. Y mettre l'étiquette **FATSSD**. Y mettre le drapeau **ESP** si le bios est EFI. Y mettre le drapeau **bios_grub** si le bios est LEGACY.
+  *   Une partition EXT4 pour le logiciel avec le reste de espace disponible éventuellement diminué de l'espace prévu pour la partition swap. Y mettre l'étiquette **NewUbuntu**.
+  *   Eventuellement, une partition de swap égale à la taille de la RAM mémoire si l'ordinateur est capable [[:/tutoriel/activer_hibernation|d'hiberner]]. Sinon, utiliser un fichier d'[[:/swap#creer_un_fichier_d_echange|échange]] à créer dans la nouvelle partition s'il n'existe pas. Une taille de 1 Go semble suffisante surtout si la taille de la RAM est importante.   Il faut penser à de pas mettre en oeuvre le pré-swapping  lorsque 40% de la RAM est consommée mais attendre  le seuil  de 95%.
+
+==== Migration des données ====
+
+  - Devenir administrateur.<code bash>sudo -i</code>
+  - Monter la partition de réception. <code bash>udisksctl unmount -b /dev/disk/by-label/NewUbuntu ## On ne sait jamais
+udisksctl mount -b /dev/disk/by-label/NewUbuntu</code> 
+  - Dupliquer le logiciel de base. Possibilité d'ajouter l'option **progress** pour visualiser le transfert des fichiers.<code bash>time rsync -ax --delete-before --stats --exclude '/home'  /  /media/$USER/NewUbuntu</code>
+  - Dupliquer les fichiers cachés du home et le répertoire snap de tous les utilisateurs et préparer certains liens symboliques. Possibilité de supprimer l'option **progress** pour masquer le transfert des fichiers.<code bash>for Me in $(ls -1 /home) ; do
+mkdir -pv /media/$USER/NewUbuntu/home/$Me
+echo  le transfert de $Me  
+rsync -ax  --stats --progress   /home/$Me/{.[^.]*,snap}  /media/$USER/NewUbuntu/home/$Me
+ln -s /media/data/home/$Me/Bureau             /media/$USER/NewUbuntu/home/$Me
+ln -s /media/data/home/$Me/Documents          /media/$USER/NewUbuntu/home/$Me
+ln -s /media/data/home/$Me/Images             /media/$USER/NewUbuntu/home/$Me
+ln -s /media/data/home/$Me/Musique            /media/$USER/NewUbuntu/home/$Me
+ln -s /media/data/home/$Me/Téléchargements    /media/$USER/NewUbuntu/home/$Me
+ln -s /media/data/home/$Me/Vidéos             /media/$USER/NewUbuntu/home/$Me 
+chown -R $Me:$Me /media/$USER/NewUbuntu/home/$Me; done </code>
+  - Modifier le fstab en remplaçant la partition racine et ajout de la partition de données avec son point de montage.<code bash>UUIDgood=$(echo $(lsblk -fe7 | grep "NewUbuntu")| cut -d" " -f5)  && echo $UUIDgood
+UUIDold=$(grep ' \/ ' /etc/fstab | grep UUID  | cut -c1-41) && echo $UUIDold 
+sed -i "s/$UUIDold/#$UUIDold/" /media/$USER/NewUbuntu/etc/fstab
+echo UUID=$UUIDgood  /  ext4 errors=remount-ro 0 1 | tee -a /media/$USER/NewUbuntu/etc/fstab
+echo $UUIDold /media/data ext4 defaults 0 2  | tee -a /media/$USER/NewUbuntu/etc/fstab
+mkdir /media/$USER/NewUbuntu/media/data
+egrep  " / |data" /media/$USER/NewUbuntu/etc/fstab</code>
+  - **Spécial boot EFI avec REFIND**. Il est inutile de réinstaller le grub (voir ci-après) mais il est nécessaire  de supprimer son fichier de configuration. La cause est actuellement inconnue!<code bash>sed -i "s/$UUIDold/$UUIDgood/" /media/$USER/$LABEL/boot/refind_linux.conf 
+mv -v /media/$USER/$LABEL/boot/refind_linux.conf /media/$USER/$LABEL/boot/conf.refind_linux.conf</code> 
+==== Installation du grub ====
+Il existe 2 possibilités pour installer le bon grub dans cette nouvelle partition.
+  *   **Avec [[/boot-repair|boot-repair]]:**
+    *  Il faut demander de réinstaller le grub du ubuntu de la partition **NewUbuntu**  en utilisant la partition  de boot [[https://doc.ubuntu-fr.org/lib/exe/fetch.php?tok=e0329e&media=http%3A%2F%2Fpix.toile-libre.org%2Fupload%2Foriginal%2F1416027492.png|FATSSD]]   
+  *    **En technique CHROOT:**
+  - Préparer le passage chroot et exécuter le chroot.<code bash>mount -t proc   /proc /media/$USER/NewUbuntu/proc && mount -t sysfs  /sys /media/$USER/NewUbuntu/sys
+mount --bind    /dev  /media/$USER/NewUbuntu/dev  && mount --bind    /run /media/$USER/NewUbuntu/run
+mount --bind    /sys  /media/$USER/NewUbuntu/sys  && modprobe efivars 
+chroot /media/$USER/NewUbuntu </code>
+  - Remplacer le point de montage de la partition EFI du disque dur par celui de la partition EFI du SSD. **Ne pas faire si le boot est en LEGACY.** <code bash>sed -i '/boot\/efi/d' /etc/fstab
+echo UUID=$(lsblk -o UUID,NAME,LABEL  | grep FATSSD | cut -c-9) /boot/efi  vfat umask=0077 0 1| tee -a /etc/fstab
+PartEFI=$(blkid | grep 'FATSSD' | head -1 | cut -d: -f1 ) && echo $PartEFI
+mount -v $PartEFI  /boot/efi</code>
+  - Réinitialiser le grub.<code bash>grub-install $(blkid | grep 'FATSSD' | head -1 | cut -c1-8 ) 
+update-grub</code>
+  - Démonter la partition EFI et quitter le CHROOT <code bash>umount -v $PartEFI 
+exit</code>
+  - Faire la mise à jour du bios efi. **Ne pas faire si le boot est en LEGACY.** <code bash>mount $PartEFI /boot/efi
+DSK=$(echo /dev/$(lsblk -o NAME,Label  | grep -B 1  $PartEFI | head -1)) 
+if [[ $(bootctl) =~ "Secure Boot: disabled" ]]; then  efibootmgr --create --disk $DSK --part 1 --label ubuntu --loader "\EFI\ubuntu\grubx64.efi";
+else efibootmgr --create --disk $DSK --part 1 --label ubuntu --loader "\EFI\ubuntu\shimx64.efi"; fi</code>
+  - Quitter proprement<code bash>umount -v /media/$USER/NewUbuntu/{run,dev,sys,proc} && umount /media/$USER/NewUbuntu/sys
+umount -v /media/$USER/NewUbuntu && umount -v $PartEFI 
+exit</code>
+
+
+   
+===== Autre méthode de migration avec gparted =====
+__Cette méthode peut s'appliquer__:
+  * Si la partition  contenant le logiciel du disque émetteur (éventuellement après rétrécissement)  a une taille  inférieure à l'espace libre du SSD.
+  * Si les deux disques peuvent être branchés simultanément.
+  * Si on opère avec un support d'installation.
+
+__Réalisation__
+  * Booter avec le support d'installation et lancer gparted.
+  * Créer une table de partition GPT dans le SSD en utilisant l'onglet **Périphérique**
+  * Si présence d'une partition de  boot EFI:
+    * Copier la partition EFI et coller cette partition dans l'espace libre du SSD
+    * Modifier le UUID de la partition émettrice
+    * Mettre le drapeau ESP dans la nouvelle partition EFI
+    * Enlever le drapeau ESP de l'ancienne partition EFI
+  * Si absence de partition de boot EFI:
+    * Créer une partition non formatée de **__36 Mo__** afin qu'elle puisse devenir un jour une partition de boot EFI et lui mettre un drapeau [[:/gpt#creer_une_partition_bios-boot|bios_grub]] 
+  * Copier la partition contenant le logiciel dans l'espace libre du SSD puis modifier le UUID de la partition émettrice.
+  * Si absence de partition EFI, lancer boot-repair et réparer le ubuntu du SSD afin qu'il garnisse la partition de 36 Mo.
+  * Rebooter.
+
+
+__Erreur possible__ 
+
+Lors d'un boot EFI, les anciennes versions, imposent le N° de partition qui peut avoir changé. Donc si plantage, lancer boot repair  et réparer le ubuntu du SSD afin qu'il réinstalle  la structure EFI avec un bon numéro.
+  * 
+  * 
+  * 
+
+
 
