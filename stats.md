@@ -12,7 +12,7 @@
 
 ## Soucis de grammaire :
 
-  * Nombres de fichiers : 5338
+  * Nombres de fichiers : 5337
   * Nombres de remontées : 221687
 
 ## Soucis de balises Dokuwiki :
@@ -22,7 +22,7 @@
 
 ## Soucis sur des scripts shell :
 
-  * Nombres de fichiers : 84
+  * Nombres de fichiers : 133
 
 ## Détection de mots interdits :
 

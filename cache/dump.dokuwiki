@@ -152,9 +152,9 @@ echo "n" > $BAK_TMP/what-tape.cmd
 restore -t -h -f /dev/st0 /mnt < $BAK_TMP/what-tape.cmd &> $BAK_TMP/what-tape.tmp
 rm $BAK_TMP/what-tape.cmd
 mt rewind -f /dev/st0
-TAPE_LABEL=`cat $BAK_TMP/what-tape.tmp | grep Label: | awk '{print $2}'`
+TAPE_LABEL=$(grep Label: $BAK_TMP/what-tape.tmp | awk '{print $2}')
 rm $BAK_TMP/what-tape.tmp
-echo $TAPE_LABEL
+echo "$TAPE_LABEL"
 </code>
 
 === Formate la bande en lui imposant un label ===
@@ -182,33 +182,33 @@ rm -Rf /tmp/empty
 # Exemple : tapebak_backup LU-MIDI
 
 BAK_NAME=$1
-BAK_LABEL=`/opt/tapebak/bin/tapebak_label`
+BAK_LABEL=$(/opt/tapebak/bin/tapebak_label)
 PATH_ARCH=/opt/tapebak/archfiles
 PATH_LIST=/opt/tapebak/filelists
 LOG=/tmp/tapebak_backup.log
 
 # Initialise la log
-echo "Backup $BAK_NAME - `date +%F\ %X`" > $LOG
+echo "Backup $BAK_NAME - $(date +%F\ %X)" > $LOG
 echo "" >> $LOG
 
 # Vérifie le label de la bande
-if test $BAK_NAME != $BAK_LABEL
+if test "$BAK_NAME" != "$BAK_LABEL"
 then
         # Génère une erreur
         ERREUR="Mauvaise bande ! Attendue : $BAK_NAME, dans le lecteur : $BAK_LABEL"
-        echo $ERREUR >> $LOG
+        echo "$ERREUR" >> $LOG
         echo "Opération annulée" >> $LOG
 else
         # Commence la génération de la liste
-        ls -AlhR /srv/files/* > $PATH_LIST/$BAK_NAME.txt
+        ls -AlhR /srv/files/* > $PATH_LIST/"$BAK_NAME".txt
         # Dump le tout sur la bande
-        dump -0 -A $PATH_ARCH/$BAK_NAME.arc -L "$BAK_NAME" -f /dev/st0 /srv/on_tape >> $LOG
-        echo "DONE (`date +%X`)" >> $LOG
+        dump -0 -A $PATH_ARCH/"$BAK_NAME".arc -L "$BAK_NAME" -f /dev/st0 /srv/on_tape >> $LOG
+        echo "DONE ($(date +%X))" >> $LOG
         echo "" >> $LOG
         # Rebobinage et éjection
         mt rewoffl -f /dev/st0
 fi
-cat $LOG | mail -s Tapebak\ $BAK_NAME admin@ub.untu.fr
+mail -s Tapebak\ "$BAK_NAME" admin@ub.untu.fr < $LOG
 </code>
 
 === Restaure une bande en mode interactif ===
@@ -219,20 +219,20 @@ cat $LOG | mail -s Tapebak\ $BAK_NAME admin@ub.untu.fr
 # Exemple : tapebak_restore LU-MIDI
 
 BAK_NAME=$1
-BAK_LABEL=`/opt/tapebak/bin/tapebak_label`
+BAK_LABEL=$(/opt/tapebak/bin/tapebak_label)
 PATH_ARCH=/opt/tapebak/archfiles
-PATH_LIST=/opt/tapebak/filelists
+# PATH_LIST=/opt/tapebak/filelists
 
 # Vérifie le label de la bande
-if test $BAK_NAME != $BAK_LABEL
+if test "$BAK_NAME" != "$BAK_LABEL"
 then
         # Génère une erreur
         ERREUR="Mauvaise bande ! Attendue : $BAK_NAME, dans le lecteur : $BAK_LABEL"
-        echo $ERREUR
-        exit -1
+        echo "$ERREUR"
+        exit 1
 else
         # Lance le système de restauration interactif
-        restore -i -A $PATH_ARCH/$BAK_NAME.arc -f /dev/st0
+        restore -i -A "$PATH_ARCH/$BAK_NAME".arc -f /dev/st0
         mt rewind -f /dev/st0
         echo "Restauration $BAK_NAME finie !" | mail -s Tapebak admin@ub.untu.fr
 fi
