@@ -17,7 +17,7 @@ pattern = re.compile(r"<[cf][oi][dl]e b?a?sh.*?>\n?(#!/.*?)</[cf][oi][dl]e>", re
 class ShellCodeChecker(Checker):
     def __init__(self, full=False):
         super(ShellCodeChecker, self).__init__(DIR_SHELLCODE_DESTINATION, full)
-    
+        compteur = 0
     
     def create_temp_file_to_run_shellcheck(self,content_to_put_in_file):
         with open(PATH_TEMP_FILE,"w") as f:
@@ -53,16 +53,28 @@ class ShellCodeChecker(Checker):
             
     
     def parse(self, content):
+        # PREMIERE FAÇON DE TROUVER LES PROBLÈMES DE SHELL
+        
         #match = re.findall(r'<code>\n?#!/.*?</code>', content, re.DOTALL)
         #self.keep_only_shellcode(match, '<code>', '</code>')
         
         #match = re.findall(r'<code b?a?sh>\n?#!/.*?</code>', content, re.DOTALL)
         #self.keep_only_shellcode(match, '<code b?a?sh>', '</code>')
         
+        #match = re.findall(r'<file b?a?sh.*?#!/.*?</file>', content, re.DOTALL)
+        #self.keep_only_shellcode(match, r'<file b?a?sh>', '</file>')
+        
+        # DEUXIÈME FAÇON
         for match in pattern.finditer(content):
             script_shell_code = match.group(1)
             #print(script_shell_code) # dans notre regex on a que un seul groupe
             self.verify_script_shell_code(script_shell_code) # parfait on a que ce qu'il y a dans le groupe
         
-        #match = re.findall(r'<file b?a?sh.*?#!/.*?</file>', content, re.DOTALL)
-        #self.keep_only_shellcode(match, r'<file b?a?sh>', '</file>')
+        # ON AJOUTE LES TRÈS MAUVAISES PRATIQUES :
+        match = re.search(r".*sudo gedit.*", content)
+        if match:
+            self.warnings += '\n' + match.group(0) + "\n\n Ne pas utiliser sudo avec une application graphique -> Utiliser la commande pkexec plutot que sudo"
+        
+        match = re.search(r".*sudo gparted.*", content)
+        if match:
+            self.warnings += '\n' + match.group(0) + "\n\n Ne pas utiliser sudo avec une application graphique -> Utiliser la commande pkexec plutot que sudo"
