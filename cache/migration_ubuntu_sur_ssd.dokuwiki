@@ -83,14 +83,15 @@ Avec le ubuntu fonctionnant, installer l'application gparted afin de pouvoir for
   *   Une partition de boot EFI.   Soit 36 Mo. Soit 512 Mo. Y mettre l'étiquette **FATSSD**. Y mettre le drapeau **ESP** si le bios est EFI. Y mettre le drapeau **bios_grub** si le bios est LEGACY.
   *   Une partition EXT4 pour le logiciel avec le reste de espace disponible éventuellement diminué de l'espace prévu pour la partition swap. Y mettre l'étiquette **NewUbuntu**.
   *   Eventuellement, une partition de swap égale à la taille de la RAM mémoire si l'ordinateur est capable [[:/tutoriel/activer_hibernation|d'hiberner]]. Sinon, utiliser un fichier d'[[:/swap#creer_un_fichier_d_echange|échange]] à créer dans la nouvelle partition s'il n'existe pas. Une taille de 1 Go semble suffisante surtout si la taille de la RAM est importante.   Il faut penser à de pas mettre en oeuvre le pré-swapping  lorsque 40% de la RAM est consommée mais attendre  le seuil  de 95%.
+ 
+<note>Si refind est utilisé: Au lieu de créer une partition de boot EFI, il est plus pratique de copier/coller la partition de boot-EFI puis changer son UUID et y mettre  une étiquette **FATSSD** et un drapeau ESP.</note>
 
 ==== Migration des données ====
-
   - Devenir administrateur.<code bash>sudo -i</code>
   - Monter la partition de réception. <code bash>udisksctl unmount -b /dev/disk/by-label/NewUbuntu ## On ne sait jamais
 udisksctl mount -b /dev/disk/by-label/NewUbuntu</code> 
-  - Dupliquer le logiciel de base. Possibilité d'ajouter l'option **progress** pour visualiser le transfert des fichiers.<code bash>time rsync -ax --delete-before --stats --exclude '/home'  /  /media/$USER/NewUbuntu</code>
-  - Dupliquer les fichiers cachés du home et le répertoire snap de tous les utilisateurs et préparer certains liens symboliques. Possibilité de supprimer l'option **progress** pour masquer le transfert des fichiers.<code bash>for Me in $(ls -1 /home) ; do
+  - Dupliquer le logiciel de base. Possibilité d'ajouter l'option **progress** pour visualiser le transfert des fichiers. **Durée estimée: 10 minutes.**<code bash>time rsync -ax --delete-before --stats --exclude '/home'  /  /media/$USER/NewUbuntu</code>
+  - Dupliquer les fichiers cachés du home et le répertoire snap de tous les utilisateurs et préparer certains liens symboliques. Possibilité de supprimer l'option **progress** pour masquer le transfert des fichiers. **Durée estimée 2 minutes par utilisateur.**<code bash>for Me in $(ls -1 /home) ; do
 mkdir -pv /media/$USER/NewUbuntu/home/$Me
 echo  le transfert de $Me  
 rsync -ax  --stats --progress   /home/$Me/{.[^.]*,snap}  /media/$USER/NewUbuntu/home/$Me
@@ -102,38 +103,41 @@ ln -s /media/data/home/$Me/Téléchargements    /media/$USER/NewUbuntu/home/$Me
 ln -s /media/data/home/$Me/Vidéos             /media/$USER/NewUbuntu/home/$Me 
 chown -R $Me:$Me /media/$USER/NewUbuntu/home/$Me; done </code>
   - Modifier le fstab en remplaçant la partition racine et ajout de la partition de données avec son point de montage.<code bash>UUIDgood=$(echo $(lsblk -fe7 | grep "NewUbuntu")| cut -d" " -f5)  && echo $UUIDgood
-UUIDold=$(grep ' \/ ' /etc/fstab | grep UUID  | cut -c1-41) && echo $UUIDold 
+UUIDold=$(grep ' \/ ' /etc/fstab | grep UUID  | cut -c6-41) && echo $UUIDold 
 sed -i "s/$UUIDold/#$UUIDold/" /media/$USER/NewUbuntu/etc/fstab
 echo UUID=$UUIDgood  /  ext4 errors=remount-ro 0 1 | tee -a /media/$USER/NewUbuntu/etc/fstab
-echo $UUIDold /media/data ext4 defaults 0 2  | tee -a /media/$USER/NewUbuntu/etc/fstab
+echo UUID=$UUIDold   /media/data ext4 defaults 0 2 | tee -a /media/$USER/NewUbuntu/etc/fstab
 mkdir /media/$USER/NewUbuntu/media/data
-egrep  " / |data" /media/$USER/NewUbuntu/etc/fstab</code>
-  - **Spécial boot EFI avec REFIND**. Il est inutile de réinstaller le grub (voir ci-après) mais il est nécessaire  de supprimer son fichier de configuration. La cause est actuellement inconnue!<code bash>sed -i "s/$UUIDold/$UUIDgood/" /media/$USER/$LABEL/boot/refind_linux.conf 
-mv -v /media/$USER/$LABEL/boot/refind_linux.conf /media/$USER/$LABEL/boot/conf.refind_linux.conf</code> 
-==== Installation du grub ====
+egrep  " / |data" /media/$USER/NewUbuntu/etc/fstab</code> 
+  - Si le boot est EFI, mettre à jour le nouvel UUID  de boot dans le fichier /etc/fstab et le fichier de configuration de refind.  <code bash>sed -i '/boot\/efi/d' /media/$USER/NewUbuntu/etc/fstab
+echo UUID=$(lsblk -o UUID,NAME,LABEL  | grep FATSSD | cut -c-9) /boot/efi  vfat umask=0077 0 1| tee -a /media/$USER/NewUbuntu/etc/fstab
+sed -i "s/$UUIDold/$UUIDgood/" /media/$USER/NewUbuntu/boot/refind_linux.conf </code> 
+==== Installation du grub  ====
+<note>Action inutile lorsque [[:/refind|refind]] est utilisé.</note>
 Il existe 2 possibilités pour installer le bon grub dans cette nouvelle partition.
   *   **Avec [[/boot-repair|boot-repair]]:**
     *  Il faut demander de réinstaller le grub du ubuntu de la partition **NewUbuntu**  en utilisant la partition  de boot [[https://doc.ubuntu-fr.org/lib/exe/fetch.php?tok=e0329e&media=http%3A%2F%2Fpix.toile-libre.org%2Fupload%2Foriginal%2F1416027492.png|FATSSD]]   
   *    **En technique CHROOT:**
-  - Préparer le passage chroot et exécuter le chroot.<code bash>mount -t proc   /proc /media/$USER/NewUbuntu/proc && mount -t sysfs  /sys /media/$USER/NewUbuntu/sys
+  - Préparer le passage chroot et exécuter le chroot.<code bash>
+mount -t proc   /proc /media/$USER/NewUbuntu/proc && mount -t sysfs  /sys /media/$USER/NewUbuntu/sys
 mount --bind    /dev  /media/$USER/NewUbuntu/dev  && mount --bind    /run /media/$USER/NewUbuntu/run
 mount --bind    /sys  /media/$USER/NewUbuntu/sys  && modprobe efivars 
 chroot /media/$USER/NewUbuntu </code>
-  - Remplacer le point de montage de la partition EFI du disque dur par celui de la partition EFI du SSD. **Ne pas faire si le boot est en LEGACY.** <code bash>sed -i '/boot\/efi/d' /etc/fstab
-echo UUID=$(lsblk -o UUID,NAME,LABEL  | grep FATSSD | cut -c-9) /boot/efi  vfat umask=0077 0 1| tee -a /etc/fstab
-PartEFI=$(blkid | grep 'FATSSD' | head -1 | cut -d: -f1 ) && echo $PartEFI
-mount -v $PartEFI  /boot/efi</code>
+  - Monter la partition EFI du SSD. **Ne pas faire si le boot est en LEGACY.** <code bash>
+mount -v /dev/disk/by-label/FATSSD  /boot/efi</code>
   - Réinitialiser le grub.<code bash>grub-install $(blkid | grep 'FATSSD' | head -1 | cut -c1-8 ) 
 update-grub</code>
-  - Démonter la partition EFI et quitter le CHROOT <code bash>umount -v $PartEFI 
+  - Démonter la partition EFI et quitter le CHROOT <code bash>umount -v /boot/efi 
 exit</code>
-  - Faire la mise à jour du bios efi. **Ne pas faire si le boot est en LEGACY.** <code bash>mount $PartEFI /boot/efi
-DSK=$(echo /dev/$(lsblk -o NAME,Label  | grep -B 1  $PartEFI | head -1)) 
+  - Faire la mise à jour du bios efi. **Ne pas faire si le boot est en LEGACY.** <code bash>
+DSK=$(echo /dev/$(lsblk -o NAME,Label  | grep -B 1  FATSSD | head -1))  && echo $DSK 
 if [[ $(bootctl) =~ "Secure Boot: disabled" ]]; then  efibootmgr --create --disk $DSK --part 1 --label ubuntu --loader "\EFI\ubuntu\grubx64.efi";
 else efibootmgr --create --disk $DSK --part 1 --label ubuntu --loader "\EFI\ubuntu\shimx64.efi"; fi</code>
   - Quitter proprement<code bash>umount -v /media/$USER/NewUbuntu/{run,dev,sys,proc} && umount /media/$USER/NewUbuntu/sys
-umount -v /media/$USER/NewUbuntu && umount -v $PartEFI 
+umount -v /media/$USER/NewUbuntu  
 exit</code>
+  - Rebooter   sans oublier  de modifier le BIOS LEGACY pour mettre prioritaire le disque SSD.
+
 
 
    
