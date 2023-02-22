@@ -50,8 +50,9 @@ class GrammalecteChecker(Checker):
             self._file.replace('.dokuwiki', '.toml'),
         )
         if isfile(blacklist_path):
-            with open(blacklist_path, 'r') as f:
-                self.blacklist = toml.loads(f.read())
+            self.blacklist = toml.loads(
+                Path(blacklist_path).read_text(encoding='UTF-8')
+            )
 
         self.warnings = self._parse(content)
         try:
@@ -159,7 +160,7 @@ class GrammalecteChecker(Checker):
                 continue
             if message.end != int(self.blacklist['falsepositive'][inc]['col_end']):
                 continue
-            if message.message != self.blacklist['falsepositive'][inc]['message']:
+            if message.message.replace(u'\xa0', u' ') != self.blacklist['falsepositive'][inc]['message']:
                 continue
             return True
         return False
@@ -205,6 +206,7 @@ class GrammalecteChecker(Checker):
             return ''
 
         if self.is_blacklisted(message):
+            print(message)
             return ''
 
         if type(message) == GrammalecteSpellingMessage:

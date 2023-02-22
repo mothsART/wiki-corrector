@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+
+import sys
+from os.path import join, isfile
+
+import toml
+
+DIR_GRAMMAR_DESTINATION = 'grammar_result'
+DIR_GRAMMAR_BLACKLIST = 'grammar_blacklist'
+
+def contain_line(denied_toml, message, line_nb):
+    if denied_toml == None:
+        return False
+    for k in denied_toml['falsepositive']:
+        if line_nb != denied_toml['falsepositive'][k]['line']:
+            continue
+        if message == denied_toml['falsepositive'][k]['message']:
+            return True
+    return False
+
+
+if __name__ == '__main__':
+    result = sys.argv[1]
+
+    result_path = join(DIR_GRAMMAR_DESTINATION, f'{result}.txt')
+    denied_path = join(DIR_GRAMMAR_BLACKLIST, f'{result}.toml')
+
+    if not isfile(result_path):
+        print(f"le chemin {result_path} n'existe pas")
+        exit(0)
+
+    denied_toml = None
+    if isfile(denied_path):
+        denied_toml = toml.load(denied_path)
+
+    result = open(result_path, 'r', encoding='utf-8').readlines()
+
+    for line in result:
+        line = line.replace(u'\xa0', u' ')
+        pattern = ' Mot inconnu : '
+        if pattern not in line:
+            continue
+
+        nb_index = line.find(pattern)
+        line_nb = int(line[0:nb_index])
+
+        col_index = line.find('[[')
+        message = line[nb_index + 1:col_index - 1]
+        cols = line[col_index + 2:line.find(']]')]
+        col_start = int(cols[:cols.find(':')])
+        col_end = int(cols[cols.find(':') + 1:])
+
+        if contain_line(denied_toml, message, line_nb):
+            continue
+
+        print(line)
+        print('Editer : n pour ne rien faire. Un texte pour détailler le pourquoi.')
+        choice = input()
+        if choice == 'n':
+            print('')
+            continue
+
+        toml_node = {
+            'line': line_nb,
+            'message': message,
+            'col_start': col_start,
+            'col_end': col_end,
+            'explication': choice,
+        }
+
+        if denied_toml == None:
+            denied_toml = {
+                'falsepositive': {
+                    '1': toml_node
+                }
+            }
+            print('')
+            continue
+
+        print('')
+        count_nodes = len(denied_toml['falsepositive'])
+        denied_toml['falsepositive'][str(int(count_nodes) + 1)] = toml_node
+
+    with open(denied_path,'w', encoding='utf-8') as f:
+        toml.dump(denied_toml, f)
