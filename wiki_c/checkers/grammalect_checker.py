@@ -264,6 +264,13 @@ class GrammalecteChecker(Checker):
         if self.__in_file_tag(target_line, word_l):
             return ''
 
+        # dokuwiki table
+        if (
+            (target_line.startswith('| ') or target_line.startswith('^ '))
+            and message.message == 'Espace(s) surnuméraire(s) à supprimer.'
+        ):
+            return ''
+
         self.first_warn = True
 
         # TODO : à supprimer le jour ou dokuwiki supportera les espaces insécables
