@@ -186,7 +186,7 @@ class GrammalecteChecker(Checker):
             return ''
 
         # open an close <file> on multi lines
-        if target_line.find('<file>') != -1:
+        if target_line.find('<file') != -1:
             self.file_tag_open = True
         if target_line.find('</file>') != -1:
             self.file_tag_open = False
@@ -206,7 +206,6 @@ class GrammalecteChecker(Checker):
             return ''
 
         if self.is_blacklisted(message):
-            print(message)
             return ''
 
         if type(message) == GrammalecteSpellingMessage:
@@ -262,6 +261,10 @@ class GrammalecteChecker(Checker):
         if self.__in_code_tag(target_line, word_l):
             return ''
         if self.__in_file_tag(target_line, word_l):
+            return ''
+
+        # underline
+        if target_line.startswith('__') and target_line.endswith('__'):
             return ''
 
         # dokuwiki table
