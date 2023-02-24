@@ -43,3 +43,9 @@ ou
 ```sh
     ./check
 ```
+
+### Launch tests
+
+```sh
+python -m unittest tests
+```
