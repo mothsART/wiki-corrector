@@ -1,6 +1,26 @@
-from .checker import Checker
+from .checker import Checker, DokuwikiTagInLine
 
 DIR_DOKUWIKI_DESTINATION = 'dokuwiki_result'
+
+
+class DokuwikiUnderlines:
+    def _delete_tags(self, line):
+        tag_inline = DokuwikiTagInLine(line)
+        tags = tag_inline.give_all_tags()
+
+        for tag in tags:
+            line = line.replace(tag, '')
+
+        return line
+
+    def __init__(self, pos, line):
+        self.pos = pos
+        self.line = self._delete_tags(line)
+        self.warnings = ''
+
+    def detect(self):
+        if self.line.count('__') % 2 != 0:
+            self.warnings += f"{self.pos + 1} number of underlines __ is not equal on this line\n"
 
 
 class DokuwikiChecker(Checker):
@@ -35,19 +55,39 @@ class DokuwikiChecker(Checker):
             self.warnings += f'{last_open_pos} extra <note>\n'
 
         for pos, line in enumerate(content_list):
+            # open and close <code> on multi lines
+            if line.find('<code') != -1:
+                self.code_open = True
+            if line.find('</code>') != -1:
+                self.code_open = False
+            if self.code_open or line.rstrip().endswith('</code>'):
+                continue
+
+            # open and close <file> on multi lines
+            if line.find('<file') != -1:
+                self.file_tag_open = True
+            if line.find('</file>') != -1:
+                self.file_tag_open = False
+            if self.file_tag_open or line.rstrip().endswith('</file>'):
+                continue
+            
+            u = DokuwikiUnderlines(pos, line)
+            u.detect()
+            self.warnings += u.warnings
+
             pattern = line.find("''--")
             if pattern == -1:
                 pattern = line.find("**--")
             suffix_pattern =  line[pattern + 4: pattern + 5]
             if pattern != -1 and suffix_pattern not in [" ", '-']:
-                self.warnings += f"{pos} -- rather than %%--%%\n"
+                self.warnings += f"{pos + 1} -- rather than %%--%%\n"
 
         nb_of_code_open = content.count('<code>') + content.count('<code/')
         nb_of_code_open += content.count('<code ') + content.count('<code|')
-        nb_of_code_open += content.count('<code=')
+        nb_of_code_open += content.count('<code=') + content.count('<code-')
         nb_of_code_open -= content.count('%%<code>%%')
 
         nb_of_code_close = content.count('</code>')
 
         if nb_of_code_open != nb_of_code_close:
-            self.warnings += f"number of <code ({nb_of_code_open}) and </code> ({nb_of_code_close}) is different"
+            self.warnings += f"number of <code ({nb_of_code_open}) and </code> ({nb_of_code_close}) is different\n"

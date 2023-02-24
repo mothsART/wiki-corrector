@@ -6,11 +6,12 @@ from pathlib import Path
 from pygrammalecte import grammalecte_text
 from pygrammalecte.pygrammalecte import GrammalecteSpellingMessage, GrammalecteGrammarMessage
 
-from .checker import Checker
+from .checker import Checker, DokuwikiTagInLine
 
 DIR_GRAMMAR_DESTINATION = 'grammar_result'
 DIR_GRAMMAR_DICT = 'grammar_dict'
 DIR_GRAMMAR_BLACKLIST = 'grammar_blacklist'
+
 
 class FakeMessage:
     def __init__(self, line, message):
@@ -23,8 +24,6 @@ class GrammalecteChecker(Checker):
         super(GrammalecteChecker, self).__init__(DIR_GRAMMAR_DESTINATION, full)
 
         self.personal_dict: Set[str] = set()
-        self.code_open = False
-        self.file_tag_open = False
         self.first_warn = False
         self.blacklist = {}
 
@@ -61,7 +60,6 @@ class GrammalecteChecker(Checker):
             self.write_error(e, content)
             return
 
-
     def _parse(self, content):
         warnings = ''
         content_list = content.splitlines()
@@ -89,65 +87,6 @@ class GrammalecteChecker(Checker):
             message = FakeMessage(key, line)
             warnings += self._set_warn(message, content_list)
         return warnings
-
-    def __in_tag(self, target_line, word, start_tag, end_tag):
-        start_index = target_line.find(start_tag)
-        if start_index == -1:
-            return False
-        end_index = target_line[start_index].find(end_tag)
-        if end_index == -1:
-            return True
-        word_index = target_line[start_index, end_index].find(word)
-        if word_index == -1:
-            return False
-        return True
-
-    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les tags de la page'''
-    def __in_header_tags(self, target_line, word):
-        return self.__in_tag(target_line, word, '{{tag>', '}}')
-
-    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les balises d'images internes'''
-    def __in_img(self, target_line, word):
-        return self.__in_tag(target_line, word, '{{', '|')
-
-    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les liens wikipédia'''
-    def __in_wikipedia_link(self, target_line, word):
-        return self.__in_tag(target_line, word, '[[wpfr>', '|')
-
-    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les liens internes'''
-    def __in_internal_link(self, target_line, word):
-        return self.__in_tag(target_line, word, '[[:', '|') or self.__in_tag(target_line, word, '[[', '|')
-
-    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les lignes de code en ligne'''
-    def __in_inline_code_tag(self, target_line, word):
-        if self.__in_tag(target_line, word, "''", "''"):
-            return True
-
-    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les suggestions de dépôts ppa'''
-    def __in_ppa_repo(self, target_line, word):
-        return self.__in_tag(target_line, word, "**ppa:", "**")
-
-
-
-    def __in_inline_tag(self, target_line, word, start_tag, end_tag):
-        while True:
-            index_start = target_line.find(start_tag)
-            index_end = target_line.find(end_tag)
-            if index_start == -1 or index_end == -1:
-                return False
-
-            sub_str = target_line[index_start +  target_line[index_start:].find('>') + 1:index_end]
-            if word in sub_str:
-                return True
-            target_line = target_line[index_end + 7:]
-
-    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les balises <file>...</file>'''
-    def __in_file_tag(self, target_line, word):
-        return self.__in_inline_tag(target_line, word, '<file', '</file>')
-
-    '''Ne pas effectuer de vérifications orthographiques et grammaticales dans les lignes de code en ligne'''
-    def __in_code_tag(self, target_line, word):
-        return self.__in_inline_tag(target_line, word, '<code', '</code>')
 
     def is_blacklisted(self, message):
         if self.blacklist == {}:
@@ -177,7 +116,7 @@ class GrammalecteChecker(Checker):
             cr = '\n'
         self.last_line = message.line
 
-        # open an close <code> on multi lines
+        # open and close <code> on multi lines
         if target_line.find('<code') != -1:
             self.code_open = True
         if target_line.find('</code>') != -1:
@@ -185,7 +124,7 @@ class GrammalecteChecker(Checker):
         if self.code_open or target_line.rstrip().endswith('</code>'):
             return ''
 
-        # open an close <file> on multi lines
+        # open and close <file> on multi lines
         if target_line.find('<file') != -1:
             self.file_tag_open = True
         if target_line.find('</file>') != -1:
@@ -223,7 +162,7 @@ class GrammalecteChecker(Checker):
             ):
                 return ''
 
-            suggestions = ' => suggestions : ' + str(message.suggestions)
+            suggestions = ' => suggestions : ' + str(message.suggestions.sort())
 
         if word_l in self.personal_dict:
             return ''
@@ -245,23 +184,12 @@ class GrammalecteChecker(Checker):
         if ':{0}]]'.format(word) in target_line:
             return ''
 
-        if self.__in_header_tags(target_line, word_l):
-            return ''
-        if self.__in_img(target_line, word_l):
-            return ''
-        if self.__in_wikipedia_link(target_line, word_l):
-            return ''
-        if self.__in_internal_link(target_line, word_l):
-            return ''
-        if self.__in_ppa_repo(target_line, word_l):
-            return ''
-        if self.__in_inline_code_tag(target_line, word_l):
+        tag_inline = DokuwikiTagInLine(target_line)
+        if tag_inline.is_in_all_tags(word_l):
             return ''
 
-        if self.__in_code_tag(target_line, word_l):
-            return ''
-        if self.__in_file_tag(target_line, word_l):
-            return ''
+        #if tag_inline.is_in_underline_expression(target_line, word_l):
+        #    return True
 
         # underline
         if target_line.startswith('__') and target_line.endswith('__'):
