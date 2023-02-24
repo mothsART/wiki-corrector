@@ -12,13 +12,13 @@
 
 ## Soucis de grammaire :
 
-  * Nombres de fichiers : 5445
-  * Nombres de remontées : 206012
+  * Nombres de fichiers : 5441
+  * Nombres de remontées : 198291
 
 ## Soucis de balises Dokuwiki :
 
-  * Nombres de fichiers : 2
-  * Nombres de remontées : 2
+  * Nombres de fichiers : 64
+  * Nombres de remontées : 103
 
 ## Soucis sur des scripts shell :
 
