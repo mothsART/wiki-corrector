@@ -203,6 +203,7 @@ class GrammalecteChecker(Checker):
             message.message == 'Il manque un espace insécable.'
             or message.message == 'Avec une unité de mesure, mettez un espace insécable.'
             or message.message == 'Si “Go” est une unité de mesure, il manque un espace insécable. Si le nombre se rapporte au mot suivant, c’est aussi valable.'
+            or message.message == 'Si “Mo” est une unité de mesure, il manque un espace insécable. Si le nombre se rapporte au mot suivant, c’est aussi valable.'
         ):
             return ''
 
