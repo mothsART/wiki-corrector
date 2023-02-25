@@ -162,7 +162,9 @@ class GrammalecteChecker(Checker):
             ):
                 return ''
 
-            suggestions = ' => suggestions : ' + str(message.suggestions.sort())
+            suggestions = ''
+            if message.suggestions:
+                suggestions = ' => suggestions : ' + ''.join(sorted(message.suggestions))
 
         if word_l in self.personal_dict:
             return ''
