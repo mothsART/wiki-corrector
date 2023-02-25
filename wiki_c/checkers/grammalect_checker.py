@@ -163,7 +163,7 @@ class GrammalecteChecker(Checker):
                 return ''
 
             suggestions = ''
-            if message.suggestions:
+            if message.suggestions and message.suggestions != [] and message.suggestions != ['']:
                 suggestions = ' => suggestions : ' + ''.join(sorted(message.suggestions))
 
         if word_l in self.personal_dict:
