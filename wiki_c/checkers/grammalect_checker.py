@@ -54,22 +54,21 @@ class GrammalecteChecker(Checker):
             )
 
         self.warnings = self._parse(content)
-        try:
-            self.warnings = self._parse(content)
-        except Exception as e:
-            self.write_error(e, content)
-            return
 
     def _parse(self, content):
         warnings = ''
         content_list = content.splitlines()
         self.last_line = 0
+        
+        # parse text without underlines
+        content = content.replace('__', '')
 
         g_lines = grammalecte_text(content)
         try:
             warn = next(g_lines)
         except:
             return ''
+
         for key, line in enumerate(content_list):
             if warn.line == key + 1:
                 warnings += self._set_warn(warn, content_list)
@@ -188,13 +187,6 @@ class GrammalecteChecker(Checker):
 
         tag_inline = DokuwikiTagInLine(target_line)
         if tag_inline.is_in_all_tags(word_l):
-            return ''
-
-        #if tag_inline.is_in_underline_expression(target_line, word_l):
-        #    return True
-
-        # underline
-        if target_line.startswith('__') and target_line.endswith('__'):
             return ''
 
         # dokuwiki table
