@@ -3,7 +3,14 @@ from .checker import Checker, DokuwikiTagInLine
 DIR_DOKUWIKI_DESTINATION = 'dokuwiki_result'
 
 
-class DokuwikiUnderlines:
+class DokuwikiWarning:
+    def __init__(self, pos, line):
+        self.pos = pos
+        self.line = line
+        self.warnings = ''
+
+
+class DokuwikiUnderlines(DokuwikiWarning):
     def _delete_tags(self, line):
         tag_inline = DokuwikiTagInLine(line)
         tags = tag_inline.give_all_tags()
@@ -14,13 +21,28 @@ class DokuwikiUnderlines:
         return line
 
     def __init__(self, pos, line):
-        self.pos = pos
+        super(DokuwikiUnderlines, self).__init__(pos, line)
         self.line = self._delete_tags(line)
-        self.warnings = ''
 
     def detect(self):
         if self.line.count('__') % 2 != 0:
             self.warnings += f"{self.pos + 1} number of underlines __ is not equal on this line\n"
+        return self.warnings
+
+
+class DokuwikiWikipediaTag(DokuwikiWarning):
+    def detect(self):
+        pattern = 'https://fr.wikipedia.org/wiki/'
+        line = self.line
+
+        while True:
+            url_pos = line.find(pattern)
+            if url_pos == -1:
+                break
+
+            self.warnings += f'{self.pos} url wikipedia : "{line[url_pos:url_pos + len(pattern)]}..." à remplacer par [[wpfr>nom_page]]\n'
+            line = line[url_pos + len(pattern):]
+        return self.warnings
 
 
 class DokuwikiChecker(Checker):
@@ -72,8 +94,10 @@ class DokuwikiChecker(Checker):
                 continue
             
             u = DokuwikiUnderlines(pos, line)
-            u.detect()
-            self.warnings += u.warnings
+            self.warnings += u.detect()
+            
+            w = DokuwikiWikipediaTag(pos, line)
+            self.warnings += w.detect()
 
             pattern = line.find("''--")
             if pattern == -1:
