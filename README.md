@@ -1,5 +1,9 @@
 # wiki-corrector
 
+[![LICENSE](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Build Status](https://github.com/mothsART/wiki-corrector/actions/workflows/ci.yml/badge.svg)](https://github.com/mothsART/wiki-corrector/actions/workflows/ci.yml)
+[![Coverage Status](https://github.com/mothsART/wiki-corrector/badge.svg?branch=master)](https://coveralls.io/github/mothsART/wiki-corrector?branch=main)
+
 ## Intro
 
 Petit outil de QA pour des wikis/documentations francophones (pour l'instant https://doc.ubuntu-fr.org/)
