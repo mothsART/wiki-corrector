@@ -77,6 +77,11 @@ class DokuwikiChecker(Checker):
             self.warnings += f'{last_open_pos} extra <note>\n'
 
         for pos, line in enumerate(content_list):
+            # detect ~~NOCACHE~~
+            # Il n'y aucune raison valable de supprimer le cache : https://forum.ubuntu-fr.org/viewtopic.php?pid=22655419#p22655419
+            if line.find('~~NOCACHE~~') != -1:
+                self.warnings += f"{pos + 1} utilisation de : ~~NOCACHE~~\n"
+
             # open and close <code> on multi lines
             if line.find('<code') != -1:
                 self.code_open = True

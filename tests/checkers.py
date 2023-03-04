@@ -2,7 +2,7 @@ import unittest
 
 from wiki_c.checkers.checker import DokuwikiTagInLine
 
-from wiki_c.checkers.dokuwiki_checker import DokuwikiWikipediaTag
+from wiki_c.checkers.dokuwiki_checker import DokuwikiChecker, DokuwikiWikipediaTag
 
 
 class CheckerTests(unittest.TestCase):
@@ -26,4 +26,13 @@ class CheckerTests(unittest.TestCase):
         self.assertEqual(
             '1 url wikipedia : "https://fr.wikipedia.org/wiki/..." à remplacer par [[wpfr>nom_page]]\n1 url wikipedia : "https://fr.wikipedia.org/wiki/..." à remplacer par [[wpfr>nom_page]]\n',
             w.detect()
+        )
+
+    def test_detect_no_cache(self):
+        content = "~~NOCACHE~~\nblablabla"
+        w = DokuwikiChecker(True)
+        w.parse(content)
+        self.assertEqual(
+            '1 utilisation de : ~~NOCACHE~~\n',
+            w.warnings
         )
