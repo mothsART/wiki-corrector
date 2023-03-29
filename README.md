@@ -18,6 +18,13 @@ Si l'arborescence des fichiers récupérés existe déjà, alors on ne récupèr
 3. outil d'aide à la correction avec la possibilité d'annoter les faux-positifs.
 
 
+### Installation
+
+```sh
+python3 -m venv venv
+source venv/bin/activate
+```
+
 ### Récupération de la documentation.
 
 

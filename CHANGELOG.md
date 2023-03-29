@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Roadmap]
 
+- https://doc.ubuntu-fr.org/wiki/chantiers
+- https://doc.ubuntu-fr.org/wiki/tag
+
+
 ### Added
 
 - Détecter des URL blacklistés
