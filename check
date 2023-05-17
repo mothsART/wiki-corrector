@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from os.path import join, isfile
 
+import click
+
 import fnmatch
 
 from wiki_c.checkers import (
@@ -54,56 +56,44 @@ def walk(list_checkers, full=False):
             analyse_file(list_checkers, root, _file, len_dir_cache, full)
 
 
-def usage():
-    message = """
-USAGE: : 
-    ./check [OPTIONS]
-
-OPTIONS:
-    -f | --full
+@click.command()
+@click.option('-f','--full', is_flag=True, help="")
+@click.option('--file', 
+    prompt=False, 
+    prompt_required=True,
+     default="", 
+     help="cette option à besoin d'une valeur associée. par exemple ./check --file cache/truc.dokuwiki")
+@click.option("--url/--no-url", is_flag=True, help="UrlChecker. utiliser/ne pas utiliser", default=True, show_default=True)
+@click.option("-g", is_flag=True, help="GrammalecteChecker")
+@click.option("-n", is_flag=True, help="NotAllowedChecker")
+@click.option("-p", is_flag=True, help="AptUrlChecker (indisponible)")
+@click.option("--doku/--no-doku", is_flag=True, help="DokuwiChecker. utiliser/ne pas utiliser", default=True,show_default=True)
+@click.option("-s", is_flag=True, help="ShellCodeChecker")
+@click.option("-a", "--all", is_flag=True, help="Utiliser tout les checkers existant")
+def check_app_main(full, file, url, g, n, p, doku, s, all):
     
-    --file <FILE>
-        cette option à besoin d'un fichier en argument
-        
-        exemple : ./check --file ./cache/rustdesk.dokuwiki
-"""    
-    print(message)
-    exit(0)
-
-def parse_args():
-    if '--help' in sys.argv or '-h' in sys.argv:
-        usage()
+    # dictionnaire de correspondance entre checker et valeur du flag qui lui est associé
+    dictCorrespondanceChecker = {
+        UrlChecker(full): url,
+        GrammalecteChecker(full): g,
+        NotAllowedChecker(full): n,
+        # AptUrlChecker(full): p,
+        DokuwikiChecker(full): doku,
+        ShellCodeChecker(full): s
+    }
     
-    full = False
+    # on checker l'option "all" pour savoir si on les prends tous
+    list_checkers = None
+    if all:
+        list_checkers = list(dictCorrespondanceChecker.keys())
+    else:
+        list_checkers = [checkerInstance for checkerInstance, valOption in dictCorrespondanceChecker.items() if valOption]
     
-    if '-f' in sys.argv or '--full' in sys.argv:
-        full = True
+    # si on a 0 checkers, ne rien faire
+    if len(list_checkers) == 0:
+        print("Les options données à la ligne de commande ne permettent pas d'avoir de checkers.")
+        exit(1)
     
-    analyze_path = ''
-
-    if '--file' in sys.argv:
-        index = sys.argv.index('--file')
-        if len(sys.argv) <= index+1:
-            print("cette option à besoin d'une valeur associée. par exemple ./check --file cache/truc.dokuwiki")
-            exit(1)
-        else:
-            analyze_path = sys.argv[index+1]
-
-    return full, analyze_path
-
-if __name__ == '__main__':
-    
-    full, analyze_path = parse_args()
-    
-    list_checkers = [
-        UrlChecker(full),
-        GrammalecteChecker(full),
-        # NotAllowedChecker(full),
-        # AptUrlChecker(full),
-        DokuwikiChecker(full),
-        # ShellCodeChecker(full)
-    ]
-
     # check if shellcheck is installed
     if any(isinstance(x, ShellCodeChecker) for x in list_checkers):
         from distutils.spawn import find_executable
@@ -111,13 +101,19 @@ if __name__ == '__main__':
             print("You need to have the shellcheck binary installed to use this checker") 
             exit(-1)
 
-    if analyze_path == '':
+    if file == '':
         walk(list_checkers, full)
     else:
-        filename = os.path.basename(analyze_path)
+        filename = os.path.basename(file)
 
-        directory_base = os.path.dirname(analyze_path)
+        directory_base = os.path.dirname(file)
 
         directory_base = os.path.relpath(directory_base, ".") # éviter un crash si "./" est renseigné
 
         analyse_file(list_checkers, directory_base, filename, len(DIR_ORIGIN), full)
+
+if __name__ == '__main__':
+    
+    # point d'entrée du main
+    # les variables sont auto complétées par la bibliothèque "click"
+    check_app_main()    
