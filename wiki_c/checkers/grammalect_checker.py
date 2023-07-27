@@ -62,13 +62,19 @@ class GrammalecteChecker(Checker):
         
         # parse text without underlines
         content = content.replace('__', '')
-
+        
+        print("grammalecte check content...")
+        
         g_lines = grammalecte_text(content)
+        
+        print("grammalecte checked content")
+        
         try:
             warn = next(g_lines)
-        except:
+        except Exception as myEx:
+            print(myEx)
             return ''
-
+        
         for key, line in enumerate(content_list):
             if warn.line == key + 1:
                 warnings += self._set_warn(warn, content_list)
