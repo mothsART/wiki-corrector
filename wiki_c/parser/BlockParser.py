@@ -14,10 +14,12 @@ class BlockParser:
 
     def get_pattern_regex(self):
         return self.regex_pattern_block
+    
 
+    """Rend un string correspondant au language du contenu : ["bash", "sh", "python"]"""
     def language_content(self):
-        if len(self.listAttributes) == 0:
-            return "unknow"
+        # if len(self.listAttributes) == 0:
+        #     return "unknow"
 
         KNOW_PROGRAMMING_LANGUAGES = ["sh", "bash", "python"]
 
@@ -27,9 +29,9 @@ class BlockParser:
 
         shellbang = self.get_shellbang()
         
-        # print("shellbang")
-
         if shellbang:
+            print("shellbang")
+
             splitted = shellbang.split(" ")
             
             part1 = splitted[0]
@@ -54,7 +56,7 @@ class BlockParser:
         if shellbang:
             print("shellbang ", '"' + self.get_shellbang()  + '"')
 
-    def content(self):
+    def get_content(self):
         return self.content
     
     def get_shellbang(self):
@@ -82,12 +84,12 @@ class BlockParser:
         lexStart = "<" + self.nameBlock
 
         if not content.startswith(lexStart):
-            raise Exception(f"La chaîne en entrée ne commence pas par \"{lexStart}\" mais par \"{content[:5]}\"")
+            raise Exception(f"La chaîne en entrée ne commence pas par \"{lexStart}\".")
 
         lexEnd = f"</{self.nameBlock}>"
 
         if not content.endswith(lexEnd):
-            raise Exception(f"La chaîne en entrée ne se termine pas par \"{lexEnd}\"")
+            raise Exception(f"La chaîne en entrée ne se termine pas par \"{lexEnd}\".")
         
         lines = content.split("\n")
 
