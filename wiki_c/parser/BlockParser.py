@@ -30,8 +30,6 @@ class BlockParser:
         shellbang = self.get_shellbang()
         
         if shellbang:
-            print("shellbang")
-
             splitted = shellbang.split(" ")
             
             part1 = splitted[0]
