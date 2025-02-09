@@ -5,6 +5,10 @@ import subprocess
 
 DIR_SHELLCODE_DESTINATION = 'shellcode_result'
 
+# Vous pouvez trouver la liste des erreurs
+# sur le site de shellcheck
+# https://www.shellcheck.net/wiki/
+
 class ShellCodeChecker(Checker):
     def __init__(self, full=False):
         super(ShellCodeChecker, self).__init__(DIR_SHELLCODE_DESTINATION, full)
@@ -25,6 +29,11 @@ class ShellCodeChecker(Checker):
     
     def parse_on_find_block(self, code_block_obj):
         
+        shellbang = code_block_obj.get_shellbang()
+
+        if shellbang is None:
+            return
+
         name_language = code_block_obj.language_content()
         
         if name_language not in self.SHELLCODE_ACCEPTED_LANGUAGE_NAMES:
@@ -40,6 +49,7 @@ class ShellCodeChecker(Checker):
         self.warnings += f"{result}\n\n"
     
     def parse(self, content):
+        self.warnings = ""
 
         my_parse = Parser()
 

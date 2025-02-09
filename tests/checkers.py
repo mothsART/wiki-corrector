@@ -61,3 +61,18 @@ class CheckerTests(unittest.TestCase):
         c.parse(content)
         self.assertTrue("monfic.sh" in c.listAttributes)
         self.assertEqual(c.language_content(), "bash")
+    
+    def test_parser_code_block_trim_line_break(self):
+        block_code = r'''
+<file - bin/supprime-snap-désactivé.sh>
+#!/bin/sh
+LANG=C snap list --all | awk '/disabled/{print $1, $3}' |
+while read snapname revision ; do
+    snap remove "$snapname" --revision="$revision"
+done
+</file>'''
+
+        c = BlockParser(BlockParser.NAME_BLOCK_FILE)
+        c.parse(block_code)
+        content = c.get_content()
+        self.assertTrue(content.splitlines()[0], c.get_shellbang())
