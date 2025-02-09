@@ -62,7 +62,7 @@ class BlockParser:
         if len(self.content) == 0:
             return None
         
-        firstLine = self.content.strip().split("\n")[0].strip()
+        firstLine = self.content.split("\n")[0].strip()
 
         # print(f"le shellbang est \"{firstLine}\"")
 
@@ -107,3 +107,8 @@ class BlockParser:
 
         self.content = content[indexFirstEnd + 1: contentLastIndex]
 
+        # le contenu doit débuter par le hashtag du shellbang
+        # si le premier caractère est un saut de ligne, on l'enlève
+        if len(self.content) > 0 and self.content[0] == '\n':
+            self.content = self.content[1:] 
+        
